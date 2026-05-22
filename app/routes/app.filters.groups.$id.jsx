@@ -209,9 +209,49 @@ export const action = async ({ request, params }) => {
   const group = await prisma.filterGroup.findFirst({ where: { id: filterGroupId, shop } });
   if (!group) return data({ success: false, error: "Not found" }, { status: 404 });
 
-  if (intent === "updateGroupName") {
+  if (intent === "updateGroupSettings") {
     const name = formData.get("name");
+    const groupType = formData.get("groupType");
+    const selectedCollections = JSON.parse(formData.get("selectedCollections") || "[]");
+
+    // Update the basic info
     await prisma.filterGroup.update({ where: { id: filterGroupId }, data: { name } });
+
+    // Delete existing collections for this group
+    await prisma.filterGroupCollection.deleteMany({ where: { filterGroupId } });
+
+    // Re-create the collections based on new type
+    if (groupType === "collections") {
+      if (selectedCollections.length > 0) {
+        await prisma.filterGroupCollection.createMany({
+          data: selectedCollections.map((c) => ({
+            filterGroupId,
+            collectionId: c.id,
+            collectionTitle: c.title,
+            pageType: "collection",
+          })),
+        });
+      } else {
+        await prisma.filterGroupCollection.create({
+          data: {
+            filterGroupId,
+            collectionId: "__all__",
+            collectionTitle: "All Collections",
+            pageType: "collection",
+          },
+        });
+      }
+    } else if (groupType === "search") {
+      await prisma.filterGroupCollection.create({
+        data: {
+          filterGroupId,
+          collectionId: "search",
+          collectionTitle: "Search Page",
+          pageType: "search",
+        },
+      });
+    }
+
     return { success: true, intent };
   }
 
@@ -356,6 +396,27 @@ export default function FilterGroupDetail() {
   const shopify = useAppBridge();
 
   const [groupName, setGroupName] = useState(group.name);
+  
+  // -- Group Settings State --
+  const initialGroupType = group.collections.some(c => c.pageType === "search") ? "search" : "collections";
+  const initialSelectedColls = group.collections.filter(c => c.pageType === "collection" && c.collectionId !== "__all__").map(c => ({ id: c.collectionId, title: c.collectionTitle }));
+  
+  const [groupType, setGroupType] = useState(initialGroupType);
+  const [selectedColls, setSelectedColls] = useState(initialSelectedColls);
+  const [showCollDropdown, setShowCollDropdown] = useState(false);
+  const [searchColl, setSearchColl] = useState("");
+  const filteredCollections = shopifyCollections.filter(c => c.toLowerCase().includes(searchColl.toLowerCase()));
+
+  const handleToggleCollection = (title) => {
+    // Generate a pseudo-ID like shopify uses (or just use title)
+    const id = `gid://shopify/Collection/${title}`;
+    setSelectedColls(prev => 
+      prev.find(c => c.title === title)
+        ? prev.filter(c => c.title !== title)
+        : [...prev, { id, title }]
+    );
+  };
+  // --------------------------
 
   const [showAddFilter, setShowAddFilter] = useState(false);
   const [addType, setAddType] = useState("vendor");
@@ -480,9 +541,18 @@ export default function FilterGroupDetail() {
     setEditingFilterData(null);
   };
 
-  const handleUpdateName = () => {
+  const handleUpdateGroupSettings = () => {
     if (!groupName.trim()) return;
-    submit({ intent: "updateGroupName", name: groupName }, { method: "POST" });
+    submit(
+      { 
+        intent: "updateGroupSettings", 
+        name: groupName,
+        groupType,
+        selectedCollections: JSON.stringify(selectedColls)
+      }, 
+      { method: "POST" }
+    );
+    shopify.toast.show("Group updated");
   };
 
   return (
@@ -497,10 +567,10 @@ export default function FilterGroupDetail() {
 
       <s-stack direction="block" gap="base">
         <s-card heading="Filter group information">
-          <div style={{ display: "flex", gap: "16px", alignItems: "flex-end", marginTop: "8px" }}>
+          <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
-                Group Name
+                Name <span style={{ color: "#8c9196", fontWeight: "normal", fontSize: "11px", cursor: "help" }} title="The name of this filter group">?</span>
               </label>
               <input
                 type="text"
@@ -516,31 +586,133 @@ export default function FilterGroupDetail() {
                   boxSizing: "border-box",
                 }}
               />
-            </div>
-            <s-button variant="primary" onClick={handleUpdateName}>
-              Update
-            </s-button>
-          </div>
 
-          <div style={{ marginTop: "16px" }}>
-            <s-text variant="bodySm" tone="subdued">Assigned to:</s-text>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
-              {group.collections.map((c) => (
-                <span
-                  key={c.id}
-                  style={{
-                    padding: "3px 10px",
-                    borderRadius: "4px",
-                    backgroundColor: "#e4e5e7",
-                    border: "1px solid #c9cccf",
-                    fontSize: "12px",
-                    color: "#202223",
-                  }}
-                >
-                  {c.collectionTitle}
-                </span>
-              ))}
+              {/* Editable Group Type & Collections */}
+              {!group.isDefault && (
+                <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {/* For collection pages */}
+                  <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="groupType"
+                      checked={groupType === "collections"}
+                      onChange={() => setGroupType("collections")}
+                      style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                    />
+                    <span style={{ fontSize: "14px", color: "#202223", fontWeight: groupType === "collections" ? "600" : "400" }}>For collection pages</span>
+                  </label>
+
+                  {groupType === "collections" && (
+                    <div style={{ marginLeft: "26px", position: "relative", marginBottom: "10px" }}>
+                      <s-text variant="bodySm" tone="subdued" style={{ display: "block", marginBottom: "6px" }}>Select collections using this filter group</s-text>
+                      <div
+                        onClick={() => setShowCollDropdown(!showCollDropdown)}
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          border: "1px solid #c9cccf",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                          background: "#f6f6f7",
+                          userSelect: "none",
+                          minHeight: "40px",
+                          display: "flex",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "6px"
+                        }}
+                      >
+                        {selectedColls.length > 0
+                          ? selectedColls.map((c) => (
+                              <span key={c.id} style={{ display: "inline-flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "500", gap: "4px" }}>
+                                {c.title}
+                                <span onClick={(e) => { e.stopPropagation(); handleToggleCollection(c.title); }} style={{ cursor: "pointer", marginLeft: "4px", fontSize: "10px" }}>✕</span>
+                              </span>
+                            ))
+                          : <span style={{ color: "#8c9196" }}>All collections (no specific selection)</span>}
+                      </div>
+                      
+                      {showCollDropdown && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            background: "#fff",
+                            border: "1px solid #e1e3e5",
+                            borderRadius: "8px",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                            maxHeight: "200px",
+                            overflowY: "auto",
+                            zIndex: 10,
+                            marginTop: "4px",
+                          }}
+                        >
+                          <div style={{ padding: "8px", position: "sticky", top: 0, background: "#fff", borderBottom: "1px solid #f1f2f4" }}>
+                            <input
+                              type="text"
+                              placeholder="Search collections..."
+                              value={searchColl}
+                              onChange={(e) => setSearchColl(e.target.value)}
+                              style={{
+                                width: "100%",
+                                padding: "6px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #c9cccf",
+                                fontSize: "13px",
+                                outline: "none",
+                                boxSizing: "border-box"
+                              }}
+                            />
+                          </div>
+                          {filteredCollections.map(c => {
+                            const isSelected = selectedColls.some(sc => sc.title === c);
+                            return (
+                              <div
+                                key={c}
+                                onClick={() => handleToggleCollection(c)}
+                                style={{
+                                  padding: "8px 12px",
+                                  fontSize: "13px",
+                                  cursor: "pointer",
+                                  background: isSelected ? "#f0f4f9" : "transparent",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                }}
+                              >
+                                <input type="checkbox" checked={isSelected} readOnly />
+                                {c}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* For search page */}
+                  <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                    <input
+                      type="radio"
+                      name="groupType"
+                      checked={groupType === "search"}
+                      onChange={() => setGroupType("search")}
+                      style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                    />
+                    <span style={{ fontSize: "14px", color: "#202223", fontWeight: groupType === "search" ? "600" : "400" }}>For search page</span>
+                  </label>
+                </div>
+              )}
+
             </div>
+          </div>
+          
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f1f2f4" }}>
+            <s-button variant="primary" onClick={handleUpdateGroupSettings}>
+              UPDATE
+            </s-button>
           </div>
         </s-card>
 
@@ -752,14 +924,6 @@ export default function FilterGroupDetail() {
                       </svg>
                     </td>
                     <td style={{ padding: "14px 16px" }}>
-                      <CreateFilterModal
-                        isOpen={isCreateModalOpen}
-                        onClose={() => { setIsCreateModalOpen(false); setEditingFilterData(null); }}
-                        onSave={handleSaveFilterModal}
-                        initialData={editingFilterData}
-                        shopifyCollections={shopifyCollections}
-                        storeData={storeData}
-                      />
                       <button
                         onClick={() => openConfigModal(filter)}
                         style={{
@@ -1098,6 +1262,14 @@ export default function FilterGroupDetail() {
           setAdvancedConditions(conditions);
           // Optional: Prompt to save view in db here if user wants a saved view feature.
         }}
+      />
+      <CreateFilterModal
+        isOpen={isCreateModalOpen}
+        onClose={() => { setIsCreateModalOpen(false); setEditingFilterData(null); }}
+        onSave={handleSaveFilterModal}
+        initialData={editingFilterData}
+        shopifyCollections={shopifyCollections}
+        storeData={storeData}
       />
     </s-page>
   );

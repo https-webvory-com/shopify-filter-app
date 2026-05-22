@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLoaderData, useSubmit, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigate, useNavigation, useActionData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
@@ -152,7 +152,6 @@ export const action = async ({ request }) => {
                 }))
               : [{ collectionId: "__all__", collectionTitle: "All Collections", pageType: "collection" }],
         },
-        filters: { create: DEFAULT_FILTERS },
       },
     });
 
@@ -234,8 +233,20 @@ export default function FilterGroups() {
   const submit = useSubmit();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const actionData = useActionData();
   const shopify = useAppBridge();
   const isLoading = navigation.state !== "idle";
+
+  useEffect(() => {
+    if (actionData?.success) {
+      if (actionData.intent === "create") shopify.toast.show("Filter group created");
+      else if (actionData.intent === "delete") shopify.toast.show("Filter group deleted");
+      else if (actionData.intent === "toggle") shopify.toast.show("Status updated");
+      else if (actionData.intent === "duplicate") shopify.toast.show("Filter group duplicated");
+    } else if (actionData && !actionData.success) {
+      shopify.toast.show(actionData.error || "An error occurred", { isError: true });
+    }
+  }, [actionData, shopify]);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -243,9 +254,11 @@ export default function FilterGroups() {
   const [selectedColls, setSelectedColls] = useState([]);
   const [showCollDropdown, setShowCollDropdown] = useState(false);
   const [searchColl, setSearchColl] = useState("");
+  const [groupToDelete, setGroupToDelete] = useState(null);
   
-  // Search state for the groups list
+  // Search and View state for the groups list
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeView, setActiveView] = useState("all");
 
   // Columns customization state
   const [columns, setColumns] = useState(INITIAL_COLUMNS);
@@ -305,9 +318,21 @@ export default function FilterGroups() {
     c.title.toLowerCase().includes(searchColl.toLowerCase())
   );
 
-  const filteredGroups = groups.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredGroups = groups.filter((g) => {
+    const matchesSearch = g.name.toLowerCase().includes(searchQuery.toLowerCase());
+    let matchesView = true;
+    if (activeView === "active") matchesView = g.status === true;
+    if (activeView === "inactive") matchesView = g.status === false;
+    if (activeView === "favorites") matchesView = false; // not implemented yet
+    return matchesSearch && matchesView;
+  });
+
+  const getActiveViewLabel = () => {
+    if (activeView === "active") return "Active filters groups";
+    if (activeView === "inactive") return "Inactive filters groups";
+    if (activeView === "favorites") return "My favorite groups";
+    return "All groups";
+  };
 
   const handleToggleCollection = (coll) => {
     setSelectedColls((prev) =>
@@ -335,8 +360,14 @@ export default function FilterGroups() {
   };
 
   const handleDelete = (id) => {
-    if (!confirm("Delete this filter group?")) return;
-    submit({ intent: "delete", id }, { method: "POST" });
+    setGroupToDelete(id);
+  };
+
+  const confirmDelete = () => {
+    if (groupToDelete) {
+      submit({ intent: "delete", id: groupToDelete }, { method: "POST" });
+      setGroupToDelete(null);
+    }
   };
 
   const handleToggle = (id) => {
@@ -389,8 +420,7 @@ export default function FilterGroups() {
                 <button
                   onClick={() => setShowViewsDropdown(!showViewsDropdown)}
                   style={{
-                    appearance: "none",
-                    background: "#f0f4f9",
+                    background: "#f1f8ff",
                     color: "#007bff",
                     padding: "8px 16px",
                     borderRadius: "20px",
@@ -404,7 +434,7 @@ export default function FilterGroups() {
                     gap: "8px"
                   }}
                 >
-                  All groups ({groups.length})
+                  {getActiveViewLabel()} ({filteredGroups.length})
                   <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "none", stroke: "currentColor", strokeWidth: "1.5" }}>
                     <path d="M5 7l5 5 5-5" />
                   </svg>
@@ -426,21 +456,25 @@ export default function FilterGroups() {
                     }}
                   >
                     {[
-                      { id: "all", label: "All groups", isFavorite: true },
-                      { id: "active", label: "Active filters groups", isFavorite: false },
-                      { id: "inactive", label: "Inactive filters groups", isFavorite: false },
-                      { id: "favorites", label: "My favorite groups", isFavorite: false }
+                      { id: "all", label: "All groups", isFavorite: activeView === "all" },
+                      { id: "active", label: "Active filters groups", isFavorite: activeView === "active" },
+                      { id: "inactive", label: "Inactive filters groups", isFavorite: activeView === "inactive" },
+                      { id: "favorites", label: "My favorite groups", isFavorite: activeView === "favorites" }
                     ].map(view => (
                       <div 
                         key={view.id}
+                        onClick={() => {
+                          setActiveView(view.id);
+                          setShowViewsDropdown(false);
+                        }}
                         style={{
                           padding: "12px 16px",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
                           cursor: "pointer",
-                          color: view.id === "all" ? "#007bff" : "#202223",
-                          fontWeight: view.id === "all" ? "600" : "400",
+                          color: activeView === view.id ? "#007bff" : "#202223",
+                          fontWeight: activeView === view.id ? "600" : "400",
                           borderBottom: view.id === "all" ? "1px solid #e4e5e7" : "none"
                         }}
                       >
@@ -1309,6 +1343,74 @@ export default function FilterGroups() {
                 style={{ background: "#0066cc", border: "none", borderRadius: "20px", padding: "8px 24px", fontSize: "13px", fontWeight: "600", color: "#fff", cursor: "pointer" }}
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ──────────────────────────────────── */}
+      {groupToDelete && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setGroupToDelete(null); }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "24px",
+              width: "400px",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h2 style={{ fontSize: "18px", fontWeight: "600", color: "#202223", margin: 0 }}>Delete filter group?</h2>
+              <button onClick={() => setGroupToDelete(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6d7175", padding: "4px" }}>✕</button>
+            </div>
+            
+            <p style={{ margin: "0 0 24px", fontSize: "14px", color: "#6d7175", lineHeight: "1.4" }}>
+              Are you sure you want to delete this filter group? This action cannot be undone and these filters will no longer be visible on your store.
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button
+                onClick={() => setGroupToDelete(null)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "4px",
+                  border: "1px solid #c9cccf",
+                  background: "#fff",
+                  color: "#202223",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "4px",
+                  border: "none",
+                  background: "#d82c0d",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: "500",
+                  cursor: "pointer",
+                }}
+              >
+                Delete
               </button>
             </div>
           </div>

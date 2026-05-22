@@ -14,9 +14,15 @@ export const loader = async ({ request }) => {
     return data({ error: "Missing shop parameter" }, { status: 400 });
   }
 
-  // ── 0. Resolve FilterGroup settings ────────────────────────────────
+  // ── 0. Parse Query Parameters (needed for resolving group) ───────
+  const collectionId = url.searchParams.get("collectionId");
+  const collectionHandle = url.searchParams.get("collectionHandle");
+  const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
+  const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
+  
+  // ── 1. Resolve FilterGroup settings ────────────────────────────────
   // If groupId is provided, use its FilterGroupItems.
-  // Otherwise fall back to the collection-matched default group or global FilterSettings.
+  // Otherwise fall back to the collection-matched group or default group.
   const groupId = url.searchParams.get("groupId");
   let activeGroupFilters = null;
 
@@ -28,20 +34,43 @@ export const loader = async ({ request }) => {
     if (group) activeGroupFilters = group.filters;
   }
 
+  let resolvedCollectionId = collectionId;
+  if (!resolvedCollectionId && collectionHandle && collectionHandle.toLowerCase() !== 'all') {
+    const coll = await prisma.collection.findFirst({
+      where: { handle: collectionHandle, shop }
+    });
+    if (coll) {
+      resolvedCollectionId = coll.id;
+    }
+  }
+
+  if (!activeGroupFilters && resolvedCollectionId) {
+    // Try to find a specific group assigned to this collection
+    const assignedGroup = await prisma.filterGroup.findFirst({
+      where: {
+        shop,
+        status: true,
+        collections: {
+          some: {
+            collectionId: resolvedCollectionId
+          }
+        }
+      },
+      include: { filters: { orderBy: { order: "asc" } } },
+    });
+    if (assignedGroup) activeGroupFilters = assignedGroup.filters;
+  }
+
   if (!activeGroupFilters) {
     // Try to find the default group
     const defaultGroup = await prisma.filterGroup.findFirst({
-      where: { shop, isDefault: true },
+      where: { shop, isDefault: true, status: true },
       include: { filters: { orderBy: { order: "asc" } } },
     });
     if (defaultGroup) activeGroupFilters = defaultGroup.filters;
   }
 
-  // ── 1. Parse Query Parameters ──────────────────────────────────────
-  const collectionId = url.searchParams.get("collectionId");
-  const collectionHandle = url.searchParams.get("collectionHandle");
-  const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
-  const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
+  // ── 2. Parse Remaining Query Parameters ────────────────────────────
   
   const vendors = url.searchParams.getAll("vendor[]");
   const types = url.searchParams.getAll("type[]");
@@ -225,6 +254,7 @@ export const loader = async ({ request }) => {
         variants: {
           select: {
             available: true,
+            price: true,
             option1: true,
             option2: true,
             option3: true,
@@ -251,6 +281,17 @@ export const loader = async ({ request }) => {
   const collectionCounts = {};
   let inStockCount = 0;
   let outOfStockCount = 0;
+
+  // Extract price ranges from the active group filter
+  const priceFilter = activeGroupFilters ? activeGroupFilters.find(f => f.filterType === 'price' || f.type === 'price') : null;
+  let priceRangesConfig = [];
+  if (priceFilter && priceFilter.config) {
+    try {
+      const configObj = typeof priceFilter.config === 'string' ? JSON.parse(priceFilter.config) : priceFilter.config;
+      priceRangesConfig = configObj.priceRanges || [];
+    } catch(e) {}
+  }
+  const priceRangeCounts = priceRangesConfig.map(r => ({ ...r, count: 0 }));
 
   allMatchedProducts.forEach(p => {
     if (p.collections) {
@@ -319,6 +360,24 @@ export const loader = async ({ request }) => {
     } else {
       outOfStockCount++;
     }
+
+    // Price range counts
+    if (priceRangeCounts.length > 0 && p.variants.length > 0) {
+      let minProductPrice = Infinity;
+      p.variants.forEach(v => {
+        const vPrice = parseFloat(v.price || 0);
+        if (vPrice < minProductPrice) minProductPrice = vPrice;
+      });
+      if (minProductPrice !== Infinity) {
+        priceRangeCounts.forEach(r => {
+          const rMin = parseFloat(r.min) || 0;
+          const rMax = r.max === "" || r.max === null || r.max === undefined ? Infinity : parseFloat(r.max);
+          if (minProductPrice >= rMin && minProductPrice <= rMax) {
+            r.count += 1;
+          }
+        });
+      }
+    }
   });
 
   return data({
@@ -343,7 +402,8 @@ export const loader = async ({ request }) => {
       availability: {
         inStock: inStockCount,
         outOfStock: outOfStockCount
-      }
+      },
+      priceRanges: priceRangeCounts
     }
   });
 };

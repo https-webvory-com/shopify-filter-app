@@ -5,7 +5,7 @@
 
 (function () {
   'use strict';
-
+ 
   const sidebar = document.getElementById('cfp-sidebar');
   const topBar = document.getElementById('cfp-top-bar');
   const overlay = document.getElementById('cfp-overlay');
@@ -32,6 +32,7 @@
     options: {}, // name -> array of values
     metafields: {}, // key -> array of values
     availability: [], // 'in_stock', 'out_of_stock'
+    priceRanges: [], // selected price range strings
     minPrice: 0,
     maxPrice: 9999,
     sortBy: 'created-descending',
@@ -253,7 +254,7 @@
           </label>
         `;
       } 
-      else if (type === 'price') {
+      else if (type === 'price' && displayMode === 'Range') {
         groupContent = `
           <div class="cfp-price-range">
             <div class="cfp-price-inputs">
@@ -279,10 +280,17 @@
       else {
         // Resolve dynamic items
         let items = [];
-        if (type === 'vendor') items = facets.vendors || [];
+        if (type === 'price') {
+          items = (facets.priceRanges || []).map(r => ({
+            value: `${r.min}-${r.max}`,
+            label: r.label,
+            count: r.count
+          }));
+        }
+        else if (type === 'vendor') items = facets.vendors || [];
         else if (type === 'product_type') items = facets.productTypes || [];
         else if (type === 'collection') items = facets.collections || [];
-        else if (type === 'tag') items = facets.tags || [];
+        else if (type === 'tag' || type === 'tags') items = facets.tags || [];
         else if (type === 'title') items = facets.titles || [];
         else if (type === 'option') items = facets.options?.[key] || [];
         else if (type === 'metafield') items = facets.metafields?.[key] || [];
@@ -305,7 +313,8 @@
         const activeArray = (type === 'vendor') ? activeFilters.vendors :
                             (type === 'product_type') ? activeFilters.types :
                             (type === 'collection') ? activeFilters.collections :
-                            (type === 'tag') ? activeFilters.tags :
+                            (type === 'tag' || type === 'tags') ? activeFilters.tags :
+                            (type === 'price') ? activeFilters.priceRanges :
                             (type === 'title') ? (activeFilters.titles || []) :
                             (type === 'option') ? (activeFilters.options[key] || []) :
                             (activeFilters.metafields[key] || []);
@@ -517,7 +526,7 @@
         else if (name === 'vendor') arr = activeFilters.vendors;
         else if (name === 'type') arr = activeFilters.types;
         else if (name === 'collection') arr = activeFilters.collections;
-        else if (name === 'tag') arr = activeFilters.tags;
+        else if (name === 'tag' || name === 'tags') arr = activeFilters.tags;
         else if (name === 'title') arr = activeFilters.titles;
         else if (name.startsWith('option-')) {
           const optionName = name.replace('option-', '');
@@ -556,8 +565,26 @@
           updateFilterArray(activeFilters.types, val, checked);
         } else if (name === 'collection') {
           updateFilterArray(activeFilters.collections, val, checked);
-        } else if (name === 'tag') {
+        } else if (name === 'tag' || name === 'tags') {
           updateFilterArray(activeFilters.tags, val, checked);
+        } else if (name === 'price') {
+          updateFilterArray(activeFilters.priceRanges, val, checked);
+          if (activeFilters.priceRanges.length > 0) {
+            let globalMin = Infinity;
+            let globalMax = 0;
+            activeFilters.priceRanges.forEach(r => {
+              const parts = r.split('-');
+              const minVal = parseFloat(parts[0]) || 0;
+              const maxVal = (parts[1] === "" || parts[1] === "Infinity" || parts[1] === "null" || parts[1] === "undefined") ? 999999 : parseFloat(parts[1]);
+              if (minVal < globalMin) globalMin = minVal;
+              if (maxVal > globalMax) globalMax = maxVal;
+            });
+            activeFilters.minPrice = globalMin;
+            activeFilters.maxPrice = globalMax;
+          } else {
+            activeFilters.minPrice = 0;
+            activeFilters.maxPrice = 999999;
+          }
         } else if (name === 'title') {
           updateFilterArray(activeFilters.titles, val, checked);
         } else if (name.startsWith('option-')) {
@@ -597,6 +624,7 @@
       options: {},
       metafields: {},
       availability: [],
+      priceRanges: [],
       minPrice: 0,
       maxPrice: 9999,
       sortBy: activeFilters.sortBy,

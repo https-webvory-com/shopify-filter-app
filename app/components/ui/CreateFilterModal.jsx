@@ -1205,13 +1205,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 <div style={{ display: "flex", background: "#fff", borderRadius: "4px", border: "1px solid #c9cccf", overflow: "hidden" }}>
                   <button 
                     onClick={() => setLayout("sidebar")}
-                    style={{ padding: "6px 12px", border: "none", background: layout === "sidebar" ? "#f4f6f8" : "#fff", color: layout === "sidebar" ? "#007bff" : "#6d7175", cursor: "pointer", border: layout === "sidebar" ? "1px solid #007bff" : "none" }}
+                    style={{ padding: "6px 12px", border: layout === "sidebar" ? "1px solid #007bff" : "none", background: layout === "sidebar" ? "#f4f6f8" : "#fff", color: layout === "sidebar" ? "#007bff" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><rect x="3" y="4" width="4" height="12"/><rect x="8" y="4" width="9" height="12" opacity="0.3"/></svg>
                   </button>
                   <button 
                     onClick={() => setLayout("top")}
-                    style={{ padding: "6px 12px", border: "none", borderLeft: "1px solid #c9cccf", background: layout === "top" ? "#f4f6f8" : "#fff", color: layout === "top" ? "#007bff" : "#6d7175", cursor: "pointer", border: layout === "top" ? "1px solid #007bff" : "none" }}
+                    style={{ padding: "6px 12px", border: layout === "top" ? "1px solid #007bff" : "none", borderLeft: layout === "top" ? "1px solid #007bff" : "1px solid #c9cccf", background: layout === "top" ? "#f4f6f8" : "#fff", color: layout === "top" ? "#007bff" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><rect x="4" y="3" width="12" height="3"/><rect x="4" y="7" width="12" height="10" opacity="0.3"/></svg>
                   </button>
