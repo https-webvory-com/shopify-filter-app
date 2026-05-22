@@ -134,6 +134,7 @@ model FilterGroup {
 
   collections FilterGroupCollection[]
   filters     FilterGroupItem[]
+  savedViews  SavedFilterView[]
 
   @@index([shop])
 }
@@ -160,6 +161,20 @@ model FilterGroupItem {
   isEnabled     Boolean     @default(true)
   order         Int         @default(0)
   config        Json?       // { sortBy, limit, showSearch, collapsed, valueMode }
+
+  filterGroup   FilterGroup @relation(fields: [filterGroupId], references: [id], onDelete: Cascade)
+
+  @@index([filterGroupId])
+}
+
+model SavedFilterView {
+  id            String      @id @default(cuid())
+  filterGroupId String
+  name          String      @default("Custom Filter")
+  matchType     String      @default("all") // 'all' or 'any'
+  conditions    Json        // Array of conditions [{ field: "label", operator: "contains", value: "x" }]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   filterGroup   FilterGroup @relation(fields: [filterGroupId], references: [id], onDelete: Cascade)
 

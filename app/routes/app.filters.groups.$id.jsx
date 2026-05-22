@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useActionData, useLoaderData, useSubmit, Link, data } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { CreateFilterModal } from "../components/ui/CreateFilterModal";
+import { Modal } from "../components/ui/Modal";
+import { Button } from "../components/ui/Button";
+import { Checkbox } from "../components/ui/Checkbox";
+import { SearchInput } from "../components/ui/SearchInput";
+import { AdvancedFilterBuilder } from "../components/ui/AdvancedFilterBuilder";
 
 // ── Available filter types for "Add Filter" modal ─────────────────────
 const FILTER_TYPE_OPTIONS = [
@@ -25,7 +31,7 @@ const DISPLAY_MODES = [
 
 // ── Loader ───────────────────────────────────────────────────────────
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const { id } = params;
 
@@ -53,7 +59,142 @@ export const loader = async ({ request, params }) => {
     }
   }
 
-  return { group, detectedOptions: Array.from(optionNames).sort() };
+  let shopifyCollections = [];
+  let shopifyLocations = [];
+  try {
+    const graphqlQuery = await admin.graphql(`
+      #graphql
+      query {
+        collections(first: 50) {
+          nodes {
+            title
+          }
+        }
+        locations(first: 250, includeInactive: true) {
+          nodes {
+            id
+            name
+            inventoryLevels(first: 250) {
+              nodes {
+                id
+              }
+            }
+          }
+        }
+        shop {
+          fulfillmentServices {
+            location {
+              id
+              name
+              inventoryLevels(first: 250) {
+                nodes {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `);
+    const graphqlData = await graphqlQuery.json();
+    shopifyCollections = graphqlData?.data?.collections?.nodes?.map(c => c.title).sort() || [];
+    
+    const allLocsMap = new Map();
+    // Add regular locations
+    graphqlData?.data?.locations?.nodes?.forEach(l => {
+      allLocsMap.set(l.id, { value: l.name, id: l.id, count: l.inventoryLevels?.nodes?.length || 0 });
+    });
+    // Add fulfillment service locations
+    graphqlData?.data?.shop?.fulfillmentServices?.forEach(fs => {
+      if (fs.location) {
+        const l = fs.location;
+        allLocsMap.set(l.id, { value: l.name, id: l.id, count: l.inventoryLevels?.nodes?.length || 0 });
+      }
+    });
+    
+    shopifyLocations = Array.from(allLocsMap.values());
+  } catch (err) {
+    console.error("Error fetching collections or locations:", err);
+  }
+
+  // Fetch unique vendors and product types with counts
+  const vendors = await prisma.product.groupBy({
+    by: ['vendor'],
+    where: { shop, vendor: { not: "" } },
+    _count: { vendor: true }
+  });
+
+  const productTypes = await prisma.product.groupBy({
+    by: ['productType'],
+    where: { shop, productType: { not: "" } },
+    _count: { productType: true }
+  });
+
+  const allProducts = await prisma.product.findMany({
+    where: { shop },
+    select: { tags: true, options: true, variants: { select: { available: true, inventory: true } } }
+  });
+
+  const tagsMap = new Map();
+  const optionsMap = new Map();
+
+  let stockOnHandCount = 0;
+  let preOrderCount = 0;
+  let inStockCount = 0;
+  let outOfStockCount = 0;
+
+  for (const p of allProducts) {
+    // Process tags
+    for (const t of p.tags || []) {
+      if (t) tagsMap.set(t, (tagsMap.get(t) || 0) + 1);
+    }
+    // Process options
+    if (p.options && Array.isArray(p.options)) {
+      for (const opt of p.options) {
+        if (opt.name && opt.values) {
+          const optNameLower = opt.name.toLowerCase();
+          if (!optionsMap.has(optNameLower)) optionsMap.set(optNameLower, new Map());
+          const valMap = optionsMap.get(optNameLower);
+          for (const v of opt.values) {
+            valMap.set(v, (valMap.get(v) || 0) + 1);
+          }
+        }
+      }
+    }
+    
+    // Process stock status counts
+    if (p.variants && p.variants.length > 0) {
+      const hasStock = p.variants.some(v => v.inventory > 0);
+      const isPreOrder = p.variants.some(v => v.available && v.inventory <= 0);
+      const isAvailable = p.variants.some(v => v.available);
+      
+      if (hasStock) stockOnHandCount++;
+      if (isPreOrder) preOrderCount++;
+      if (isAvailable) inStockCount++;
+      if (!isAvailable) outOfStockCount++;
+    }
+  }
+
+  const storeData = {
+    totalProducts: allProducts.length,
+    stockStatusCounts: {
+      inStock: inStockCount,
+      stockOnHand: stockOnHandCount,
+      preOrder: preOrderCount,
+      outOfStock: outOfStockCount
+    },
+    vendors: vendors.map(v => ({ value: v.vendor, count: v._count.vendor })).sort((a,b) => a.value.localeCompare(b.value)),
+    productTypes: productTypes.map(p => ({ value: p.productType, count: p._count.productType })).sort((a,b) => a.value.localeCompare(b.value)),
+    tags: Array.from(tagsMap.entries()).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+    locations: shopifyLocations,
+    options: Array.from(optionsMap.entries()).reduce((acc, [name, valMap]) => {
+      acc[name] = Array.from(valMap.entries()).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value));
+      return acc;
+    }, {})
+  };
+
+
+  return { group, detectedOptions: Array.from(optionNames).sort(), shopifyCollections, storeData };
 };
 
 // ── Action ───────────────────────────────────────────────────────────
@@ -205,7 +346,7 @@ function DisplayModeBadge({ mode }) {
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function FilterGroupDetail() {
-  const { group, detectedOptions } = useLoaderData();
+  const { group, detectedOptions, shopifyCollections, storeData } = useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const shopify = useAppBridge();
@@ -225,6 +366,39 @@ export default function FilterGroupDetail() {
   const [configLimit, setConfigLimit] = useState(0);
   const [configShowSearch, setConfigShowSearch] = useState(false);
   const [configCollapsed, setConfigCollapsed] = useState(false);
+  
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Toolbar State
+  const [filterSearch, setFilterSearch] = useState("");
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+  const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Column Customization State
+  const ALL_COLUMNS = [
+    { id: "title", label: "Filter title", locked: true },
+    { id: "displayMode", label: "Display mode", locked: true },
+    { id: "values", label: "Filter values", locked: true },
+    { id: "status", label: "Status", locked: false },
+    { id: "action", label: "Action", locked: false },
+  ];
+  const [tableColumns, setTableColumns] = useState(ALL_COLUMNS.map(c => c.id));
+  const [tempTableColumns, setTempTableColumns] = useState([...tableColumns]);
+  const [columnsSearch, setColumnsSearch] = useState("");
+  const [draggedColumnIdx, setDraggedColumnIdx] = useState(null);
+  
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsViewDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (actionData?.intent === "toggleFilter") {
@@ -369,29 +543,144 @@ export default function FilterGroupDetail() {
             style={{
               padding: "14px 16px",
               display: "flex",
-              justifyContent: "space-between",
               alignItems: "center",
               borderBottom: "1px solid #e1e3e5",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <s-text variant="headingMd" fontWeight="bold">Filters</s-text>
-              <span
-                style={{
-                  padding: "2px 8px",
-                  borderRadius: "4px",
-                  background: "#f1f2f4",
-                  fontSize: "12px",
-                  color: "#6d7175",
-                  fontWeight: "600",
-                }}
-              >
-                {group.filters.length}
-              </span>
+            {/* Left side: Filters heading */}
+            <div style={{ width: "120px" }}>
+              <span style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>Filters</span>
             </div>
-            <s-button variant="primary" onClick={() => setShowAddFilter(true)}>
-              Add filter
-            </s-button>
+
+            {/* Middle: Filter views & Add Filter */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              {/* All Filters Dropdown */}
+              <div style={{ position: "relative" }} ref={dropdownRef}>
+                <button
+                  onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+                  style={{
+                    background: "#f1f8ff",
+                    border: "none",
+                    padding: "8px 16px",
+                    borderRadius: "20px",
+                    color: "#007bff",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  All filters ({group.filters.length})
+                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
+                    <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
+                  </svg>
+                </button>
+                {isViewDropdownOpen && (
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, marginTop: "8px",
+                    background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    border: "1px solid #e1e3e5", width: "200px", zIndex: 10, padding: "8px 0"
+                  }}>
+                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>All filters</button>
+                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Active filters</button>
+                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Inactive filters</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Filter Split Button */}
+              <div style={{ display: "flex", borderRadius: "20px", overflow: "hidden" }}>
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  style={{
+                    background: "#007bff",
+                    color: "#fff",
+                    border: "none",
+                    padding: "8px 16px",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Add filter
+                </button>
+                <div style={{ width: "1px", background: "rgba(255,255,255,0.3)", backgroundColor: "#007bff" }}>
+                   <div style={{ height: "100%", width: "1px", background: "rgba(255,255,255,0.3)" }}></div>
+                </div>
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  style={{
+                    background: "#007bff",
+                    color: "#fff",
+                    border: "none",
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
+                    <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1 }}></div>
+
+            {/* Right side: Search and Icons */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              {/* Search Bar */}
+              <div style={{ position: "relative" }}>
+                <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
+                  <path d="M8 2a6 6 0 1 0 4.243 10.243l4.05 4.05a1 1 0 0 0 1.414-1.414l-4.05-4.05A6 6 0 0 0 8 2zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  style={{
+                    background: "#f1f8ff",
+                    border: "none",
+                    padding: "8px 16px 8px 36px",
+                    borderRadius: "20px",
+                    fontSize: "14px",
+                    color: "#007bff",
+                    width: "200px",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              {/* Icons */}
+              <button 
+                onClick={() => setIsCustomizeColumnsOpen(true)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#007bff", display: "flex" }}
+              >
+                <svg viewBox="0 0 24 24" style={{ width: "20px", height: "20px", fill: "currentColor" }}>
+                  <path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm0-5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM19.33 13.04l2.12.88a1 1 0 0 1 .53 1.28l-1.5 3.62a1 1 0 0 1-1.28.53l-2.12-.88a7.073 7.073 0 0 1-2.14 1.26l-.33 2.27a1 1 0 0 1-.99.85h-3.88a1 1 0 0 1-.99-.85l-.33-2.27a7.073 7.073 0 0 1-2.14-1.26l-2.12.88a1 1 0 0 1-1.28-.53l-1.5-3.62a1 1 0 0 1 .53-1.28l2.12-.88c-.06-.41-.11-.83-.11-1.26s.05-.85.11-1.26l-2.12-.88a1 1 0 0 1-.53-1.28l1.5-3.62a1 1 0 0 1 1.28-.53l2.12.88c.63-.53 1.34-.97 2.14-1.26l.33-2.27a1 1 0 0 1 .99-.85h3.88a1 1 0 0 1 .99.85l.33 2.27c.8.29 1.51.73 2.14 1.26l2.12-.88a1 1 0 0 1 1.28.53l1.5 3.62a1 1 0 0 1-.53 1.28l-2.12.88c.06.41.11.83.11 1.26s-.05.85-.11 1.26z" />
+                </svg>
+              </button>
+              <button 
+                onClick={() => setIsAdvancedFilterOpen(true)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#007bff", display: "flex" }}
+              >
+                <svg viewBox="0 0 24 24" style={{ width: "20px", height: "20px", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }}>
+                  <line x1="4" y1="21" x2="4" y2="14"></line>
+                  <line x1="4" y1="10" x2="4" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12" y2="3"></line>
+                  <line x1="20" y1="21" x2="20" y2="16"></line>
+                  <line x1="20" y1="12" x2="20" y2="3"></line>
+                  <line x1="1" y1="14" x2="7" y2="14"></line>
+                  <line x1="9" y1="8" x2="15" y2="8"></line>
+                  <line x1="17" y1="16" x2="23" y2="16"></line>
+                </svg>
+              </button>
+            </div>
           </div>
 
           {group.filters.length === 0 ? (
@@ -400,7 +689,7 @@ export default function FilterGroupDetail() {
                 <path d="M3 16h4v-2H3v2zm0-5h9V9H3v2zm0-5h14V4H3v2zm6 10h8v-2H9v2zm5-5h3V9h-3v2z" />
               </svg>
               <p style={{ margin: "0 0 16px", fontSize: "14px" }}>No filters yet. Add your first filter.</p>
-              <s-button onClick={() => setShowAddFilter(true)}>Add filter</s-button>
+              <s-button onClick={() => setIsCreateModalOpen(true)}>Add filter</s-button>
             </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
@@ -423,6 +712,13 @@ export default function FilterGroupDetail() {
                       </svg>
                     </td>
                     <td style={{ padding: "14px 16px" }}>
+                      <CreateFilterModal
+                        isOpen={isCreateModalOpen}
+                        onClose={() => setIsCreateModalOpen(false)}
+                        onSave={handleAddFilter}
+                        shopifyCollections={shopifyCollections}
+                        storeData={storeData}
+                      />
                       <button
                         onClick={() => openConfigModal(filter)}
                         style={{
@@ -829,6 +1125,106 @@ export default function FilterGroupDetail() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={isCustomizeColumnsOpen}
+        onClose={() => setIsCustomizeColumnsOpen(false)}
+        title="Customize Columns"
+        width="700px"
+        footer={
+          <>
+            <Button variant="default" onClick={() => setIsCustomizeColumnsOpen(false)} style={{ borderRadius: "20px", padding: "8px 24px", color: "#c4cdd5", border: "1px solid #e1e3e5" }}>CANCEL</Button>
+            <Button variant="primary" onClick={() => { setTableColumns(tempTableColumns); setIsCustomizeColumnsOpen(false); }} style={{ borderRadius: "20px", padding: "8px 24px", background: "#51a2ff", border: "none" }}>OK</Button>
+          </>
+        }
+      >
+        <div style={{ display: "flex", gap: "40px" }}>
+          {/* Left Side */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+              <SearchInput value={columnsSearch} onChange={(e) => setColumnsSearch(e.target.value)} style={{ width: "200px" }} />
+              <button onClick={() => setTempTableColumns(ALL_COLUMNS.map(c => c.id))} style={{ background: "none", border: "none", color: "#007bff", cursor: "pointer", fontSize: "14px" }}>select all</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {ALL_COLUMNS.filter(c => c.label.toLowerCase().includes(columnsSearch.toLowerCase())).map(c => (
+                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", fontSize: "14px", color: "#007bff", fontWeight: 500 }}>
+                  <Checkbox 
+                    checked={tempTableColumns.includes(c.id)} 
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setTempTableColumns([...tempTableColumns, c.id]);
+                      } else {
+                        setTempTableColumns(tempTableColumns.filter(id => id !== c.id));
+                      }
+                    }} 
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Side */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+              <span style={{ fontSize: "14px", color: "#4a4c4e" }}>{tempTableColumns.length} columns selected</span>
+              <button onClick={() => setTempTableColumns([])} style={{ background: "none", border: "none", color: "#007bff", cursor: "pointer", fontSize: "14px" }}>clear all</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {tempTableColumns.map((colId, index) => {
+                const col = ALL_COLUMNS.find(c => c.id === colId);
+                return (
+                  <div 
+                    key={colId} 
+                    draggable
+                    onDragStart={(e) => setDraggedColumnIdx(index)}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const newCols = [...tempTableColumns];
+                      const [removed] = newCols.splice(draggedColumnIdx, 1);
+                      newCols.splice(index, 0, removed);
+                      setTempTableColumns(newCols);
+                      setDraggedColumnIdx(null);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "14px", color: "#4a4c4e", cursor: "grab" }}
+                  >
+                    <span style={{ color: "#6d7175", fontSize: "18px", userSelect: "none" }}>=</span>
+                    <span style={{ flex: 1 }}>{col.label}</span>
+                    {col.locked ? (
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#2c2c2c" }}>
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <button onClick={() => setTempTableColumns(tempTableColumns.filter(id => id !== colId))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
+                        <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#8c9196" }}>
+                          <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <AdvancedFilterBuilder
+        isOpen={isAdvancedFilterOpen}
+        onClose={() => setIsAdvancedFilterOpen(false)}
+        initialMatchType="all"
+        initialConditions={[]}
+        onApply={(matchType, conditions) => {
+          const viewName = prompt("Enter a name to save this filter view:", `View ${new Date().toLocaleTimeString()}`);
+          if (viewName) {
+            submit(
+              { intent: "saveFilterView", name: viewName, matchType, conditions: JSON.stringify(conditions) },
+              { method: "POST" }
+            );
+          }
+        }}
+      />
     </s-page>
   );
 }
