@@ -48,6 +48,7 @@ export const loader = async ({ request }) => {
   const collections = url.searchParams.getAll("collection[]");
   const tags = url.searchParams.getAll("tags[]");
   const availability = url.searchParams.getAll("availability[]");
+  const titles = url.searchParams.getAll("title[]");
   
   const sortBy = url.searchParams.get("sortBy") || "created-descending";
   const page = parseInt(url.searchParams.get("page") || "1");
@@ -100,6 +101,10 @@ export const loader = async ({ request }) => {
 
   if (tags.length > 0) {
     where.tags = { hasSome: tags };
+  }
+
+  if (titles.length > 0) {
+    where.title = { in: titles };
   }
 
   // Build variant level filter (price, stock, size, color options)
@@ -240,6 +245,7 @@ export const loader = async ({ request }) => {
   const vendorCounts = {};
   const typeCounts = {};
   const tagCounts = {};
+  const titleCounts = {};
   const optionCounts = {}; // e.g. { "Size": { "S": 5, "M": 12 }, "Color": { "Red": 4 } }
   const metafieldCounts = {}; // e.g. { "custom.material": { "Cotton": 8 } }
   const collectionCounts = {};
@@ -270,6 +276,11 @@ export const loader = async ({ request }) => {
       p.tags.forEach(tag => {
         tagCounts[tag] = (tagCounts[tag] || 0) + 1;
       });
+    }
+
+    // Title counts
+    if (p.title) {
+      titleCounts[p.title] = (titleCounts[p.title] || 0) + 1;
     }
 
     // Option counts
@@ -319,6 +330,7 @@ export const loader = async ({ request }) => {
       vendors: Object.entries(vendorCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
       productTypes: Object.entries(typeCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
       tags: Object.entries(tagCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+      titles: Object.entries(titleCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
       options: Object.entries(optionCounts).reduce((acc, [name, valuesMap]) => {
         acc[name] = Object.entries(valuesMap).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value));
         return acc;

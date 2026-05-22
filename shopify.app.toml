@@ -2,7 +2,7 @@
 
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-application_url = "https://specialists-mode-basic-notifications.trycloudflare.com"
+application_url = "https://authors-troubleshooting-insurance-mention.trycloudflare.com"
 embedded = true
 
 [build]
@@ -33,10 +33,10 @@ scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_inv
 
 
 [auth]
-redirect_urls = [ "https://specialists-mode-basic-notifications.trycloudflare.com/api/auth" ]
+redirect_urls = [ "https://authors-troubleshooting-insurance-mention.trycloudflare.com/api/auth" ]
 
 
 [app_proxy]
-url = "https://specialists-mode-basic-notifications.trycloudflare.com"
+url = "https://authors-troubleshooting-insurance-mention.trycloudflare.com"
 prefix = "apps"
 subpath = "collection-filter-pro"

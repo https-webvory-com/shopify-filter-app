@@ -220,6 +220,7 @@ export const action = async ({ request, params }) => {
     const filterKey = formData.get("filterKey") || null;
     const label = formData.get("label");
     const displayMode = formData.get("displayMode") || "list";
+    const config = formData.get("config") ? JSON.parse(formData.get("config")) : undefined;
 
     const lastFilter = await prisma.filterGroupItem.findFirst({
       where: { filterGroupId },
@@ -228,7 +229,10 @@ export const action = async ({ request, params }) => {
     const nextOrder = (lastFilter?.order ?? -1) + 1;
 
     await prisma.filterGroupItem.create({
-      data: { filterGroupId, filterType, filterKey, label, displayMode, isEnabled: true, order: nextOrder },
+      data: { 
+        filterGroupId, filterType, filterKey, label, displayMode, isEnabled: true, order: nextOrder,
+        ...(config !== undefined ? { config } : {})
+      },
     });
     return { success: true, intent };
   }
@@ -368,12 +372,16 @@ export default function FilterGroupDetail() {
   const [configCollapsed, setConfigCollapsed] = useState(false);
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingFilterData, setEditingFilterData] = useState(null);
 
   // Toolbar State
   const [filterSearch, setFilterSearch] = useState("");
+  const [filterStatusView, setFilterStatusView] = useState("all"); // 'all', 'active', 'inactive'
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState(false);
+  const [advancedConditions, setAdvancedConditions] = useState([]);
+  const [advancedMatchType, setAdvancedMatchType] = useState("all");
   const dropdownRef = useRef(null);
 
   // Column Customization State
@@ -413,70 +421,68 @@ export default function FilterGroupDetail() {
   }, [actionData, shopify]);
 
   const openConfigModal = (filter) => {
-    setConfigFilter(filter);
-    setConfigLabel(filter.label);
-    setConfigDisplayMode(filter.displayMode);
-    const cfg = filter.config || {};
-    setConfigSortBy(cfg.sortBy || "count");
-    setConfigLimit(cfg.limit || 0);
-    setConfigShowSearch(cfg.showSearch || false);
-    setConfigCollapsed(cfg.collapsed || false);
+    let parsedConfig = {};
+    try {
+      if (filter.config) parsedConfig = typeof filter.config === "string" ? JSON.parse(filter.config) : filter.config;
+    } catch(e) {}
+
+    setEditingFilterData({
+      id: filter.id,
+      optionType: filter.filterType,
+      filterTitle: filter.label,
+      prefix: parsedConfig.prefix || "",
+      navCollections: parsedConfig.navCollections || false,
+      childType: parsedConfig.childType || "Select child type",
+      mainCollections: parsedConfig.mainCollections || [{ id: Date.now(), collection: "" }],
+      keepMainCollectionsUnchanged: parsedConfig.keepMainCollectionsUnchanged || false,
+      multipleSelection: parsedConfig.multipleSelection || false,
+      narrowDown: parsedConfig.narrowDown || false,
+      useManualValues: parsedConfig.useManualValues || false,
+      excludedValues: parsedConfig.excludedValues || [],
+      manualValues: parsedConfig.manualValues || [],
+      sortManualValues: parsedConfig.sortManualValues || false,
+      advanced: parsedConfig.advanced || {},
+      displayMode: filter.displayMode || "List",
+      priceRanges: parsedConfig.priceRanges,
+      saleRanges: parsedConfig.saleRanges,
+      weightRanges: parsedConfig.weightRanges,
+      reviewRanges: parsedConfig.reviewRanges,
+      stockStatusConfig: parsedConfig.stockStatusConfig,
+      ratingColor: parsedConfig.ratingColor
+    });
+    setIsCreateModalOpen(true);
   };
 
-  const handleSaveConfig = () => {
+  const handleSaveFilterModal = (data) => {
+    const { 
+      filterId, optionType, prefix, filterTitle, navCollections, childType, mainCollections, 
+      keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, 
+      excludedValues, manualValues, sortManualValues, advanced,
+      displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
+    } = data;
+    
     submit(
       {
-        intent: "updateFilter",
-        filterId: configFilter.id,
-        label: configLabel,
-        displayMode: configDisplayMode,
+        intent: filterId ? "updateFilter" : "addFilter",
+        filterId: filterId || "",
+        filterType: optionType,
+        filterKey: "",
+        label: filterTitle,
+        displayMode: displayMode || "List",
         config: JSON.stringify({
-          sortBy: configSortBy,
-          limit: configLimit,
-          showSearch: configShowSearch,
-          collapsed: configCollapsed,
-        }),
+          prefix, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
+          priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
+        })
       },
       { method: "POST" }
     );
-    setConfigFilter(null);
+    setIsCreateModalOpen(false);
+    setEditingFilterData(null);
   };
 
   const handleUpdateName = () => {
     if (!groupName.trim()) return;
     submit({ intent: "updateGroupName", name: groupName }, { method: "POST" });
-  };
-
-  const handleAddFilter = () => {
-    if (!addLabel.trim()) return;
-    submit(
-      {
-        intent: "addFilter",
-        filterType: addType,
-        filterKey: addType === "option" || addType === "metafield" ? addKey : "",
-        label: addLabel,
-        displayMode: addDisplayMode,
-      },
-      { method: "POST" }
-    );
-    setShowAddFilter(false);
-    setAddType("vendor");
-    setAddKey("");
-    setAddLabel("");
-    setAddDisplayMode("list");
-  };
-
-  const handleAddTypeChange = (val) => {
-    setAddType(val);
-    setAddKey("");
-    const found = FILTER_TYPE_OPTIONS.find((o) => o.value === val);
-    setAddLabel(found && val !== "option" && val !== "metafield" ? found.label : "");
-    setAddDisplayMode(val === "price" ? "range" : "list");
-  };
-
-  const handleAddKeyChange = (val) => {
-    setAddKey(val);
-    if (addType === "option" && val) setAddLabel(val);
   };
 
   return (
@@ -572,7 +578,7 @@ export default function FilterGroupDetail() {
                     cursor: "pointer",
                   }}
                 >
-                  All filters ({group.filters.length})
+                  {filterStatusView === "active" ? "Active filters" : filterStatusView === "inactive" ? "Inactive filters" : "All filters"} ({group.filters.length})
                   <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
                     <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
                   </svg>
@@ -583,9 +589,9 @@ export default function FilterGroupDetail() {
                     background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                     border: "1px solid #e1e3e5", width: "200px", zIndex: 10, padding: "8px 0"
                   }}>
-                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>All filters</button>
-                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Active filters</button>
-                    <button style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Inactive filters</button>
+                    <button onClick={() => { setFilterStatusView("all"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>All filters</button>
+                    <button onClick={() => { setFilterStatusView("active"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Active filters</button>
+                    <button onClick={() => { setFilterStatusView("inactive"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Inactive filters</button>
                   </div>
                 )}
               </div>
@@ -704,7 +710,41 @@ export default function FilterGroupDetail() {
                 </tr>
               </thead>
               <tbody>
-                {group.filters.map((filter) => (
+                {group.filters
+                  .filter((filter) => {
+                    if (filterStatusView === "active") return filter.isEnabled;
+                    if (filterStatusView === "inactive") return !filter.isEnabled;
+                    return true;
+                  })
+                  .filter((filter) => filter.label.toLowerCase().includes(filterSearch.toLowerCase()))
+                  .filter((filter) => {
+                    if (advancedConditions.length === 0) return true;
+                    
+                    const passesCondition = (c) => {
+                      const val = filter[c.field];
+                      const target = c.value;
+                      
+                      if (c.operator === "equals") return val === target;
+                      if (c.operator === "doesNotEqual") return val !== target;
+                      
+                      if (typeof val === "string") {
+                        const sVal = val.toLowerCase();
+                        const sTarget = String(target).toLowerCase();
+                        if (c.operator === "contains") return sVal.includes(sTarget);
+                        if (c.operator === "doesNotContain") return !sVal.includes(sTarget);
+                        if (c.operator === "startsWith") return sVal.startsWith(sTarget);
+                        if (c.operator === "endsWith") return sVal.endsWith(sTarget);
+                      }
+                      return false;
+                    };
+
+                    if (advancedMatchType === "all") {
+                      return advancedConditions.every(passesCondition);
+                    } else {
+                      return advancedConditions.some(passesCondition);
+                    }
+                  })
+                  .map((filter) => (
                   <tr key={filter.id} style={{ borderBottom: "1px solid #f1f2f4" }}>
                     <td style={{ padding: "14px 16px", color: "#c9cccf", cursor: "grab", textAlign: "center" }}>
                       <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#c9cccf" }}>
@@ -714,8 +754,9 @@ export default function FilterGroupDetail() {
                     <td style={{ padding: "14px 16px" }}>
                       <CreateFilterModal
                         isOpen={isCreateModalOpen}
-                        onClose={() => setIsCreateModalOpen(false)}
-                        onSave={handleAddFilter}
+                        onClose={() => { setIsCreateModalOpen(false); setEditingFilterData(null); }}
+                        onSave={handleSaveFilterModal}
+                        initialData={editingFilterData}
                         shopifyCollections={shopifyCollections}
                         storeData={storeData}
                       />
@@ -961,170 +1002,7 @@ export default function FilterGroupDetail() {
         </div>
       )}
 
-      {configFilter && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 99999,
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setConfigFilter(null);
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "12px",
-              padding: "32px",
-              width: "520px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-              position: "relative",
-              maxHeight: "90vh",
-              overflowY: "auto",
-            }}
-          >
-            <button
-              onClick={() => setConfigFilter(null)}
-              style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            >
-              <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#5c5f62" }}>
-                <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
-              </svg>
-            </button>
 
-            <h2 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: 700, color: "#202223" }}>
-              Configure Filter
-            </h2>
-            <p style={{ margin: "0 0 24px", fontSize: "13px", color: "#6d7175" }}>
-              {getFilterTypeLabel(configFilter.filterType, configFilter.filterKey)}
-            </p>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
-                Display Label
-              </label>
-              <input
-                type="text"
-                value={configLabel}
-                onChange={(e) => setConfigLabel(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px", boxSizing: "border-box" }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
-                Display Mode
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                {DISPLAY_MODES.map((m) => (
-                  <label
-                    key={m.value}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      border: `2px solid ${configDisplayMode === m.value ? "#008060" : "#e1e3e5"}`,
-                      cursor: "pointer",
-                      background: configDisplayMode === m.value ? "#e6f5ef" : "#fff",
-                      fontSize: "13px",
-                      fontWeight: configDisplayMode === m.value ? "600" : "400",
-                      color: configDisplayMode === m.value ? "#008060" : "#202223",
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="displayMode"
-                      value={m.value}
-                      checked={configDisplayMode === m.value}
-                      onChange={() => setConfigDisplayMode(m.value)}
-                      style={{ display: "none" }}
-                    />
-                    {m.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginBottom: "24px",
-                padding: "16px",
-                borderRadius: "8px",
-                background: "#f6f6f7",
-                border: "1px solid #e1e3e5",
-              }}
-            >
-              <p style={{ margin: "0 0 12px", fontWeight: 600, fontSize: "13px", color: "#202223" }}>
-                Advanced Options
-              </p>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "#6d7175", fontWeight: 500 }}>
-                  Sort values by
-                </label>
-                <select
-                  value={configSortBy}
-                  onChange={(e) => setConfigSortBy(e.target.value)}
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #c9cccf", fontSize: "13px" }}
-                >
-                  <option value="count">Count (highest first)</option>
-                  <option value="az">Alphabetical A → Z</option>
-                  <option value="za">Alphabetical Z → A</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: "12px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "13px", color: "#6d7175", fontWeight: 500 }}>
-                  Limit values shown (0 = show all)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={configLimit}
-                  onChange={(e) => setConfigLimit(parseInt(e.target.value) || 0)}
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "6px", border: "1px solid #c9cccf", fontSize: "13px", boxSizing: "border-box" }}
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "#202223" }}>
-                  <input
-                    type="checkbox"
-                    checked={configShowSearch}
-                    onChange={(e) => setConfigShowSearch(e.target.checked)}
-                    style={{ width: "16px", height: "16px" }}
-                  />
-                  Enable search within this filter
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", fontSize: "13px", color: "#202223" }}>
-                  <input
-                    type="checkbox"
-                    checked={configCollapsed}
-                    onChange={(e) => setConfigCollapsed(e.target.checked)}
-                    style={{ width: "16px", height: "16px" }}
-                  />
-                  Collapsed by default on storefront
-                </label>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <s-button onClick={() => setConfigFilter(null)}>Cancel</s-button>
-              <s-button variant="primary" onClick={handleSaveConfig}>
-                Save Changes
-              </s-button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <Modal
         isOpen={isCustomizeColumnsOpen}
@@ -1213,16 +1091,12 @@ export default function FilterGroupDetail() {
       <AdvancedFilterBuilder
         isOpen={isAdvancedFilterOpen}
         onClose={() => setIsAdvancedFilterOpen(false)}
-        initialMatchType="all"
-        initialConditions={[]}
+        initialMatchType={advancedMatchType}
+        initialConditions={advancedConditions}
         onApply={(matchType, conditions) => {
-          const viewName = prompt("Enter a name to save this filter view:", `View ${new Date().toLocaleTimeString()}`);
-          if (viewName) {
-            submit(
-              { intent: "saveFilterView", name: viewName, matchType, conditions: JSON.stringify(conditions) },
-              { method: "POST" }
-            );
-          }
+          setAdvancedMatchType(matchType);
+          setAdvancedConditions(conditions);
+          // Optional: Prompt to save view in db here if user wants a saved view feature.
         }}
       />
     </s-page>

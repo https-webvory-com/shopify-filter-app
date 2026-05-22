@@ -263,6 +263,16 @@ facet-filters-form,
 }
 .cfp-group__content.cfp-collapsed { display: none; }
 
+.cfp-scroll-area {
+  max-height: 250px; /* Overridden by JS inline style */
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-right: 4px;
+}
+.cfp-scroll-area::-webkit-scrollbar { width: 4px; }
+.cfp-scroll-area::-webkit-scrollbar-track { background: transparent; }
+.cfp-scroll-area::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
+
 /* ─── Select Dropdown ────────────────────────────────────────────────── */
 .cfp-select {
   width: 100%;
@@ -500,6 +510,29 @@ facet-filters-form,
   background: var(--cfp-accent);
   border-color: var(--cfp-accent);
   color: white; font-weight: 600;
+}
+
+/* ─── Button Boxes ───────────────────────────────────────────────────── */
+.cfp-button-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px; }
+.cfp-button-chip { position: relative; cursor: pointer; }
+.cfp-button-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.cfp-button-chip span {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px; border-radius: var(--cfp-radius-sm);
+  border: 1px solid var(--cfp-border);
+  font-size: 13px; font-weight: 500;
+  color: var(--cfp-text-muted);
+  background: var(--cfp-bg);
+  transition: all var(--cfp-transition);
+}
+.cfp-button-chip:hover span {
+  border-color: var(--cfp-text);
+  color: var(--cfp-text);
+}
+.cfp-button-chip input:checked ~ span {
+  background: var(--cfp-bg);
+  border-color: var(--cfp-text);
+  color: var(--cfp-text); font-weight: 700;
 }
 
 /* ─── Footer Buttons ─────────────────────────────────────────────────── */

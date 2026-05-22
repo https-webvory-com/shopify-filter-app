@@ -67,6 +67,7 @@
       activeFilters.tags.forEach(t => queryParams.append('tags[]', t));
       activeFilters.collections.forEach(c => queryParams.append('collection[]', c));
       activeFilters.availability.forEach(a => queryParams.append('availability[]', a));
+      (activeFilters.titles || []).forEach(t => queryParams.append('title[]', t));
 
       // Dynamic options
       Object.entries(activeFilters.options).forEach(([name, values]) => {
@@ -214,20 +215,29 @@
     // Cache scroll position
     const scrollTop = body.scrollTop;
 
-    // We build the body content dynamically
     let html = '';
 
     settings.forEach(setting => {
       if (!setting.isEnabled) return;
 
-      let groupContent = '';
       const type = setting.filterType || setting.type;
       const key = setting.filterKey || setting.key;
+      let config = {};
+      try {
+        config = typeof setting.config === "string" ? JSON.parse(setting.config) : (setting.config || {});
+      } catch (e) {
+        config = {};
+      }
+      
+      const adv = config.advanced || {};
+      const prefix = config.prefix || "";
+      const displayMode = setting.displayMode || "List";
+      
+      let groupContent = '';
 
       if (type === 'availability') {
         const inStockCount = facets.availability?.inStock || 0;
         const outOfStockCount = facets.availability?.outOfStock || 0;
-
         groupContent = `
           <label class="cfp-checkbox">
             <input type="checkbox" name="availability" value="in_stock" ${activeFilters.availability.includes('in_stock') ? 'checked' : ''}>
@@ -243,16 +253,14 @@
           </label>
         `;
       } 
-      
       else if (type === 'price') {
-        // Render price slider controls
         groupContent = `
           <div class="cfp-price-range">
             <div class="cfp-price-inputs">
               <div class="cfp-price-input-wrap">
                 <label for="cfp-price-min" class="cfp-price-label">Min</label>
                 <div class="cfp-price-field">
-                  <span class="cfp-price-symbol">$</span>
+                  <span class="cfp-price-symbol">${prefix || '$'}</span>
                   <input type="number" id="cfp-price-min" class="cfp-price-input" value="${activeFilters.minPrice}" min="0">
                 </div>
               </div>
@@ -260,7 +268,7 @@
               <div class="cfp-price-input-wrap">
                 <label for="cfp-price-max" class="cfp-price-label">Max</label>
                 <div class="cfp-price-field">
-                  <span class="cfp-price-symbol">$</span>
+                  <span class="cfp-price-symbol">${prefix || '$'}</span>
                   <input type="number" id="cfp-price-max" class="cfp-price-input" value="${activeFilters.maxPrice}" min="0">
                 </div>
               </div>
@@ -268,128 +276,127 @@
           </div>
         `;
       } 
-      
-      else if (type === 'vendor') {
-        if (facets.vendors.length === 0) return;
-        const hasSearch = facets.vendors.length > 5;
+      else {
+        // Resolve dynamic items
+        let items = [];
+        if (type === 'vendor') items = facets.vendors || [];
+        else if (type === 'product_type') items = facets.productTypes || [];
+        else if (type === 'collection') items = facets.collections || [];
+        else if (type === 'tag') items = facets.tags || [];
+        else if (type === 'title') items = facets.titles || [];
+        else if (type === 'option') items = facets.options?.[key] || [];
+        else if (type === 'metafield') items = facets.metafields?.[key] || [];
 
-        groupContent = `
-          ${hasSearch ? `
-            <div class="cfp-search-input-wrap">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search brands...">
-            </div>
-          ` : ''}
-          <div class="cfp-scroll-list">
-            ${facets.vendors.map(item => `
-              <label class="cfp-checkbox">
-                <input type="checkbox" name="vendor" value="${item.value}" ${activeFilters.vendors.includes(item.value) ? 'checked' : ''}>
-                <span class="cfp-checkbox__box"></span>
-                <span class="cfp-checkbox__label">${item.value}</span>
-                <span class="cfp-checkbox__count">${item.count}</span>
-              </label>
-            `).join('')}
-          </div>
-        `;
-      } 
-      
-      else if (type === 'product_type') {
-        if (facets.productTypes.length === 0) return;
-        groupContent = facets.productTypes.map(item => `
-          <label class="cfp-checkbox">
-            <input type="checkbox" name="type" value="${item.value}" ${activeFilters.types.includes(item.value) ? 'checked' : ''}>
-            <span class="cfp-checkbox__box"></span>
-            <span class="cfp-checkbox__label">${item.value}</span>
-            <span class="cfp-checkbox__count">${item.count}</span>
-          </label>
-        `).join('');
-      } 
-      
-      else if (type === 'collection') {
-        if (!facets.collections || facets.collections.length === 0) return;
-        groupContent = facets.collections.map(item => `
-          <label class="cfp-checkbox">
-            <input type="checkbox" name="collection" value="${item.value}" ${activeFilters.collections.includes(item.value) ? 'checked' : ''}>
-            <span class="cfp-checkbox__box"></span>
-            <span class="cfp-checkbox__label">${item.label}</span>
-            <span class="cfp-checkbox__count">${item.count}</span>
-          </label>
-        `).join('');
-      } 
-      
-      else if (type === 'tag') {
-        if (facets.tags.length === 0) return;
-        groupContent = facets.tags.map(item => `
-          <label class="cfp-checkbox">
-            <input type="checkbox" name="tag" value="${item.value}" ${activeFilters.tags.includes(item.value) ? 'checked' : ''}>
-            <span class="cfp-checkbox__box"></span>
-            <span class="cfp-checkbox__label">${item.value}</span>
-            <span class="cfp-checkbox__count">${item.count}</span>
-          </label>
-        `).join('');
-      } 
-      
-      else if (type === 'option') {
-        // e.g. Size, Color options
-        const optionValues = facets.options[key] || [];
-        if (optionValues.length === 0) return;
+        if (!items || items.length === 0) return;
 
-        const isColor = key.toLowerCase().includes('color') || key.toLowerCase().includes('colour');
-        const activeVals = activeFilters.options[key] || [];
+        // Apply advanced exclusions and manual sorts
+        if (config.excludedValues && config.excludedValues.length > 0) {
+          items = items.filter(i => !config.excludedValues.includes(i.value));
+        }
+        if (config.useManualValues && config.manualValues && config.manualValues.length > 0) {
+          items = items.filter(i => config.manualValues.includes(i.value));
+          if (config.sortManualValues) {
+            items.sort((a,b) => config.manualValues.indexOf(a.value) - config.manualValues.indexOf(b.value));
+          }
+        }
+        
+        if (items.length === 0) return;
 
-        if (isColor) {
+        const activeArray = (type === 'vendor') ? activeFilters.vendors :
+                            (type === 'product_type') ? activeFilters.types :
+                            (type === 'collection') ? activeFilters.collections :
+                            (type === 'tag') ? activeFilters.tags :
+                            (type === 'title') ? (activeFilters.titles || []) :
+                            (type === 'option') ? (activeFilters.options[key] || []) :
+                            (activeFilters.metafields[key] || []);
+
+        const inputName = (type === 'option') ? `option-${key}` : 
+                          (type === 'metafield') ? `metafield-${key}` : type;
+
+        const isColor = type === 'option' && (key.toLowerCase().includes('color') || key.toLowerCase().includes('colour'));
+        const resolvedMode = (displayMode === "Swatch" && !isColor) ? "List" : displayMode; // Fallback if swatch used on non-color
+        
+        // Wrapper for Max Height scroll
+        const scrollClass = (adv.showMoreType === "Scrollbar" && items.length > 6) ? "cfp-scroll-area" : "";
+        const scrollStyle = scrollClass ? `style="max-height: ${adv.maxHeight || '300px'};"` : "";
+
+        // Render based on displayMode
+        if (resolvedMode === "Dropdown") {
           groupContent = `
-            <div class="cfp-color-grid">
-              ${optionValues.map(item => {
-                const colorHex = getColorHex(item.value);
-                const isWhite = item.value.toLowerCase() === 'white';
-                return `
-                  <label class="cfp-color-swatch" title="${item.value} (${item.count})">
-                    <input type="checkbox" name="option-${key}" value="${item.value}" ${activeVals.includes(item.value) ? 'checked' : ''}>
-                    <span class="cfp-swatch-circle" style="background:${colorHex}; ${isWhite ? 'border: 1px solid #ddd;' : ''}"></span>
-                    <span class="cfp-swatch-label">${item.value}</span>
-                  </label>
-                `;
-              }).join('')}
+            <select class="cfp-select" name="${inputName}">
+              <option value="">Any ${setting.label}</option>
+              ${items.map(item => `
+                <option value="${item.value}" ${activeArray.includes(item.value) ? 'selected' : ''}>
+                  ${prefix}${item.label || item.value} (${item.count})
+                </option>
+              `).join('')}
+            </select>
+          `;
+        }
+        else if (resolvedMode === "Swatch" || (isColor && displayMode === "List")) { // Always default color to Swatch for better UI if not overridden
+          groupContent = `
+            <div class="${scrollClass}" ${scrollStyle}>
+              <div class="cfp-color-grid">
+                ${items.map(item => {
+                  const colorHex = getColorHex(item.value);
+                  const isWhite = item.value.toLowerCase() === 'white';
+                  return `
+                    <label class="cfp-color-swatch" title="${item.value} (${item.count})">
+                      <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
+                      <span class="cfp-swatch-circle" style="background:${colorHex}; ${isWhite ? 'border: 1px solid #ddd;' : ''}"></span>
+                      <span class="cfp-swatch-label">${item.value}</span>
+                    </label>
+                  `;
+                }).join('')}
+              </div>
             </div>
           `;
-        } else {
+        }
+        else if (resolvedMode === "Box/Button" || resolvedMode === "Button") {
           groupContent = `
-            <div class="cfp-size-grid">
-              ${optionValues.map(item => `
-                <label class="cfp-size-chip" title="${item.value} (${item.count})">
-                  <input type="checkbox" name="option-${key}" value="${item.value}" ${activeVals.includes(item.value) ? 'checked' : ''}>
-                  <span>${item.value}</span>
+            <div class="${scrollClass}" ${scrollStyle}>
+              <div class="cfp-button-grid">
+                ${items.map(item => `
+                  <label class="cfp-button-chip" title="${item.value} (${item.count})">
+                    <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
+                    <span>${prefix}${item.label || item.value}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        else { // Default: List
+          const hasSearch = adv.desktopSearchBox && items.length > 5;
+          groupContent = `
+            ${hasSearch ? `
+              <div class="cfp-search-input-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+              </div>
+            ` : ''}
+            <div class="${scrollClass}" ${scrollStyle}>
+              ${items.map(item => `
+                <label class="cfp-checkbox">
+                  <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
+                  <span class="cfp-checkbox__box"></span>
+                  <span class="cfp-checkbox__label">${prefix}${item.label || item.value}</span>
+                  <span class="cfp-checkbox__count">${item.count}</span>
                 </label>
               `).join('')}
             </div>
           `;
         }
-      } 
-      
-      else if (type === 'metafield') {
-        const metafieldValues = facets.metafields[key] || [];
-        if (metafieldValues.length === 0) return;
-
-        const activeVals = activeFilters.metafields[key] || [];
-
-        groupContent = metafieldValues.map(item => `
-          <label class="cfp-checkbox">
-            <input type="checkbox" name="metafield-${key}" value="${item.value}" ${activeVals.includes(item.value) ? 'checked' : ''}>
-            <span class="cfp-checkbox__box"></span>
-            <span class="cfp-checkbox__label">${item.value}</span>
-            <span class="cfp-checkbox__count">${item.count}</span>
-          </label>
-        `).join('');
       }
 
+      const isCollapsed = adv.desktopCollapsed;
       html += `
         <div class="cfp-group" data-group="${type}-${key || ''}">
-          <button class="cfp-group__toggle" aria-expanded="true" aria-controls="cfp-group-${type}-${key || ''}">
+          <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="cfp-group-${type}-${key || ''}">
             <span>${setting.label}</span>
             <svg class="cfp-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div class="cfp-group__content" id="cfp-group-${type}-${key || ''}">
+          <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${type}-${key || ''}">
             ${groupContent}
           </div>
         </div>
@@ -497,6 +504,41 @@
       });
     }
 
+    // Dropdowns change listeners
+    sidebar.querySelectorAll('.cfp-sidebar__body select.cfp-select').forEach(select => {
+      select.addEventListener('change', () => {
+        const name = select.name;
+        const val = select.value;
+        
+        activeFilters.page = 1;
+        
+        let arr = [];
+        if (name === 'availability') arr = activeFilters.availability;
+        else if (name === 'vendor') arr = activeFilters.vendors;
+        else if (name === 'type') arr = activeFilters.types;
+        else if (name === 'collection') arr = activeFilters.collections;
+        else if (name === 'tag') arr = activeFilters.tags;
+        else if (name === 'title') arr = activeFilters.titles;
+        else if (name.startsWith('option-')) {
+          const optionName = name.replace('option-', '');
+          if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
+          arr = activeFilters.options[optionName];
+        } else if (name.startsWith('metafield-')) {
+          const metafieldKey = name.replace('metafield-', '');
+          if (!activeFilters.metafields[metafieldKey]) activeFilters.metafields[metafieldKey] = [];
+          arr = activeFilters.metafields[metafieldKey];
+        }
+
+        // Clear existing selections for this dropdown and set the new one
+        arr.length = 0;
+        if (val) arr.push(val);
+
+        if (window.innerWidth > 991) {
+          fetchAndRenderData();
+        }
+      });
+    });
+
     // Checkboxes change listeners
     sidebar.querySelectorAll('.cfp-sidebar__body input[type="checkbox"]').forEach(checkbox => {
       checkbox.addEventListener('change', () => {
@@ -516,6 +558,8 @@
           updateFilterArray(activeFilters.collections, val, checked);
         } else if (name === 'tag') {
           updateFilterArray(activeFilters.tags, val, checked);
+        } else if (name === 'title') {
+          updateFilterArray(activeFilters.titles, val, checked);
         } else if (name.startsWith('option-')) {
           const optionName = name.replace('option-', '');
           if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
@@ -548,6 +592,7 @@
       vendors: [],
       types: [],
       tags: [],
+      titles: [],
       collections: [],
       options: {},
       metafields: {},
@@ -567,6 +612,7 @@
     count += activeFilters.vendors.length;
     count += activeFilters.types.length;
     count += activeFilters.tags.length;
+    count += (activeFilters.titles || []).length;
     count += activeFilters.collections.length;
     count += activeFilters.availability.length;
     

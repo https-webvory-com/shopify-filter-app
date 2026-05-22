@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState,useEffect } from "react";
 // import { Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
@@ -275,7 +275,7 @@ const SimpleDropdown = ({ value, onChange, options, width = "200px" }) => {
   );
 };
 
-export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections = [], storeData = {} }) {
+export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections = [], storeData = {}, initialData = null }) {
   const [activeTab, setActiveTab] = useState("general");
   const [showPreview, setShowPreview] = useState(true);
   
@@ -307,11 +307,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     { id: 2, label: "From {0}", from: "10", to: "" }
   ]);
   const [reviewRanges, setReviewRanges] = useState([
-    { id: 1, label: "No reviews", from: "0", to: "1" },
-    { id: 2, label: "D", from: "1", to: "2" },
-    { id: 3, label: "", from: "2", to: "3" },
-    { id: 4, label: "", from: "3", to: "4" },
-    { id: 5, label: "", from: "4", to: "5" },
+    { id: 1, label: "No reviews", from: "0", to: "" },
+    { id: 2, label: "", from: "1", to: "" },
+    { id: 3, label: "", from: "2", to: "" },
+    { id: 4, label: "", from: "3", to: "" },
+    { id: 5, label: "", from: "4", to: "" },
     { id: 6, label: "", from: "5", to: "" }
   ]);
 
@@ -332,6 +332,86 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
   // Preview State
   const [device, setDevice] = useState("desktop");
   const [layout, setLayout] = useState("sidebar");
+
+  const [advanced, setAdvanced] = useState({
+    displayTooltip: false,
+    tooltipContent: "",
+    valuesTransformation: "No transformation",
+    showMoreType: "Scrollbar",
+    maxHeight: "300px",
+    sortType: "Label - AZ",
+        desktopCollapsed: false,
+    desktopSearchBox: false,
+    mobileSearchBox: false
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData) {
+        setOptionType(initialData.optionType || "collection");
+        setFilterTitle(initialData.filterTitle || "");
+        setPrefix(initialData.prefix || "");
+        setNavCollections(initialData.navCollections || false);
+        setChildType(initialData.childType || "Select child type");
+        setMainCollections(initialData.mainCollections || [{ id: Date.now(), collection: "" }]);
+        setKeepMainCollectionsUnchanged(initialData.keepMainCollectionsUnchanged || false);
+        setMultipleSelection(initialData.multipleSelection || false);
+        setNarrowDown(initialData.narrowDown || false);
+        setUseManualValues(initialData.useManualValues || false);
+        setExcludedValues(initialData.excludedValues || []);
+        setManualValues(initialData.manualValues || []);
+        setSortManualValues(initialData.sortManualValues || false);
+        setDisplayMode(initialData.displayMode || "List");
+        
+        if (initialData.priceRanges) setPriceRanges(initialData.priceRanges);
+        if (initialData.saleRanges) setSaleRanges(initialData.saleRanges);
+        if (initialData.weightRanges) setWeightRanges(initialData.weightRanges);
+        if (initialData.reviewRanges) setReviewRanges(initialData.reviewRanges);
+        if (initialData.stockStatusConfig) setStockStatusConfig(initialData.stockStatusConfig);
+        if (initialData.ratingColor) setRatingColor(initialData.ratingColor);
+
+        if (initialData.advanced) {
+          setAdvanced(prev => ({ ...prev, ...initialData.advanced }));
+        }
+      } else {
+        setOptionType("collection");
+        setFilterTitle("Collection");
+        setPrefix("");
+        setNavCollections(false);
+        setChildType("Select child type");
+        setMainCollections([{ id: Date.now(), collection: "" }]);
+        setKeepMainCollectionsUnchanged(false);
+        setMultipleSelection(false);
+        setNarrowDown(false);
+        setUseManualValues(false);
+        setExcludedValues([]);
+        setManualValues([]);
+        setSortManualValues(false);
+        setAdvanced({
+          valuesTransformation: "Default",
+          showMoreType: "Scrollbar",
+          maxHeight: "300px",
+          sortType: "Label - AZ",
+          displayTooltip: false,
+          tooltipContent: "",
+          desktopCollapsed: false,
+          desktopSearchBox: false,
+          mobileSearchBox: false
+        });
+        setDisplayMode("List");
+        setPriceRanges([{ id: Date.now(), from: "", to: "" }]);
+        setSaleRanges([{ id: Date.now(), from: "", to: "" }]);
+        setWeightRanges([{ id: Date.now(), from: "", to: "" }]);
+        setReviewRanges([{ id: Date.now(), from: "", to: "" }]);
+        setStockStatusConfig({
+          inStock: true, inStockLabel: "In stock", inStockType: "checkbox",
+          outOfStock: true, outOfStockLabel: "Out of stock", outOfStockType: "checkbox"
+        });
+        setRatingColor("#ffff00");
+      }
+      setActiveTab("general");
+    }
+  }, [isOpen, initialData]);
 
   const DUMMY_DATA = {
     collection: (shopifyCollections || []).map(c => ({ label: c, count: 0 })),
@@ -403,8 +483,42 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     ];
   };
 
-  const currentOptionsData = getDummyData(optionType);
+  let currentOptionsData = getDummyData(optionType);
   const currentOptionsLabels = currentOptionsData.map(o => o.label);
+
+  const renderStars = (ratingStr) => {
+    const num = parseInt(ratingStr);
+    if (isNaN(num)) return ratingStr;
+    return (
+      <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <svg key={star} viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: star <= num ? "#FFC107" : "transparent", stroke: "#FFC107", strokeWidth: "1.5px" }}>
+            <path d="M10 1.3l2.388 6.722h7.312l-5.938 4.056 2.388 6.722-5.938-4.056-5.938 4.056 2.388-6.722-5.938-4.056h7.312z" />
+          </svg>
+        ))}
+      </div>
+    );
+  };
+
+  // Apply Advanced Transformations
+  if (advanced.valuesTransformation === "Capitalize") {
+    currentOptionsData = currentOptionsData.map(o => ({ ...o, label: o.label.charAt(0).toUpperCase() + o.label.slice(1).toLowerCase() }));
+  } else if (advanced.valuesTransformation === "Uppercase") {
+    currentOptionsData = currentOptionsData.map(o => ({ ...o, label: o.label.toUpperCase() }));
+  } else if (advanced.valuesTransformation === "Lowercase") {
+    currentOptionsData = currentOptionsData.map(o => ({ ...o, label: o.label.toLowerCase() }));
+  }
+
+  // Apply Advanced Sorting
+  if (advanced.sortType === "Label - AZ") {
+    currentOptionsData.sort((a, b) => a.label.localeCompare(b.label));
+  } else if (advanced.sortType === "Label - ZA") {
+    currentOptionsData.sort((a, b) => b.label.localeCompare(a.label));
+  } else if (advanced.sortType === "Product count - Highest to lowest") {
+    currentOptionsData.sort((a, b) => b.count - a.count);
+  } else if (advanced.sortType === "Product count - Lowest to highest") {
+    currentOptionsData.sort((a, b) => a.count - b.count);
+  }
 
   if (!isOpen) return null;
 
@@ -437,7 +551,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         {/* Header Title */}
         <div style={{ padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e1e3e5" }}>
           <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#202223" }}>
-            Create a new filter
+            {initialData ? "Edit Filters" : "Create a new filter"}
           </h2>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#5c5f62" }}>
@@ -908,7 +1022,162 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             )}
             
             {activeTab === "advanced" && (
-              <div style={{ color: "#6d7175", fontSize: "14px" }}>Advanced settings will be placed here.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "24px", paddingBottom: "24px" }}>
+                {/* Display tooltip */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Checkbox 
+                      checked={advanced.displayTooltip} 
+                      onChange={(checked) => setAdvanced({ ...advanced, displayTooltip: checked })} 
+                    />
+                    <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Display tooltip</label>
+                    <TooltipIcon content="Show a tooltip icon next to the filter title." />
+                  </div>
+                  
+                  {advanced.displayTooltip && (
+                    <div style={{ marginTop: "12px", marginLeft: "28px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                        <label style={{ fontSize: "13px", color: "#8c9196" }}>Tooltip content</label>
+                        <TooltipIcon content="The text to display inside the tooltip." />
+                      </div>
+                      <input 
+                        type="text" 
+                        value={advanced.tooltipContent}
+                        onChange={e => setAdvanced({ ...advanced, tooltipContent: e.target.value })}
+                        placeholder="Type tooltip text here"
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) ? (
+                  <>
+                    {/* Values transformation */}
+                    <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                    <label style={{ fontSize: "13px", color: "#8c9196" }}>Values transformation</label>
+                    <TooltipIcon content="Transform how the filter option labels appear." />
+                  </div>
+                  <SimpleDropdown 
+                    value={advanced.valuesTransformation} 
+                    onChange={val => setAdvanced({ ...advanced, valuesTransformation: val })} 
+                    options={["No transformation", "Capitalize", "Uppercase", "Lowercase"]} 
+                    width="100%"
+                  />
+                </div>
+
+                {/* Show more type */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                    <label style={{ fontSize: "13px", color: "#8c9196" }}>Show more type</label>
+                    <TooltipIcon content="How to display long lists of filter values." />
+                  </div>
+                  <SimpleDropdown 
+                    value={advanced.showMoreType} 
+                    onChange={val => setAdvanced({ ...advanced, showMoreType: val })} 
+                    options={["Scrollbar", "Show all", "View more", "View more with scrollbar"]} 
+                    width="100%"
+                  />
+                </div>
+
+                {/* Maximum height (Conditional) */}
+                {(advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                      <label style={{ fontSize: "13px", color: "#8c9196" }}>Maximum height</label>
+                      <TooltipIcon content="The maximum height of the filter block before a scrollbar appears." />
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <input 
+                        type="text" 
+                        value={advanced.maxHeight}
+                        onChange={e => setAdvanced({ ...advanced, maxHeight: e.target.value })}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }}
+                      />
+                      {advanced.maxHeight && (
+                        <button 
+                          onClick={() => setAdvanced({ ...advanced, maxHeight: "" })}
+                          style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "#d1e4fb", color: "#007bff", border: "none", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sort type */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                    <label style={{ fontSize: "13px", color: "#8c9196" }}>Sort type</label>
+                    <TooltipIcon content="How filter options should be ordered." />
+                  </div>
+                  <SimpleDropdown 
+                    value={advanced.sortType} 
+                    onChange={val => setAdvanced({ ...advanced, sortType: val })} 
+                    options={["Label - AZ", "Label - ZA", "Product count - Highest to lowest", "Product count - Lowest to highest"]} 
+                    width="100%"
+                  />
+                </div>
+
+                {/* On desktop & On mobile checkboxes */}
+                <div style={{ display: "flex", gap: "40px", marginTop: "16px" }}>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <h4 style={{ margin: 0, fontSize: "13px", color: "#202223" }}>On desktop</h4>
+                    
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Checkbox 
+                        checked={advanced.desktopCollapsed} 
+                        onChange={checked => setAdvanced({ ...advanced, desktopCollapsed: checked })} 
+                      />
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Initially collapsed</label>
+                      <TooltipIcon content="Filter block will be collapsed when the page loads on desktop." />
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Checkbox 
+                        checked={advanced.desktopSearchBox} 
+                        onChange={checked => setAdvanced({ ...advanced, desktopSearchBox: checked })} 
+                      />
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show search box</label>
+                      <TooltipIcon content="Show a search input inside the filter block on desktop." />
+                    </div>
+                  </div>
+
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <h4 style={{ margin: 0, fontSize: "13px", color: "#202223" }}>On mobile</h4>
+                    
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "32px" }}>
+                      <Checkbox 
+                        checked={advanced.mobileSearchBox} 
+                        onChange={checked => setAdvanced({ ...advanced, mobileSearchBox: checked })} 
+                      />
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show search box</label>
+                      <TooltipIcon content="Show a search input inside the filter block on mobile." />
+                    </div>
+                  </div>
+                </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Restricted Options (e.g. Price) only show Initially Collapsed */}
+                    <div style={{ marginTop: "16px" }}>
+                      <label style={{ fontSize: "13px", fontWeight: "600", color: "#202223", display: "block", marginBottom: "12px" }}>On desktop</label>
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                        <input 
+                          type="checkbox" 
+                          checked={advanced.desktopCollapsed} 
+                          onChange={e => setAdvanced({ ...advanced, desktopCollapsed: e.target.checked })} 
+                          style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                        />
+                        <span style={{ fontSize: "14px", color: "#007bff" }}>Initially collapsed</span>
+                        <TooltipIcon content="When checked, the filter is initially collapsed." />
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -954,26 +1223,45 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 {device === "desktop" ? (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}>
                         <h3 style={{ margin: 0, fontSize: "12px", fontWeight: "700", color: "#202223", textTransform: "uppercase" }}>
                           {filterTitle || "COLLECTION"}
                         </h3>
-                        <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#f4f6f8", color: "#8c9196", fontSize: "9px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #d2d5d8" }}>?</div>
+                        {advanced.displayTooltip && (
+                          <div title={advanced.tooltipContent} style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#f4f6f8", color: "#8c9196", fontSize: "9px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #d2d5d8", cursor: "help" }}>?</div>
+                        )}
                       </div>
-                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#202223" }}><path d="M5 8l5 5 5-5z" /></svg>
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#202223", transform: advanced.desktopCollapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><path d="M5 8l5 5 5-5z" /></svg>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    {!advanced.desktopCollapsed && (
+                      <div style={{ 
+                        display: "flex", 
+                        flexDirection: "column", 
+                        gap: "12px", 
+                        maxHeight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && advanced.maxHeight ? advanced.maxHeight : "none", 
+                        overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible",
+                        paddingRight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "4px" : "0"
+                      }}>
+                        {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.desktopSearchBox && (
+                          <input 
+                            type="text" 
+                            placeholder="Filter options" 
+                            style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "13px", marginBottom: "8px" }} 
+                          />
+                        )}
+
                       {currentOptionsData
                         .filter(item => !excludedValues.includes(item.label))
                         .map(item => (
                           <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#202223" }}>
-                            <span>{item.label}</span>
+                            <span>{item.isStars ? renderStars(item.label) : item.label}</span>
                             {item.count > 0 && <span style={{ color: "#8c9196" }}>({item.count})</span>}
                           </div>
                         ))
                       }
-                    </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
@@ -990,12 +1278,25 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    <div style={{ 
+                      display: "flex", 
+                      flexDirection: "column", 
+                      gap: "24px",
+                      maxHeight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && advanced.maxHeight ? advanced.maxHeight : "none", 
+                      overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible"
+                    }}>
+                      {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.mobileSearchBox && (
+                        <input 
+                          type="text" 
+                          placeholder="Filter options" 
+                          style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
+                        />
+                      )}
                       {currentOptionsData
                         .filter(item => !excludedValues.includes(item.label))
                         .map(item => (
                           <div key={item.label} style={{ display: "flex", gap: "4px", fontSize: "13px", color: "#202223" }}>
-                            <span>{item.label}</span>
+                            <span>{item.isStars ? renderStars(item.label) : item.label}</span>
                             {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
                           </div>
                         ))
@@ -1016,7 +1317,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           </Button>
           <Button 
             variant="primary" 
-            onClick={() => onSave({ optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues })}
+            onClick={() => onSave({ 
+              filterId: initialData?.id,
+              optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
+              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
+            })}
             style={{ borderRadius: "20px", padding: "8px 24px", background: "#007bff", border: "none" }}
           >
             CREATE
