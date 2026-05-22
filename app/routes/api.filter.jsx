@@ -1,0 +1,337 @@
+import { data } from "react-router";
+import prisma from "../db.server";
+
+/**
+ * Storefront Filtering API
+ * Computes dynamic facets (counts, options) and returns matched products.
+ * Supports groupId to serve filter config for a specific FilterGroup.
+ */
+export const loader = async ({ request }) => {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  
+  if (!shop) {
+    return data({ error: "Missing shop parameter" }, { status: 400 });
+  }
+
+  // ── 0. Resolve FilterGroup settings ────────────────────────────────
+  // If groupId is provided, use its FilterGroupItems.
+  // Otherwise fall back to the collection-matched default group or global FilterSettings.
+  const groupId = url.searchParams.get("groupId");
+  let activeGroupFilters = null;
+
+  if (groupId) {
+    const group = await prisma.filterGroup.findFirst({
+      where: { id: groupId, shop },
+      include: { filters: { orderBy: { order: "asc" } } },
+    });
+    if (group) activeGroupFilters = group.filters;
+  }
+
+  if (!activeGroupFilters) {
+    // Try to find the default group
+    const defaultGroup = await prisma.filterGroup.findFirst({
+      where: { shop, isDefault: true },
+      include: { filters: { orderBy: { order: "asc" } } },
+    });
+    if (defaultGroup) activeGroupFilters = defaultGroup.filters;
+  }
+
+  // ── 1. Parse Query Parameters ──────────────────────────────────────
+  const collectionId = url.searchParams.get("collectionId");
+  const collectionHandle = url.searchParams.get("collectionHandle");
+  const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
+  const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
+  
+  const vendors = url.searchParams.getAll("vendor[]");
+  const types = url.searchParams.getAll("type[]");
+  const collections = url.searchParams.getAll("collection[]");
+  const tags = url.searchParams.getAll("tags[]");
+  const availability = url.searchParams.getAll("availability[]");
+  
+  const sortBy = url.searchParams.get("sortBy") || "created-descending";
+  const page = parseInt(url.searchParams.get("page") || "1");
+  const limit = parseInt(url.searchParams.get("limit") || "24");
+
+  // Parse variant option filters (e.g. options[Size][]=M)
+  const optionsFilters = {};
+  // Parse metafield filters (e.g. metafields[custom.material][]=Cotton)
+  const metafieldsFilters = {};
+
+  for (const [key, value] of url.searchParams.entries()) {
+    const optionMatch = key.match(/^options\[([^\]]+)\](?:\[\])?$/);
+    if (optionMatch) {
+      const optionName = optionMatch[1];
+      if (!optionsFilters[optionName]) optionsFilters[optionName] = [];
+      optionsFilters[optionName].push(value);
+    }
+
+    const metafieldMatch = key.match(/^metafields\[([^\]]+)\](?:\[\])?$/);
+    if (metafieldMatch) {
+      const metafieldKey = metafieldMatch[1];
+      if (!metafieldsFilters[metafieldKey]) metafieldsFilters[metafieldKey] = [];
+      metafieldsFilters[metafieldKey].push(value);
+    }
+  }
+
+  // ── 2. Build Prisma Product Filter Clause ──────────────────────────
+  const where = {
+    shop,
+    status: "active",
+  };
+
+  if (collections.length > 0) {
+    where.collections = { some: { collectionId: { in: collections } } };
+  } else if (collectionHandle && collectionHandle.toLowerCase() !== 'all') {
+    // Shopify's default "all" collection is special and may not be stored
+    // as a normal collection relationship in the product sync data.
+    where.collections = { some: { collection: { handle: collectionHandle } } };
+  } else if (collectionId) {
+    where.collections = { some: { collectionId } };
+  }
+
+  if (vendors.length > 0) {
+    where.vendor = { in: vendors };
+  }
+
+  if (types.length > 0) {
+    where.productType = { in: types };
+  }
+
+  if (tags.length > 0) {
+    where.tags = { hasSome: tags };
+  }
+
+  // Build variant level filter (price, stock, size, color options)
+  const variantConditions = [];
+
+  // Price constraint
+  variantConditions.push({
+    price: { gte: minPrice, lte: maxPrice }
+  });
+
+  // Stock availability constraint
+  if (availability.length > 0) {
+    if (availability.includes("in_stock") && !availability.includes("out_of_stock")) {
+      variantConditions.push({ available: true });
+    } else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) {
+      variantConditions.push({ available: false });
+    }
+  }
+
+  // Variant options constraints (Size, Color, etc.)
+  Object.entries(optionsFilters).forEach(([optionName, values]) => {
+    if (values.length > 0) {
+      variantConditions.push({
+        OR: [
+          { option1: { in: values } },
+          { option2: { in: values } },
+          { option3: { in: values } }
+        ]
+      });
+    }
+  });
+
+  if (variantConditions.length > 0) {
+    where.variants = {
+      some: {
+        AND: variantConditions
+      }
+    };
+  }
+
+  // Metafields constraints
+  const metafieldConditions = [];
+  Object.entries(metafieldsFilters).forEach(([metafieldKey, values]) => {
+    if (values.length > 0 && metafieldKey.includes(".")) {
+      const [namespace, key] = metafieldKey.split(".");
+      metafieldConditions.push({
+        metafields: {
+          some: {
+            namespace,
+            key,
+            value: { in: values }
+          }
+        }
+      });
+    }
+  });
+
+  if (metafieldConditions.length > 0) {
+    where.AND = metafieldConditions;
+  }
+
+  // ── 3. Parse Sorting ────────────────────────────────────────────────
+  let orderBy = {};
+  switch (sortBy) {
+    case "title-ascending":
+      orderBy = { title: "asc" };
+      break;
+    case "title-descending":
+      orderBy = { title: "desc" };
+      break;
+    case "price-ascending":
+      orderBy = { priceMin: "asc" };
+      break;
+    case "price-descending":
+      orderBy = { priceMax: "desc" };
+      break;
+    case "created-ascending":
+      orderBy = { createdAt: "asc" };
+      break;
+    case "created-descending":
+    default:
+      orderBy = { createdAt: "desc" };
+      break;
+  }
+
+  // ── 4. Execute Parallel Database Queries ───────────────────────────
+  const [products, totalCount, allMatchedProducts] = await Promise.all([
+    // Paginated products
+    prisma.product.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        variants: true,
+      }
+    }),
+    // Count of filtered products
+    prisma.product.count({ where }),
+    // Matched products with variants and metafields for facet computations
+    prisma.product.findMany({
+      where,
+      select: {
+        vendor: true,
+        productType: true,
+        tags: true,
+        collections: {
+          select: {
+            collectionId: true,
+            collection: {
+              select: {
+                title: true,
+              }
+            }
+          }
+        },
+        options: true,
+        variants: {
+          select: {
+            available: true,
+            option1: true,
+            option2: true,
+            option3: true,
+          }
+        },
+        metafields: {
+          select: {
+            namespace: true,
+            key: true,
+            value: true,
+          }
+        }
+      }
+    }),
+  ]);
+
+  // ── 5. Compute Facets in Memory ────────────────────────────────────
+  const vendorCounts = {};
+  const typeCounts = {};
+  const tagCounts = {};
+  const optionCounts = {}; // e.g. { "Size": { "S": 5, "M": 12 }, "Color": { "Red": 4 } }
+  const metafieldCounts = {}; // e.g. { "custom.material": { "Cotton": 8 } }
+  const collectionCounts = {};
+  let inStockCount = 0;
+  let outOfStockCount = 0;
+
+  allMatchedProducts.forEach(p => {
+    if (p.collections) {
+      p.collections.forEach(pc => {
+        const id = pc.collectionId;
+        const title = pc.collection?.title || id;
+        if (!collectionCounts[id]) collectionCounts[id] = { title, count: 0 };
+        collectionCounts[id].count += 1;
+      });
+    }
+    // Vendor counts
+    if (p.vendor) {
+      vendorCounts[p.vendor] = (vendorCounts[p.vendor] || 0) + 1;
+    }
+
+    // Product Type counts
+    if (p.productType) {
+      typeCounts[p.productType] = (typeCounts[p.productType] || 0) + 1;
+    }
+
+    // Tag counts
+    if (p.tags) {
+      p.tags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    }
+
+    // Option counts
+    const optionsList = p.options || [];
+    p.variants.forEach(v => {
+      if (v.option1 && optionsList[0]) {
+        const optName = optionsList[0].name;
+        if (!optionCounts[optName]) optionCounts[optName] = {};
+        optionCounts[optName][v.option1] = (optionCounts[optName][v.option1] || 0) + 1;
+      }
+      if (v.option2 && optionsList[1]) {
+        const optName = optionsList[1].name;
+        if (!optionCounts[optName]) optionCounts[optName] = {};
+        optionCounts[optName][v.option2] = (optionCounts[optName][v.option2] || 0) + 1;
+      }
+      if (v.option3 && optionsList[2]) {
+        const optName = optionsList[2].name;
+        if (!optionCounts[optName]) optionCounts[optName] = {};
+        optionCounts[optName][v.option3] = (optionCounts[optName][v.option3] || 0) + 1;
+      }
+    });
+
+    // Metafield counts
+    if (p.metafields) {
+      p.metafields.forEach(m => {
+        const facetKey = `${m.namespace}.${m.key}`;
+        if (!metafieldCounts[facetKey]) metafieldCounts[facetKey] = {};
+        metafieldCounts[facetKey][m.value] = (metafieldCounts[facetKey][m.value] || 0) + 1;
+      });
+    }
+
+    // Availability counts
+    const hasInStock = p.variants.some(v => v.available);
+    if (hasInStock) {
+      inStockCount++;
+    } else {
+      outOfStockCount++;
+    }
+  });
+
+  return data({
+    products,
+    totalCount,
+    // Return group filters (FilterGroupItem[]) if available, else empty
+    settings: activeGroupFilters || [],
+    facets: {
+      vendors: Object.entries(vendorCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+      productTypes: Object.entries(typeCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+      tags: Object.entries(tagCounts).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+      options: Object.entries(optionCounts).reduce((acc, [name, valuesMap]) => {
+        acc[name] = Object.entries(valuesMap).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value));
+        return acc;
+      }, {}),
+      collections: Object.entries(collectionCounts).map(([value, item]) => ({ value, label: item.title, count: item.count })).sort((a,b) => a.label.localeCompare(b.label)),
+      metafields: Object.entries(metafieldCounts).reduce((acc, [key, valuesMap]) => {
+        acc[key] = Object.entries(valuesMap).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value));
+        return acc;
+      }, {}),
+      availability: {
+        inStock: inStockCount,
+        outOfStock: outOfStockCount
+      }
+    }
+  });
+};
