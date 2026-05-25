@@ -64,6 +64,7 @@ model Variant {
   compareAtPrice Decimal? @db.Decimal(10, 2)
   available      Boolean  @default(true)
   inventory      Int      @default(0)
+  imageUrl       String?
   
   option1        String?
   option2        String?
@@ -194,4 +195,41 @@ model MergedValue {
   updatedAt    DateTime @updatedAt
 
   @@index([shop, filterType])
+}
+
+// ── Merchandising Rules ─────────────────────────────────────────────
+
+model MerchandisingRule {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  collections     String[] // Array of selected collections like ["Formal", "Prom"]
+  customerTags    String?
+  locales         String?
+  startDate       DateTime?
+  endDate         DateTime?
+  status          Boolean  @default(true) // For the ON/OFF toggle switch
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  conditions      MerchandisingRuleCondition[]
+
+  @@index([shop])
+}
+
+model MerchandisingRuleCondition {
+  id              String   @id @default(cuid())
+  ruleId          String
+  action          String   // e.g. Boost, Bury, Pin, Dynamic
+  field           String   // e.g. Price, Collections, Tags, Product, etc.
+  value           String?  // The selected values
+  operator        String?  // e.g. Add, Subtract, Set (for Dynamic)
+  operand         String?  // The score value (for Dynamic)
+  minValue        String?  // Min value for range fields
+  maxValue        String?  // Max value for range fields
+  dateValue       String?  // Selected dates
+
+  rule            MerchandisingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
 }

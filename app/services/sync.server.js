@@ -108,6 +108,9 @@ export async function syncProducts(shop, admin) {
               compareAtPrice
               inventoryQuantity
               availableForSale
+              image {
+                url
+              }
               selectedOptions {
                 name
                 value
@@ -227,6 +230,7 @@ export async function syncProducts(shop, admin) {
               compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
               available: available,
               inventory: inventory,
+              imageUrl: variant.image?.url || null,
               option1,
               option2,
               option3,
@@ -361,6 +365,9 @@ export async function syncSingleProduct(shop, admin, productId) {
             compareAtPrice
             inventoryQuantity
             availableForSale
+            image {
+              url
+            }
             selectedOptions {
               name
               value
@@ -466,6 +473,7 @@ export async function syncSingleProduct(shop, admin, productId) {
           compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
           available: available,
           inventory: inventory,
+          imageUrl: variant.image?.url || null,
           option1,
           option2,
           option3,

@@ -1,4 +1,4 @@
-{% if template.name == 'collection' %}
+{% if template.name == 'collection' or template.name == 'search' %}
   {% render 'collectionFilterPro',
     show_price_filter: block.settings.show_price_filter,
     show_brand_filter: block.settings.show_brand_filter,

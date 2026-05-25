@@ -363,7 +363,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         setSortManualValues(initialData.sortManualValues || false);
         setDisplayMode(initialData.displayMode || "List");
         
-        if (initialData.priceRanges) setPriceRanges(initialData.priceRanges);
+        if (initialData.priceRanges) setPriceRanges(initialData.priceRanges.map(r => ({ ...r, from: r.from !== undefined ? r.from : (r.min || ""), to: r.to !== undefined ? r.to : (r.max || "") })));
         if (initialData.saleRanges) setSaleRanges(initialData.saleRanges);
         if (initialData.weightRanges) setWeightRanges(initialData.weightRanges);
         if (initialData.reviewRanges) setReviewRanges(initialData.reviewRanges);
@@ -399,10 +399,26 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           mobileSearchBox: false
         });
         setDisplayMode("List");
-        setPriceRanges([{ id: Date.now(), from: "", to: "" }]);
-        setSaleRanges([{ id: Date.now(), from: "", to: "" }]);
-        setWeightRanges([{ id: Date.now(), from: "", to: "" }]);
-        setReviewRanges([{ id: Date.now(), from: "", to: "" }]);
+        setPriceRanges([
+          { id: Date.now(), label: "{0} - {1}", from: "0", to: "10" },
+          { id: Date.now() + 1, label: "From {0}", from: "10", to: "" }
+        ]);
+        setSaleRanges([
+          { id: Date.now(), label: "{0}% - {1}%", from: "0", to: "10" },
+          { id: Date.now() + 1, label: "From {0}%", from: "10", to: "" }
+        ]);
+        setWeightRanges([
+          { id: Date.now(), label: "{0} - {1}", from: "0", to: "10" },
+          { id: Date.now() + 1, label: "From {0}", from: "10", to: "" }
+        ]);
+        setReviewRanges([
+          { id: Date.now(), label: "No reviews", from: "0", to: "" },
+          { id: Date.now() + 1, label: "", from: "1", to: "" },
+          { id: Date.now() + 2, label: "", from: "2", to: "" },
+          { id: Date.now() + 3, label: "", from: "3", to: "" },
+          { id: Date.now() + 4, label: "", from: "4", to: "" },
+          { id: Date.now() + 5, label: "", from: "5", to: "" }
+        ]);
         setStockStatusConfig({
           inStock: true, inStockLabel: "In stock", inStockType: "checkbox",
           outOfStock: true, outOfStockLabel: "Out of stock", outOfStockType: "checkbox"
@@ -437,8 +453,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         if (type === "review_rating" && !r.label) {
           return { label: r.from, isStars: true, count: totalCount };
         }
-        let label = r.label.replace("{0}", r.from);
-        if (r.to) label = label.replace("{1}", r.to);
+        const rFrom = r.from !== undefined ? r.from : (r.min || "");
+        const rTo = r.to !== undefined ? r.to : (r.max || "");
+        let label = (r.label || "").replace("{0}", rFrom);
+        if (rTo) label = label.replace("{1}", rTo);
         return { label, count: totalCount };
       });
     }
@@ -470,16 +488,17 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     // If it's a known top-level type, return its data
     if (DUMMY_DATA[type]) return DUMMY_DATA[type];
     
-    // Check if it's a dynamic option type (like 'color', 'size')
+    // Check if it's a dynamic option type (like 'color', 'size', 'title', 'denominations')
     if (storeData?.options && storeData.options[type]) {
       return storeData.options[type].map(v => ({ label: v.value, count: v.count }));
     }
 
     // Fallback dummy data if nothing exists
+    const labelType = type === "option" ? filterTitle || "option" : type;
     return [
-      { label: `Sample ${type} 1`, count: 5 },
-      { label: `Sample ${type} 2`, count: 3 },
-      { label: `Sample ${type} 3`, count: 2 }
+      { label: `Sample ${labelType} 1`, count: 5 },
+      { label: `Sample ${labelType} 2`, count: 3 },
+      { label: `Sample ${labelType} 3`, count: 2 }
     ];
   };
 
@@ -609,9 +628,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     value={optionType} 
                     onChange={(val, label) => {
                       // If the current title matches the old option type label, update it to the new one
-                      const oldLabel = OPTION_TYPES.find(o => o.value === optionType)?.label || "Collection";
+                      const oldLabel = (OPTION_TYPES.find(o => o.value === optionType)?.label || "Collection").replace(" (product option)", "");
                       if (filterTitle === oldLabel) {
-                        setFilterTitle(label);
+                        setFilterTitle(label.replace(" (product option)", ""));
                       }
                       setOptionType(val);
                       
@@ -1324,7 +1343,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             })}
             style={{ borderRadius: "20px", padding: "8px 24px", background: "#007bff", border: "none" }}
           >
-            CREATE
+            {initialData ? "UPDATE" : "CREATE"}
           </Button>
         </div>
 

@@ -214,6 +214,18 @@ export const action = async ({ request, params }) => {
     const groupType = formData.get("groupType");
     const selectedCollections = JSON.parse(formData.get("selectedCollections") || "[]");
 
+    const existingGroup = await prisma.filterGroup.findFirst({
+      where: { 
+        shop, 
+        name: { equals: name, mode: "insensitive" },
+        id: { not: filterGroupId } 
+      }
+    });
+
+    if (existingGroup) {
+      return { success: false, error: "A filter group with this name already exists.", intent };
+    }
+
     // Update the basic info
     await prisma.filterGroup.update({ where: { id: filterGroupId }, data: { name } });
 
@@ -256,11 +268,19 @@ export const action = async ({ request, params }) => {
   }
 
   if (intent === "addFilter") {
-    const filterType = formData.get("filterType");
-    const filterKey = formData.get("filterKey") || null;
+    let filterType = formData.get("filterType");
+    let filterKey = formData.get("filterKey") || null;
     const label = formData.get("label");
     const displayMode = formData.get("displayMode") || "list";
     const config = formData.get("config") ? JSON.parse(formData.get("config")) : undefined;
+
+    // Fix for option types (e.g. "color", "size", "title", "denominations")
+    // Storefront expects filterType="option" and filterKey="Color"
+    const isDynamicOption = !["collection", "vendor", "product_type", "tags", "price", "percent_sale", "weight", "review_rating", "stock_status", "inventory_locations"].includes(filterType);
+    if (isDynamicOption) {
+      filterKey = label; // The user's label becomes the key (e.g., "Color")
+      filterType = "option";
+    }
 
     const lastFilter = await prisma.filterGroupItem.findFirst({
       where: { filterGroupId },
@@ -470,11 +490,13 @@ export default function FilterGroupDetail() {
   }, []);
 
   useEffect(() => {
-    if (actionData?.intent === "toggleFilter") {
+    if (actionData) {
       if (actionData.success) {
-        shopify.toast.show(
-          `${actionData.label ?? "Filter"} ${actionData.isEnabled ? "enabled" : "disabled"}`
-        );
+        if (actionData.intent === "toggleFilter") {
+          shopify.toast.show(`${actionData.label ?? "Filter"} ${actionData.isEnabled ? "enabled" : "disabled"}`);
+        } else if (actionData.intent === "updateGroupSettings") {
+          shopify.toast.show("Group settings saved successfully");
+        }
       } else if (actionData.error) {
         shopify.toast.show(actionData.error, { isError: true });
       }
@@ -489,7 +511,7 @@ export default function FilterGroupDetail() {
 
     setEditingFilterData({
       id: filter.id,
-      optionType: filter.filterType,
+      optionType: filter.filterType === "option" ? (filter.filterKey ? filter.filterKey.toLowerCase() : "option") : filter.filterType,
       filterTitle: filter.label,
       prefix: parsedConfig.prefix || "",
       navCollections: parsedConfig.navCollections || false,

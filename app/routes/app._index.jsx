@@ -152,7 +152,7 @@ export default function Index() {
               </div>
               <div style={{ marginTop: "16px" }}>
                 <button
-                  onClick={() => alert("Collection Merchandising module coming soon!")}
+                  onClick={() => navigate("/app/merchandising")}
                   style={{
                     background: "none",
                     border: "none",

@@ -127,6 +127,13 @@ export const action = async ({ request }) => {
     const groupType = formData.get("groupType"); // "collections" | "search"
     const selectedCollections = JSON.parse(formData.get("selectedCollections") || "[]");
 
+    const existingGroup = await prisma.filterGroup.findFirst({
+      where: { shop, name: { equals: name, mode: "insensitive" } }
+    });
+    if (existingGroup) {
+      return { success: false, error: "A filter group with this name already exists.", intent };
+    }
+
     const lastGroup = await prisma.filterGroup.findFirst({
       where: { shop },
       orderBy: { order: "desc" },
@@ -143,7 +150,7 @@ export const action = async ({ request }) => {
         collections: {
           create:
             groupType === "search"
-              ? [{ collectionId: "__search__", collectionTitle: "Search Page", pageType: "search" }]
+              ? [{ collectionId: "search", collectionTitle: "Search Page", pageType: "search" }]
               : selectedCollections.length > 0
               ? selectedCollections.map((c) => ({
                   collectionId: c.id,
@@ -185,10 +192,30 @@ export const action = async ({ request }) => {
     });
     const nextOrder = (lastGroup?.order ?? -1) + 1;
 
+    const nameMatch = source.name.match(/^(.*?)\s*\((\d+)\)$/);
+    let baseName = source.name;
+    let counter = 1;
+    if (nameMatch) {
+      baseName = nameMatch[1];
+      counter = parseInt(nameMatch[2], 10);
+    }
+    
+    let newName = `${baseName} (Copy)`;
+    let existing;
+    do {
+      existing = await prisma.filterGroup.findFirst({
+        where: { shop, name: { equals: newName, mode: "insensitive" } }
+      });
+      if (existing) {
+        counter++;
+        newName = `${baseName} (${counter})`;
+      }
+    } while (existing);
+
     await prisma.filterGroup.create({
       data: {
         shop,
-        name: `${source.name} (Copy)`,
+        name: newName,
         isDefault: false,
         status: source.status,
         order: nextOrder,

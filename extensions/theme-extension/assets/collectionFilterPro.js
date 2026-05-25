@@ -20,6 +20,8 @@
   const shop = sidebar.dataset.shop;
   const collectionId = sidebar.dataset.collectionId || '';
   const collectionHandle = sidebar.dataset.collectionHandle || '';
+  const templateName = sidebar.dataset.templateName || '';
+  const searchTerms = sidebar.dataset.searchTerms || '';
 
   // ── 1. Global Filter State ──────────────────────────────────────────
   const PAGE_SIZE = 24;
@@ -28,6 +30,7 @@
     vendors: [],
     types: [],
     tags: [],
+    titles: [],
     collections: [],
     options: {}, // name -> array of values
     metafields: {}, // key -> array of values
@@ -42,9 +45,36 @@
   let maxPriceLimit = 1000; // Updated dynamically from product prices
 
   // ── 2. Initialization ───────────────────────────────────────────────
+  let activeMerchandisingRule = null;
+
   async function init() {
     setupStaticEventListeners();
+    await fetchMerchandisingRule();
     await fetchAndRenderData();
+  }
+
+  // ── 2.5 Fetch Merchandising Rule ──────────────────────────────────
+  async function fetchMerchandisingRule() {
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.append('shop', shop);
+      if (collectionHandle) {
+        queryParams.append('collectionHandle', collectionHandle);
+      } else if (collectionId) {
+        queryParams.append('collectionId', collectionId);
+      }
+
+      const response = await fetch(`/apps/collection-filter-pro/api/merchandising?${queryParams.toString()}`);
+      const data = await response.json();
+      
+      if (data && data.rule) {
+        activeMerchandisingRule = data.rule;
+        console.log("CFP: Active Merchandising Rule loaded", activeMerchandisingRule);
+        // You can use activeMerchandisingRule here to render banners or badges
+      }
+    } catch (e) {
+      console.error("CFP: Merchandising API error", e);
+    }
   }
 
   // ── 3. Fetch data from Shopify App Proxy ───────────────────────────
@@ -56,6 +86,13 @@
         queryParams.append('collectionHandle', collectionHandle);
       } else if (collectionId) {
         queryParams.append('collectionId', collectionId);
+      }
+      
+      if (templateName === 'search') {
+        queryParams.append('isSearch', 'true');
+        if (searchTerms) {
+          queryParams.append('q', searchTerms);
+        }
       }
 
       // Price range
@@ -134,8 +171,8 @@
     grid.classList.add('cfp-products-grid');
 
     grid.innerHTML = products.map(product => {
-      const primaryImg = product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
-      const secondaryImg = product.images?.[1] || primaryImg;
+      const primaryImg = product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+      const secondaryImg = (product.merchandisingImage && product.images?.[0] && product.images?.[0] !== product.merchandisingImage) ? product.images[0] : (product.images?.[1] || primaryImg);
       const price = parseFloat(product.priceMin).toFixed(2);
       const comparePrice = product.variants?.[0]?.compareAtPrice 
         ? parseFloat(product.variants[0].compareAtPrice).toFixed(2) 
@@ -221,7 +258,8 @@
     settings.forEach(setting => {
       if (!setting.isEnabled) return;
 
-      const type = setting.filterType || setting.type;
+      let type = setting.filterType || setting.type;
+      if (type === 'stock_status') type = 'availability';
       const key = setting.filterKey || setting.key;
       let config = {};
       try {
@@ -254,7 +292,7 @@
           </label>
         `;
       } 
-      else if (type === 'price' && displayMode === 'Range') {
+      else if (type === 'price' && displayMode.toLowerCase() === 'range') {
         groupContent = `
           <div class="cfp-price-range">
             <div class="cfp-price-inputs">
@@ -281,11 +319,17 @@
         // Resolve dynamic items
         let items = [];
         if (type === 'price') {
-          items = (facets.priceRanges || []).map(r => ({
-            value: `${r.min}-${r.max}`,
-            label: r.label,
-            count: r.count
-          }));
+          items = (facets.priceRanges || []).map(r => {
+            const minStr = r.min !== undefined ? r.min : (r.from || "");
+            const maxStr = r.max !== undefined ? r.max : (r.to || "");
+            let parsedLabel = (r.label || "").replace("{0}", minStr);
+            parsedLabel = parsedLabel.replace("{1}", maxStr);
+            return {
+              value: `${minStr}-${maxStr}`,
+              label: parsedLabel,
+              count: r.count
+            };
+          });
         }
         else if (type === 'vendor') items = facets.vendors || [];
         else if (type === 'product_type') items = facets.productTypes || [];

@@ -1,5 +1,6 @@
 import { data } from "react-router";
 import prisma from "../db.server";
+import { getActiveRuleForCollection, applyMerchandisingRules } from "../services/merchandising.server";
 
 /**
  * Storefront Filtering API
@@ -19,28 +20,37 @@ export const loader = async ({ request }) => {
   const collectionHandle = url.searchParams.get("collectionHandle");
   const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
   const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
-  
-  // ── 1. Resolve FilterGroup settings ────────────────────────────────
-  // If groupId is provided, use its FilterGroupItems.
-  // Otherwise fall back to the collection-matched group or default group.
-  const groupId = url.searchParams.get("groupId");
+  const isSearch = url.searchParams.get("isSearch") === "true";
+  const searchQuery = url.searchParams.get("q");
+  // ── 1. Fetch Active Filter Group ───────────────────────────────────
   let activeGroupFilters = null;
+  let targetGroup = null;
 
-  if (groupId) {
-    const group = await prisma.filterGroup.findFirst({
-      where: { id: groupId, shop },
-      include: { filters: { orderBy: { order: "asc" } } },
+  if (isSearch) {
+    // If it's a search page, fetch the filter group specifically assigned to search
+    const searchGroupColl = await prisma.filterGroupCollection.findFirst({
+      where: { pageType: "search", filterGroup: { shop, isDefault: false, status: true } },
+      include: { filterGroup: { include: { filters: { orderBy: { order: "asc" } } } } }
     });
-    if (group) activeGroupFilters = group.filters;
+    if (searchGroupColl && searchGroupColl.filterGroup) {
+      activeGroupFilters = searchGroupColl.filterGroup.filters;
+    }
   }
 
   let resolvedCollectionId = collectionId;
+  let resolvedCollectionTitle = "";
   if (!resolvedCollectionId && collectionHandle && collectionHandle.toLowerCase() !== 'all') {
     const coll = await prisma.collection.findFirst({
       where: { handle: collectionHandle, shop }
     });
     if (coll) {
       resolvedCollectionId = coll.id;
+      resolvedCollectionTitle = coll.title;
+    }
+  } else if (resolvedCollectionId) {
+    const coll = await prisma.collection.findUnique({ where: { id: resolvedCollectionId } });
+    if (coll) {
+      resolvedCollectionTitle = coll.title;
     }
   }
 
@@ -136,6 +146,14 @@ export const loader = async ({ request }) => {
     where.title = { in: titles };
   }
 
+  if (isSearch && searchQuery) {
+    where.OR = [
+      { title: { contains: searchQuery, mode: "insensitive" } },
+      { vendor: { contains: searchQuery, mode: "insensitive" } },
+      { productType: { contains: searchQuery, mode: "insensitive" } }
+    ];
+  }
+
   // Build variant level filter (price, stock, size, color options)
   const variantConditions = [];
 
@@ -219,27 +237,25 @@ export const loader = async ({ request }) => {
       break;
   }
 
-  // ── 4. Execute Parallel Database Queries ───────────────────────────
-  const [products, totalCount, allMatchedProducts] = await Promise.all([
-    // Paginated products
-    prisma.product.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        variants: true,
-      }
-    }),
+  // ── 4. Fetch Active Merchandising Rules ────────────────────────────
+  const activeRule = await getActiveRuleForCollection(shop, resolvedCollectionTitle);
+
+  // ── 5. Execute Parallel Database Queries ───────────────────────────
+  const [totalCount, allMatchedProducts] = await Promise.all([
     // Count of filtered products
     prisma.product.count({ where }),
-    // Matched products with variants and metafields for facet computations
+    // Matched products with variants and metafields for facet computations and sorting
     prisma.product.findMany({
       where,
       select: {
+        id: true,
+        createdAt: true,
+        priceMin: true,
+        priceMax: true,
         vendor: true,
         productType: true,
         tags: true,
+        title: true,
         collections: {
           select: {
             collectionId: true,
@@ -258,6 +274,7 @@ export const loader = async ({ request }) => {
             option1: true,
             option2: true,
             option3: true,
+            imageUrl: true,
           }
         },
         metafields: {
@@ -325,7 +342,12 @@ export const loader = async ({ request }) => {
     }
 
     // Option counts
-    const optionsList = p.options || [];
+    let optionsList = [];
+    if (typeof p.options === 'string') {
+      try { optionsList = JSON.parse(p.options) || []; } catch(e){}
+    } else {
+      optionsList = p.options || [];
+    }
     p.variants.forEach(v => {
       if (v.option1 && optionsList[0]) {
         const optName = optionsList[0].name;
@@ -370,8 +392,10 @@ export const loader = async ({ request }) => {
       });
       if (minProductPrice !== Infinity) {
         priceRangeCounts.forEach(r => {
-          const rMin = parseFloat(r.min) || 0;
-          const rMax = r.max === "" || r.max === null || r.max === undefined ? Infinity : parseFloat(r.max);
+          const rMinVal = r.min !== undefined ? r.min : r.from;
+          const rMin = parseFloat(rMinVal) || 0;
+          const rMaxVal = r.max !== undefined ? r.max : r.to;
+          const rMax = rMaxVal === "" || rMaxVal === null || rMaxVal === undefined ? Infinity : parseFloat(rMaxVal);
           if (minProductPrice >= rMin && minProductPrice <= rMax) {
             r.count += 1;
           }
@@ -379,6 +403,33 @@ export const loader = async ({ request }) => {
       }
     }
   });
+
+  // ── 6. Apply Merchandising Scores and Sort ─────────────────────────
+  applyMerchandisingRules(allMatchedProducts, activeRule, sortBy);
+
+  // ── 7. Fetch Full Details for Paginated Products ───────────────────
+  const startIndex = (page - 1) * limit;
+  const paginatedIds = allMatchedProducts.slice(startIndex, startIndex + limit).map(p => p.id);
+  
+  let products = [];
+  if (paginatedIds.length > 0) {
+    const fetchedProducts = await prisma.product.findMany({
+      where: { id: { in: paginatedIds } },
+      include: { variants: true }
+    });
+    
+    // Restore exact sort order and attach merchandisingImage
+    products = paginatedIds.map(id => {
+      const p = fetchedProducts.find(fp => fp.id === id);
+      if (p) {
+        const matched = allMatchedProducts.find(mp => mp.id === id);
+        if (matched && matched.merchandisingImage) {
+          p.merchandisingImage = matched.merchandisingImage;
+        }
+      }
+      return p;
+    }).filter(Boolean);
+  }
 
   return data({
     products,

@@ -241,7 +241,6 @@ facet-filters-form,
   color: var(--cfp-text);
   text-align: left;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
   transition: background var(--cfp-transition);
 }
 .cfp-group__toggle:hover { background: var(--cfp-surface); }
