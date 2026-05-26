@@ -64,7 +64,7 @@ export const action = async ({ request }) => {
 
     // First delete old conditions
     await prisma.merchandisingRuleCondition.deleteMany({
-      where: { merchandisingRuleId: id }
+      where: { ruleId: id }
     });
 
     const updatedRule = await prisma.merchandisingRule.update({
@@ -177,43 +177,35 @@ export const loader = async ({ request }) => {
           }
         }
       }
+      shop {
+        fulfillmentServices {
+          location {
+            id
+            name
+          }
+        }
+      }
     }
   `);
   const graphqlData = await graphqlQuery.json();
   const shopifyCollections = graphqlData?.data?.collections?.nodes?.map(c => ({ id: c.id, title: c.title })).sort((a,b) => a.title.localeCompare(b.title)) || [];
-  const shopifyLocations = graphqlData?.data?.locations?.nodes?.map(l => l.name).sort() || [];
+  
+  const allLocsSet = new Set();
+  graphqlData?.data?.locations?.nodes?.forEach(l => {
+    if (l.name) allLocsSet.add(l.name);
+  });
+  graphqlData?.data?.shop?.fulfillmentServices?.forEach(fs => {
+    if (fs.location && fs.location.name) {
+      allLocsSet.add(fs.location.name);
+    }
+  });
+  const shopifyLocations = Array.from(allLocsSet).sort();
 
   const vendorsData = await prisma.product.groupBy({
     by: ['vendor'],
     where: { shop, vendor: { not: "" } },
   });
   const shopifyVendors = vendorsData.map(v => v.vendor).sort();
-
-  const productsWithOptions = await prisma.product.findMany({
-    where: { shop, options: { not: "[]" } },
-    select: { options: true }
-  });
-
-  const optionsMap = {};
-  for (const p of productsWithOptions) {
-    let opts = [];
-    if (typeof p.options === 'string') {
-      try { opts = JSON.parse(p.options); } catch(e){}
-    } else if (Array.isArray(p.options)) {
-      opts = p.options;
-    }
-    for (const opt of opts) {
-      if (opt && opt.name && opt.values) {
-        if (!optionsMap[opt.name]) optionsMap[opt.name] = new Set();
-        opt.values.forEach(v => optionsMap[opt.name].add(v));
-      }
-    }
-  }
-
-  const shopifyOptions = {};
-  for (const [name, valSet] of Object.entries(optionsMap)) {
-    shopifyOptions[name] = Array.from(valSet).sort();
-  }
 
   const productTypesData = await prisma.product.groupBy({
     by: ['productType'],
@@ -264,6 +256,32 @@ export const loader = async ({ request }) => {
   });
   const shopifyBarcodes = Array.from(shopifyBarcodesSet).sort();
 
+  const productsWithOptions = await prisma.product.findMany({
+    where: { shop, options: { not: "[]" } },
+    select: { options: true }
+  });
+
+  const optionsMap = {};
+  for (const p of productsWithOptions) {
+    let opts = [];
+    if (typeof p.options === 'string') {
+      try { opts = JSON.parse(p.options); } catch(e){}
+    } else if (Array.isArray(p.options)) {
+      opts = p.options;
+    }
+    for (const opt of opts) {
+      if (opt && opt.name && opt.values) {
+        if (!optionsMap[opt.name]) optionsMap[opt.name] = new Set();
+        opt.values.forEach(v => optionsMap[opt.name].add(v));
+      }
+    }
+  }
+
+  const shopifyOptions = {};
+  for (const [name, valSet] of Object.entries(optionsMap)) {
+    shopifyOptions[name] = Array.from(valSet).sort();
+  }
+
   const merchandisingRules = await prisma.merchandisingRule.findMany({
     where: { shop },
     orderBy: { createdAt: 'desc' },
@@ -295,6 +313,8 @@ export default function MerchandisingIndex() {
   const [ruleMatchType, setRuleMatchType] = useState("all");
   const [ruleFilters, setRuleFilters] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
   const defaultColumns = [
     { id: "Name", label: "Name", visible: true },
@@ -307,6 +327,9 @@ export default function MerchandisingIndex() {
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
 
   const filteredRules = merchandisingRules.filter(rule => {
+    if (statusFilter === "active" && !rule.status) return false;
+    if (statusFilter === "inactive" && rule.status) return false;
+
     if (searchQuery && !rule.name.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
@@ -367,13 +390,51 @@ export default function MerchandisingIndex() {
 
   return (
     <div style={{ fontFamily: "Inter, sans-serif", background: "#f8f9fa", minHeight: "100vh", padding: "20px" }}>
+      <ui-title-bar title="Merchandising"></ui-title-bar>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", padding: "12px 24px", borderRadius: "8px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
         <div style={{ display: "flex", gap: "12px" }}>
           {/* All rules dropdown */}
-          <div style={{ display: "flex", alignItems: "center", background: "#f1f5f9", padding: "8px 16px", borderRadius: "20px", cursor: "pointer", color: "#007bff", fontSize: "14px", fontWeight: "500" }}>
-            All rules ({filteredRules.length})
-            <svg style={{ width: "12px", height: "12px", marginLeft: "8px" }} viewBox="0 0 20 20" fill="currentColor"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+          <div style={{ position: "relative" }}>
+            <div 
+              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+              style={{ display: "flex", alignItems: "center", background: "#f1f5f9", padding: "8px 16px", borderRadius: "20px", cursor: "pointer", color: "#007bff", fontSize: "14px", fontWeight: "500" }}
+            >
+              {statusFilter === "all" ? "All rules" : statusFilter === "active" ? "Active rules" : "Inactive rules"} ({filteredRules.length})
+              <svg style={{ width: "12px", height: "12px", marginLeft: "8px" }} viewBox="0 0 20 20" fill="currentColor"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+            </div>
+            
+            {isStatusDropdownOpen && (
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", zIndex: 50, width: "200px" }}>
+                <div 
+                  onClick={() => { setStatusFilter("all"); setIsStatusDropdownOpen(false); }}
+                  style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "14px", color: statusFilter === "all" ? "#007bff" : "#334155", fontWeight: statusFilter === "all" ? "500" : "400" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  All rules
+                  <svg style={{ width: "16px", height: "16px", color: statusFilter === "all" ? "#007bff" : "#cbd5e1" }} fill={statusFilter === "all" ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                </div>
+                <div 
+                  onClick={() => { setStatusFilter("active"); setIsStatusDropdownOpen(false); }}
+                  style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "14px", color: statusFilter === "active" ? "#007bff" : "#334155", fontWeight: statusFilter === "active" ? "500" : "400" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  Active rules
+                  <svg style={{ width: "16px", height: "16px", color: statusFilter === "active" ? "#007bff" : "#cbd5e1" }} fill={statusFilter === "active" ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                </div>
+                <div 
+                  onClick={() => { setStatusFilter("inactive"); setIsStatusDropdownOpen(false); }}
+                  style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontSize: "14px", color: statusFilter === "inactive" ? "#007bff" : "#334155", fontWeight: statusFilter === "inactive" ? "500" : "400" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                >
+                  Inactive rules
+                  <svg style={{ width: "16px", height: "16px", color: statusFilter === "inactive" ? "#007bff" : "#cbd5e1" }} fill={statusFilter === "inactive" ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Create rule button */}

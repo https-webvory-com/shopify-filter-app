@@ -18,6 +18,8 @@ export default function App() {
       <s-app-nav>
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/filters/groups">Filter Groups</s-link>
+        <s-link href="/app/merchandising">Merchandising</s-link>
+        <s-link href="/app/merchandising/pinning">Product Pinning</s-link>
         <s-link href="/app/filters/settings">Filter Settings</s-link>
         <s-link href="/app/filters/merged-value">Merged Values</s-link>
         <s-link href="/app/theme-setup">Theme Setup</s-link>

@@ -579,6 +579,7 @@ export default function FilterGroupDetail() {
 
   return (
     <s-page>
+      <ui-title-bar title={group.name}></ui-title-bar>
       <div style={{ marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
         <Link to="/app/filters/groups" style={{ color: "#006e52", textDecoration: "underline", fontWeight: "500" }}>
           Filter groups

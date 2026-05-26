@@ -1,9 +1,24 @@
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
-const TooltipIcon = () => (
-  <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", marginLeft: "6px", cursor: "help", fontWeight: "bold" }}>?</div>
-);
+const TooltipIcon = ({ text }) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div 
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: "6px", cursor: "help" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", fontWeight: "bold" }}>?</div>
+      {show && text && (
+        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)", background: "#333e54", color: "#e2e8f0", padding: "12px 16px", borderRadius: "6px", fontSize: "13px", width: "max-content", maxWidth: "250px", zIndex: 100, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", textAlign: "left", lineHeight: "1.5", whiteSpace: "normal", fontWeight: "normal", letterSpacing: "normal" }}>
+          {text}
+          <div style={{ position: "absolute", bottom: "-4px", left: "50%", transform: "translateX(-50%) rotate(45deg)", width: "8px", height: "8px", background: "#333e54" }}></div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function CreateRuleModal({ 
   isOpen, onClose, ruleToEdit = null, shopifyCollections = [], shopifyVendors = [], shopifyOptions = {},
@@ -160,7 +175,7 @@ export default function CreateRuleModal({
           {/* Rule Name */}
           <div>
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
-              Rule name <TooltipIcon />
+              Rule name <TooltipIcon text="Name of the merchandising rule." />
             </label>
             <input 
               type="text" 
@@ -175,7 +190,7 @@ export default function CreateRuleModal({
           {/* Collections */}
           <div>
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
-              Collections <TooltipIcon />
+              Collections <TooltipIcon text="The collections to which this rule is applied." />
             </label>
             <div style={{ position: "relative" }}>
               <div 
@@ -273,7 +288,7 @@ export default function CreateRuleModal({
           {/* Customer tags */}
           <div>
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
-              Customer tags <TooltipIcon />
+              Customer tags <TooltipIcon text="The customer tags to which this rule is applied. Leave blank to apply to all customers, or enter [no tag] to apply to customers without tags." />
             </label>
             <input 
               type="text" 
@@ -289,7 +304,7 @@ export default function CreateRuleModal({
           {/* Apply to locales */}
           <div>
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
-              Apply to locales <TooltipIcon />
+              Apply to locales <TooltipIcon text="The locales to which this rule is applied. Leave blank to apply to all locales." />
             </label>
             <div style={{ position: "relative" }}>
               <input 
@@ -323,7 +338,7 @@ export default function CreateRuleModal({
                   )}
                 </div>
                 <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "600" }}>Date range</span>
-                <TooltipIcon />
+                <TooltipIcon text="Apply this Merchandising rule within a certain time-period." />
               </label>
             </div>
 

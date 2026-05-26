@@ -32,6 +32,7 @@ export default function Customization() {
 
   return (
     <s-page heading="Customization">
+      <ui-title-bar title="Customization"></ui-title-bar>
       <s-button slot="primary-action">
         Save Customization
       </s-button>

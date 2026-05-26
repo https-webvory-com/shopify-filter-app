@@ -142,6 +142,7 @@ export default function MergedValues() {
 
   return (
     <s-page heading="Merged Filter Values">
+      <ui-title-bar title="Merged Filter Values"></ui-title-bar>
       <s-button slot="primary-action" variant="primary" onClick={openAdd}>
         Add merged rule
       </s-button>

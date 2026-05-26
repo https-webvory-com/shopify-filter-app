@@ -9,6 +9,7 @@ export const loader = async ({ request }) => {
 export default function Settings() {
   return (
     <s-page heading="App Settings">
+      <ui-title-bar title="App Settings"></ui-title-bar>
       <s-button slot="primary-action">
         Save Settings
       </s-button>

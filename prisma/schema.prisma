@@ -233,3 +233,17 @@ model MerchandisingRuleCondition {
 
   @@index([ruleId])
 }
+
+model PinnedProductRule {
+  id            String   @id @default(cuid())
+  shop          String
+  name          String   @default("Pinning Rule")
+  collections   String[] // Array of collection IDs, or empty if applyToAll is true
+  applyToAll    Boolean  @default(false)
+  products      Json
+  status        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
+}

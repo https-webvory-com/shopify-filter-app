@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import prisma from "../db.server";
-import { getActiveRuleForCollection, applyMerchandisingRules } from "../services/merchandising.server";
+import { getActiveRuleForCollection, applyMerchandisingRules, getActivePinningRuleForCollection } from "../services/merchandising.server";
 
 /**
  * Storefront Filtering API
@@ -114,7 +114,19 @@ export const loader = async ({ request }) => {
     }
   }
 
-  // ── 2. Build Prisma Product Filter Clause ──────────────────────────
+  // ── 2. Fetch Active Pinning Rule Early ──────────────────────────────
+  const activePinningRule = await getActivePinningRuleForCollection(shop, resolvedCollectionTitle);
+  let pinnedIds = [];
+  if (activePinningRule && activePinningRule.products) {
+    try {
+      const parsedPins = typeof activePinningRule.products === 'string' ? JSON.parse(activePinningRule.products) : activePinningRule.products;
+      if (Array.isArray(parsedPins)) {
+        pinnedIds = parsedPins.map(p => p.id);
+      }
+    } catch(e) {}
+  }
+
+  // ── 3. Build Prisma Product Filter Clause ──────────────────────────
   const where = {
     shop,
     status: "active",
@@ -239,6 +251,7 @@ export const loader = async ({ request }) => {
 
   // ── 4. Fetch Active Merchandising Rules ────────────────────────────
   const activeRule = await getActiveRuleForCollection(shop, resolvedCollectionTitle);
+  // activePinningRule is already fetched above
 
   // ── 5. Execute Parallel Database Queries ───────────────────────────
   const [totalCount, allMatchedProducts] = await Promise.all([
@@ -271,6 +284,8 @@ export const loader = async ({ request }) => {
           select: {
             available: true,
             price: true,
+            compareAtPrice: true,
+            inventory: true,
             option1: true,
             option2: true,
             option3: true,
@@ -405,11 +420,11 @@ export const loader = async ({ request }) => {
   });
 
   // ── 6. Apply Merchandising Scores and Sort ─────────────────────────
-  applyMerchandisingRules(allMatchedProducts, activeRule, sortBy);
+  const finalProducts = applyMerchandisingRules(allMatchedProducts, activeRule, sortBy, activePinningRule);
 
   // ── 7. Fetch Full Details for Paginated Products ───────────────────
   const startIndex = (page - 1) * limit;
-  const paginatedIds = allMatchedProducts.slice(startIndex, startIndex + limit).map(p => p.id);
+  const paginatedIds = finalProducts.slice(startIndex, startIndex + limit).map(p => p.id);
   
   let products = [];
   if (paginatedIds.length > 0) {
@@ -422,7 +437,7 @@ export const loader = async ({ request }) => {
     products = paginatedIds.map(id => {
       const p = fetchedProducts.find(fp => fp.id === id);
       if (p) {
-        const matched = allMatchedProducts.find(mp => mp.id === id);
+        const matched = finalProducts.find(mp => mp.id === id);
         if (matched && matched.merchandisingImage) {
           p.merchandisingImage = matched.merchandisingImage;
         }

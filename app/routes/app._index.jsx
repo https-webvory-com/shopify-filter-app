@@ -57,6 +57,7 @@ export default function Index() {
 
   return (
     <s-page heading="Collection Filter Pro Dashboard">
+      <ui-title-bar title="Dashboard"></ui-title-bar>
       <s-stack direction="block" gap="base">
         
         {/* Sync Controls Banner */}

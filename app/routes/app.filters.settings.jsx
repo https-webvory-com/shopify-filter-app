@@ -172,6 +172,7 @@ export default function FilterSettings() {
 
   return (
     <s-page heading="Filter Settings">
+      <ui-title-bar title="Filter Settings"></ui-title-bar>
       <s-button slot="primary-action" variant="primary" onClick={handleSave}>
         Save Settings
       </s-button>

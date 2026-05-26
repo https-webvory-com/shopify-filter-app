@@ -407,6 +407,7 @@ export default function FilterGroups() {
 
   return (
     <s-page heading="Filter groups">
+      <ui-title-bar title="Filter Groups"></ui-title-bar>
       <s-stack direction="block" gap="base">
 
         {/* Info Banner */}

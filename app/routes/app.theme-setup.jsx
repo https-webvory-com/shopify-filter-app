@@ -134,6 +134,7 @@ export default function ThemeSetup() {
 
   return (
     <s-page heading="Theme Setup">
+      <ui-title-bar title="Theme Setup"></ui-title-bar>
       <s-stack direction="block" gap="base">
         {/* Banner Informational block */}
         <s-box padding="base" background="info" borderRadius="base">

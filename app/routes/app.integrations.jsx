@@ -27,6 +27,7 @@ export default function Integrations() {
 
   return (
     <s-page heading="Integrations">
+      <ui-title-bar title="Integrations"></ui-title-bar>
       <s-stack direction="block" gap="base">
         <s-section heading="Connect Third-Party Apps">
           <s-paragraph>

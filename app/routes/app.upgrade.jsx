@@ -55,6 +55,7 @@ export default function Upgrade() {
 
   return (
     <s-page heading="Pricing Plans">
+      <ui-title-bar title="Pricing Plans"></ui-title-bar>
       <s-stack direction="block" gap="base">
         <s-box padding="base" background="info" borderRadius="base">
           <s-paragraph>
