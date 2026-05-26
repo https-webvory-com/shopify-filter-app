@@ -2,6 +2,7 @@
 
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
+handle = "ai-smart-search-filter"
 application_url = "https://buyer-posing-dressing-wright.trycloudflare.com"
 embedded = true
 

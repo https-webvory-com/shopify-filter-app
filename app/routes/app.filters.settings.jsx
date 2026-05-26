@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useNavigate } from "react-router";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -21,10 +22,24 @@ function SettingToggle({ label, description, value, onChange }) {
       }}
     >
       <div style={{ flex: 1 }}>
-        <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#202223" }}>
+        <p
+          style={{
+            margin: "0 0 4px",
+            fontSize: "14px",
+            fontWeight: "600",
+            color: "#202223",
+          }}
+        >
           {label}
         </p>
-        <p style={{ margin: 0, fontSize: "13px", color: "#6d7175", lineHeight: "1.5" }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "13px",
+            color: "#6d7175",
+            lineHeight: "1.5",
+          }}
+        >
           {description}
         </p>
       </div>
@@ -87,10 +102,24 @@ function SettingSelect({ label, description, value, onChange, options }) {
       }}
     >
       <div style={{ flex: 1 }}>
-        <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600", color: "#202223" }}>
+        <p
+          style={{
+            margin: "0 0 4px",
+            fontSize: "14px",
+            fontWeight: "600",
+            color: "#202223",
+          }}
+        >
           {label}
         </p>
-        <p style={{ margin: 0, fontSize: "13px", color: "#6d7175", lineHeight: "1.5" }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "13px",
+            color: "#6d7175",
+            lineHeight: "1.5",
+          }}
+        >
           {description}
         </p>
       </div>
@@ -114,7 +143,9 @@ function SettingSelect({ label, description, value, onChange, options }) {
           }}
         >
           {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
       </div>
@@ -141,7 +172,14 @@ function SettingsSection({ title, children }) {
             borderBottom: "1px solid #e1e3e5",
           }}
         >
-          <p style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#202223" }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "15px",
+              fontWeight: "700",
+              color: "#202223",
+            }}
+          >
             {title}
           </p>
         </div>
@@ -153,6 +191,8 @@ function SettingsSection({ title, children }) {
 
 // ── Main Component ────────────────────────────────────────────────────
 export default function FilterSettings() {
+  const navigate = useNavigate();
+
   const [horizontalFilters, setHorizontalFilters] = useState(false);
   const [mobileLayout, setMobileLayout] = useState("off-canvas");
 
@@ -172,10 +212,64 @@ export default function FilterSettings() {
 
   return (
     <s-page heading="Filter Settings">
-      <ui-title-bar title="Filter Settings"></ui-title-bar>
-      <s-button slot="primary-action" variant="primary" onClick={handleSave}>
-        Save Settings
-      </s-button>
+      <ui-title-bar title="Filter Settings">
+        <button variant="breadcrumb" onClick={() => navigate("/app/filters")}>
+          Filters
+        </button>
+      </ui-title-bar>
+
+      <div
+        style={{
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "14px",
+        }}
+      >
+        <a
+          href="/app/filters"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("/app/filters");
+          }}
+          style={{
+            color: "#006e52",
+            textDecoration: "none",
+            fontWeight: "500",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+        >
+          <svg
+            style={{ width: "16px", height: "16px" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            ></path>
+          </svg>
+          Back to Filters
+        </a>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: "16px",
+        }}
+      >
+        <s-button variant="primary" onClick={handleSave}>
+          Save Settings
+        </s-button>
+      </div>
 
       <SettingsSection title="Filters Settings">
         <SettingToggle
@@ -238,7 +332,6 @@ export default function FilterSettings() {
         />
         <div style={{ padding: "20px 0" }} />
       </SettingsSection>
-
     </s-page>
   );
 }

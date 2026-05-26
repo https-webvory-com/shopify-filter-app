@@ -31,7 +31,14 @@ async function autoSeedOptionFilters(shop) {
     });
     if (!existing) {
       await prisma.filterSetting.create({
-        data: { shop, type: "option", key: optName, label: optName, order: nextOrder++, isEnabled: true },
+        data: {
+          shop,
+          type: "option",
+          key: optName,
+          label: optName,
+          order: nextOrder++,
+          isEnabled: true,
+        },
       });
       console.log(`CFP: Auto-seeded option filter: ${optName}`);
     }
@@ -52,22 +59,23 @@ export async function syncProducts(shop, admin) {
   });
 
   const metafieldIdentifiers = metafieldSettings
-    .filter(s => s.key && s.key.includes("."))
-    .map(s => {
+    .filter((s) => s.key && s.key.includes("."))
+    .map((s) => {
       const [namespace, key] = s.key.split(".");
       return { namespace, key };
     });
 
   // Construct query dynamically based on whether there are metafield filters
-  const metafieldQueryPart = metafieldIdentifiers.length > 0
-    ? `metafields(identifiers: $metafieldIdentifiers) {
+  const metafieldQueryPart =
+    metafieldIdentifiers.length > 0
+      ? `metafields(identifiers: $metafieldIdentifiers) {
         id
         namespace
         key
         value
         type
       }`
-    : "";
+      : "";
 
   const query = `#graphql
     query getProducts($cursor: String ${metafieldIdentifiers.length > 0 ? ", $metafieldIdentifiers: [HasMetafieldsIdentifier!]!" : ""}) {
@@ -151,18 +159,18 @@ export async function syncProducts(shop, admin) {
     for (const product of products) {
       allFetchedProductIds.push(product.id);
 
-      const optionsList = product.options.map(opt => ({
+      const optionsList = product.options.map((opt) => ({
         name: opt.name,
         values: opt.values,
       }));
 
       // Calculate min and max price across all variants
-      const prices = product.variants.nodes.map(v => parseFloat(v.price));
+      const prices = product.variants.nodes.map((v) => parseFloat(v.price));
       const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
       const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
 
       // Extract image URLs
-      const imageUrls = product.images.nodes.map(img => img.url);
+      const imageUrls = product.images.nodes.map((img) => img.url);
 
       // Perform upsert inside database transaction or sequentially
       await prisma.$transaction(async (tx) => {
@@ -200,8 +208,12 @@ export async function syncProducts(shop, admin) {
 
         // 2. Delete existing relations/variants/metafields to prevent orphaned records
         await tx.variant.deleteMany({ where: { productId: product.id } });
-        await tx.productCollection.deleteMany({ where: { productId: product.id } });
-        await tx.productMetafield.deleteMany({ where: { productId: product.id } });
+        await tx.productCollection.deleteMany({
+          where: { productId: product.id },
+        });
+        await tx.productMetafield.deleteMany({
+          where: { productId: product.id },
+        });
 
         // 3. Create Variants with option mapping
         for (const variant of product.variants.nodes) {
@@ -209,8 +221,10 @@ export async function syncProducts(shop, admin) {
           let option2 = null;
           let option3 = null;
 
-          variant.selectedOptions.forEach(selOpt => {
-            const optIndex = optionsList.findIndex(o => o.name === selOpt.name);
+          variant.selectedOptions.forEach((selOpt) => {
+            const optIndex = optionsList.findIndex(
+              (o) => o.name === selOpt.name,
+            );
             if (optIndex === 0) option1 = selOpt.value;
             else if (optIndex === 1) option2 = selOpt.value;
             else if (optIndex === 2) option3 = selOpt.value;
@@ -227,7 +241,9 @@ export async function syncProducts(shop, admin) {
               id: variant.id,
               productId: product.id,
               price: parseFloat(variant.price),
-              compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
+              compareAtPrice: variant.compareAtPrice
+                ? parseFloat(variant.compareAtPrice)
+                : null,
               available: available,
               inventory: inventory,
               imageUrl: variant.image?.url || null,
@@ -296,7 +312,9 @@ export async function syncProducts(shop, admin) {
   // 7. Auto-seed FilterSetting records for every unique product option found
   await autoSeedOptionFilters(shop);
 
-  console.log(`CFP: Product sync complete. Synced ${allFetchedProductIds.length} products. Deleted ${deletedProductsCount.count} obsolete records.`);
+  console.log(
+    `CFP: Product sync complete. Synced ${allFetchedProductIds.length} products. Deleted ${deletedProductsCount.count} obsolete records.`,
+  );
   return allFetchedProductIds.length;
 }
 
@@ -316,21 +334,22 @@ export async function syncSingleProduct(shop, admin, productId) {
   });
 
   const metafieldIdentifiers = metafieldSettings
-    .filter(s => s.key && s.key.includes("."))
-    .map(s => {
+    .filter((s) => s.key && s.key.includes("."))
+    .map((s) => {
       const [namespace, key] = s.key.split(".");
       return { namespace, key };
     });
 
-  const metafieldQueryPart = metafieldIdentifiers.length > 0
-    ? `metafields(identifiers: $metafieldIdentifiers) {
+  const metafieldQueryPart =
+    metafieldIdentifiers.length > 0
+      ? `metafields(identifiers: $metafieldIdentifiers) {
         id
         namespace
         key
         value
         type
       }`
-    : "";
+      : "";
 
   const query = `#graphql
     query getProduct($id: ID! ${metafieldIdentifiers.length > 0 ? ", $metafieldIdentifiers: [HasMetafieldsIdentifier!]!" : ""}) {
@@ -388,26 +407,31 @@ export async function syncSingleProduct(shop, admin, productId) {
   const responseJson = await response.json();
 
   if (responseJson.errors) {
-    console.error(`CFP: GraphQL Errors syncing product ${productId}:`, responseJson.errors);
+    console.error(
+      `CFP: GraphQL Errors syncing product ${productId}:`,
+      responseJson.errors,
+    );
     throw new Error(`Failed to fetch product ${productId} from Shopify`);
   }
 
   const product = responseJson.data?.product;
   if (!product) {
-    console.warn(`CFP: Product ${productId} not found on Shopify. Deleting from DB.`);
+    console.warn(
+      `CFP: Product ${productId} not found on Shopify. Deleting from DB.`,
+    );
     await prisma.product.deleteMany({ where: { id: productId } });
     return null;
   }
 
-  const optionsList = product.options.map(opt => ({
+  const optionsList = product.options.map((opt) => ({
     name: opt.name,
     values: opt.values,
   }));
 
-  const prices = product.variants.nodes.map(v => parseFloat(v.price));
+  const prices = product.variants.nodes.map((v) => parseFloat(v.price));
   const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
   const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
-  const imageUrls = product.images.nodes.map(img => img.url);
+  const imageUrls = product.images.nodes.map((img) => img.url);
 
   await prisma.$transaction(async (tx) => {
     // 1. Upsert Product
@@ -453,8 +477,8 @@ export async function syncSingleProduct(shop, admin, productId) {
       let option2 = null;
       let option3 = null;
 
-      variant.selectedOptions.forEach(selOpt => {
-        const optIndex = optionsList.findIndex(o => o.name === selOpt.name);
+      variant.selectedOptions.forEach((selOpt) => {
+        const optIndex = optionsList.findIndex((o) => o.name === selOpt.name);
         if (optIndex === 0) option1 = selOpt.value;
         else if (optIndex === 1) option2 = selOpt.value;
         else if (optIndex === 2) option3 = selOpt.value;
@@ -470,7 +494,9 @@ export async function syncSingleProduct(shop, admin, productId) {
           id: variant.id,
           productId: product.id,
           price: parseFloat(variant.price),
-          compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
+          compareAtPrice: variant.compareAtPrice
+            ? parseFloat(variant.compareAtPrice)
+            : null,
           available: available,
           inventory: inventory,
           imageUrl: variant.image?.url || null,

@@ -20,14 +20,16 @@ export const action = async ({ request }) => {
         if (admin) {
           await syncSingleProduct(shop, admin, productId);
         } else {
-          console.warn(`CFP: Admin client not available in webhook for ${shop}. Skipping real-time fetch.`);
+          console.warn(
+            `CFP: Admin client not available in webhook for ${shop}. Skipping real-time fetch.`,
+          );
         }
         break;
       }
       case "PRODUCTS_DELETE": {
         const productId = `gid://shopify/Product/${payload.id}`;
         console.log(`CFP: Deleting product ${productId} from DB...`);
-        
+
         await prisma.$transaction(async (tx) => {
           await tx.variant.deleteMany({ where: { productId } });
           await tx.productCollection.deleteMany({ where: { productId } });

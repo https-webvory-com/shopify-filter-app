@@ -17,14 +17,8 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/filters/groups">Filter Groups</s-link>
-        <s-link href="/app/merchandising">Merchandising</s-link>
-        <s-link href="/app/merchandising/pinning">Product Pinning</s-link>
-        <s-link href="/app/filters/settings">Filter Settings</s-link>
-        <s-link href="/app/filters/merged-value">Merged Values</s-link>
-        <s-link href="/app/theme-setup">Theme Setup</s-link>
-        <s-link href="/app/integrations">Integrations</s-link>
-        <s-link href="/app/customization">Customization</s-link>
+        <s-link href="/app/filters">Filters</s-link>
+        <s-link href="/app/collections">Collections</s-link>
         <s-link href="/app/settings">Settings</s-link>
         <s-link href="/app/upgrade">Upgrade</s-link>
       </s-app-nav>

@@ -1,5 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import { useActionData, useLoaderData, useSubmit, Link, data } from "react-router";
+import {
+  useActionData,
+  useLoaderData,
+  useSubmit,
+  Link,
+  data,
+} from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
@@ -97,21 +103,30 @@ export const loader = async ({ request, params }) => {
       }
     `);
     const graphqlData = await graphqlQuery.json();
-    shopifyCollections = graphqlData?.data?.collections?.nodes?.map(c => c.title).sort() || [];
-    
+    shopifyCollections =
+      graphqlData?.data?.collections?.nodes?.map((c) => c.title).sort() || [];
+
     const allLocsMap = new Map();
     // Add regular locations
-    graphqlData?.data?.locations?.nodes?.forEach(l => {
-      allLocsMap.set(l.id, { value: l.name, id: l.id, count: l.inventoryLevels?.nodes?.length || 0 });
+    graphqlData?.data?.locations?.nodes?.forEach((l) => {
+      allLocsMap.set(l.id, {
+        value: l.name,
+        id: l.id,
+        count: l.inventoryLevels?.nodes?.length || 0,
+      });
     });
     // Add fulfillment service locations
-    graphqlData?.data?.shop?.fulfillmentServices?.forEach(fs => {
+    graphqlData?.data?.shop?.fulfillmentServices?.forEach((fs) => {
       if (fs.location) {
         const l = fs.location;
-        allLocsMap.set(l.id, { value: l.name, id: l.id, count: l.inventoryLevels?.nodes?.length || 0 });
+        allLocsMap.set(l.id, {
+          value: l.name,
+          id: l.id,
+          count: l.inventoryLevels?.nodes?.length || 0,
+        });
       }
     });
-    
+
     shopifyLocations = Array.from(allLocsMap.values());
   } catch (err) {
     console.error("Error fetching collections or locations:", err);
@@ -119,20 +134,24 @@ export const loader = async ({ request, params }) => {
 
   // Fetch unique vendors and product types with counts
   const vendors = await prisma.product.groupBy({
-    by: ['vendor'],
+    by: ["vendor"],
     where: { shop, vendor: { not: "" } },
-    _count: { vendor: true }
+    _count: { vendor: true },
   });
 
   const productTypes = await prisma.product.groupBy({
-    by: ['productType'],
+    by: ["productType"],
     where: { shop, productType: { not: "" } },
-    _count: { productType: true }
+    _count: { productType: true },
   });
 
   const allProducts = await prisma.product.findMany({
     where: { shop },
-    select: { tags: true, options: true, variants: { select: { available: true, inventory: true } } }
+    select: {
+      tags: true,
+      options: true,
+      variants: { select: { available: true, inventory: true } },
+    },
   });
 
   const tagsMap = new Map();
@@ -153,7 +172,8 @@ export const loader = async ({ request, params }) => {
       for (const opt of p.options) {
         if (opt.name && opt.values) {
           const optNameLower = opt.name.toLowerCase();
-          if (!optionsMap.has(optNameLower)) optionsMap.set(optNameLower, new Map());
+          if (!optionsMap.has(optNameLower))
+            optionsMap.set(optNameLower, new Map());
           const valMap = optionsMap.get(optNameLower);
           for (const v of opt.values) {
             valMap.set(v, (valMap.get(v) || 0) + 1);
@@ -161,13 +181,15 @@ export const loader = async ({ request, params }) => {
         }
       }
     }
-    
+
     // Process stock status counts
     if (p.variants && p.variants.length > 0) {
-      const hasStock = p.variants.some(v => v.inventory > 0);
-      const isPreOrder = p.variants.some(v => v.available && v.inventory <= 0);
-      const isAvailable = p.variants.some(v => v.available);
-      
+      const hasStock = p.variants.some((v) => v.inventory > 0);
+      const isPreOrder = p.variants.some(
+        (v) => v.available && v.inventory <= 0,
+      );
+      const isAvailable = p.variants.some((v) => v.available);
+
       if (hasStock) stockOnHandCount++;
       if (isPreOrder) preOrderCount++;
       if (isAvailable) inStockCount++;
@@ -181,20 +203,32 @@ export const loader = async ({ request, params }) => {
       inStock: inStockCount,
       stockOnHand: stockOnHandCount,
       preOrder: preOrderCount,
-      outOfStock: outOfStockCount
+      outOfStock: outOfStockCount,
     },
-    vendors: vendors.map(v => ({ value: v.vendor, count: v._count.vendor })).sort((a,b) => a.value.localeCompare(b.value)),
-    productTypes: productTypes.map(p => ({ value: p.productType, count: p._count.productType })).sort((a,b) => a.value.localeCompare(b.value)),
-    tags: Array.from(tagsMap.entries()).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value)),
+    vendors: vendors
+      .map((v) => ({ value: v.vendor, count: v._count.vendor }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
+    productTypes: productTypes
+      .map((p) => ({ value: p.productType, count: p._count.productType }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
+    tags: Array.from(tagsMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
     locations: shopifyLocations,
     options: Array.from(optionsMap.entries()).reduce((acc, [name, valMap]) => {
-      acc[name] = Array.from(valMap.entries()).map(([value, count]) => ({ value, count })).sort((a,b) => a.value.localeCompare(b.value));
+      acc[name] = Array.from(valMap.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.value.localeCompare(b.value));
       return acc;
-    }, {})
+    }, {}),
   };
 
-
-  return { group, detectedOptions: Array.from(optionNames).sort(), shopifyCollections, storeData };
+  return {
+    group,
+    detectedOptions: Array.from(optionNames).sort(),
+    shopifyCollections,
+    storeData,
+  };
 };
 
 // ── Action ───────────────────────────────────────────────────────────
@@ -206,28 +240,40 @@ export const action = async ({ request, params }) => {
   const intent = formData.get("intent");
 
   // Verify group belongs to shop
-  const group = await prisma.filterGroup.findFirst({ where: { id: filterGroupId, shop } });
-  if (!group) return data({ success: false, error: "Not found" }, { status: 404 });
+  const group = await prisma.filterGroup.findFirst({
+    where: { id: filterGroupId, shop },
+  });
+  if (!group)
+    return data({ success: false, error: "Not found" }, { status: 404 });
 
   if (intent === "updateGroupSettings") {
     const name = formData.get("name");
     const groupType = formData.get("groupType");
-    const selectedCollections = JSON.parse(formData.get("selectedCollections") || "[]");
+    const selectedCollections = JSON.parse(
+      formData.get("selectedCollections") || "[]",
+    );
 
     const existingGroup = await prisma.filterGroup.findFirst({
-      where: { 
-        shop, 
+      where: {
+        shop,
         name: { equals: name, mode: "insensitive" },
-        id: { not: filterGroupId } 
-      }
+        id: { not: filterGroupId },
+      },
     });
 
     if (existingGroup) {
-      return { success: false, error: "A filter group with this name already exists.", intent };
+      return {
+        success: false,
+        error: "A filter group with this name already exists.",
+        intent,
+      };
     }
 
     // Update the basic info
-    await prisma.filterGroup.update({ where: { id: filterGroupId }, data: { name } });
+    await prisma.filterGroup.update({
+      where: { id: filterGroupId },
+      data: { name },
+    });
 
     // Delete existing collections for this group
     await prisma.filterGroupCollection.deleteMany({ where: { filterGroupId } });
@@ -272,11 +318,24 @@ export const action = async ({ request, params }) => {
     let filterKey = formData.get("filterKey") || null;
     const label = formData.get("label");
     const displayMode = formData.get("displayMode") || "list";
-    const config = formData.get("config") ? JSON.parse(formData.get("config")) : undefined;
+    const config = formData.get("config")
+      ? JSON.parse(formData.get("config"))
+      : undefined;
 
     // Fix for option types (e.g. "color", "size", "title", "denominations")
     // Storefront expects filterType="option" and filterKey="Color"
-    const isDynamicOption = !["collection", "vendor", "product_type", "tags", "price", "percent_sale", "weight", "review_rating", "stock_status", "inventory_locations"].includes(filterType);
+    const isDynamicOption = ![
+      "collection",
+      "vendor",
+      "product_type",
+      "tags",
+      "price",
+      "percent_sale",
+      "weight",
+      "review_rating",
+      "stock_status",
+      "inventory_locations",
+    ].includes(filterType);
     if (isDynamicOption) {
       filterKey = label; // The user's label becomes the key (e.g., "Color")
       filterType = "option";
@@ -289,9 +348,15 @@ export const action = async ({ request, params }) => {
     const nextOrder = (lastFilter?.order ?? -1) + 1;
 
     await prisma.filterGroupItem.create({
-      data: { 
-        filterGroupId, filterType, filterKey, label, displayMode, isEnabled: true, order: nextOrder,
-        ...(config !== undefined ? { config } : {})
+      data: {
+        filterGroupId,
+        filterType,
+        filterKey,
+        label,
+        displayMode,
+        isEnabled: true,
+        order: nextOrder,
+        ...(config !== undefined ? { config } : {}),
       },
     });
     return { success: true, intent };
@@ -301,7 +366,9 @@ export const action = async ({ request, params }) => {
     const filterId = formData.get("filterId");
     const label = formData.get("label");
     const displayMode = formData.get("displayMode");
-    const config = formData.get("config") ? JSON.parse(formData.get("config")) : undefined;
+    const config = formData.get("config")
+      ? JSON.parse(formData.get("config"))
+      : undefined;
 
     await prisma.filterGroupItem.update({
       where: { id: filterId },
@@ -320,7 +387,11 @@ export const action = async ({ request, params }) => {
       where: { id: filterId },
       select: { isEnabled: true, label: true },
     });
-    if (!current) return data({ success: false, error: "Filter not found" }, { status: 404 });
+    if (!current)
+      return data(
+        { success: false, error: "Filter not found" },
+        { status: 404 },
+      );
 
     const newStatus = !current.isEnabled;
     await prisma.filterGroupItem.update({
@@ -328,7 +399,12 @@ export const action = async ({ request, params }) => {
       data: { isEnabled: newStatus },
     });
 
-    return { success: true, intent, isEnabled: newStatus, label: current.label };
+    return {
+      success: true,
+      intent,
+      isEnabled: newStatus,
+      label: current.label,
+    };
   }
 
   if (intent === "deleteFilter") {
@@ -339,7 +415,9 @@ export const action = async ({ request, params }) => {
 
   if (intent === "duplicateFilter") {
     const filterId = formData.get("filterId");
-    const source = await prisma.filterGroupItem.findUnique({ where: { id: filterId } });
+    const source = await prisma.filterGroupItem.findUnique({
+      where: { id: filterId },
+    });
     if (!source) return { success: false };
 
     const lastFilter = await prisma.filterGroupItem.findFirst({
@@ -365,8 +443,11 @@ export const action = async ({ request, params }) => {
     const orderedIds = JSON.parse(formData.get("orderedIds"));
     await prisma.$transaction(
       orderedIds.map((filterId, index) =>
-        prisma.filterGroupItem.update({ where: { id: filterId }, data: { order: index } })
-      )
+        prisma.filterGroupItem.update({
+          where: { id: filterId },
+          data: { order: index },
+        }),
+      ),
     );
     return { success: true, intent };
   }
@@ -391,7 +472,8 @@ function DisplayModeBadge({ mode }) {
     dropdown: { bg: "#f3ebf9", text: "#4b1277" },
   };
   const c = colors[mode] || colors.list;
-  const label = DISPLAY_MODES.find((d) => d.value === mode)?.label.split(" ")[0] || mode;
+  const label =
+    DISPLAY_MODES.find((d) => d.value === mode)?.label.split(" ")[0] || mode;
   return (
     <span
       style={{
@@ -410,30 +492,39 @@ function DisplayModeBadge({ mode }) {
 
 // ── Component ─────────────────────────────────────────────────────────
 export default function FilterGroupDetail() {
-  const { group, detectedOptions, shopifyCollections, storeData } = useLoaderData();
+  const { group, detectedOptions, shopifyCollections, storeData } =
+    useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const shopify = useAppBridge();
 
   const [groupName, setGroupName] = useState(group.name);
-  
+
   // -- Group Settings State --
-  const initialGroupType = group.collections.some(c => c.pageType === "search") ? "search" : "collections";
-  const initialSelectedColls = group.collections.filter(c => c.pageType === "collection" && c.collectionId !== "__all__").map(c => ({ id: c.collectionId, title: c.collectionTitle }));
-  
+  const initialGroupType = group.collections.some(
+    (c) => c.pageType === "search",
+  )
+    ? "search"
+    : "collections";
+  const initialSelectedColls = group.collections
+    .filter((c) => c.pageType === "collection" && c.collectionId !== "__all__")
+    .map((c) => ({ id: c.collectionId, title: c.collectionTitle }));
+
   const [groupType, setGroupType] = useState(initialGroupType);
   const [selectedColls, setSelectedColls] = useState(initialSelectedColls);
   const [showCollDropdown, setShowCollDropdown] = useState(false);
   const [searchColl, setSearchColl] = useState("");
-  const filteredCollections = shopifyCollections.filter(c => c.toLowerCase().includes(searchColl.toLowerCase()));
+  const filteredCollections = shopifyCollections.filter((c) =>
+    c.toLowerCase().includes(searchColl.toLowerCase()),
+  );
 
   const handleToggleCollection = (title) => {
     // Generate a pseudo-ID like shopify uses (or just use title)
     const id = `gid://shopify/Collection/${title}`;
-    setSelectedColls(prev => 
-      prev.find(c => c.title === title)
-        ? prev.filter(c => c.title !== title)
-        : [...prev, { id, title }]
+    setSelectedColls((prev) =>
+      prev.find((c) => c.title === title)
+        ? prev.filter((c) => c.title !== title)
+        : [...prev, { id, title }],
     );
   };
   // --------------------------
@@ -451,7 +542,7 @@ export default function FilterGroupDetail() {
   const [configLimit, setConfigLimit] = useState(0);
   const [configShowSearch, setConfigShowSearch] = useState(false);
   const [configCollapsed, setConfigCollapsed] = useState(false);
-  
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingFilterData, setEditingFilterData] = useState(null);
 
@@ -473,11 +564,13 @@ export default function FilterGroupDetail() {
     { id: "status", label: "Status", locked: false },
     { id: "action", label: "Action", locked: false },
   ];
-  const [tableColumns, setTableColumns] = useState(ALL_COLUMNS.map(c => c.id));
+  const [tableColumns, setTableColumns] = useState(
+    ALL_COLUMNS.map((c) => c.id),
+  );
   const [tempTableColumns, setTempTableColumns] = useState([...tableColumns]);
   const [columnsSearch, setColumnsSearch] = useState("");
   const [draggedColumnIdx, setDraggedColumnIdx] = useState(null);
-  
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -493,7 +586,9 @@ export default function FilterGroupDetail() {
     if (actionData) {
       if (actionData.success) {
         if (actionData.intent === "toggleFilter") {
-          shopify.toast.show(`${actionData.label ?? "Filter"} ${actionData.isEnabled ? "enabled" : "disabled"}`);
+          shopify.toast.show(
+            `${actionData.label ?? "Filter"} ${actionData.isEnabled ? "enabled" : "disabled"}`,
+          );
         } else if (actionData.intent === "updateGroupSettings") {
           shopify.toast.show("Group settings saved successfully");
         }
@@ -506,18 +601,30 @@ export default function FilterGroupDetail() {
   const openConfigModal = (filter) => {
     let parsedConfig = {};
     try {
-      if (filter.config) parsedConfig = typeof filter.config === "string" ? JSON.parse(filter.config) : filter.config;
-    } catch(e) {}
+      if (filter.config)
+        parsedConfig =
+          typeof filter.config === "string"
+            ? JSON.parse(filter.config)
+            : filter.config;
+    } catch (e) {}
 
     setEditingFilterData({
       id: filter.id,
-      optionType: filter.filterType === "option" ? (filter.filterKey ? filter.filterKey.toLowerCase() : "option") : filter.filterType,
+      optionType:
+        filter.filterType === "option"
+          ? filter.filterKey
+            ? filter.filterKey.toLowerCase()
+            : "option"
+          : filter.filterType,
       filterTitle: filter.label,
       prefix: parsedConfig.prefix || "",
       navCollections: parsedConfig.navCollections || false,
       childType: parsedConfig.childType || "Select child type",
-      mainCollections: parsedConfig.mainCollections || [{ id: Date.now(), collection: "" }],
-      keepMainCollectionsUnchanged: parsedConfig.keepMainCollectionsUnchanged || false,
+      mainCollections: parsedConfig.mainCollections || [
+        { id: Date.now(), collection: "" },
+      ],
+      keepMainCollectionsUnchanged:
+        parsedConfig.keepMainCollectionsUnchanged || false,
       multipleSelection: parsedConfig.multipleSelection || false,
       narrowDown: parsedConfig.narrowDown || false,
       useManualValues: parsedConfig.useManualValues || false,
@@ -531,19 +638,37 @@ export default function FilterGroupDetail() {
       weightRanges: parsedConfig.weightRanges,
       reviewRanges: parsedConfig.reviewRanges,
       stockStatusConfig: parsedConfig.stockStatusConfig,
-      ratingColor: parsedConfig.ratingColor
+      ratingColor: parsedConfig.ratingColor,
     });
     setIsCreateModalOpen(true);
   };
 
   const handleSaveFilterModal = (data) => {
-    const { 
-      filterId, optionType, prefix, filterTitle, navCollections, childType, mainCollections, 
-      keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, 
-      excludedValues, manualValues, sortManualValues, advanced,
-      displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
+    const {
+      filterId,
+      optionType,
+      prefix,
+      filterTitle,
+      navCollections,
+      childType,
+      mainCollections,
+      keepMainCollectionsUnchanged,
+      multipleSelection,
+      narrowDown,
+      useManualValues,
+      excludedValues,
+      manualValues,
+      sortManualValues,
+      advanced,
+      displayMode,
+      priceRanges,
+      saleRanges,
+      weightRanges,
+      reviewRanges,
+      stockStatusConfig,
+      ratingColor,
     } = data;
-    
+
     submit(
       {
         intent: filterId ? "updateFilter" : "addFilter",
@@ -553,11 +678,27 @@ export default function FilterGroupDetail() {
         label: filterTitle,
         displayMode: displayMode || "List",
         config: JSON.stringify({
-          prefix, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
-          priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
-        })
+          prefix,
+          navCollections,
+          childType,
+          mainCollections,
+          keepMainCollectionsUnchanged,
+          multipleSelection,
+          narrowDown,
+          useManualValues,
+          excludedValues,
+          manualValues,
+          sortManualValues,
+          advanced,
+          priceRanges,
+          saleRanges,
+          weightRanges,
+          reviewRanges,
+          stockStatusConfig,
+          ratingColor,
+        }),
       },
-      { method: "POST" }
+      { method: "POST" },
     );
     setIsCreateModalOpen(false);
     setEditingFilterData(null);
@@ -566,13 +707,13 @@ export default function FilterGroupDetail() {
   const handleUpdateGroupSettings = () => {
     if (!groupName.trim()) return;
     submit(
-      { 
-        intent: "updateGroupSettings", 
+      {
+        intent: "updateGroupSettings",
         name: groupName,
         groupType,
-        selectedCollections: JSON.stringify(selectedColls)
-      }, 
-      { method: "POST" }
+        selectedCollections: JSON.stringify(selectedColls),
+      },
+      { method: "POST" },
     );
     shopify.toast.show("Group updated");
   };
@@ -580,20 +721,56 @@ export default function FilterGroupDetail() {
   return (
     <s-page>
       <ui-title-bar title={group.name}></ui-title-bar>
-      <div style={{ marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
-        <Link to="/app/filters/groups" style={{ color: "#006e52", textDecoration: "underline", fontWeight: "500" }}>
+      <div
+        style={{
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "14px",
+        }}
+      >
+        <Link
+          to="/app/filters/groups"
+          style={{
+            color: "#006e52",
+            textDecoration: "underline",
+            fontWeight: "500",
+          }}
+        >
           Filter groups
         </Link>
         <span style={{ color: "#6d7175" }}>›</span>
-        <span style={{ color: "#202223", fontWeight: "600" }}>{group.name}</span>
+        <span style={{ color: "#202223", fontWeight: "600" }}>
+          {group.name}
+        </span>
       </div>
 
       <s-stack direction="block" gap="base">
         <s-card heading="Filter group information">
           <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
-                Name <span style={{ color: "#8c9196", fontWeight: "normal", fontSize: "11px", cursor: "help" }} title="The name of this filter group">?</span>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  fontSize: "13px",
+                  color: "#6d7175",
+                }}
+              >
+                Name{" "}
+                <span
+                  style={{
+                    color: "#8c9196",
+                    fontWeight: "normal",
+                    fontSize: "11px",
+                    cursor: "help",
+                  }}
+                  title="The name of this filter group"
+                >
+                  ?
+                </span>
               </label>
               <input
                 type="text"
@@ -612,22 +789,60 @@ export default function FilterGroupDetail() {
 
               {/* Editable Group Type & Collections */}
               {!group.isDefault && (
-                <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div
+                  style={{
+                    marginTop: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                  }}
+                >
                   {/* For collection pages */}
-                  <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      cursor: "pointer",
+                    }}
+                  >
                     <input
                       type="radio"
                       name="groupType"
                       checked={groupType === "collections"}
                       onChange={() => setGroupType("collections")}
-                      style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                      style={{
+                        cursor: "pointer",
+                        width: "16px",
+                        height: "16px",
+                      }}
                     />
-                    <span style={{ fontSize: "14px", color: "#202223", fontWeight: groupType === "collections" ? "600" : "400" }}>For collection pages</span>
+                    <span
+                      style={{
+                        fontSize: "14px",
+                        color: "#202223",
+                        fontWeight: groupType === "collections" ? "600" : "400",
+                      }}
+                    >
+                      For collection pages
+                    </span>
                   </label>
 
                   {groupType === "collections" && (
-                    <div style={{ marginLeft: "26px", position: "relative", marginBottom: "10px" }}>
-                      <s-text variant="bodySm" tone="subdued" style={{ display: "block", marginBottom: "6px" }}>Select collections using this filter group</s-text>
+                    <div
+                      style={{
+                        marginLeft: "26px",
+                        position: "relative",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <s-text
+                        variant="bodySm"
+                        tone="subdued"
+                        style={{ display: "block", marginBottom: "6px" }}
+                      >
+                        Select collections using this filter group
+                      </s-text>
                       <div
                         onClick={() => setShowCollDropdown(!showCollDropdown)}
                         style={{
@@ -642,19 +857,48 @@ export default function FilterGroupDetail() {
                           display: "flex",
                           alignItems: "center",
                           flexWrap: "wrap",
-                          gap: "6px"
+                          gap: "6px",
                         }}
                       >
-                        {selectedColls.length > 0
-                          ? selectedColls.map((c) => (
-                              <span key={c.id} style={{ display: "inline-flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "500", gap: "4px" }}>
-                                {c.title}
-                                <span onClick={(e) => { e.stopPropagation(); handleToggleCollection(c.title); }} style={{ cursor: "pointer", marginLeft: "4px", fontSize: "10px" }}>✕</span>
+                        {selectedColls.length > 0 ? (
+                          selectedColls.map((c) => (
+                            <span
+                              key={c.id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                background: "#007bff",
+                                color: "#fff",
+                                padding: "2px 8px",
+                                borderRadius: "12px",
+                                fontSize: "12px",
+                                fontWeight: "500",
+                                gap: "4px",
+                              }}
+                            >
+                              {c.title}
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleCollection(c.title);
+                                }}
+                                style={{
+                                  cursor: "pointer",
+                                  marginLeft: "4px",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                ✕
                               </span>
-                            ))
-                          : <span style={{ color: "#8c9196" }}>All collections (no specific selection)</span>}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ color: "#8c9196" }}>
+                            All collections (no specific selection)
+                          </span>
+                        )}
                       </div>
-                      
+
                       {showCollDropdown && (
                         <div
                           style={{
@@ -672,7 +916,15 @@ export default function FilterGroupDetail() {
                             marginTop: "4px",
                           }}
                         >
-                          <div style={{ padding: "8px", position: "sticky", top: 0, background: "#fff", borderBottom: "1px solid #f1f2f4" }}>
+                          <div
+                            style={{
+                              padding: "8px",
+                              position: "sticky",
+                              top: 0,
+                              background: "#fff",
+                              borderBottom: "1px solid #f1f2f4",
+                            }}
+                          >
                             <input
                               type="text"
                               placeholder="Search collections..."
@@ -685,12 +937,14 @@ export default function FilterGroupDetail() {
                                 border: "1px solid #c9cccf",
                                 fontSize: "13px",
                                 outline: "none",
-                                boxSizing: "border-box"
+                                boxSizing: "border-box",
                               }}
                             />
                           </div>
-                          {filteredCollections.map(c => {
-                            const isSelected = selectedColls.some(sc => sc.title === c);
+                          {filteredCollections.map((c) => {
+                            const isSelected = selectedColls.some(
+                              (sc) => sc.title === c,
+                            );
                             return (
                               <div
                                 key={c}
@@ -699,13 +953,19 @@ export default function FilterGroupDetail() {
                                   padding: "8px 12px",
                                   fontSize: "13px",
                                   cursor: "pointer",
-                                  background: isSelected ? "#f0f4f9" : "transparent",
+                                  background: isSelected
+                                    ? "#f0f4f9"
+                                    : "transparent",
                                   display: "flex",
                                   alignItems: "center",
                                   gap: "8px",
                                 }}
                               >
-                                <input type="checkbox" checked={isSelected} readOnly />
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  readOnly
+                                />
                                 {c}
                               </div>
                             );
@@ -716,30 +976,62 @@ export default function FilterGroupDetail() {
                   )}
 
                   {/* For search page */}
-                  <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      cursor: "pointer",
+                    }}
+                  >
                     <input
                       type="radio"
                       name="groupType"
                       checked={groupType === "search"}
                       onChange={() => setGroupType("search")}
-                      style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                      style={{
+                        cursor: "pointer",
+                        width: "16px",
+                        height: "16px",
+                      }}
                     />
-                    <span style={{ fontSize: "14px", color: "#202223", fontWeight: groupType === "search" ? "600" : "400" }}>For search page</span>
+                    <span
+                      style={{
+                        fontSize: "14px",
+                        color: "#202223",
+                        fontWeight: groupType === "search" ? "600" : "400",
+                      }}
+                    >
+                      For search page
+                    </span>
                   </label>
                 </div>
               )}
-
             </div>
           </div>
-          
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f1f2f4" }}>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: "16px",
+              paddingTop: "16px",
+              borderTop: "1px solid #f1f2f4",
+            }}
+          >
             <s-button variant="primary" onClick={handleUpdateGroupSettings}>
               UPDATE
             </s-button>
           </div>
         </s-card>
 
-        <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px" }}>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e1e3e5",
+            borderRadius: "8px",
+          }}
+        >
           <div
             style={{
               padding: "14px 16px",
@@ -750,7 +1042,15 @@ export default function FilterGroupDetail() {
           >
             {/* Left side: Filters heading */}
             <div style={{ width: "120px" }}>
-              <span style={{ fontSize: "16px", fontWeight: "600", color: "#202223" }}>Filters</span>
+              <span
+                style={{
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  color: "#202223",
+                }}
+              >
+                Filters
+              </span>
             </div>
 
             {/* Middle: Filter views & Add Filter */}
@@ -773,26 +1073,105 @@ export default function FilterGroupDetail() {
                     cursor: "pointer",
                   }}
                 >
-                  {filterStatusView === "active" ? "Active filters" : filterStatusView === "inactive" ? "Inactive filters" : "All filters"} ({group.filters.length})
-                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
+                  {filterStatusView === "active"
+                    ? "Active filters"
+                    : filterStatusView === "inactive"
+                      ? "Inactive filters"
+                      : "All filters"}{" "}
+                  ({group.filters.length})
+                  <svg
+                    viewBox="0 0 20 20"
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      fill: "currentColor",
+                    }}
+                  >
                     <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
                   </svg>
                 </button>
                 {isViewDropdownOpen && (
-                  <div style={{
-                    position: "absolute", top: "100%", left: 0, marginTop: "8px",
-                    background: "#fff", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                    border: "1px solid #e1e3e5", width: "200px", zIndex: 10, padding: "8px 0"
-                  }}>
-                    <button onClick={() => { setFilterStatusView("all"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>All filters</button>
-                    <button onClick={() => { setFilterStatusView("active"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Active filters</button>
-                    <button onClick={() => { setFilterStatusView("inactive"); setIsViewDropdownOpen(false); }} style={{ display: "block", width: "100%", padding: "8px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>Inactive filters</button>
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      marginTop: "8px",
+                      background: "#fff",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                      border: "1px solid #e1e3e5",
+                      width: "200px",
+                      zIndex: 10,
+                      padding: "8px 0",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setFilterStatusView("all");
+                        setIsViewDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "8px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                      }}
+                    >
+                      All filters
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterStatusView("active");
+                        setIsViewDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "8px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Active filters
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFilterStatusView("inactive");
+                        setIsViewDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "8px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                      }}
+                    >
+                      Inactive filters
+                    </button>
                   </div>
                 )}
               </div>
 
               {/* Add Filter Split Button */}
-              <div style={{ display: "flex", borderRadius: "20px", overflow: "hidden" }}>
+              <div
+                style={{
+                  display: "flex",
+                  borderRadius: "20px",
+                  overflow: "hidden",
+                }}
+              >
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
                   style={{
@@ -807,8 +1186,20 @@ export default function FilterGroupDetail() {
                 >
                   Add filter
                 </button>
-                <div style={{ width: "1px", background: "rgba(255,255,255,0.3)", backgroundColor: "#007bff" }}>
-                   <div style={{ height: "100%", width: "1px", background: "rgba(255,255,255,0.3)" }}></div>
+                <div
+                  style={{
+                    width: "1px",
+                    background: "rgba(255,255,255,0.3)",
+                    backgroundColor: "#007bff",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: "1px",
+                      background: "rgba(255,255,255,0.3)",
+                    }}
+                  ></div>
                 </div>
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
@@ -822,7 +1213,14 @@ export default function FilterGroupDetail() {
                     alignItems: "center",
                   }}
                 >
-                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
+                  <svg
+                    viewBox="0 0 20 20"
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      fill: "currentColor",
+                    }}
+                  >
                     <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
                   </svg>
                 </button>
@@ -835,7 +1233,18 @@ export default function FilterGroupDetail() {
             <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
               {/* Search Bar */}
               <div style={{ position: "relative" }}>
-                <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}>
+                <svg
+                  viewBox="0 0 20 20"
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    fill: "#007bff",
+                    position: "absolute",
+                    left: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                  }}
+                >
                   <path d="M8 2a6 6 0 1 0 4.243 10.243l4.05 4.05a1 1 0 0 0 1.414-1.414l-4.05-4.05A6 6 0 0 0 8 2zM4 8a4 4 0 1 1 8 0 4 4 0 0 1-8 0z" />
                 </svg>
                 <input
@@ -857,19 +1266,51 @@ export default function FilterGroupDetail() {
               </div>
 
               {/* Icons */}
-              <button 
+              <button
                 onClick={() => setIsCustomizeColumnsOpen(true)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#007bff", display: "flex" }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  color: "#007bff",
+                  display: "flex",
+                }}
               >
-                <svg viewBox="0 0 24 24" style={{ width: "20px", height: "20px", fill: "currentColor" }}>
+                <svg
+                  viewBox="0 0 24 24"
+                  style={{
+                    width: "20px",
+                    height: "20px",
+                    fill: "currentColor",
+                  }}
+                >
                   <path d="M12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm0-5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM19.33 13.04l2.12.88a1 1 0 0 1 .53 1.28l-1.5 3.62a1 1 0 0 1-1.28.53l-2.12-.88a7.073 7.073 0 0 1-2.14 1.26l-.33 2.27a1 1 0 0 1-.99.85h-3.88a1 1 0 0 1-.99-.85l-.33-2.27a7.073 7.073 0 0 1-2.14-1.26l-2.12.88a1 1 0 0 1-1.28-.53l-1.5-3.62a1 1 0 0 1 .53-1.28l2.12-.88c-.06-.41-.11-.83-.11-1.26s.05-.85.11-1.26l-2.12-.88a1 1 0 0 1-.53-1.28l1.5-3.62a1 1 0 0 1 1.28-.53l2.12.88c.63-.53 1.34-.97 2.14-1.26l.33-2.27a1 1 0 0 1 .99-.85h3.88a1 1 0 0 1 .99.85l.33 2.27c.8.29 1.51.73 2.14 1.26l2.12-.88a1 1 0 0 1 1.28.53l1.5 3.62a1 1 0 0 1-.53 1.28l-2.12.88c.06.41.11.83.11 1.26s-.05.85-.11 1.26z" />
                 </svg>
               </button>
-              <button 
+              <button
                 onClick={() => setIsAdvancedFilterOpen(true)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#007bff", display: "flex" }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  color: "#007bff",
+                  display: "flex",
+                }}
               >
-                <svg viewBox="0 0 24 24" style={{ width: "20px", height: "20px", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" }}>
+                <svg
+                  viewBox="0 0 24 24"
+                  style={{
+                    width: "20px",
+                    height: "20px",
+                    fill: "none",
+                    stroke: "currentColor",
+                    strokeWidth: "2",
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round",
+                  }}
+                >
                   <line x1="4" y1="21" x2="4" y2="14"></line>
                   <line x1="4" y1="10" x2="4" y2="3"></line>
                   <line x1="12" y1="21" x2="12" y2="12"></line>
@@ -885,50 +1326,142 @@ export default function FilterGroupDetail() {
           </div>
 
           {group.filters.length === 0 ? (
-            <div style={{ padding: "40px 16px", textAlign: "center", color: "#6d7175" }}>
-              <svg viewBox="0 0 20 20" style={{ width: "32px", height: "32px", fill: "#c9cccf", marginBottom: "12px" }}>
+            <div
+              style={{
+                padding: "40px 16px",
+                textAlign: "center",
+                color: "#6d7175",
+              }}
+            >
+              <svg
+                viewBox="0 0 20 20"
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  fill: "#c9cccf",
+                  marginBottom: "12px",
+                }}
+              >
                 <path d="M3 16h4v-2H3v2zm0-5h9V9H3v2zm0-5h14V4H3v2zm6 10h8v-2H9v2zm5-5h3V9h-3v2z" />
               </svg>
-              <p style={{ margin: "0 0 16px", fontSize: "14px" }}>No filters yet. Add your first filter.</p>
-              <s-button onClick={() => setIsCreateModalOpen(true)}>Add filter</s-button>
+              <p style={{ margin: "0 0 16px", fontSize: "14px" }}>
+                No filters yet. Add your first filter.
+              </p>
+              <s-button onClick={() => setIsCreateModalOpen(true)}>
+                Add filter
+              </s-button>
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                textAlign: "left",
+              }}
+            >
               <thead>
-                <tr style={{ background: "#fafafa", borderBottom: "1px solid #e1e3e5" }}>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175", width: "32px" }}></th>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175" }}>Filter title</th>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175" }}>Type</th>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175" }}>Display mode</th>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175" }}>Status</th>
-                  <th style={{ padding: "10px 16px", fontWeight: "600", fontSize: "12px", color: "#6d7175", textAlign: "right" }}>Actions</th>
+                <tr
+                  style={{
+                    background: "#fafafa",
+                    borderBottom: "1px solid #e1e3e5",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                      width: "32px",
+                    }}
+                  ></th>
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                    }}
+                  >
+                    Filter title
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                    }}
+                  >
+                    Type
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                    }}
+                  >
+                    Display mode
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                    }}
+                  >
+                    Status
+                  </th>
+                  <th
+                    style={{
+                      padding: "10px 16px",
+                      fontWeight: "600",
+                      fontSize: "12px",
+                      color: "#6d7175",
+                      textAlign: "right",
+                    }}
+                  >
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {group.filters
                   .filter((filter) => {
                     if (filterStatusView === "active") return filter.isEnabled;
-                    if (filterStatusView === "inactive") return !filter.isEnabled;
+                    if (filterStatusView === "inactive")
+                      return !filter.isEnabled;
                     return true;
                   })
-                  .filter((filter) => filter.label.toLowerCase().includes(filterSearch.toLowerCase()))
+                  .filter((filter) =>
+                    filter.label
+                      .toLowerCase()
+                      .includes(filterSearch.toLowerCase()),
+                  )
                   .filter((filter) => {
                     if (advancedConditions.length === 0) return true;
-                    
+
                     const passesCondition = (c) => {
                       const val = filter[c.field];
                       const target = c.value;
-                      
+
                       if (c.operator === "equals") return val === target;
                       if (c.operator === "doesNotEqual") return val !== target;
-                      
+
                       if (typeof val === "string") {
                         const sVal = val.toLowerCase();
                         const sTarget = String(target).toLowerCase();
-                        if (c.operator === "contains") return sVal.includes(sTarget);
-                        if (c.operator === "doesNotContain") return !sVal.includes(sTarget);
-                        if (c.operator === "startsWith") return sVal.startsWith(sTarget);
-                        if (c.operator === "endsWith") return sVal.endsWith(sTarget);
+                        if (c.operator === "contains")
+                          return sVal.includes(sTarget);
+                        if (c.operator === "doesNotContain")
+                          return !sVal.includes(sTarget);
+                        if (c.operator === "startsWith")
+                          return sVal.startsWith(sTarget);
+                        if (c.operator === "endsWith")
+                          return sVal.endsWith(sTarget);
                       }
                       return false;
                     };
@@ -940,102 +1473,205 @@ export default function FilterGroupDetail() {
                     }
                   })
                   .map((filter) => (
-                  <tr key={filter.id} style={{ borderBottom: "1px solid #f1f2f4" }}>
-                    <td style={{ padding: "14px 16px", color: "#c9cccf", cursor: "grab", textAlign: "center" }}>
-                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#c9cccf" }}>
-                        <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                      </svg>
-                    </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <button
-                        onClick={() => openConfigModal(filter)}
+                    <tr
+                      key={filter.id}
+                      style={{ borderBottom: "1px solid #f1f2f4" }}
+                    >
+                      <td
                         style={{
-                          background: "none",
-                          border: "none",
-                          color: "#006e52",
-                          fontSize: "14px",
-                          fontWeight: "600",
-                          textDecoration: "underline",
-                          cursor: "pointer",
-                          padding: 0,
-                          textAlign: "left",
+                          padding: "14px 16px",
+                          color: "#c9cccf",
+                          cursor: "grab",
+                          textAlign: "center",
                         }}
                       >
-                        {filter.label}
-                      </button>
-                    </td>
-                    <td style={{ padding: "14px 16px", fontSize: "13px", color: "#6d7175" }}>
-                      {getFilterTypeLabel(filter.filterType, filter.filterKey)}
-                    </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <DisplayModeBadge mode={filter.displayMode} />
-                    </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      <label style={{ position: "relative", display: "inline-block", width: "40px", height: "22px", cursor: "pointer" }}>
-                        <input
-                          type="checkbox"
-                          checked={filter.isEnabled}
-                          onChange={() => submit({ intent: "toggleFilter", filterId: filter.id }, { method: "POST" })}
-                          style={{ opacity: 0, width: 0, height: 0 }}
-                        />
-                        <span
+                        <svg
+                          viewBox="0 0 20 20"
                           style={{
-                            position: "absolute",
-                            inset: 0,
-                            backgroundColor: filter.isEnabled ? "#008060" : "#8c9196",
-                            borderRadius: "34px",
-                            transition: "0.2s",
+                            width: "16px",
+                            height: "16px",
+                            fill: "#c9cccf",
                           }}
                         >
+                          <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                      </td>
+                      <td style={{ padding: "14px 16px" }}>
+                        <button
+                          onClick={() => openConfigModal(filter)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#006e52",
+                            fontSize: "14px",
+                            fontWeight: "600",
+                            textDecoration: "underline",
+                            cursor: "pointer",
+                            padding: 0,
+                            textAlign: "left",
+                          }}
+                        >
+                          {filter.label}
+                        </button>
+                      </td>
+                      <td
+                        style={{
+                          padding: "14px 16px",
+                          fontSize: "13px",
+                          color: "#6d7175",
+                        }}
+                      >
+                        {getFilterTypeLabel(
+                          filter.filterType,
+                          filter.filterKey,
+                        )}
+                      </td>
+                      <td style={{ padding: "14px 16px" }}>
+                        <DisplayModeBadge mode={filter.displayMode} />
+                      </td>
+                      <td style={{ padding: "14px 16px" }}>
+                        <label
+                          style={{
+                            position: "relative",
+                            display: "inline-block",
+                            width: "40px",
+                            height: "22px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filter.isEnabled}
+                            onChange={() =>
+                              submit(
+                                { intent: "toggleFilter", filterId: filter.id },
+                                { method: "POST" },
+                              )
+                            }
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
                           <span
                             style={{
                               position: "absolute",
-                              height: "16px",
-                              width: "16px",
-                              left: filter.isEnabled ? "20px" : "4px",
-                              bottom: "3px",
-                              backgroundColor: "white",
+                              inset: 0,
+                              backgroundColor: filter.isEnabled
+                                ? "#008060"
+                                : "#8c9196",
+                              borderRadius: "34px",
                               transition: "0.2s",
-                              borderRadius: "50%",
                             }}
-                          />
-                        </span>
-                      </label>
-                    </td>
-                    <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                      <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", alignItems: "center" }}>
-                        <button
-                          onClick={() => openConfigModal(filter)}
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
-                          title="Configure"
+                          >
+                            <span
+                              style={{
+                                position: "absolute",
+                                height: "16px",
+                                width: "16px",
+                                left: filter.isEnabled ? "20px" : "4px",
+                                bottom: "3px",
+                                backgroundColor: "white",
+                                transition: "0.2s",
+                                borderRadius: "50%",
+                              }}
+                            />
+                          </span>
+                        </label>
+                      </td>
+                      <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "12px",
+                            justifyContent: "flex-end",
+                            alignItems: "center",
+                          }}
                         >
-                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
-                            <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828z" />
-                            <path d="M3 16h14v2H3v-2z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => submit({ intent: "duplicateFilter", filterId: filter.id }, { method: "POST" })}
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
-                          title="Duplicate"
-                        >
-                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
-                            <path d="M14 6h-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-8 6V4h6v2H8a2 2 0 0 0-2 2v4H6zm8 4H8V8h6v8z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => submit({ intent: "deleteFilter", filterId: filter.id }, { method: "POST" })}
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}
-                          title="Delete"
-                        >
-                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#d82c0d" }}>
-                            <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button
+                            onClick={() => openConfigModal(filter)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                            title="Configure"
+                          >
+                            <svg
+                              viewBox="0 0 20 20"
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                fill: "#5c5f62",
+                              }}
+                            >
+                              <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828z" />
+                              <path d="M3 16h14v2H3v-2z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() =>
+                              submit(
+                                {
+                                  intent: "duplicateFilter",
+                                  filterId: filter.id,
+                                },
+                                { method: "POST" },
+                              )
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                            title="Duplicate"
+                          >
+                            <svg
+                              viewBox="0 0 20 20"
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                fill: "#5c5f62",
+                              }}
+                            >
+                              <path d="M14 6h-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-8 6V4h6v2H8a2 2 0 0 0-2 2v4H6zm8 4H8V8h6v8z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() =>
+                              submit(
+                                { intent: "deleteFilter", filterId: filter.id },
+                                { method: "POST" },
+                              )
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                            title="Delete"
+                          >
+                            <svg
+                              viewBox="0 0 20 20"
+                              style={{
+                                width: "16px",
+                                height: "16px",
+                                fill: "#d82c0d",
+                              }}
+                            >
+                              <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           )}
@@ -1069,23 +1705,57 @@ export default function FilterGroupDetail() {
           >
             <button
               onClick={() => setShowAddFilter(false)}
-              style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+              }}
             >
-              <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#5c5f62" }}>
+              <svg
+                viewBox="0 0 20 20"
+                style={{ width: "20px", height: "20px", fill: "#5c5f62" }}
+              >
                 <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
               </svg>
             </button>
 
-            <h2 style={{ margin: "0 0 24px", fontSize: "18px", fontWeight: 700, color: "#202223" }}>Add Filter</h2>
+            <h2
+              style={{
+                margin: "0 0 24px",
+                fontSize: "18px",
+                fontWeight: 700,
+                color: "#202223",
+              }}
+            >
+              Add Filter
+            </h2>
 
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  fontSize: "13px",
+                  color: "#6d7175",
+                }}
+              >
                 Filter Type
               </label>
               <select
                 value={addType}
                 onChange={(e) => handleAddTypeChange(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px" }}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #c9cccf",
+                  fontSize: "14px",
+                }}
               >
                 {FILTER_TYPE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -1097,14 +1767,28 @@ export default function FilterGroupDetail() {
 
             {addType === "option" && (
               <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 600,
+                    marginBottom: "8px",
+                    fontSize: "13px",
+                    color: "#6d7175",
+                  }}
+                >
                   Option Name
                 </label>
                 {detectedOptions.length > 0 ? (
                   <select
                     value={addKey}
                     onChange={(e) => handleAddKeyChange(e.target.value)}
-                    style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px" }}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #c9cccf",
+                      fontSize: "14px",
+                    }}
                   >
                     <option value="">-- Select option --</option>
                     {detectedOptions.map((n) => (
@@ -1120,14 +1804,29 @@ export default function FilterGroupDetail() {
                     placeholder="e.g. Color"
                     value={addKey}
                     onChange={(e) => handleAddKeyChange(e.target.value)}
-                    style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #c9cccf",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                    }}
                   />
                 )}
                 {addKey === "__custom" && (
                   <input
                     type="text"
                     placeholder="Type option name (e.g. Material)"
-                    style={{ width: "100%", padding: "10px 14px", marginTop: "8px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      marginTop: "8px",
+                      borderRadius: "8px",
+                      border: "1px solid #c9cccf",
+                      fontSize: "14px",
+                      boxSizing: "border-box",
+                    }}
                     onChange={(e) => handleAddKeyChange(e.target.value)}
                   />
                 )}
@@ -1136,7 +1835,15 @@ export default function FilterGroupDetail() {
 
             {addType === "metafield" && (
               <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontWeight: 600,
+                    marginBottom: "8px",
+                    fontSize: "13px",
+                    color: "#6d7175",
+                  }}
+                >
                   Metafield Key (namespace.key)
                 </label>
                 <input
@@ -1144,13 +1851,28 @@ export default function FilterGroupDetail() {
                   placeholder="e.g. custom.material"
                   value={addKey}
                   onChange={(e) => setAddKey(e.target.value)}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px", boxSizing: "border-box" }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #c9cccf",
+                    fontSize: "14px",
+                    boxSizing: "border-box",
+                  }}
                 />
               </div>
             )}
 
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  fontSize: "13px",
+                  color: "#6d7175",
+                }}
+              >
                 Display Label
               </label>
               <input
@@ -1158,18 +1880,39 @@ export default function FilterGroupDetail() {
                 placeholder="Label shown on storefront"
                 value={addLabel}
                 onChange={(e) => setAddLabel(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px", boxSizing: "border-box" }}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #c9cccf",
+                  fontSize: "14px",
+                  boxSizing: "border-box",
+                }}
               />
             </div>
 
             <div style={{ marginBottom: "24px" }}>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "8px", fontSize: "13px", color: "#6d7175" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: 600,
+                  marginBottom: "8px",
+                  fontSize: "13px",
+                  color: "#6d7175",
+                }}
+              >
                 Display Mode
               </label>
               <select
                 value={addDisplayMode}
                 onChange={(e) => setAddDisplayMode(e.target.value)}
-                style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #c9cccf", fontSize: "14px" }}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid #c9cccf",
+                  fontSize: "14px",
+                }}
               >
                 {DISPLAY_MODES.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -1179,17 +1922,27 @@ export default function FilterGroupDetail() {
               </select>
             </div>
 
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <s-button onClick={() => setShowAddFilter(false)}>Cancel</s-button>
-              <s-button variant="primary" onClick={handleAddFilter} disabled={!addLabel.trim()}>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "flex-end",
+              }}
+            >
+              <s-button onClick={() => setShowAddFilter(false)}>
+                Cancel
+              </s-button>
+              <s-button
+                variant="primary"
+                onClick={handleAddFilter}
+                disabled={!addLabel.trim()}
+              >
                 Add Filter
               </s-button>
             </div>
           </div>
         </div>
       )}
-
-
 
       <Modal
         isOpen={isCustomizeColumnsOpen}
@@ -1198,30 +1951,96 @@ export default function FilterGroupDetail() {
         width="700px"
         footer={
           <>
-            <Button variant="default" onClick={() => setIsCustomizeColumnsOpen(false)} style={{ borderRadius: "20px", padding: "8px 24px", color: "#c4cdd5", border: "1px solid #e1e3e5" }}>CANCEL</Button>
-            <Button variant="primary" onClick={() => { setTableColumns(tempTableColumns); setIsCustomizeColumnsOpen(false); }} style={{ borderRadius: "20px", padding: "8px 24px", background: "#51a2ff", border: "none" }}>OK</Button>
+            <Button
+              variant="default"
+              onClick={() => setIsCustomizeColumnsOpen(false)}
+              style={{
+                borderRadius: "20px",
+                padding: "8px 24px",
+                color: "#c4cdd5",
+                border: "1px solid #e1e3e5",
+              }}
+            >
+              CANCEL
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setTableColumns(tempTableColumns);
+                setIsCustomizeColumnsOpen(false);
+              }}
+              style={{
+                borderRadius: "20px",
+                padding: "8px 24px",
+                background: "#51a2ff",
+                border: "none",
+              }}
+            >
+              OK
+            </Button>
           </>
         }
       >
         <div style={{ display: "flex", gap: "40px" }}>
           {/* Left Side */}
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-              <SearchInput value={columnsSearch} onChange={(e) => setColumnsSearch(e.target.value)} style={{ width: "200px" }} />
-              <button onClick={() => setTempTableColumns(ALL_COLUMNS.map(c => c.id))} style={{ background: "none", border: "none", color: "#007bff", cursor: "pointer", fontSize: "14px" }}>select all</button>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                marginBottom: "20px",
+              }}
+            >
+              <SearchInput
+                value={columnsSearch}
+                onChange={(e) => setColumnsSearch(e.target.value)}
+                style={{ width: "200px" }}
+              />
+              <button
+                onClick={() =>
+                  setTempTableColumns(ALL_COLUMNS.map((c) => c.id))
+                }
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#007bff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                select all
+              </button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {ALL_COLUMNS.filter(c => c.label.toLowerCase().includes(columnsSearch.toLowerCase())).map(c => (
-                <label key={c.id} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", fontSize: "14px", color: "#007bff", fontWeight: 500 }}>
-                  <Checkbox 
-                    checked={tempTableColumns.includes(c.id)} 
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+            >
+              {ALL_COLUMNS.filter((c) =>
+                c.label.toLowerCase().includes(columnsSearch.toLowerCase()),
+              ).map((c) => (
+                <label
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    color: "#007bff",
+                    fontWeight: 500,
+                  }}
+                >
+                  <Checkbox
+                    checked={tempTableColumns.includes(c.id)}
                     onChange={(e) => {
                       if (e.target.checked) {
                         setTempTableColumns([...tempTableColumns, c.id]);
                       } else {
-                        setTempTableColumns(tempTableColumns.filter(id => id !== c.id));
+                        setTempTableColumns(
+                          tempTableColumns.filter((id) => id !== c.id),
+                        );
                       }
-                    }} 
+                    }}
                   />
                   {c.label}
                 </label>
@@ -1231,19 +2050,44 @@ export default function FilterGroupDetail() {
 
           {/* Right Side */}
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-              <span style={{ fontSize: "14px", color: "#4a4c4e" }}>{tempTableColumns.length} columns selected</span>
-              <button onClick={() => setTempTableColumns([])} style={{ background: "none", border: "none", color: "#007bff", cursor: "pointer", fontSize: "14px" }}>clear all</button>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "20px",
+              }}
+            >
+              <span style={{ fontSize: "14px", color: "#4a4c4e" }}>
+                {tempTableColumns.length} columns selected
+              </span>
+              <button
+                onClick={() => setTempTableColumns([])}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#007bff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                clear all
+              </button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+            >
               {tempTableColumns.map((colId, index) => {
-                const col = ALL_COLUMNS.find(c => c.id === colId);
+                const col = ALL_COLUMNS.find((c) => c.id === colId);
                 return (
-                  <div 
-                    key={colId} 
+                  <div
+                    key={colId}
                     draggable
                     onDragStart={(e) => setDraggedColumnIdx(index)}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                    }}
                     onDrop={(e) => {
                       e.preventDefault();
                       const newCols = [...tempTableColumns];
@@ -1252,17 +2096,63 @@ export default function FilterGroupDetail() {
                       setTempTableColumns(newCols);
                       setDraggedColumnIdx(null);
                     }}
-                    style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "14px", color: "#4a4c4e", cursor: "grab" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      fontSize: "14px",
+                      color: "#4a4c4e",
+                      cursor: "grab",
+                    }}
                   >
-                    <span style={{ color: "#6d7175", fontSize: "18px", userSelect: "none" }}>=</span>
+                    <span
+                      style={{
+                        color: "#6d7175",
+                        fontSize: "18px",
+                        userSelect: "none",
+                      }}
+                    >
+                      =
+                    </span>
                     <span style={{ flex: 1 }}>{col.label}</span>
                     {col.locked ? (
-                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#2c2c2c" }}>
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      <svg
+                        viewBox="0 0 20 20"
+                        style={{
+                          width: "16px",
+                          height: "16px",
+                          fill: "#2c2c2c",
+                        }}
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                     ) : (
-                      <button onClick={() => setTempTableColumns(tempTableColumns.filter(id => id !== colId))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}>
-                        <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#8c9196" }}>
+                      <button
+                        onClick={() =>
+                          setTempTableColumns(
+                            tempTableColumns.filter((id) => id !== colId),
+                          )
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          display: "flex",
+                        }}
+                      >
+                        <svg
+                          viewBox="0 0 20 20"
+                          style={{
+                            width: "16px",
+                            height: "16px",
+                            fill: "#8c9196",
+                          }}
+                        >
                           <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
                         </svg>
                       </button>
@@ -1288,7 +2178,10 @@ export default function FilterGroupDetail() {
       />
       <CreateFilterModal
         isOpen={isCreateModalOpen}
-        onClose={() => { setIsCreateModalOpen(false); setEditingFilterData(null); }}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setEditingFilterData(null);
+        }}
         onSave={handleSaveFilterModal}
         initialData={editingFilterData}
         shopifyCollections={shopifyCollections}

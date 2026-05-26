@@ -21,23 +21,29 @@ export const loader = async ({ request }) => {
     let resolvedCollectionTitle = "";
 
     // Resolve Collection Title
-    if (collectionHandle && collectionHandle.toLowerCase() !== 'all') {
+    if (collectionHandle && collectionHandle.toLowerCase() !== "all") {
       const coll = await prisma.collection.findFirst({
-        where: { handle: collectionHandle, shop }
+        where: { handle: collectionHandle, shop },
       });
       if (coll) resolvedCollectionTitle = coll.title;
     } else if (collectionId) {
       const coll = await prisma.collection.findUnique({
-        where: { id: collectionId }
+        where: { id: collectionId },
       });
       if (coll) resolvedCollectionTitle = coll.title;
     }
 
     if (!resolvedCollectionTitle) {
-      return data({ rule: null, message: "No collection matched." }, { status: 404 });
+      return data(
+        { rule: null, message: "No collection matched." },
+        { status: 404 },
+      );
     }
 
-    const activeRule = await getActiveRuleForCollection(shop, resolvedCollectionTitle);
+    const activeRule = await getActiveRuleForCollection(
+      shop,
+      resolvedCollectionTitle,
+    );
 
     return data({ rule: activeRule });
   } catch (error) {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { GET_THEME, GET_THEME_SETTINGS } from "../graphql/queries";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 
 const hasDisabledFalse = (value) => {
   if (value === null || value === undefined) {
@@ -63,7 +63,7 @@ export const loader = async ({ request }) => {
         updatedAt: node.updatedAt,
         canPreview,
       };
-    })
+    }),
   );
 
   return {
@@ -72,9 +72,10 @@ export const loader = async ({ request }) => {
   };
 };
 export default function ThemeSetup() {
-   const { themes, shop } = useLoaderData();
-   console.log("Fetched themes:", themes);
- // Normalize Shopify data → UI format
+  const { themes, shop } = useLoaderData();
+  const navigate = useNavigate();
+  console.log("Fetched themes:", themes);
+  // Normalize Shopify data → UI format
   const mappedThemes = themes.map((theme) => ({
     id: theme.id,
     themeId: theme.themeId != null ? String(theme.themeId) : null,
@@ -89,11 +90,15 @@ export default function ThemeSetup() {
 
   const [themeState, setThemeState] = useState(allThemes);
   const [selectedTheme, setSelectedTheme] = useState(
-    allThemes[0]?.themeId != null ? String(allThemes[0].themeId) : ""
+    allThemes[0]?.themeId != null ? String(allThemes[0].themeId) : "",
   );
 
   const openCustomization = (themeId = selectedTheme) => {
-    if (typeof themeId === "object" && themeId !== null && themeId.nativeEvent) {
+    if (
+      typeof themeId === "object" &&
+      themeId !== null &&
+      themeId.nativeEvent
+    ) {
       themeId = selectedTheme;
     }
 
@@ -103,7 +108,9 @@ export default function ThemeSetup() {
     if (!cleanedThemeId) return;
 
     console.log("Opening theme editor for theme ID:", cleanedThemeId);
-    const shopDomain = shop?.includes(".myshopify.com") ? shop : `${shop}.myshopify.com`;
+    const shopDomain = shop?.includes(".myshopify.com")
+      ? shop
+      : `${shop}.myshopify.com`;
     const customizationUrl = `https://${shopDomain}/admin/themes/${cleanedThemeId}/editor?context=apps`;
     window.open(customizationUrl, "_blank");
   };
@@ -117,8 +124,8 @@ export default function ThemeSetup() {
               status: "Installed",
               date: new Date().toISOString().split("T")[0],
             }
-          : t
-      )
+          : t,
+      ),
     );
   };
 
@@ -127,14 +134,60 @@ export default function ThemeSetup() {
       prev.map((t) =>
         t.themeId === themeId
           ? { ...t, status: "Not Installed", date: "-" }
-          : t
-      )
+          : t,
+      ),
     );
   };
 
   return (
     <s-page heading="Theme Setup">
-      <ui-title-bar title="Theme Setup"></ui-title-bar>
+      <ui-title-bar title="Theme Setup">
+        <button variant="breadcrumb" onClick={() => navigate("/app/settings")}>
+          Settings
+        </button>
+      </ui-title-bar>
+
+      <div
+        style={{
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "14px",
+        }}
+      >
+        <a
+          href="/app/settings"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("/app/settings");
+          }}
+          style={{
+            color: "#006e52",
+            textDecoration: "none",
+            fontWeight: "500",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+        >
+          <svg
+            style={{ width: "16px", height: "16px" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            ></path>
+          </svg>
+          Back to Settings
+        </a>
+      </div>
+
       <s-stack direction="block" gap="base">
         {/* Banner Informational block */}
         <s-box padding="base" background="info" borderRadius="base">
@@ -202,15 +255,13 @@ export default function ThemeSetup() {
                   onClick={() => openCustomization()}
                   target="_blank"
                   rel="noreferrer"
-                 variant="primary"
+                  variant="primary"
                 >
                   Go to theme editor
                 </s-button>
               </div>
             </s-card>
           </s-layout-section>
-
-      
         </s-layout>
 
         {/* Installed Themes list table */}
@@ -277,53 +328,53 @@ export default function ThemeSetup() {
                 </tr>
               </thead>
               <tbody>
-              {themeState.filter((theme) => theme.canPreview).map((theme) => (
-                <tr key={theme.id}>
-                  <td>{theme.name}</td>
+                {themeState
+                  .filter((theme) => theme.canPreview)
+                  .map((theme) => (
+                    <tr key={theme.id}>
+                      <td>{theme.name}</td>
 
-                  <td>
-                    <span
-                      style={{
-                        color:
-                          theme.status === "Installed"
-                            ? "green"
-                            : "crimson",
-                      }}
-                    >
-                      {theme.status}
-                    </span>
-                  </td>
+                      <td>
+                        <span
+                          style={{
+                            color:
+                              theme.status === "Installed"
+                                ? "green"
+                                : "crimson",
+                          }}
+                        >
+                          {theme.status}
+                        </span>
+                      </td>
 
-                  <td>{theme.date || "-"}</td>
+                      <td>{theme.date || "-"}</td>
 
-                  <td style={{ textAlign: "right" }}>
-                    {theme.status === "Installed" ? (
-                      <>
-                        {theme.canPreview && (
-                          <button
-                            style={{ marginRight: 10 }}
-                            onClick={() => openCustomization(theme.themeId)}
-                          >
-                            Preview
+                      <td style={{ textAlign: "right" }}>
+                        {theme.status === "Installed" ? (
+                          <>
+                            {theme.canPreview && (
+                              <button
+                                style={{ marginRight: 10 }}
+                                onClick={() => openCustomization(theme.themeId)}
+                              >
+                                Preview
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openCustomization(theme.themeId)}
+                            >
+                              Revert
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={() => handleInstall(theme.themeId)}>
+                            Install
                           </button>
                         )}
-                        <button
-                          onClick={() => openCustomization(theme.themeId)}
-                        >
-                          Revert
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleInstall(theme.themeId)}
-                      >
-                        Install
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
             </table>
           </div>
         </s-section>
