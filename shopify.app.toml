@@ -3,7 +3,7 @@
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
 handle = "ai-smart-search-filter"
-application_url = "https://aisearchfilter.webvory.com"
+application_url = "https://folks-building-sen-least.trycloudflare.com"
 embedded = true
 
 [build]
@@ -34,10 +34,10 @@ scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_inv
 
 
 [auth]
-redirect_urls = [ "https://aisearchfilter.webvory.com/api/auth" ]
+redirect_urls = [ "https://folks-building-sen-least.trycloudflare.com/api/auth" ]
 
 
 [app_proxy]
-url = "https://aisearchfilter.webvory.com"
+url = "https://folks-building-sen-least.trycloudflare.com"
 prefix = "apps"
 subpath = "collection-filter-pro"

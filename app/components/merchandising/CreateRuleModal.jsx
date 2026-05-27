@@ -133,7 +133,7 @@ export default function CreateRuleModal({
       conditions: JSON.stringify(ruleRules)
     };
     if (ruleToEdit) payload.id = ruleToEdit.id;
-    fetcher.submit(payload, { method: "POST", action: "/app/merchandising" });
+    fetcher.submit(payload, { method: "POST", action: "/app/collections/merchandising" });
   };
 
   useEffect(() => {

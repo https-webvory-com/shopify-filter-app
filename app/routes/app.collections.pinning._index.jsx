@@ -24,6 +24,25 @@ export const action = async ({ request }) => {
     return { success: true, action: "deleteRule" };
   }
 
+  if (actionType === "duplicateRule") {
+    const id = formData.get("id");
+    const originalRule = await prisma.pinnedProductRule.findFirst({ where: { id, shop } });
+    if (originalRule) {
+      await prisma.pinnedProductRule.create({
+        data: {
+          shop: originalRule.shop,
+          name: `${originalRule.name || "Untitled"} (Copy)`,
+          status: originalRule.status,
+          applyToAll: originalRule.applyToAll,
+          collections: originalRule.collections,
+          products: originalRule.products,
+        }
+      });
+      return { success: true, action: "duplicateRule" };
+    }
+    return { success: false, message: "Rule not found" };
+  }
+
   if (actionType === "toggleStatus") {
     const id = formData.get("id");
     const status = formData.get("status") === "true";
@@ -78,6 +97,8 @@ export default function PinningIndex() {
     if (actionData?.success) {
       if (actionData.action === "deleteRule") {
         shopify.toast.show("Pin deleted successfully");
+      } else if (actionData.action === "duplicateRule") {
+        shopify.toast.show("Pin duplicated successfully");
       } else if (actionData.action === "toggleStatus") {
         shopify.toast.show(actionData.status ? "Pin enabled" : "Pin disabled");
       }
@@ -112,6 +133,9 @@ export default function PinningIndex() {
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
 
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const [sortOption, setSortOption] = useState("recent");
+
   const filteredRules = pinningRules.filter((rule) => {
     let matchesSearch =
       (rule.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -122,6 +146,16 @@ export default function PinningIndex() {
     if (statusFilter === "active" && !rule.status) return false;
     if (statusFilter === "inactive" && rule.status) return false;
     return matchesSearch;
+  });
+
+  const sortedRules = [...filteredRules].sort((a, b) => {
+    if (sortOption === "recent") {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+    if (sortOption === "oldest") {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    }
+    return 0;
   });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -148,6 +182,13 @@ export default function PinningIndex() {
 
   const handleDelete = (id) => {
     setDeleteRuleId(id);
+  };
+
+  const handleDuplicate = (id) => {
+    const formData = new FormData();
+    formData.append("actionType", "duplicateRule");
+    formData.append("id", id);
+    submit(formData, { method: "POST" });
   };
 
   const confirmDelete = () => {
@@ -493,6 +534,60 @@ export default function PinningIndex() {
                 }}
               />
             </div>
+
+            {/* Sort Dropdown */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                title="Sort rules"
+              >
+                <svg style={{ width: "20px", height: "20px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+              </button>
+              {isSortDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    right: 0,
+                    marginTop: "8px",
+                    background: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                    zIndex: 50,
+                    width: "160px",
+                  }}
+                >
+                  <div
+                    onClick={() => { setSortOption("recent"); setIsSortDropdownOpen(false); }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "recent" ? "#007bff" : "#334155", fontWeight: sortOption === "recent" ? "500" : "400" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    Newest first
+                  </div>
+                  <div
+                    onClick={() => { setSortOption("oldest"); setIsSortDropdownOpen(false); }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "oldest" ? "#007bff" : "#334155", fontWeight: sortOption === "oldest" ? "500" : "400" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    Oldest first
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setIsFilterModalOpen(true)}
               style={{
@@ -982,7 +1077,7 @@ export default function PinningIndex() {
                 Add your pins
               </button>
             </div>
-          ) : filteredRules.length === 0 ? (
+          ) : sortedRules.length === 0 ? (
             <div style={{ padding: "60px 20px", textAlign: "center" }}>
               <svg
                 style={{
@@ -1070,7 +1165,7 @@ export default function PinningIndex() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRules.map((rule) => {
+                {sortedRules.map((rule) => {
                   const productList =
                     typeof rule.products === "string"
                       ? JSON.parse(rule.products)
@@ -1222,7 +1317,7 @@ export default function PinningIndex() {
                                   <svg
                                     onClick={() =>
                                       navigate(
-                                        `/app/collections/pinning/${encodeURIComponent(rule.collectionId)}`,
+                                        `/app/collections/pinning/${encodeURIComponent(rule.id)}`,
                                       )
                                     }
                                     title="Edit"
@@ -1241,6 +1336,26 @@ export default function PinningIndex() {
                                       strokeLinejoin="round"
                                       strokeWidth="2"
                                       d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                                    ></path>
+                                  </svg>
+                                  <svg
+                                    onClick={() => handleDuplicate(rule.id)}
+                                    title="Duplicate"
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      cursor: "pointer",
+                                      color: "#3b82f6",
+                                    }}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                                     ></path>
                                   </svg>
                                   <svg

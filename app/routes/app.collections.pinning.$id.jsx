@@ -40,10 +40,18 @@ export const action = async ({ request, params }) => {
     }
 
     const skip = parseInt(formData.get("skip") || "0", 10);
+    const excludedIdsStr = formData.get("excludedIds");
+    const excludedIds = excludedIdsStr ? JSON.parse(excludedIdsStr) : [];
+    
+    if (excludedIds.length > 0) {
+      whereClause.id = { notIn: excludedIds };
+    }
+
+    const totalCount = await prisma.product.count({ where: whereClause });
 
     const productsResult = await prisma.product.findMany({
       where: whereClause,
-      take: 20,
+      take: 9,
       skip: skip,
       select: {
         id: true,
@@ -70,7 +78,7 @@ export const action = async ({ request, params }) => {
       };
     });
 
-    return Response.json({ products });
+    return Response.json({ products, totalCount });
   }
 
   if (intent === "save") {
@@ -190,13 +198,18 @@ export default function PinningEditor() {
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
 
   const [searchResults, setSearchResults] = useState([]);
-  const [skip, setSkip] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const observerTarget = useRef(null);
+
+  const totalPages = Math.ceil(totalCount / 9);
 
   const isSaving =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "save";
+
+
 
   // Drag and drop state
   const dragItem = useRef(null);
@@ -293,13 +306,12 @@ export default function PinningEditor() {
     dragOverItem.current = null;
   };
 
-  // Search effect
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery !== undefined) {
-        setSkip(0);
+        setCurrentPage(0);
         setSearchResults([]);
-        setHasMore(true);
+        setIsFetchingMore(true);
         fetcher.submit(
           {
             intent: "search",
@@ -307,6 +319,7 @@ export default function PinningEditor() {
             collections: JSON.stringify(selectedCollections),
             applyToAll: applyToAll,
             skip: 0,
+            excludedIds: JSON.stringify(products.map(p => p.id))
           },
           { method: "post" },
         );
@@ -315,45 +328,95 @@ export default function PinningEditor() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, selectedCollections, applyToAll]);
 
+  // When products (pinned list) changes, we should refetch the current page 
+  // so the backend naturally replenishes the missing slots
   useEffect(() => {
-    if (fetcher.data?.products) {
-      if (skip === 0) {
-        setSearchResults(fetcher.data.products);
-      } else {
-        setSearchResults((prev) => {
-          const newProducts = fetcher.data.products.filter(
-            (newP) => !prev.some((p) => p.id === newP.id),
-          );
-          return [...prev, ...newProducts];
-        });
-      }
-      setHasMore(fetcher.data.products.length === 20);
-      setIsFetchingMore(false);
-    }
-  }, [fetcher.data]);
-
-  const handleScroll = (e) => {
-    const bottom =
-      e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 50;
-    if (
-      bottom &&
-      hasMore &&
-      !isFetchingMore &&
-      fetcher.state !== "submitting"
-    ) {
-      setIsFetchingMore(true);
-      const newSkip = skip + 20;
-      setSkip(newSkip);
+    if (searchQuery !== undefined) {
       fetcher.submit(
         {
           intent: "search",
           q: searchQuery,
           collections: JSON.stringify(selectedCollections),
           applyToAll: applyToAll,
-          skip: newSkip,
+          skip: currentPage * 9,
+          excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
       );
+    }
+  }, [products]); // Run whenever a product is pinned/unpinned
+
+  useEffect(() => {
+    if (fetcher.data?.products) {
+      setSearchResults(fetcher.data.products);
+      if (fetcher.data.totalCount !== undefined) {
+        setTotalCount(fetcher.data.totalCount);
+      }
+      setIsFetchingMore(false);
+    }
+  }, [fetcher.data]);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages - 1 && !isFetchingMore) {
+      setIsFetchingMore(true);
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      fetcher.submit(
+        {
+          intent: "search",
+          q: searchQuery,
+          collections: JSON.stringify(selectedCollections),
+          applyToAll: applyToAll,
+          skip: nextPage * 9,
+          excludedIds: JSON.stringify(products.map(p => p.id))
+        },
+        { method: "post" },
+      );
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 0 && !isFetchingMore) {
+      setIsFetchingMore(true);
+      const prevPage = currentPage - 1;
+      setCurrentPage(prevPage);
+      fetcher.submit(
+        {
+          intent: "search",
+          q: searchQuery,
+          collections: JSON.stringify(selectedCollections),
+          applyToAll: applyToAll,
+          skip: prevPage * 9,
+          excludedIds: JSON.stringify(products.map(p => p.id))
+        },
+        { method: "post" },
+      );
+    }
+  };
+
+  const wheelLock = useRef(false);
+  const handleWheel = (e) => {
+    const container = e.currentTarget;
+    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 10;
+    const isAtTop = container.scrollTop <= 10;
+
+    if (e.deltaY > 30 && !isAtBottom) return;
+    if (e.deltaY < -30 && !isAtTop) return;
+
+    if (wheelLock.current) return;
+    
+    if (e.deltaY > 30) {
+      if (currentPage < totalPages - 1) {
+        wheelLock.current = true;
+        handleNextPage();
+        setTimeout(() => { wheelLock.current = false; }, 800);
+      }
+    } else if (e.deltaY < -30) {
+      if (currentPage > 0) {
+        wheelLock.current = true;
+        handlePrevPage();
+        setTimeout(() => { wheelLock.current = false; }, 800);
+      }
     }
   };
 
@@ -424,6 +487,21 @@ export default function PinningEditor() {
 
   return (
     <s-page heading={name}>
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: #94a3b8;
+        }
+      `}</style>
       <ui-title-bar title={name}>
         <button
           variant="breadcrumb"
@@ -719,136 +797,117 @@ export default function PinningEditor() {
                 overflowY: "auto",
                 maxHeight: "600px",
                 marginTop: "10px",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: "12px",
+                alignContent: "start",
+                paddingRight: "8px"
               }}
-              onScroll={handleScroll}
+              onWheel={handleWheel}
             >
-              {fetcher.state === "submitting" && skip === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#64748b",
-                  }}
-                >
-                  Searching...
-                </div>
-              ) : searchResults.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    padding: "20px",
-                    color: "#64748b",
-                  }}
-                >
-                  {searchQuery
-                    ? "No products found."
-                    : "No products available."}
+              {searchResults.length === 0 ? (
+                <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
+                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : (searchQuery ? "No products found." : "No products available.")}
                 </div>
               ) : (
                 <>
-                  {searchResults.map((prod) => {
-                    const isPinned = products.some((p) => p.id === prod.id);
-                    return (
+                  {searchResults.map((prod) => (
                       <div
                         key={prod.id}
-                        draggable={!isPinned}
+                        draggable
                         onDragStart={(e) => {
-                          if (isPinned) {
-                            e.preventDefault();
-                            return;
-                          }
                           e.dataTransfer.effectAllowed = "copy";
-                          e.dataTransfer.setData(
-                            "application/json",
-                            JSON.stringify({ type: "NEW_PIN", product: prod }),
-                          );
+                          e.dataTransfer.setData("application/json", JSON.stringify({ type: "NEW_PIN", product: prod }));
                           e.dataTransfer.setData("text/plain", "NEW_PIN");
                         }}
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "12px",
-                          borderBottom: "1px solid #f1f5f9",
-                          cursor: isPinned ? "default" : "grab",
+                          flexDirection: "column",
+                          background: "#fff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          cursor: "grab",
+                          position: "relative",
+                          opacity: (isFetchingMore || fetcher.state === "submitting") ? 0.6 : 1,
+                          transition: "opacity 0.2s, box-shadow 0.2s, transform 0.2s"
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "12px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: "40px",
-                              height: "40px",
-                              background: "#f1f5f9",
-                              borderRadius: "4px",
-                              overflow: "hidden",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            {prod.image ? (
-                              <img
-                                src={prod.image}
-                                alt={prod.title}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "cover",
-                                }}
-                              />
-                            ) : (
-                              <span
-                                style={{ fontSize: "12px", color: "#94a3b8" }}
-                              >
-                                No Img
-                              </span>
-                            )}
+                        <div style={{ width: "100%", height: "120px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
+                          {prod.image ? (
+                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#fff" }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
+                          )}
+                          
+                          {/* Pin Button overlay */}
+                          <div style={{ position: "absolute", top: "8px", right: "8px" }}>
+                            <button 
+                              onClick={() => handlePin(prod)} 
+                              style={{ width: "28px", height: "28px", background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", cursor: "pointer", color: "#007bff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", transition: "all 0.1s" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "#007bff"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.border = "none"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "#007bff"; e.currentTarget.style.border = "1px solid #e2e8f0"; }}
+                              onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"}
+                              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+                              title="Pin this product"
+                            >
+                              <svg style={{ width: "14px", height: "14px", transform: "rotate(45deg)" }} fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                            </button>
                           </div>
-                          <span
-                            style={{
-                              fontSize: "14px",
-                              fontWeight: "500",
-                              color: "#334155",
-                            }}
-                          >
+                        </div>
+                        <div style={{ padding: "12px", display: "flex", flexDirection: "column" }}>
+                          <span style={{ fontSize: "13px", fontWeight: "500", color: "#334155", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4" }}>
                             {prod.title}
                           </span>
                         </div>
-                        <button
-                          onClick={() => !isPinned && handlePin(prod)}
-                          disabled={isPinned}
-                          style={{
-                            background: isPinned ? "#f8fafc" : "#e0f2fe",
-                            color: isPinned ? "#94a3b8" : "#0369a1",
-                            border: isPinned ? "1px solid #e2e8f0" : "none",
-                            padding: isPinned ? "5px 11px" : "6px 12px",
-                            borderRadius: "4px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            cursor: isPinned ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {isPinned ? "✓ Pinned" : "+ Pin"}
-                        </button>
                       </div>
-                    );
-                  })}
+                    ))}
                   {isFetchingMore && (
-                    <div
-                      style={{
-                        textAlign: "center",
-                        padding: "12px",
-                        color: "#64748b",
-                        fontSize: "13px",
-                      }}
-                    >
-                      Loading more products...
+                    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "12px", color: "#64748b", fontSize: "13px" }}>
+                      Loading...
+                    </div>
+                  )}
+                  
+                  {/* Pagination Controls */}
+                  {totalCount > 0 && (
+                    <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", padding: "8px 0", borderTop: "1px solid #e2e8f0" }}>
+                      <button
+                        onClick={handlePrevPage}
+                        disabled={currentPage === 0 || isFetchingMore}
+                        style={{
+                          background: (currentPage === 0 || isFetchingMore) ? "#f1f5f9" : "#fff",
+                          color: (currentPage === 0 || isFetchingMore) ? "#94a3b8" : "#334155",
+                          border: "1px solid #e2e8f0",
+                          padding: "6px 16px",
+                          borderRadius: "4px",
+                          fontSize: "13px",
+                          fontWeight: "500",
+                          cursor: (currentPage === 0 || isFetchingMore) ? "default" : "pointer"
+                        }}
+                      >
+                        Previous
+                      </button>
+                      <span style={{ fontSize: "12px", color: "#64748b" }}>
+                        Page {currentPage + 1} of {Math.max(1, totalPages)} ({totalCount} total unpinned)
+                      </span>
+                      <button
+                        onClick={handleNextPage}
+                        disabled={currentPage >= totalPages - 1 || isFetchingMore}
+                        style={{
+                          background: (currentPage >= totalPages - 1 || isFetchingMore) ? "#f1f5f9" : "#fff",
+                          color: (currentPage >= totalPages - 1 || isFetchingMore) ? "#94a3b8" : "#334155",
+                          border: "1px solid #e2e8f0",
+                          padding: "6px 16px",
+                          borderRadius: "4px",
+                          fontSize: "13px",
+                          fontWeight: "500",
+                          cursor: (currentPage >= totalPages - 1 || isFetchingMore) ? "default" : "pointer"
+                        }}
+                      >
+                        Next
+                      </button>
                     </div>
                   )}
                 </>
@@ -1093,19 +1152,22 @@ export default function PinningEditor() {
               ) : (
                 <div
                   style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    maxHeight: "400px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gridAutoRows: "max-content",
+                    gap: "12px",
+                    maxHeight: "600px",
                     overflowY: "auto",
+                    alignContent: "start",
+                    padding: "4px",
+                    // Adding custom scrollbar for webkit browsers
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "#cbd5e1 transparent",
                   }}
+                  className="custom-scrollbar"
                 >
                   {products
-                    .filter((p) =>
-                      p.title
-                        .toLowerCase()
-                        .includes(pinnedSearchQuery.toLowerCase()),
-                    )
+                    .filter((p) => p.title.toLowerCase().includes(pinnedSearchQuery.toLowerCase()))
                     .map((prod, index) => (
                       <div
                         key={prod.id}
@@ -1116,128 +1178,54 @@ export default function PinningEditor() {
                         onDrop={(e) => handleDrop(e, index)}
                         onDragOver={(e) => {
                           e.preventDefault();
-                          e.dataTransfer.dropEffect =
-                            dragItem.current !== null ? "move" : "copy";
+                          e.dataTransfer.dropEffect = dragItem.current !== null ? "move" : "copy";
                         }}
                         style={{
                           display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "12px",
-                          background: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: "6px",
+                          flexDirection: "column",
+                          background: selectedPinnedIds.includes(prod.id) ? "#f0f7ff" : "#fff",
+                          border: selectedPinnedIds.includes(prod.id) ? "2px solid #007bff" : "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          overflow: "hidden",
                           cursor: "grab",
+                          position: "relative",
+                          transition: "all 0.2s"
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "12px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              color: "#cbd5e1",
-                              cursor: "grab",
-                              marginRight: "4px",
-                            }}
-                          >
-                            <svg
-                              style={{ width: "20px", height: "20px" }}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 6h16M4 12h16M4 18h16"
-                              ></path>
-                            </svg>
-                          </div>
+                        <div style={{ position: "absolute", top: "6px", left: "6px", zIndex: 10 }}>
                           <input
                             type="checkbox"
                             checked={selectedPinnedIds.includes(prod.id)}
                             onChange={() => toggleSelection(prod.id)}
-                            style={{
-                              accentColor: "#007bff",
-                              width: "16px",
-                              height: "16px",
-                              cursor: "pointer",
-                            }}
+                            style={{ accentColor: "#007bff", width: "16px", height: "16px", cursor: "pointer", margin: 0 }}
                           />
-                          <div
-                            style={{
-                              width: "32px",
-                              height: "32px",
-                              background: "#fff",
-                              borderRadius: "4px",
-                              overflow: "hidden",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
+                        </div>
+                        <div style={{ position: "absolute", top: "6px", right: "6px", zIndex: 10 }}>
+                          <button
+                            onClick={() => handleUnpin(index)}
+                            style={{ background: "#fff", border: "none", borderRadius: "50%", width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", opacity: 0.9 }}
+                            title="Remove pin"
                           >
-                            {prod.image ? (
-                              <img
-                                src={prod.image}
-                                alt={prod.title}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "cover",
-                                }}
-                              />
-                            ) : (
-                              <span
-                                style={{ fontSize: "10px", color: "#94a3b8" }}
-                              >
-                                No Img
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "14px",
-                                fontWeight: "500",
-                                color: "#334155",
-                              }}
-                            >
-                              {prod.title}
-                            </div>
-                            <div style={{ fontSize: "12px", color: "#64748b" }}>
-                              Position: {index + 1}
-                            </div>
+                            <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                          </button>
+                        </div>
+                        
+                        <div style={{ width: "100%", height: "120px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
+                          {prod.image ? (
+                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#fff" }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
+                          )}
+                          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", color: "#fff", padding: "4px 8px", fontSize: "11px", fontWeight: "600", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>Pos: {index + 1}</span>
+                            <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16"></path></svg>
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleUnpin(index)}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: "#ef4444",
-                            cursor: "pointer",
-                            padding: "4px",
-                          }}
-                        >
-                          <svg
-                            style={{ width: "16px", height: "16px" }}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            ></path>
-                          </svg>
-                        </button>
+                        <div style={{ padding: "10px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                          <span style={{ fontSize: "12px", fontWeight: "500", color: "#334155", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4" }}>
+                            {prod.title}
+                          </span>
+                        </div>
                       </div>
                     ))}
                 </div>
