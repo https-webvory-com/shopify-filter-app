@@ -176,13 +176,13 @@ export default function PinningEditor() {
         ? initialCollections.join(", ")
         : "New Pinning Rule");
 
-  const [products, setProducts] = useState(
-    rule?.products
-      ? typeof rule.products === "string"
-        ? JSON.parse(rule.products)
-        : rule.products
-      : [],
-  );
+  const initialProducts = rule?.products
+    ? typeof rule.products === "string"
+      ? JSON.parse(rule.products)
+      : rule.products
+    : [];
+
+  const [products, setProducts] = useState(initialProducts);
   const [name, setName] = useState(defaultName);
   const [selectedCollections, setSelectedCollections] =
     useState(initialCollections);
@@ -193,6 +193,26 @@ export default function PinningEditor() {
   const [applyToSearchResults, setApplyToSearchResults] = useState(
     rule?.applyToSearchResults ?? false,
   );
+
+  const [isUnsavedModalOpen, setIsUnsavedModalOpen] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState(null);
+
+  const hasUnsavedChanges =
+    JSON.stringify(products) !== JSON.stringify(initialProducts) ||
+    name !== defaultName ||
+    JSON.stringify(selectedCollections) !== JSON.stringify(initialCollections) ||
+    applyToAll !== initialApplyToAll ||
+    applyToInstantSearch !== (rule?.applyToInstantSearch ?? true) ||
+    applyToSearchResults !== (rule?.applyToSearchResults ?? false);
+
+  const handleNavigate = (destination) => {
+    if (hasUnsavedChanges) {
+      setPendingDestination(destination);
+      setIsUnsavedModalOpen(true);
+    } else {
+      navigate(destination);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [pinnedSearchQuery, setPinnedSearchQuery] = useState("");
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
@@ -486,8 +506,12 @@ export default function PinningEditor() {
   };
 
   return (
-    <s-page heading={name}>
+    <s-page heading={name} fullWidth>
       <style>{`
+        s-page {
+          max-width: none !important;
+          width: 100% !important;
+        }
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
@@ -505,7 +529,7 @@ export default function PinningEditor() {
       <ui-title-bar title={name}>
         <button
           variant="breadcrumb"
-          onClick={() => navigate("/app/collections/pinning")}
+          onClick={() => handleNavigate("/app/collections/pinning")}
         >
           Product Pinning
         </button>
@@ -524,7 +548,7 @@ export default function PinningEditor() {
           href="/app/collections/pinning"
           onClick={(e) => {
             e.preventDefault();
-            navigate("/app/collections/pinning");
+            handleNavigate("/app/collections/pinning");
           }}
           style={{
             color: "#006e52",
@@ -575,7 +599,7 @@ export default function PinningEditor() {
         >
           <div>
             <button
-              onClick={() => navigate("/app/collections/pinning")}
+              onClick={() => handleNavigate("/app/collections/pinning")}
               style={{
                 background: "none",
                 border: "none",
@@ -618,7 +642,7 @@ export default function PinningEditor() {
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              onClick={() => navigate("/app/collections/pinning")}
+              onClick={() => handleNavigate("/app/collections/pinning")}
               style={{
                 background: "#fff",
                 border: "1px solid #cbd5e1",
@@ -1234,6 +1258,73 @@ export default function PinningEditor() {
           </div>
         </div>
       </div>
+      {isUnsavedModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: "24px",
+              borderRadius: "12px",
+              width: "450px",
+              maxWidth: "90%",
+              boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, fontSize: "18px", fontWeight: "600", color: "#1e293b", marginBottom: "8px" }}>Unsaved Changes</h2>
+            <p style={{ color: "#475569", marginBottom: "24px", fontSize: "14px", lineHeight: "1.5" }}>
+              Your changes have not been saved. Do you really want to cancel and lose these changes?
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button
+                onClick={() => setIsUnsavedModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #cbd5e1",
+                  padding: "8px 16px",
+                  borderRadius: "20px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  color: "#334155",
+                  fontSize: "14px",
+                }}
+              >
+                No, keep editing
+              </button>
+              <button
+                onClick={() => {
+                  setIsUnsavedModalOpen(false);
+                  navigate(pendingDestination);
+                }}
+                style={{
+                  background: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: "20px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                }}
+              >
+                Yes, discard changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </s-page>
   );
 }

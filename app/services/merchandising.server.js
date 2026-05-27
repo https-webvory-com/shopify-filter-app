@@ -27,14 +27,28 @@ export async function getActiveRuleForCollection(shop, collectionTitle) {
 export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   if (!shop || !collectionTitle) return null;
 
-  return await prisma.pinnedProductRule.findFirst({
+  if (collectionTitle === "all") {
+    return await prisma.pinnedProductRule.findFirst({
+      where: {
+        shop,
+        status: true,
+        applyToAll: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  // Find a specific rule for this collection (do not fallback to applyToAll)
+  const specificRule = await prisma.pinnedProductRule.findFirst({
     where: {
       shop,
       status: true,
-      OR: [{ applyToAll: true }, { collections: { has: collectionTitle } }],
+      collections: { has: collectionTitle },
     },
     orderBy: { createdAt: "desc" },
   });
+
+  return specificRule;
 }
 
 /**

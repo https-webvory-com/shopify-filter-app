@@ -202,7 +202,7 @@ export default function PinningIndex() {
   };
 
   return (
-    <s-page heading="Product Pinning">
+    <s-page heading="Product Pinning" full-width="true">
       <ui-title-bar title="Product Pinning">
         <button
           variant="breadcrumb"
@@ -778,19 +778,33 @@ export default function PinningIndex() {
                   >
                     Select collections to apply
                   </h2>
-                  <svg
-                    style={{ width: "16px", height: "16px", color: "#007bff" }}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <button
+                    onClick={() => setIsCreateModalOpen(false)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "4px",
+                      color: "#64748b",
+                    }}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 9l-7 7-7-7"
-                    ></path>
-                  </svg>
+                    <svg
+                      style={{ width: "20px", height: "20px" }}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M6 18L18 6M6 6l12 12"
+                      ></path>
+                    </svg>
+                  </button>
                 </div>
 
                 {/* Search / Filter */}

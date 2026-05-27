@@ -21,14 +21,24 @@ export const loader = async ({ request }) => {
     let resolvedCollectionTitle = "";
 
     // Resolve Collection Title
-    if (collectionHandle && collectionHandle.toLowerCase() !== "all") {
-      const coll = await prisma.collection.findFirst({
-        where: { handle: collectionHandle, shop },
-      });
-      if (coll) resolvedCollectionTitle = coll.title;
-    } else if (collectionId) {
+    if (collectionHandle) {
+      if (collectionHandle.toLowerCase() === "all") {
+        resolvedCollectionTitle = "all";
+      } else {
+        const coll = await prisma.collection.findFirst({
+          where: { handle: collectionHandle, shop },
+        });
+        if (coll) resolvedCollectionTitle = coll.title;
+      }
+    }
+    
+    if (!resolvedCollectionTitle && collectionId) {
+      const formattedId = collectionId.includes("gid://") 
+        ? collectionId 
+        : `gid://shopify/Collection/${collectionId}`;
+        
       const coll = await prisma.collection.findUnique({
-        where: { id: collectionId },
+        where: { id: formattedId },
       });
       if (coll) resolvedCollectionTitle = coll.title;
     }

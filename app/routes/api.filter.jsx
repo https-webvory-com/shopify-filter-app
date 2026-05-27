@@ -48,24 +48,32 @@ export const loader = async ({ request }) => {
 
   let resolvedCollectionId = collectionId;
   let resolvedCollectionTitle = "";
-  if (
-    !resolvedCollectionId &&
-    collectionHandle &&
-    collectionHandle.toLowerCase() !== "all"
-  ) {
-    const coll = await prisma.collection.findFirst({
-      where: { handle: collectionHandle, shop },
-    });
-    if (coll) {
-      resolvedCollectionId = coll.id;
-      resolvedCollectionTitle = coll.title;
+  
+  if (collectionHandle) {
+    if (collectionHandle.toLowerCase() === "all") {
+      resolvedCollectionTitle = "all";
+    } else {
+      const coll = await prisma.collection.findFirst({
+        where: { handle: collectionHandle, shop },
+      });
+      if (coll) {
+        resolvedCollectionId = coll.id;
+        resolvedCollectionTitle = coll.title;
+      }
     }
-  } else if (resolvedCollectionId) {
+  }
+  
+  if (!resolvedCollectionTitle && resolvedCollectionId) {
+    const formattedId = resolvedCollectionId.includes("gid://") 
+      ? resolvedCollectionId 
+      : `gid://shopify/Collection/${resolvedCollectionId}`;
+      
     const coll = await prisma.collection.findUnique({
-      where: { id: resolvedCollectionId },
+      where: { id: formattedId },
     });
     if (coll) {
       resolvedCollectionTitle = coll.title;
+      resolvedCollectionId = coll.id;
     }
   }
 
@@ -507,6 +515,14 @@ export const loader = async ({ request }) => {
     totalCount,
     // Return group filters (FilterGroupItem[]) if available, else empty
     settings: activeGroupFilters || [],
+    debug: {
+      resolvedCollectionId,
+      resolvedCollectionTitle,
+      hasActivePinningRule: !!activePinningRule,
+      pinningRuleName: activePinningRule?.name,
+      pinnedProductsCount: activePinningRule?.products ? (typeof activePinningRule.products === "string" ? JSON.parse(activePinningRule.products).length : activePinningRule.products.length) : 0,
+      hasMerchandisingRule: !!activeRule,
+    },
     facets: {
       vendors: Object.entries(vendorCounts)
         .map(([value, count]) => ({ value, count }))

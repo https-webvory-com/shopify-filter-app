@@ -1,7 +1,7 @@
 /**
  * Collection Filter Pro — Storefront JavaScript
  * Dynamic UI Injection and Relative App Proxy Querying
- */
+ */ 
 
 (function () {
   'use strict';
