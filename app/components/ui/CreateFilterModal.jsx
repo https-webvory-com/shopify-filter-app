@@ -73,12 +73,21 @@ const OPTION_TYPES = [
 const OptionTypeDropdown = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const dropdownRef = React.useRef(null);
   const selectedLabel = OPTION_TYPES.find(o => o.value === value)?.label || "Select";
   
   const filteredOptions = OPTION_TYPES.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
 
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div style={{ position: "relative", width: "100%" }}>
+    <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
@@ -128,8 +137,17 @@ const OptionTypeDropdown = ({ value, onChange }) => {
 const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select values", renderTagsOutside = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const dropdownRef = React.useRef(null);
   
   const filteredOptions = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleToggle = (opt) => {
     if (value.includes(opt)) {
@@ -140,7 +158,7 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
   };
 
   return (
-    <div style={{ position: "relative", width: "100%" }}>
+    <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
@@ -194,11 +212,20 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
 const SingleSelectDropdown = ({ value, onChange, options, placeholder = "Select value" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const dropdownRef = React.useRef(null);
   
   const filteredOptions = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
 
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div style={{ position: "relative", width: "100%" }}>
+    <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
@@ -247,8 +274,18 @@ const SingleSelectDropdown = ({ value, onChange, options, placeholder = "Select 
 
 const SimpleDropdown = ({ value, onChange, options, width = "200px" }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div style={{ position: "relative", width }}>
+    <div style={{ position: "relative", width }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box" }}
@@ -543,6 +580,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
 
   return (
     <div
+      onClick={onClose}
       style={{
         position: "fixed",
         inset: 0,
@@ -554,6 +592,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: "#fff",
           borderRadius: "12px",

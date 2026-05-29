@@ -371,6 +371,17 @@ export default function FilterGroups() {
     }
   }, [actionData, shopify]);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.filter-dropdown-inside')) {
+        setShowViewsDropdown(false);
+        setShowCollDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [groupType, setGroupType] = useState("collections");
@@ -621,7 +632,7 @@ export default function FilterGroups() {
             {/* Left Actions */}
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
               {/* Views Dropdown */}
-              <div style={{ position: "relative" }}>
+              <div style={{ position: "relative" }} className="filter-dropdown-inside">
                 <button
                   onClick={() => setShowViewsDropdown(!showViewsDropdown)}
                   style={{
@@ -1339,7 +1350,7 @@ export default function FilterGroups() {
                 </label>
 
                 {groupType === "collections" && (
-                  <div style={{ marginLeft: "24px", position: "relative" }}>
+                  <div style={{ marginLeft: "24px", position: "relative" }} className="filter-dropdown-inside">
                     <div
                       onClick={() => setShowCollDropdown(!showCollDropdown)}
                       style={{

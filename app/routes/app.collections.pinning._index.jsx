@@ -105,6 +105,17 @@ export default function PinningIndex() {
     }
   }, [actionData, shopify]);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.pin-dropdown-inside')) {
+        setIsStatusDropdownOpen(false);
+        setIsSortDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleToggleStatus = (id, currentStatus) => {
     const formData = new FormData();
     formData.append("actionType", "toggleStatus");
@@ -276,7 +287,7 @@ export default function PinningIndex() {
         >
           <div style={{ display: "flex", gap: "12px" }}>
             {/* All rules dropdown */}
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative" }} className="pin-dropdown-inside">
               <div
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
                 style={{
@@ -536,7 +547,7 @@ export default function PinningIndex() {
             </div>
 
             {/* Sort Dropdown */}
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative" }} className="pin-dropdown-inside">
               <button
                 onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
                 style={{
@@ -644,6 +655,7 @@ export default function PinningIndex() {
 
           {deleteRuleId && (
             <div
+              onClick={() => setDeleteRuleId(null)}
               style={{
                 position: "fixed",
                 top: 0,
@@ -658,6 +670,7 @@ export default function PinningIndex() {
               }}
             >
               <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   background: "#fff",
                   borderRadius: "8px",
@@ -732,6 +745,7 @@ export default function PinningIndex() {
           {/* Create Pin Modal */}
           {isCreateModalOpen && (
             <div
+              onClick={() => setIsCreateModalOpen(false)}
               style={{
                 position: "fixed",
                 top: 0,
@@ -746,6 +760,7 @@ export default function PinningIndex() {
               }}
             >
               <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   background: "#fff",
                   borderRadius: "12px",

@@ -1260,6 +1260,7 @@ export default function PinningEditor() {
       </div>
       {isUnsavedModalOpen && (
         <div
+          onClick={() => setIsUnsavedModalOpen(false)}
           style={{
             position: "fixed",
             top: 0,
@@ -1274,6 +1275,7 @@ export default function PinningEditor() {
           }}
         >
           <div
+            onClick={(e) => e.stopPropagation()}
             style={{
               background: "#fff",
               padding: "24px",

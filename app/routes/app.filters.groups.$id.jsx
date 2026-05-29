@@ -577,6 +577,9 @@ export default function FilterGroupDetail() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsViewDropdownOpen(false);
       }
+      if (!event.target.closest('.filter-dropdown-inside')) {
+        setShowCollDropdown(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -835,6 +838,7 @@ export default function FilterGroupDetail() {
                         position: "relative",
                         marginBottom: "10px",
                       }}
+                      className="filter-dropdown-inside"
                     >
                       <s-text
                         variant="bodySm"

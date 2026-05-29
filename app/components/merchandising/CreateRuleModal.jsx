@@ -141,6 +141,22 @@ export default function CreateRuleModal({
       handleClose();
     }
   }, [fetcher.state, fetcher.data]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.dropdown-inside')) {
+        setOpenActionDropdownIndex(null);
+        setOpenFieldDropdownIndex(null);
+        setOpenOperatorDropdownIndex(null);
+        setOpenRuleDatePickerIndex(null);
+        setOpenVendorDropdownIndex(null);
+        setIsCollectionDropdownOpen(false);
+        setIsDatePickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const addRuleRule = () => {
     setRuleRules([...ruleRules, { action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
   };
@@ -158,8 +174,8 @@ export default function CreateRuleModal({
   if (!isOpen) return null;
 
   return (
-    <div style={{ boxSizing: "border-box", position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div style={{ boxSizing: "border-box", background: "#fff", width: "100%", maxWidth: "900px", maxHeight: "90vh", overflowY: "auto", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div onClick={handleClose} style={{ boxSizing: "border-box", position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ boxSizing: "border-box", background: "#fff", width: "100%", maxWidth: "900px", maxHeight: "90vh", overflowY: "auto", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", position: "relative" }}>
         
         {/* Modal Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "32px 32px 16px 32px" }}>
@@ -192,7 +208,7 @@ export default function CreateRuleModal({
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
               Collections <TooltipIcon text="The collections to which this rule is applied." />
             </label>
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative" }} className="dropdown-inside">
               <div 
                 onClick={() => setIsCollectionDropdownOpen(!isCollectionDropdownOpen)}
                 style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "10px 14px", borderRadius: "6px", fontSize: "14px", color: "#202223", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
@@ -343,7 +359,7 @@ export default function CreateRuleModal({
             </div>
 
             {isDateRangeChecked && (
-              <div style={{ position: "relative", marginTop: "8px" }}>
+              <div style={{ position: "relative", marginTop: "8px" }} className="dropdown-inside">
                 <div 
                   onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
                   style={{ width: "100%", background: "#f8fafc", color: "#334155", border: "none", padding: "12px 16px", borderRadius: "16px", fontSize: "14px", display: "flex", alignItems: "center", cursor: "pointer" }}
@@ -479,7 +495,7 @@ export default function CreateRuleModal({
                   <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                     
                     {/* Action Custom Dropdown */}
-                    <div style={{ position: "relative", width: "120px" }}>
+                    <div style={{ position: "relative", width: "120px" }} className="dropdown-inside">
                       <div 
                         onClick={() => setOpenActionDropdownIndex(openActionDropdownIndex === i ? null : i)}
                         style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
@@ -508,7 +524,7 @@ export default function CreateRuleModal({
                     </div>
 
                     {/* Field Custom Dropdown */}
-                    <div style={{ position: "relative", flex: 1, minWidth: "150px" }}>
+                    <div style={{ position: "relative", flex: 1, minWidth: "150px" }} className="dropdown-inside">
                       <div 
                         onClick={() => {
                           if (openFieldDropdownIndex === i) {
@@ -567,7 +583,7 @@ export default function CreateRuleModal({
                     {/* Values Input (Column 3) */}
                     <div style={{ flex: 1, position: "relative" }}>
                       {r.field === "Date" ? (
-                        <div>
+                        <div className="dropdown-inside">
                           <button 
                             onClick={() => setOpenRuleDatePickerIndex(openRuleDatePickerIndex === i ? null : i)}
                             style={{ width: "100%", padding: "10px 16px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", outline: "none", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}
@@ -706,7 +722,7 @@ export default function CreateRuleModal({
                           />
                         </div>
                       ) : (["Vendor", "Collections", "Product type", "Tags", "Locations", "Product", "SKU", "Barcode"].includes(r.field) || (r.field && r.field.endsWith("(product option)"))) ? (
-                        <div>
+                        <div className="dropdown-inside">
                           {(() => {
                             const selectedValues = r.value ? r.value.split(',').map(s=>s.trim()).filter(Boolean) : [];
                             return (
@@ -874,7 +890,7 @@ export default function CreateRuleModal({
                       <div style={{ flex: 1, maxWidth: "120px" }}></div> {/* Spacer for Action column */}
                       
                       {/* Operator Dropdown */}
-                      <div style={{ position: "relative", flex: 1.5 }}>
+                      <div style={{ position: "relative", flex: 1.5 }} className="dropdown-inside">
                         <div 
                           onClick={() => setOpenOperatorDropdownIndex(openOperatorDropdownIndex === i ? null : i)}
                           style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}

@@ -441,6 +441,16 @@ export default function MerchandisingIndex() {
   });
 
   useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.merch-dropdown-inside')) {
+        setIsStatusDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
       if (fetcher.data.intent === "create")
         shopify.toast.show("Rule created successfully");
@@ -528,7 +538,7 @@ export default function MerchandisingIndex() {
         >
           <div style={{ display: "flex", gap: "12px" }}>
             {/* All rules dropdown */}
-            <div style={{ position: "relative" }}>
+            <div style={{ position: "relative" }} className="merch-dropdown-inside">
               <div
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
                 style={{
