@@ -854,14 +854,15 @@ export default function PinningEditor() {
                           cursor: "grab",
                           position: "relative",
                           opacity: (isFetchingMore || fetcher.state === "submitting") ? 0.6 : 1,
-                          transition: "opacity 0.2s, box-shadow 0.2s, transform 0.2s"
+                          transition: "opacity 0.2s, box-shadow 0.2s, transform 0.2s",
+                          height: "270px"
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
                       >
-                        <div style={{ width: "100%", height: "120px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
+                        <div style={{ width: "100%", height: "200px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
                           {prod.image ? (
-                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#fff" }} />
+                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#fff" }} />
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
                           )}
@@ -881,7 +882,7 @@ export default function PinningEditor() {
                             </button>
                           </div>
                         </div>
-                        <div style={{ padding: "12px", display: "flex", flexDirection: "column" }}>
+                        <div style={{ padding: "12px", display: "flex", flexDirection: "column", flex: 1 }}>
                           <span style={{ fontSize: "13px", fontWeight: "500", color: "#334155", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4" }}>
                             {prod.title}
                           </span>
@@ -1213,7 +1214,8 @@ export default function PinningEditor() {
                           overflow: "hidden",
                           cursor: "grab",
                           position: "relative",
-                          transition: "all 0.2s"
+                          transition: "all 0.2s",
+                          height: "270px"
                         }}
                       >
                         <div style={{ position: "absolute", top: "6px", left: "6px", zIndex: 10 }}>
@@ -1234,9 +1236,9 @@ export default function PinningEditor() {
                           </button>
                         </div>
                         
-                        <div style={{ width: "100%", height: "120px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
+                        <div style={{ width: "100%", height: "200px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
                           {prod.image ? (
-                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#fff" }} />
+                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#fff" }} />
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
                           )}
@@ -1245,7 +1247,7 @@ export default function PinningEditor() {
                             <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16"></path></svg>
                           </div>
                         </div>
-                        <div style={{ padding: "10px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                        <div style={{ padding: "10px", display: "flex", flexDirection: "column", flex: 1 }}>
                           <span style={{ fontSize: "12px", fontWeight: "500", color: "#334155", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4" }}>
                             {prod.title}
                           </span>
