@@ -71,7 +71,7 @@ export const loader = async ({ request, params }) => {
     const graphqlQuery = await admin.graphql(`
       #graphql
       query {
-        collections(first: 50) {
+        collections(first: 50, query: "published_status:published") {
           nodes {
             title
           }
@@ -458,7 +458,7 @@ export const action = async ({ request, params }) => {
 // ── Helper ────────────────────────────────────────────────────────────
 function getFilterTypeLabel(type, key) {
   const found = FILTER_TYPE_OPTIONS.find((o) => o.value === type);
-  if (type === "option") return `${key || "Option"}`;
+  if (type === "option") return `${key || "Option"} (option)`;
   if (type === "metafield") return `Metafield: ${key || ""}`;
   return found?.label || type;
 }
@@ -642,6 +642,7 @@ export default function FilterGroupDetail() {
       reviewRanges: parsedConfig.reviewRanges,
       stockStatusConfig: parsedConfig.stockStatusConfig,
       ratingColor: parsedConfig.ratingColor,
+      sliderConfig: parsedConfig.sliderConfig,
     });
     setIsCreateModalOpen(true);
   };
@@ -670,6 +671,7 @@ export default function FilterGroupDetail() {
       reviewRanges,
       stockStatusConfig,
       ratingColor,
+      sliderConfig,
     } = data;
 
     submit(
@@ -699,6 +701,7 @@ export default function FilterGroupDetail() {
           reviewRanges,
           stockStatusConfig,
           ratingColor,
+          sliderConfig,
         }),
       },
       { method: "POST" },
@@ -1397,7 +1400,7 @@ export default function FilterGroupDetail() {
                       color: "#6d7175",
                     }}
                   >
-                    Type
+                    Display mode
                   </th>
                   <th
                     style={{
@@ -1407,7 +1410,7 @@ export default function FilterGroupDetail() {
                       color: "#6d7175",
                     }}
                   >
-                    Display mode
+                    Filter values
                   </th>
                   <th
                     style={{
@@ -1506,17 +1509,24 @@ export default function FilterGroupDetail() {
                           style={{
                             background: "none",
                             border: "none",
-                            color: "#006e52",
+                            color: "#000",
                             fontSize: "14px",
-                            fontWeight: "600",
-                            textDecoration: "underline",
+                            fontWeight: "400",
                             cursor: "pointer",
                             padding: 0,
                             textAlign: "left",
                           }}
                         >
                           {filter.label}
+                          {filter.filterType === "option" && (
+                            <span style={{ color: "#a1a5a8", fontWeight: "normal", marginLeft: "4px" }}>
+                              (option)
+                            </span>
+                          )}
                         </button>
+                      </td>
+                      <td style={{ padding: "14px 16px" }}>
+                        <DisplayModeBadge mode={filter.displayMode} />
                       </td>
                       <td
                         style={{
@@ -1525,13 +1535,7 @@ export default function FilterGroupDetail() {
                           color: "#6d7175",
                         }}
                       >
-                        {getFilterTypeLabel(
-                          filter.filterType,
-                          filter.filterKey,
-                        )}
-                      </td>
-                      <td style={{ padding: "14px 16px" }}>
-                        <DisplayModeBadge mode={filter.displayMode} />
+                        All values
                       </td>
                       <td style={{ padding: "14px 16px" }}>
                         <label

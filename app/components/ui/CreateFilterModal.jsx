@@ -360,6 +360,20 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     outOfStock: { enabled: false, label: "Out of stock" }
   });
   
+  // Slider Config State (for Range display mode)
+  const [sliderConfig, setSliderConfig] = useState({
+    sliderRange: 4,
+    sliderStep: 0.1,
+    decimals: 0,
+    rangeFormat: "{0} - {1}",
+    sliderColor: "#007bff",
+    sliderValueSymbols: "k,M,G,T,P,E",
+    sliderPrefix: "",
+    sliderSuffix: "",
+    showInputPrefixSuffix: true,
+    valueFormula: ""
+  });
+  
 
   // Navigation Collections State
   const [childType, setChildType] = useState("Select child type");
@@ -406,6 +420,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         if (initialData.reviewRanges) setReviewRanges(initialData.reviewRanges);
         if (initialData.stockStatusConfig) setStockStatusConfig(initialData.stockStatusConfig);
         if (initialData.ratingColor) setRatingColor(initialData.ratingColor);
+        if (initialData.sliderConfig) setSliderConfig(initialData.sliderConfig);
 
         if (initialData.advanced) {
           setAdvanced(prev => ({ ...prev, ...initialData.advanced }));
@@ -461,6 +476,18 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           outOfStock: true, outOfStockLabel: "Out of stock", outOfStockType: "checkbox"
         });
         setRatingColor("#ffff00");
+        setSliderConfig({
+          sliderRange: 4,
+          sliderStep: 0.1,
+          decimals: 0,
+          rangeFormat: "{0} - {1}",
+          sliderColor: "#007bff",
+          sliderValueSymbols: "k,M,G,T,P,E",
+          sliderPrefix: "",
+          sliderSuffix: "",
+          showInputPrefixSuffix: true,
+          valueFormula: ""
+        });
       }
       setActiveTab("general");
     }
@@ -552,6 +579,75 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             <path d="M10 1.3l2.388 6.722h7.312l-5.938 4.056 2.388 6.722-5.938-4.056-5.938 4.056 2.388-6.722-5.938-4.056h7.312z" />
           </svg>
         ))}
+      </div>
+    );
+  };
+
+  const renderSliderPreview = (isTopLayout) => {
+    const { sliderRange, sliderColor, sliderValueSymbols, sliderPrefix, sliderSuffix, showInputPrefixSuffix } = sliderConfig;
+    const ticks = [];
+    const points = Math.max(2, sliderRange + 1);
+    
+    // For visual preview, let's assume a range 0 to 1,000,000
+    const maxVal = 1000000;
+    
+    const formatValue = (val) => {
+      if (val === 0) return '0';
+      if (val === maxVal) return `1M`;
+      if (val === 250000) return `250k`;
+      if (val === 500000) return `500k`;
+      if (val === 750000) return `750k`;
+      return val;
+    };
+
+    for (let i = 0; i < points; i++) {
+      const percent = (i / (points - 1)) * 100;
+      const val = (i / (points - 1)) * maxVal;
+      ticks.push(
+        <div key={i} style={{ position: "absolute", left: `${percent}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", top: "4px" }}>
+          <div style={{ width: "1px", height: "6px", background: "#6d7175", marginBottom: "4px" }}></div>
+          <span style={{ fontSize: "10px", color: "#202223", fontWeight: "400" }}>{sliderPrefix}{formatValue(val)}{sliderSuffix}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ 
+        display: "flex", flexDirection: "column", gap: "28px", 
+        padding: isTopLayout ? "16px" : "12px 0",
+        background: isTopLayout ? "#ffffff" : "transparent",
+        borderRadius: isTopLayout ? "8px" : "0",
+        border: isTopLayout ? "1px solid #e1e3e5" : "none",
+        boxShadow: isTopLayout ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+        position: "relative",
+        marginTop: isTopLayout ? "8px" : "0",
+        paddingBottom: "32px"
+      }}>
+        {isTopLayout && (
+          <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
+        )}
+        
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px" }}>
+          <div style={{ flex: 1, position: "relative" }}>
+            {showInputPrefixSuffix && sliderPrefix && <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderPrefix}</span>}
+            <input type="text" value="0" readOnly style={{ width: "100%", padding: `8px 12px`, paddingLeft: showInputPrefixSuffix && sliderPrefix ? "24px" : "12px", paddingRight: showInputPrefixSuffix && sliderSuffix ? "24px" : "12px", borderRadius: "4px", border: "1px solid #c9cccf", fontSize: "13px", color: "#202223", textAlign: "center" }} />
+            {showInputPrefixSuffix && sliderSuffix && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderSuffix}</span>}
+          </div>
+          <span style={{ color: "#202223", fontWeight: "400" }}>-</span>
+          <div style={{ flex: 1, position: "relative" }}>
+            {showInputPrefixSuffix && sliderPrefix && <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderPrefix}</span>}
+            <input type="text" value="1000000" readOnly style={{ width: "100%", padding: `8px 12px`, paddingLeft: showInputPrefixSuffix && sliderPrefix ? "24px" : "12px", paddingRight: showInputPrefixSuffix && sliderSuffix ? "24px" : "12px", borderRadius: "4px", border: "1px solid #c9cccf", fontSize: "13px", color: "#202223", textAlign: "center" }} />
+            {showInputPrefixSuffix && sliderSuffix && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderSuffix}</span>}
+          </div>
+        </div>
+
+        <div style={{ padding: "0 10px", marginTop: "4px" }}>
+          <div style={{ position: "relative", height: "2px", background: "#202223" }}>
+            <div style={{ position: "absolute", left: "0%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid #202223`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
+            <div style={{ position: "absolute", left: "100%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid #202223`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
+            {ticks}
+          </div>
+        </div>
       </div>
     );
   };
@@ -826,12 +922,100 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   
                   {["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? (
                     <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <div style={{ display: "flex", gap: "20px", color: "#6d7175", fontSize: "13px", fontWeight: "600" }}>
-                        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "4px" }}>Label <TooltipIcon content="Format using {0} for From and {1} for To" /></div>
-                        <div style={{ flex: 1 }}>From</div>
-                        <div style={{ flex: 1 }}>To</div>
-                        <div style={{ width: "80px" }}></div>
-                      </div>
+                      
+                      {displayMode === "Range" ? (
+                        <>
+                          <div style={{ display: "flex", gap: "20px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider range</label>
+                                <TooltipIcon content="Number of range intervals shown below the slider." />
+                              </div>
+                              <input type="number" value={sliderConfig.sliderRange} onChange={e => setSliderConfig({...sliderConfig, sliderRange: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider step</label>
+                                <TooltipIcon content="Step increment for the slider." />
+                              </div>
+                              <input type="number" step="0.1" value={sliderConfig.sliderStep} onChange={e => setSliderConfig({...sliderConfig, sliderStep: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Decimals</label>
+                                <TooltipIcon content="Number of decimal places." />
+                              </div>
+                              <input type="number" value={sliderConfig.decimals} onChange={e => setSliderConfig({...sliderConfig, decimals: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                              <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Range format</label>
+                              <TooltipIcon content="Format using {0} for from and {1} for to." />
+                            </div>
+                            <input type="text" value={sliderConfig.rangeFormat} onChange={e => setSliderConfig({...sliderConfig, rangeFormat: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                          </div>
+                          
+                          <div style={{ display: "flex", gap: "20px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider color</label>
+                                <TooltipIcon content="Color of the active slider track." />
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 16px" }}>
+                                <input type="text" value={sliderConfig.sliderColor} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", padding: "6px 0", outline: "none" }} />
+                                <div style={{ width: "16px", height: "16px", background: sliderConfig.sliderColor, border: "1px solid rgba(0,0,0,0.1)", borderRadius: "2px" }}></div>
+                              </div>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider value symbols</label>
+                                <TooltipIcon content="Symbols for large numbers, e.g., k,M,G,T,P,E" />
+                              </div>
+                              <input type="text" value={sliderConfig.sliderValueSymbols} onChange={e => setSliderConfig({...sliderConfig, sliderValueSymbols: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: "20px" }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider prefix</label>
+                                <TooltipIcon content="Prefix for slider inputs, e.g., $" />
+                              </div>
+                              <input type="text" value={sliderConfig.sliderPrefix} onChange={e => setSliderConfig({...sliderConfig, sliderPrefix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                                <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider suffix</label>
+                                <TooltipIcon content="Suffix for slider inputs." />
+                              </div>
+                              <input type="text" value={sliderConfig.sliderSuffix} onChange={e => setSliderConfig({...sliderConfig, sliderSuffix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <Checkbox checked={sliderConfig.showInputPrefixSuffix} onChange={val => setSliderConfig({...sliderConfig, showInputPrefixSuffix: val})} />
+                            <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show slider input prefix & suffix</label>
+                            <TooltipIcon content="Show the prefix and suffix in the input boxes as well." />
+                          </div>
+
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                              <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Value formula</label>
+                              <TooltipIcon content="Custom formula for calculating the value." />
+                            </div>
+                            <input type="text" value={sliderConfig.valueFormula} onChange={e => setSliderConfig({...sliderConfig, valueFormula: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", gap: "20px", color: "#6d7175", fontSize: "13px", fontWeight: "600" }}>
+                            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "4px" }}>Label <TooltipIcon content="Format using {0} for From and {1} for To" /></div>
+                            <div style={{ flex: 1 }}>From</div>
+                            <div style={{ flex: 1 }}>To</div>
+                            <div style={{ width: "80px" }}></div>
+                          </div>
                       
                       {(optionType === "price" ? priceRanges : optionType === "percent_sale" ? saleRanges : optionType === "weight" ? weightRanges : reviewRanges).map((range, idx) => {
                         const ranges = optionType === "price" ? priceRanges : optionType === "percent_sale" ? saleRanges : optionType === "weight" ? weightRanges : reviewRanges;
@@ -896,6 +1080,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           </div>
                         );
                       })}
+                      </>
+                      )}
                       {optionType === "review_rating" && (
                         <div style={{ marginTop: "16px" }}>
                           <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175", display: "block", marginBottom: "8px" }}>Rating color</label>
@@ -1296,28 +1482,60 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <div style={{ 
                         display: "flex", 
                         flexDirection: "column", 
-                        gap: "12px", 
+                        gap: displayMode === "Range" ? "24px" : "8px", 
                         maxHeight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && advanced.maxHeight ? advanced.maxHeight : "none", 
                         overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible",
                         paddingRight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "4px" : "0"
                       }}>
-                        {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.desktopSearchBox && (
-                          <input 
-                            type="text" 
-                            placeholder="Filter options" 
-                            style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "13px", marginBottom: "8px" }} 
-                          />
-                        )}
+                        {displayMode === "Range" ? renderSliderPreview(layout === "top") : (
+                          <div style={{
+                            display: "flex", flexDirection: "column", gap: "8px",
+                            padding: layout === "top" ? "16px" : "0",
+                            background: layout === "top" ? "#ffffff" : "transparent",
+                            borderRadius: layout === "top" ? "8px" : "0",
+                            border: layout === "top" ? "1px solid #e1e3e5" : "none",
+                            boxShadow: layout === "top" ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+                            position: "relative",
+                            marginTop: layout === "top" ? "8px" : "0"
+                          }}>
+                            {layout === "top" && (
+                              <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
+                            )}
+                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.desktopSearchBox && (
+                              <input 
+                                type="text" 
+                                placeholder="Filter options" 
+                                style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "13px", marginBottom: "8px" }} 
+                              />
+                            )}
 
-                      {currentOptionsData
-                        .filter(item => !excludedValues.includes(item.label))
-                        .map(item => (
-                          <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#202223" }}>
-                            <span>{item.isStars ? renderStars(item.label) : item.label}</span>
-                            {item.count > 0 && <span style={{ color: "#8c9196" }}>({item.count})</span>}
+                            {displayMode === "Box" ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                                {currentOptionsData
+                                  .filter(item => !excludedValues.includes(item.label))
+                                  .map(item => (
+                                    <div key={item.label} style={{ padding: "6px 8px", border: "1px solid #c9cccf", borderRadius: "0px", fontSize: "12px", color: "#202223", background: "#fff", display: "inline-block", alignSelf: "flex-start" }}>
+                                      {item.isStars ? renderStars(item.label) : item.label}
+                                    </div>
+                                  ))
+                                }
+                              </div>
+                            ) : (
+                              <>
+                                {currentOptionsData
+                                  .filter(item => !excludedValues.includes(item.label))
+                                  .map(item => (
+                                    <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#202223" }}>
+                                      <span>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                      {item.count > 0 && <span style={{ color: "#8c9196" }}>({item.count})</span>}
+                                    </div>
+                                  ))
+                                }
+                                {layout !== "top" && <div style={{ height: "1px", background: "#e1e3e5", width: "100%", marginTop: "4px" }}></div>}
+                              </>
+                            )}
                           </div>
-                        ))
-                      }
+                        )}
                       </div>
                     )}
                   </>
@@ -1339,26 +1557,30 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <div style={{ 
                       display: "flex", 
                       flexDirection: "column", 
-                      gap: "24px",
+                      gap: displayMode === "Range" ? "24px" : "16px",
                       maxHeight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && advanced.maxHeight ? advanced.maxHeight : "none", 
                       overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible"
                     }}>
-                      {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.mobileSearchBox && (
-                        <input 
-                          type="text" 
-                          placeholder="Filter options" 
-                          style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
-                        />
+                      {displayMode === "Range" ? renderSliderPreview(false) : (
+                        <>
+                          {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.mobileSearchBox && (
+                            <input 
+                              type="text" 
+                              placeholder="Filter options" 
+                              style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
+                            />
+                          )}
+                          {currentOptionsData
+                            .filter(item => !excludedValues.includes(item.label))
+                            .map(item => (
+                              <div key={item.label} style={{ display: "flex", gap: "4px", fontSize: "13px", color: "#202223" }}>
+                                <span>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
+                              </div>
+                            ))
+                          }
+                        </>
                       )}
-                      {currentOptionsData
-                        .filter(item => !excludedValues.includes(item.label))
-                        .map(item => (
-                          <div key={item.label} style={{ display: "flex", gap: "4px", fontSize: "13px", color: "#202223" }}>
-                            <span>{item.isStars ? renderStars(item.label) : item.label}</span>
-                            {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
-                          </div>
-                        ))
-                      }
                     </div>
                   </>
                 )}
@@ -1378,7 +1600,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             onClick={() => onSave({ 
               filterId: initialData?.id,
               optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
-              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor
+              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig
             })}
             style={{ borderRadius: "20px", padding: "8px 24px", background: "#007bff", border: "none" }}
           >

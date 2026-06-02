@@ -191,6 +191,7 @@ model MergedValue {
   filterKey    String?  // For metafield-based filters
   targetValue  String   // The clean merged value shown e.g. "Red"
   sourceValues String[] // Raw values that map to targetValue e.g. ["Crimson","Wine","Ruby"]
+  isActive     Boolean  @default(true) // Whether the merged value is active
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

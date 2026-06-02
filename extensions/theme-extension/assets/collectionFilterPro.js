@@ -293,24 +293,44 @@
         `;
       } 
       else if (type === 'price' && displayMode.toLowerCase() === 'range') {
+        const s = config.sliderConfig || {};
+        const prefixStr = s.sliderPrefix || prefix || "$";
+        const suffixStr = s.sliderSuffix || "";
+        const step = s.sliderStep || 1;
+        const maxLimit = parseFloat(s.sliderRange || "10000");
+        maxPriceLimit = maxLimit; // Update global for active badge computation if needed
+
+        const fillLeft = (activeFilters.minPrice / maxLimit) * 100;
+        let effectiveMax = activeFilters.maxPrice;
+        if (effectiveMax === 9999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
+        const fillRight = 100 - (effectiveMax / maxLimit) * 100;
+        
         groupContent = `
           <div class="cfp-price-range">
             <div class="cfp-price-inputs">
               <div class="cfp-price-input-wrap">
                 <label for="cfp-price-min" class="cfp-price-label">Min</label>
                 <div class="cfp-price-field">
-                  <span class="cfp-price-symbol">${prefix || '$'}</span>
-                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${activeFilters.minPrice}" min="0">
+                  ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
+                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${activeFilters.minPrice}" min="0" step="${step}">
+                  ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
               <span class="cfp-price-divider">—</span>
               <div class="cfp-price-input-wrap">
                 <label for="cfp-price-max" class="cfp-price-label">Max</label>
                 <div class="cfp-price-field">
-                  <span class="cfp-price-symbol">${prefix || '$'}</span>
-                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${activeFilters.maxPrice}" min="0">
+                  ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
+                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${effectiveMax}" min="0" step="${step}">
+                  ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
+            </div>
+            
+            <div class="cfp-range-track" id="cfp-slider-track">
+              <div class="cfp-range-fill" id="cfp-slider-fill" style="left: ${fillLeft}%; right: ${fillRight}%;"></div>
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="0" max="${maxLimit}" value="${activeFilters.minPrice}" step="${step}">
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="0" max="${maxLimit}" value="${effectiveMax}" step="${step}">
             </div>
           </div>
         `;
@@ -540,18 +560,86 @@
     // Price input changes
     const minInput = document.getElementById('cfp-price-min');
     const maxInput = document.getElementById('cfp-price-max');
+    const rangeMin = document.getElementById('cfp-slider-range-min');
+    const rangeMax = document.getElementById('cfp-slider-range-max');
+    const fill = document.getElementById('cfp-slider-fill');
 
-    if (minInput) {
-      minInput.addEventListener('change', () => {
-        activeFilters.minPrice = parseFloat(minInput.value || '0');
+    function updateFill() {
+      if(!fill || !rangeMin || !rangeMax) return;
+      const minVal = parseFloat(rangeMin.value) || 0;
+      const maxVal = parseFloat(rangeMax.value) || 0;
+      const maxLimit = parseFloat(rangeMin.max) || 1000;
+      
+      let leftPercent = (minVal / maxLimit) * 100;
+      let rightPercent = 100 - (maxVal / maxLimit) * 100;
+      if(leftPercent < 0) leftPercent = 0;
+      if(rightPercent < 0) rightPercent = 0;
+      if(leftPercent > 100) leftPercent = 100;
+      if(rightPercent > 100) rightPercent = 100;
+      
+      fill.style.left = `${leftPercent}%`;
+      fill.style.right = `${rightPercent}%`;
+    }
+
+    if (minInput && maxInput) {
+      const applyPriceFilter = () => {
+        let minV = parseFloat(minInput.value) || 0;
+        let maxV = parseFloat(maxInput.value) || 999999;
+        if(minV > maxV) { let t=minV; minV=maxV; maxV=t; minInput.value=minV; maxInput.value=maxV; }
+        activeFilters.minPrice = minV;
+        activeFilters.maxPrice = maxV;
         activeFilters.page = 1;
         fetchAndRenderData();
+      };
+
+      minInput.addEventListener('change', () => {
+        if(rangeMin) {
+          rangeMin.value = minInput.value;
+          updateFill();
+        }
+        applyPriceFilter();
+      });
+
+      maxInput.addEventListener('change', () => {
+        if(rangeMax) {
+          rangeMax.value = maxInput.value;
+          updateFill();
+        }
+        applyPriceFilter();
       });
     }
 
-    if (maxInput) {
-      maxInput.addEventListener('change', () => {
-        activeFilters.maxPrice = parseFloat(maxInput.value || '9999');
+    if (rangeMin && rangeMax) {
+      rangeMin.addEventListener('input', () => {
+        let minVal = parseFloat(rangeMin.value);
+        let maxVal = parseFloat(rangeMax.value);
+        if (minVal > maxVal) {
+          rangeMin.value = maxVal;
+          minVal = maxVal;
+        }
+        if (minInput) minInput.value = minVal;
+        updateFill();
+      });
+
+      rangeMin.addEventListener('change', () => {
+        activeFilters.minPrice = parseFloat(rangeMin.value);
+        activeFilters.page = 1;
+        fetchAndRenderData();
+      });
+
+      rangeMax.addEventListener('input', () => {
+        let minVal = parseFloat(rangeMin.value);
+        let maxVal = parseFloat(rangeMax.value);
+        if (maxVal < minVal) {
+          rangeMax.value = minVal;
+          maxVal = minVal;
+        }
+        if (maxInput) maxInput.value = maxVal;
+        updateFill();
+      });
+
+      rangeMax.addEventListener('change', () => {
+        activeFilters.maxPrice = parseFloat(rangeMax.value);
         activeFilters.page = 1;
         fetchAndRenderData();
       });
