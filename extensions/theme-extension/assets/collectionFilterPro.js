@@ -58,6 +58,11 @@
     try {
       const queryParams = new URLSearchParams();
       queryParams.append('shop', shop);
+      
+      if (window.cfpCustomerTags) {
+        queryParams.append('customer_tags', window.cfpCustomerTags);
+      }
+
       if (collectionHandle) {
         queryParams.append('collectionHandle', collectionHandle);
       } else if (collectionId) {
@@ -82,6 +87,11 @@
     try {
       const queryParams = new URLSearchParams();
       queryParams.append('shop', shop);
+      
+      if (window.cfpCustomerTags) {
+        queryParams.append('customer_tags', window.cfpCustomerTags);
+      }
+
       if (collectionHandle) {
         queryParams.append('collectionHandle', collectionHandle);
       } else if (collectionId) {

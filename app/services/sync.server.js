@@ -93,7 +93,7 @@ export async function syncProducts(shop, admin) {
           tags
           totalInventory
           status
-          images(first: 5) {
+          images(first: 250) {
             nodes {
               url
             }
@@ -112,6 +112,7 @@ export async function syncProducts(shop, admin) {
           variants(first: 100) {
             nodes {
               id
+              sku
               price
               compareAtPrice
               inventoryQuantity
@@ -240,6 +241,7 @@ export async function syncProducts(shop, admin) {
             data: {
               id: variant.id,
               productId: product.id,
+              sku: variant.sku || null,
               price: parseFloat(variant.price),
               compareAtPrice: variant.compareAtPrice
                 ? parseFloat(variant.compareAtPrice)
@@ -361,7 +363,7 @@ export async function syncSingleProduct(shop, admin, productId) {
         productType
         tags
         status
-        images(first: 5) {
+        images(first: 250) {
           nodes {
             url
           }
@@ -380,6 +382,7 @@ export async function syncSingleProduct(shop, admin, productId) {
         variants(first: 100) {
           nodes {
             id
+            sku
             price
             compareAtPrice
             inventoryQuantity
@@ -493,6 +496,7 @@ export async function syncSingleProduct(shop, admin, productId) {
         data: {
           id: variant.id,
           productId: product.id,
+          sku: variant.sku || null,
           price: parseFloat(variant.price),
           compareAtPrice: variant.compareAtPrice
             ? parseFloat(variant.compareAtPrice)

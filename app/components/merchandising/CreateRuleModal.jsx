@@ -28,6 +28,7 @@ export default function CreateRuleModal({
   const shopify = useAppBridge();
   const [ruleName, setRuleName] = useState("");
   const [customerTags, setCustomerTags] = useState("");
+  const [customerTagInput, setCustomerTagInput] = useState("");
   const [locales, setLocales] = useState("");
   const [ruleRules, setRuleRules] = useState([{ action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
   const [isCollectionDropdownOpen, setIsCollectionDropdownOpen] = useState(false);
@@ -52,6 +53,7 @@ export default function CreateRuleModal({
   const handleClose = () => {
     setRuleName("");
     setCustomerTags("");
+    setCustomerTagInput("");
     setLocales("");
     setRuleRules([{ action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
     setIsCollectionDropdownOpen(false);
@@ -306,15 +308,65 @@ export default function CreateRuleModal({
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>
               Customer tags <TooltipIcon text="The customer tags to which this rule is applied. Leave blank to apply to all customers, or enter [no tag] to apply to customers without tags." />
             </label>
-            <input 
-              type="text" 
-              placeholder="Enter customer tags, or leave blank to apply to all customers" 
-              value={customerTags}
-              onChange={(e) => setCustomerTags(e.target.value)}
-              style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "10px 14px", borderRadius: "6px", fontSize: "14px", color: "#202223", outline: "none" }}
-              onFocus={(e) => e.target.style.borderColor = "#007bff"}
-              onBlur={(e) => e.target.style.borderColor = "#c9cccf"}
-            />
+            <div 
+              style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "6px 10px", borderRadius: "6px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", transition: "border-color 0.2s" }}
+              tabIndex={-1}
+              onFocus={(e) => e.currentTarget.style.borderColor = "#007bff"}
+              onBlur={(e) => e.currentTarget.style.borderColor = "#c9cccf"}
+            >
+              {customerTags.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
+                <div key={tag} style={{ display: "flex", alignItems: "center", background: "#e2e8f0", color: "#334155", padding: "4px 8px", borderRadius: "16px", fontSize: "13px", fontWeight: "500" }}>
+                  {tag}
+                  <div 
+                    onClick={() => {
+                      const tags = customerTags.split(',').map(t => t.trim()).filter(Boolean);
+                      setCustomerTags(tags.filter(t => t !== tag).join(','));
+                    }}
+                    style={{ marginLeft: "6px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}
+                  >
+                    <svg style={{ width: "12px", height: "12px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </div>
+                </div>
+              ))}
+              <div style={{ position: "relative", flex: 1, minWidth: "150px" }} className="dropdown-inside">
+                <input 
+                  type="text" 
+                  placeholder={customerTags ? "" : "Enter customer tags, or leave blank to apply to all customers"}
+                  value={customerTagInput}
+                  onChange={(e) => setCustomerTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && customerTagInput.trim()) {
+                      e.preventDefault();
+                      const tags = customerTags.split(',').map(t => t.trim()).filter(Boolean);
+                      if (!tags.includes(customerTagInput.trim())) {
+                        setCustomerTags([...tags, customerTagInput.trim()].join(','));
+                      }
+                      setCustomerTagInput("");
+                    }
+                  }}
+                  style={{ width: "100%", border: "none", outline: "none", fontSize: "14px", color: "#202223", background: "transparent", padding: "4px 0" }}
+                />
+                {customerTagInput.trim() && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", zIndex: 10, minWidth: "200px" }}>
+                    <div 
+                      onClick={() => {
+                        const tags = customerTags.split(',').map(t => t.trim()).filter(Boolean);
+                        if (!tags.includes(customerTagInput.trim())) {
+                          setCustomerTags([...tags, customerTagInput.trim()].join(','));
+                        }
+                        setCustomerTagInput("");
+                      }}
+                      style={{ padding: "10px 16px", cursor: "pointer", fontSize: "14px", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                    >
+                      <svg style={{ width: "14px", height: "14px", color: "#64748b" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                      Add <strong>{customerTagInput}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Apply to locales */}

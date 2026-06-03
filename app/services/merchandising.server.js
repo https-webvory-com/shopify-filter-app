@@ -3,12 +3,12 @@ import prisma from "../db.server";
 /**
  * Fetches the active merchandising rule for a given shop and collection.
  */
-export async function getActiveRuleForCollection(shop, collectionTitle) {
+export async function getActiveRuleForCollection(shop, collectionTitle, currentCustomerTags = []) {
   if (!shop || !collectionTitle) return null;
 
   const now = new Date();
 
-  return await prisma.merchandisingRule.findFirst({
+  const rules = await prisma.merchandisingRule.findMany({
     where: {
       shop,
       status: true,
@@ -19,6 +19,23 @@ export async function getActiveRuleForCollection(shop, collectionTitle) {
     include: { conditions: true },
     orderBy: { createdAt: "desc" },
   });
+
+  for (const rule of rules) {
+    if (!rule.customerTags || rule.customerTags.trim() === "") {
+      return rule; // Rule applies to everyone
+    }
+
+    // Rule has specific customer tags, check if currentCustomerTags intersect
+    const requiredTags = rule.customerTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    const userTags = currentCustomerTags.map(t => t.trim().toLowerCase());
+
+    const hasMatchingTag = requiredTags.some(tag => userTags.includes(tag));
+    if (hasMatchingTag) {
+      return rule;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -157,24 +174,12 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
   let filteredProducts = products;
 
   if (rule && rule.conditions && rule.conditions.length > 0) {
-    const includeConditions = rule.conditions.filter(
-      (c) => c.action === "Include",
-    );
-    const hasIncludes = includeConditions.length > 0;
-
-    // 1. Filter Phase: Handle Include and Exclude
+    // 1. Filter Phase: Handle Exclude
     filteredProducts = products.filter((p) => {
       const matchesExclude = rule.conditions.some(
         (cond) => cond.action === "Exclude" && checkRuleMatch(p, cond),
       );
       if (matchesExclude) return false;
-
-      if (hasIncludes) {
-        const matchesInclude = includeConditions.some((cond) =>
-          checkRuleMatch(p, cond),
-        );
-        if (!matchesInclude) return false;
-      }
 
       return true;
     });
@@ -230,7 +235,7 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
       if (Array.isArray(parsedPins)) {
         pinnedIds = parsedPins.map((p) => p.id);
       }
-    } catch (e) {}
+    } catch (e) {console.error("Error parsing pinned products:", e);}
   }
 
   // Sort logic
@@ -281,3 +286,64 @@ function defaultSortComparison(a, b, sortBy) {
   // default: created-descending
   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 }
+
+/**
+ * Builds a Prisma 'where' clause object for 'Include' rules to fetch external products.
+ */
+export function buildIncludeWhereClause(includeConditions) {
+  if (!includeConditions || includeConditions.length === 0) return null;
+
+  const OR = [];
+
+  for (const cond of includeConditions) {
+    const field = cond.field || "";
+    
+    if (["Price", "Available"].includes(field)) {
+      const min = cond.minValue && cond.minValue !== "" ? parseFloat(cond.minValue) : -999999999;
+      const max = cond.maxValue && cond.maxValue !== "" ? parseFloat(cond.maxValue) : 999999999;
+      
+      if (field === "Price") {
+        OR.push({ priceMin: { gte: min, lte: max } });
+      }
+      if (field === "Available") {
+        OR.push({ variants: { some: { inventory: { gte: min, lte: max } } } });
+      }
+      continue;
+    }
+
+    const valueString = cond.value || "";
+    const values = valueString.split(",").map(s => s.trim()).filter(Boolean);
+
+    if (values.length === 0) continue;
+
+    if (field === "Vendor") {
+      OR.push({ vendor: { in: values } });
+    } else if (field === "Product type") {
+      OR.push({ productType: { in: values } });
+    } else if (field === "Tags") {
+      OR.push({ tags: { hasSome: values } });
+    } else if (field === "Product") {
+      OR.push({ title: { in: values } });
+    } else if (field === "Collections") {
+      OR.push({
+        collections: { some: { collection: { title: { in: values } } } }
+      });
+    } else if (field.includes("(product option)")) {
+      OR.push({
+        variants: {
+          some: {
+            OR: [
+              { option1: { in: values } },
+              { option2: { in: values } },
+              { option3: { in: values } }
+            ]
+          }
+        }
+      });
+    }
+  }
+
+  if (OR.length === 0) return null;
+  return { OR };
+}
+

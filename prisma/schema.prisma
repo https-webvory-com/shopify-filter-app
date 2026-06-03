@@ -60,6 +60,7 @@ model Product {
 model Variant {
   id             String   @id
   productId      String
+  sku            String?
   price          Decimal  @db.Decimal(10, 2)
   compareAtPrice Decimal? @db.Decimal(10, 2)
   available      Boolean  @default(true)

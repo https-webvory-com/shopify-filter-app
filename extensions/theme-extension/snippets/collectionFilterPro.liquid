@@ -65,4 +65,8 @@
   <span class="cfp-active-badge" id="cfp-active-count" style="display:none;">0</span>
 </button>
 
+<script>
+  window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
+</script>
+
 <script src="{{ 'collectionFilterPro.js' | asset_url }}" defer="defer"></script>
