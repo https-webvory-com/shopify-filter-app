@@ -23,7 +23,7 @@
   const templateName = sidebar.dataset.templateName || '';
   const searchTerms = sidebar.dataset.searchTerms || '';
 
-  console.log("check againg")
+  console.log("check againg 1")
 
   // ── 1. Global Filter State ──────────────────────────────────────────
   const PAGE_SIZE = 24;
