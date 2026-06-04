@@ -594,6 +594,16 @@ export default function FilterGroupDetail() {
           );
         } else if (actionData.intent === "updateGroupSettings") {
           shopify.toast.show("Group settings saved successfully");
+        } else if (actionData.intent === "addFilter") {
+          shopify.toast.show("Filter added successfully");
+        } else if (actionData.intent === "updateFilter") {
+          shopify.toast.show("Filter updated successfully");
+        } else if (actionData.intent === "deleteFilter") {
+          shopify.toast.show("Filter deleted successfully");
+        } else if (actionData.intent === "duplicateFilter") {
+          shopify.toast.show("Filter duplicated successfully");
+        } else if (actionData.intent === "reorderFilters") {
+          shopify.toast.show("Filters reordered successfully");
         }
       } else if (actionData.error) {
         shopify.toast.show(actionData.error, { isError: true });
@@ -643,6 +653,7 @@ export default function FilterGroupDetail() {
       stockStatusConfig: parsedConfig.stockStatusConfig,
       ratingColor: parsedConfig.ratingColor,
       sliderConfig: parsedConfig.sliderConfig,
+      swatchConfig: parsedConfig.swatchConfig,
     });
     setIsCreateModalOpen(true);
   };
@@ -672,7 +683,13 @@ export default function FilterGroupDetail() {
       stockStatusConfig,
       ratingColor,
       sliderConfig,
+      swatchConfig,
     } = data;
+
+    if (!filterTitle || filterTitle.trim() === "") {
+      shopify.toast.show("Filter title is required");
+      return;
+    }
 
     submit(
       {
@@ -702,6 +719,7 @@ export default function FilterGroupDetail() {
           stockStatusConfig,
           ratingColor,
           sliderConfig,
+          swatchConfig,
         }),
       },
       { method: "POST" },

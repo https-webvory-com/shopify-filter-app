@@ -222,12 +222,22 @@ export default function CreateRuleModal({
               </div>
 
               {selectedCollections.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                <div 
+                  onClick={() => setIsCollectionDropdownOpen(false)}
+                  style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px", cursor: "pointer" }}
+                >
                   {selectedCollections.map(val => (
-                    <div key={val} style={{ display: "flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "6px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "500" }}>
+                    <div 
+                      key={val} 
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ display: "flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "6px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "500", cursor: "default" }}
+                    >
                       {val}
                       <div 
-                        onClick={() => setSelectedCollections(selectedCollections.filter(v => v !== val))}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCollections(selectedCollections.filter(v => v !== val));
+                        }}
                         style={{ marginLeft: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(255,255,255,0.2)" }}
                       >
                         <svg style={{ width: "10px", height: "10px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>

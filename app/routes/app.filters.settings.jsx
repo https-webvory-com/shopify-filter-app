@@ -1,11 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const settings = await getFilterGlobalSettings(session.shop);
+  return { settings };
+};
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  
+  const payload = {
+    horizontalFilters: formData.get("horizontalFilters") === "true",
+    mobileFilterLayout: formData.get("mobileFilterLayout") || "off-canvas",
+    showAttributeBasedBreadcrumb: formData.get("showAttributeBasedBreadcrumb") === "true",
+    showFilterOptionsWithOneItem: formData.get("showFilterOptionsWithOneItem") === "true",
+    showProductCount: formData.get("showProductCount") === "true",
+    scrollUpOnFilterValuesChange: formData.get("scrollUpOnFilterValuesChange") === "true",
+    hideUnavailableVariantsWhenSelected: formData.get("hideUnavailableVariantsWhenSelected") === "true",
+    desktopLikeOnMobile: formData.get("desktopLikeOnMobile") === "true",
+    darkMode: formData.get("darkMode") === "true",
+  };
+
+  await updateFilterGlobalSettings(session.shop, payload);
+  return { success: true };
 };
 
 // ── Toggle Row Component ──────────────────────────────────────────────
@@ -192,22 +215,49 @@ function SettingsSection({ title, children }) {
 // ── Main Component ────────────────────────────────────────────────────
 export default function FilterSettings() {
   const navigate = useNavigate();
+  const shopify = useAppBridge();
+  const { settings } = useLoaderData();
+  const submit = useSubmit();
+  const nav = useNavigation();
 
-  const [horizontalFilters, setHorizontalFilters] = useState(false);
-  const [mobileLayout, setMobileLayout] = useState("off-canvas");
+  const [horizontalFilters, setHorizontalFilters] = useState(settings?.horizontalFilters || false);
+  const [mobileLayout, setMobileLayout] = useState(settings?.mobileFilterLayout || "off-canvas");
 
-  const [showBreadcrumb, setShowBreadcrumb] = useState(true);
-  const [showSingleItem, setShowSingleItem] = useState(true);
-  const [showProductCount, setShowProductCount] = useState(true);
-  const [scrollOnChange, setScrollOnChange] = useState(false);
+  const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
+  const [showSingleItem, setShowSingleItem] = useState(settings?.showFilterOptionsWithOneItem || false);
+  const [showProductCount, setShowProductCount] = useState(settings?.showProductCount ?? true);
+  const [scrollOnChange, setScrollOnChange] = useState(settings?.scrollUpOnFilterValuesChange || false);
 
-  const [hideUnavailableVariants, setHideUnavailableVariants] = useState(false);
-  const [desktopLikeOnMobile, setDesktopLikeOnMobile] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [hideUnavailableVariants, setHideUnavailableVariants] = useState(settings?.hideUnavailableVariantsWhenSelected || false);
+  const [desktopLikeOnMobile, setDesktopLikeOnMobile] = useState(settings?.desktopLikeOnMobile || false);
+  const [darkMode, setDarkMode] = useState(settings?.darkMode || false);
 
-  const handleSave = () => {
-    // TODO: wire to DB action later
-    alert("Settings saved (static for now).");
+  const isSaving = nav.state === "submitting";
+
+  const handleSettingChange = (key, value) => {
+    if (key === "horizontalFilters") setHorizontalFilters(value);
+    else if (key === "mobileFilterLayout") setMobileLayout(value);
+    else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
+    else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
+    else if (key === "showProductCount") setShowProductCount(value);
+    else if (key === "scrollUpOnFilterValuesChange") setScrollOnChange(value);
+    else if (key === "hideUnavailableVariantsWhenSelected") setHideUnavailableVariants(value);
+    else if (key === "desktopLikeOnMobile") setDesktopLikeOnMobile(value);
+    else if (key === "darkMode") setDarkMode(value);
+
+    const formData = new FormData();
+    formData.append("horizontalFilters", (key === "horizontalFilters" ? value : horizontalFilters).toString());
+    formData.append("mobileFilterLayout", key === "mobileFilterLayout" ? value : mobileLayout);
+    formData.append("showAttributeBasedBreadcrumb", (key === "showAttributeBasedBreadcrumb" ? value : showBreadcrumb).toString());
+    formData.append("showFilterOptionsWithOneItem", (key === "showFilterOptionsWithOneItem" ? value : showSingleItem).toString());
+    formData.append("showProductCount", (key === "showProductCount" ? value : showProductCount).toString());
+    formData.append("scrollUpOnFilterValuesChange", (key === "scrollUpOnFilterValuesChange" ? value : scrollOnChange).toString());
+    formData.append("hideUnavailableVariantsWhenSelected", (key === "hideUnavailableVariantsWhenSelected" ? value : hideUnavailableVariants).toString());
+    formData.append("desktopLikeOnMobile", (key === "desktopLikeOnMobile" ? value : desktopLikeOnMobile).toString());
+    formData.append("darkMode", (key === "darkMode" ? value : darkMode).toString());
+
+    submit(formData, { method: "post" });
+    shopify.toast.show("Filter settings saved");
   };
 
   return (
@@ -259,30 +309,18 @@ export default function FilterSettings() {
         </a>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          marginBottom: "16px",
-        }}
-      >
-        <s-button variant="primary" onClick={handleSave}>
-          Save Settings
-        </s-button>
-      </div>
-
       <SettingsSection title="Filters Settings">
         <SettingToggle
           label="Horizontal filters"
           description="Indicates whether to show the filters on the top or left side."
           value={horizontalFilters}
-          onChange={setHorizontalFilters}
+          onChange={(val) => handleSettingChange("horizontalFilters", val)}
         />
         <SettingSelect
           label="Mobile filter layout"
           description="Choose the display layout for filters on mobile."
           value={mobileLayout}
-          onChange={setMobileLayout}
+          onChange={(val) => handleSettingChange("mobileFilterLayout", val)}
           options={[
             { value: "off-canvas", label: "Off-canvas" },
             { value: "horizontal-scrolling", label: "Horizontal scrolling" },
@@ -292,43 +330,43 @@ export default function FilterSettings() {
           label="Show attribute based breadcrumb"
           description="When enabled, the attribute based breadcrumb showing the active filters is displayed."
           value={showBreadcrumb}
-          onChange={setShowBreadcrumb}
+          onChange={(val) => handleSettingChange("showAttributeBasedBreadcrumb", val)}
         />
         <SettingToggle
           label="Show filter options even if they have only one item"
           description="When enabled, a filter with only one filter value and its product count equals to the number of showing products are still shown. By default this option is turned off because the collection page is the same with or without the filter value selected."
           value={showSingleItem}
-          onChange={setShowSingleItem}
+          onChange={(val) => handleSettingChange("showFilterOptionsWithOneItem", val)}
         />
         <SettingToggle
           label="Show product count"
           description="When enabled, the number of products are shown on the right on filter options."
           value={showProductCount}
-          onChange={setShowProductCount}
+          onChange={(val) => handleSettingChange("showProductCount", val)}
         />
         <SettingToggle
           label="Scroll up on filter values change"
           description="When enabled, the widget scrolls up the browser view to the top when a user clicks on a filter option. This is for the vertical filter view only."
           value={scrollOnChange}
-          onChange={setScrollOnChange}
+          onChange={(val) => handleSettingChange("scrollUpOnFilterValuesChange", val)}
         />
         <SettingToggle
           label="Hide unavailable variants if a filter value is selected"
           description="When enabled, the app hides unavailable variants if a filter value is selected."
           value={hideUnavailableVariants}
-          onChange={setHideUnavailableVariants}
+          onChange={(val) => handleSettingChange("hideUnavailableVariantsWhenSelected", val)}
         />
         <SettingToggle
           label="Desktop-like filters on mobile"
           description="When enabled, the desktop filter style is used on mobile."
           value={desktopLikeOnMobile}
-          onChange={setDesktopLikeOnMobile}
+          onChange={(val) => handleSettingChange("desktopLikeOnMobile", val)}
         />
         <SettingToggle
           label="Dark mode"
           description="When enabled, storefront UI uses the dark color scheme."
           value={darkMode}
-          onChange={setDarkMode}
+          onChange={(val) => handleSettingChange("darkMode", val)}
         />
         <div style={{ padding: "20px 0" }} />
       </SettingsSection>

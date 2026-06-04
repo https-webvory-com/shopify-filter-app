@@ -249,3 +249,21 @@ model PinnedProductRule {
 
   @@index([shop])
 }
+
+model FilterGlobalSetting {
+  id                                  Int      @id @default(autoincrement())
+  shop                                String   @unique
+  horizontalFilters                   Boolean  @default(false)
+  mobileFilterLayout                  String   @default("off-canvas")
+  showAttributeBasedBreadcrumb        Boolean  @default(true)
+  showFilterOptionsWithOneItem        Boolean  @default(false)
+  showProductCount                    Boolean  @default(true)
+  scrollUpOnFilterValuesChange        Boolean  @default(false)
+  hideUnavailableVariantsWhenSelected Boolean  @default(false)
+  desktopLikeOnMobile                 Boolean  @default(false)
+  darkMode                            Boolean  @default(false)
+
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+}
+

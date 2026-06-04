@@ -6,6 +6,7 @@ import {
   getActivePinningRuleForCollection,
   buildIncludeWhereClause,
 } from "../services/merchandising.server";
+import { getFilterGlobalSettings } from "../services/filterSettings.server";
 
 /**
  * Storefront Filtering API
@@ -20,6 +21,8 @@ export const loader = async ({ request }) => {
     if (!shop) {
       return data({ error: "Missing shop parameter" }, { status: 400 });
     }
+
+    const globalSettings = await getFilterGlobalSettings(shop);
 
     // ── 0. Parse Query Parameters (needed for resolving group) ───────
     const collectionId = url.searchParams.get("collectionId");
@@ -251,6 +254,21 @@ export const loader = async ({ request }) => {
         !availability.includes("in_stock")
       ) {
         variantConditions.push({ available: false });
+      }
+    } else {
+      // Apply global setting if a filter is selected and no explicit availability filter is set
+      const hasAnyFilterSelected = 
+        vendors.length > 0 || 
+        types.length > 0 || 
+        collections.length > 0 || 
+        tags.length > 0 || 
+        titles.length > 0 || 
+        Object.values(optionsFilters).some(v => v.length > 0) ||
+        Object.values(metafieldsFilters).some(v => v.length > 0) ||
+        (minPrice > 0 || maxPrice < 9999);
+        
+      if (globalSettings.hideUnavailableVariantsWhenSelected && hasAnyFilterSelected) {
+        variantConditions.push({ available: true });
       }
     }
 
@@ -547,6 +565,7 @@ export const loader = async ({ request }) => {
       totalCount,
       // Return group filters (FilterGroupItem[]) if available, else empty
       settings: activeGroupFilters || [],
+      globalSettings,
       debug: {
         resolvedCollectionId,
         resolvedCollectionTitle,

@@ -39,12 +39,13 @@
     availability: [], // 'in_stock', 'out_of_stock'
     priceRanges: [], // selected price range strings
     minPrice: 0,
-    maxPrice: 9999,
+    maxPrice: 999999,
     sortBy: 'created-descending',
     page: 1
   };
 
-  let maxPriceLimit = 1000; // Updated dynamically from product prices
+  let maxPriceLimit = 1000;
+  let globalSettings = {}; // Updated dynamically from product prices
 
   // ── 2. Initialization ───────────────────────────────────────────────
   let activeMerchandisingRule = null;
@@ -84,8 +85,13 @@
     }
   }
 
-  // ── 3. Fetch data from Shopify App Proxy ───────────────────────────
+  // ── 3. Fetch data from Shopify App Proxy ──────────────────────────────
+  
   async function fetchAndRenderData() {
+    if (window._cfpInitialized && globalSettings && globalSettings.scrollUpOnFilterValuesChange && !globalSettings.horizontalFilters) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     try {
       const queryParams = new URLSearchParams();
       queryParams.append('shop', shop);
@@ -141,17 +147,55 @@
 
       sidebar.classList.remove('cfp-loading');
 
+      if (data.globalSettings) {
+        globalSettings = data.globalSettings;
+        applyGlobalSettings(globalSettings);
+      }
+
+
       if (data.products) {
         renderProducts(data.products, data.totalCount);
       }
       if (data.settings && data.facets) {
-        renderFilterSidebar(data.settings, data.facets);
+        renderFilterSidebar(data.settings, data.facets, data.totalCount);
       }
+      renderBreadcrumbs();
       updateActiveCountBadge();
+      window._cfpInitialized = true;
+
 
     } catch (e) {
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
+    }
+  }
+
+  function applyGlobalSettings(settings) {
+    const container = document.body;
+    if (!container) return;
+    
+    if (settings.horizontalFilters) {
+      container.classList.add('cfp-horizontal-layout');
+    } else {
+      container.classList.remove('cfp-horizontal-layout');
+    }
+
+    if (settings.darkMode) {
+      container.classList.add('cfp-dark-mode');
+    } else {
+      container.classList.remove('cfp-dark-mode');
+    }
+
+    if (settings.mobileFilterLayout && settings.mobileFilterLayout.toLowerCase().replace(/_/g, '-').replace(/ /g, '-') === "horizontal-scrolling") {
+      container.classList.add('cfp-mobile-horizontal-scrolling');
+    } else {
+      container.classList.remove('cfp-mobile-horizontal-scrolling');
+    }
+
+    if (settings.desktopLikeOnMobile) {
+      container.classList.add('cfp-desktop-like-mobile');
+    } else {
+      container.classList.remove('cfp-desktop-like-mobile');
     }
   }
 
@@ -163,7 +207,12 @@
     // Update count labels
     const countLabel = document.querySelector('.cfp-product-count');
     if (countLabel) {
-      countLabel.textContent = `${totalCount} product${totalCount === 1 ? '' : 's'}`;
+      if (globalSettings && globalSettings.showProductCount === false) {
+        countLabel.style.display = 'none';
+      } else {
+        countLabel.style.display = '';
+        countLabel.textContent = `${totalCount} product${totalCount === 1 ? '' : 's'}`;
+      }
     }
 
     if (products.length === 0) {
@@ -257,8 +306,8 @@
     }
   }
 
-  // ── 5. Render Filters Sidebar dynamically ─────────────────────────
-  function renderFilterSidebar(settings, facets) {
+  // ── 5. Render Filters Sidebar dynamically ──────────────────────────────
+  function renderFilterSidebar(settings, facets, totalCount) {
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
 
@@ -309,28 +358,61 @@
         const prefixStr = s.sliderPrefix || prefix || "$";
         const suffixStr = s.sliderSuffix || "";
         const step = s.sliderStep || 1;
-        const maxLimit = parseFloat(s.sliderRange || "10000");
+        // Calculate max price from priceRanges
+        let maxLimit = 100000;
+        if (facets && facets.priceRanges && facets.priceRanges.length > 0) {
+          const maxValues = facets.priceRanges.map(r => {
+            const parts = r.label ? r.label.split('-') : [];
+            return parts.length === 2 ? parseFloat(parts[1]) : 0;
+          });
+          const highest = Math.max(...maxValues);
+          if (highest > 0) maxLimit = highest;
+        }
+
         maxPriceLimit = maxLimit; // Update global for active badge computation if needed
 
         const fillLeft = (activeFilters.minPrice / maxLimit) * 100;
         let effectiveMax = activeFilters.maxPrice;
-        if (effectiveMax === 9999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
+        if (effectiveMax === 999999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
         const fillRight = 100 - (effectiveMax / maxLimit) * 100;
         
+        const intervals = parseInt(s.sliderRange) > 0 ? parseInt(s.sliderRange) : 4;
+        const points = intervals + 1;
+        let ticksHtml = '<div class="cfp-slider-ticks" style="position: relative; height: 20px; margin-top: 8px;">';
+        
+        const formatValue = (val) => {
+          if (val === 0) return '0';
+          if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.0', '') + 'M';
+          if (val >= 1000) return (val / 1000).toFixed(1).replace('.0', '') + 'k';
+          return val.toFixed(1).replace('.0', '');
+        };
+        
+        const sliderColor = s.sliderColor || '#202223';
+
+        for (let i = 0; i < points; i++) {
+          const percent = (i / (points - 1)) * 100;
+          const val = (i / (points - 1)) * maxLimit;
+          ticksHtml += `
+            <div style="position: absolute; left: ${percent}%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; top: -3px; z-index: 0; pointer-events: none;">
+              <div style="width: 1px; height: 8px; background: ${sliderColor}; margin-bottom: 4px;"></div>
+              <span style="font-size: 11px; color: #6d7175; font-weight: 400;">${formatValue(val)}</span>
+            </div>
+          `;
+        }
+        ticksHtml += '</div>';
+
         groupContent = `
-          <div class="cfp-price-range">
+          <div class="cfp-price-range" style="--slider-color: ${sliderColor};">
             <div class="cfp-price-inputs">
               <div class="cfp-price-input-wrap">
-                <label for="cfp-price-min" class="cfp-price-label">Min</label>
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
                   <input type="number" id="cfp-price-min" class="cfp-price-input" value="${activeFilters.minPrice}" min="0" step="${step}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
-              <span class="cfp-price-divider">—</span>
+              <span class="cfp-price-divider">-</span>
               <div class="cfp-price-input-wrap">
-                <label for="cfp-price-max" class="cfp-price-label">Max</label>
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
                   <input type="number" id="cfp-price-max" class="cfp-price-input" value="${effectiveMax}" min="0" step="${step}">
@@ -343,6 +425,7 @@
               <div class="cfp-range-fill" id="cfp-slider-fill" style="left: ${fillLeft}%; right: ${fillRight}%;"></div>
               <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="0" max="${maxLimit}" value="${activeFilters.minPrice}" step="${step}">
               <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="0" max="${maxLimit}" value="${effectiveMax}" step="${step}">
+              ${ticksHtml}
             </div>
           </div>
         `;
@@ -383,8 +466,37 @@
             items.sort((a,b) => config.manualValues.indexOf(a.value) - config.manualValues.indexOf(b.value));
           }
         }
+        // Apply Values Transformation
+        if (adv.valuesTransformation && adv.valuesTransformation !== "No transformation") {
+          items.forEach(item => {
+            let label = item.label || item.value;
+            if (adv.valuesTransformation === "Uppercase") label = label.toUpperCase();
+            else if (adv.valuesTransformation === "Lowercase") label = label.toLowerCase();
+            else if (adv.valuesTransformation === "Capitalize") {
+              label = label.replace(/\b\w/g, l => l.toUpperCase());
+            }
+            item.label = label;
+          });
+        }
+
+        // Apply Advanced Sort
+        if (!config.useManualValues || !config.sortManualValues) {
+          if (adv.sortType) {
+            if (adv.sortType === "Label - AZ") items.sort((a,b) => (a.label || a.value).localeCompare(b.label || b.value));
+            else if (adv.sortType === "Label - ZA") items.sort((a,b) => (b.label || b.value).localeCompare(a.label || a.value));
+            else if (adv.sortType === "Product count - Highest to lowest") items.sort((a,b) => b.count - a.count);
+            else if (adv.sortType === "Product count - Lowest to highest") items.sort((a,b) => a.count - b.count);
+          }
+        }
         
         if (items.length === 0) return;
+
+        if (globalSettings && globalSettings.showFilterOptionsWithOneItem === false) {
+           if (items.length === 1 && items[0].count === totalCount) {
+              return; // skip rendering this filter group
+           }
+        }
+
 
         const activeArray = (type === 'vendor') ? activeFilters.vendors :
                             (type === 'product_type') ? activeFilters.types :
@@ -399,11 +511,24 @@
                           (type === 'metafield') ? `metafield-${key}` : type;
 
         const isColor = type === 'option' && (key.toLowerCase().includes('color') || key.toLowerCase().includes('colour'));
-        const resolvedMode = (displayMode === "Swatch" && !isColor) ? "List" : displayMode; // Fallback if swatch used on non-color
+        const resolvedMode = displayMode;
+        
+        const showMoreType = adv.showMoreType || "Scrollbar";
+        const limit = 6;
+        const isViewMore = (showMoreType === "View more" || showMoreType === "View more with scrollbar") && items.length > limit;
         
         // Wrapper for Max Height scroll
-        const scrollClass = (adv.showMoreType === "Scrollbar" && items.length > 6) ? "cfp-scroll-area" : "";
+        const scrollClass = (showMoreType === "Scrollbar" || showMoreType === "View more with scrollbar") && items.length > 6 ? "cfp-scroll-area" : "";
         const scrollStyle = scrollClass ? `style="max-height: ${adv.maxHeight || '300px'};"` : "";
+
+        const renderViewMoreBtn = () => {
+          if (!isViewMore) return '';
+          return `
+            <div class="cfp-view-more-action" style="margin-top: 8px;">
+              <button type="button" class="cfp-view-more-btn" style="background: none; border: none; color: #007bff; cursor: pointer; padding: 0; font-size: 13px; text-decoration: underline;">+ View more</button>
+            </div>
+          `;
+        };
 
         // Render based on displayMode
         if (resolvedMode === "Dropdown") {
@@ -412,47 +537,18 @@
               <option value="">Any ${setting.label}</option>
               ${items.map(item => `
                 <option value="${item.value}" ${activeArray.includes(item.value) ? 'selected' : ''}>
-                  ${prefix}${item.label || item.value} (${item.count})
+                  ${prefix}${item.label || item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}
                 </option>
               `).join('')}
             </select>
           `;
         }
-        else if (resolvedMode === "Swatch" || (isColor && displayMode === "List")) { // Always default color to Swatch for better UI if not overridden
-          groupContent = `
-            <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid">
-                ${items.map(item => {
-                  const colorHex = getColorHex(item.value);
-                  const isWhite = item.value.toLowerCase() === 'white';
-                  return `
-                    <label class="cfp-color-swatch" title="${item.value} (${item.count})">
-                      <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
-                      <span class="cfp-swatch-circle" style="background:${colorHex}; ${isWhite ? 'border: 1px solid #ddd;' : ''}"></span>
-                      <span class="cfp-swatch-label">${item.value}</span>
-                    </label>
-                  `;
-                }).join('')}
-              </div>
-            </div>
-          `;
-        }
-        else if (resolvedMode === "Box/Button" || resolvedMode === "Button") {
-          groupContent = `
-            <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-button-grid">
-                ${items.map(item => `
-                  <label class="cfp-button-chip" title="${item.value} (${item.count})">
-                    <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
-                    <span>${prefix}${item.label || item.value}</span>
-                  </label>
-                `).join('')}
-              </div>
-            </div>
-          `;
-        }
-        else { // Default: List
-          const hasSearch = adv.desktopSearchBox && items.length > 5;
+        else if (resolvedMode === "Swatch") {
+          const swatchConf = config.swatchConfig || {};
+          const isCircle = swatchConf.circleSwatch !== false;
+          const showLabel = swatchConf.showLabel === true;
+          const hasSearch = adv.desktopSearchBox;
+
           groupContent = `
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
@@ -461,14 +557,85 @@
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              ${items.map(item => `
-                <label class="cfp-checkbox">
+              <div class="cfp-color-grid" style="display: flex; flex-wrap: wrap; gap: 12px; flex-direction: ${swatchConf.layout === 'List' ? 'column' : 'row'};">
+                ${items.map((item, idx) => {
+                  let colorValue = getColorHex(item.value);
+                  let isImage = false;
+                  
+                  if (swatchConf.colors && swatchConf.colors[item.value]) {
+                    const cData = swatchConf.colors[item.value];
+                    if (cData.type === 'color' && cData.value) colorValue = cData.value;
+                    else if (cData.type === 'image' && cData.value) {
+                      colorValue = cData.value;
+                      isImage = true;
+                    }
+                  }
+                  
+                  const isWhite = !isImage && (colorValue.toLowerCase() === '#ffffff' || colorValue.toLowerCase() === 'white' || item.value.toLowerCase() === 'white');
+                  const hide = isViewMore && idx >= limit;
+                  const bgStyle = isImage ? `background: url('${colorValue}') center/cover;` : `background:${colorValue};`;
+                  const isList = swatchConf.layout === 'List';
+                  
+                  return `
+                    <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: 6px; cursor: pointer; flex-direction: ${isList ? 'row' : 'column'}; justify-content: ${isList ? 'flex-start' : 'center'};" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''} style="display:none;">
+                      <span class="cfp-swatch-circle" style="${bgStyle} width: 24px; height: 24px; display: inline-block; ${isCircle ? 'border-radius: 50%;' : 'border-radius: 4px;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${activeArray.includes(item.value) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0;"></span>
+                      ${showLabel ? `<span class="cfp-swatch-label" style="font-size: ${isList ? '13px' : '12px'}; text-align: ${isList ? 'left' : 'center'};">${item.value}</span>` : `<span class="cfp-swatch-label" style="display:none;">${item.value}</span>`}
+                    </label>
+                  `;
+                }).join('')}
+              </div>
+              ${renderViewMoreBtn()}
+            </div>
+          `;
+        }
+        else if (resolvedMode === "Box/Button" || resolvedMode === "Button" || resolvedMode === "Box") {
+          const hasSearch = adv.desktopSearchBox;
+          groupContent = `
+            ${hasSearch ? `
+              <div class="cfp-search-input-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+              </div>
+            ` : ''}
+            <div class="${scrollClass}" ${scrollStyle}>
+              <div class="cfp-button-grid">
+                ${items.map((item, idx) => {
+                  const hide = isViewMore && idx >= limit;
+                  return `
+                  <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                    <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
+                    <span>${prefix}${item.label || item.value}</span>
+                  </label>
+                  `;
+                }).join('')}
+              </div>
+              ${renderViewMoreBtn()}
+            </div>
+          `;
+        }
+        else { // Default: List
+          const hasSearch = adv.desktopSearchBox;
+          groupContent = `
+            ${hasSearch ? `
+              <div class="cfp-search-input-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+              </div>
+            ` : ''}
+            <div class="${scrollClass}" ${scrollStyle}>
+              ${items.map((item, idx) => {
+                const hide = isViewMore && idx >= limit;
+                return `
+                <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}">
                   <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
                   <span class="cfp-checkbox__box"></span>
                   <span class="cfp-checkbox__label">${prefix}${item.label || item.value}</span>
                   <span class="cfp-checkbox__count">${item.count}</span>
                 </label>
-              `).join('')}
+                `;
+              }).join('')}
+              ${renderViewMoreBtn()}
             </div>
           `;
         }
@@ -478,8 +645,13 @@
       html += `
         <div class="cfp-group" data-group="${type}-${key || ''}">
           <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="cfp-group-${type}-${key || ''}">
-            <span>${setting.label}</span>
-            <svg class="cfp-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span>${setting.label}</span>
+              ${adv.displayTooltip ? `
+                <div class="cfp-tooltip-icon" data-tooltip="${(adv.tooltipContent || '').replace(/"/g, '&quot;')}">?</div>
+              ` : ''}
+            </div>
+            <svg class="cfp-chevron" viewBox="0 0 20 20" style="width: 12px; height: 12px; fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
           </button>
           <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${type}-${key || ''}">
             ${groupContent}
@@ -556,18 +728,48 @@
   }
 
   function setupDynamicFieldListeners() {
-    // Brand search input
-    const vendorSearch = sidebar.querySelector('.cfp-vendor-search');
-    if (vendorSearch) {
-      vendorSearch.addEventListener('input', () => {
-        const q = vendorSearch.value.toLowerCase().trim();
-        const wrapper = vendorSearch.closest('.cfp-group');
+    // Search input for all filter types
+    sidebar.querySelectorAll('.cfp-search-input').forEach(searchInput => {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase().trim();
+        const wrapper = searchInput.closest('.cfp-group');
+        
+        // Filter list items
         wrapper.querySelectorAll('.cfp-checkbox').forEach(label => {
           const txt = label.querySelector('.cfp-checkbox__label');
           label.style.display = (!txt || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
         });
+        
+        // Filter button chips
+        wrapper.querySelectorAll('.cfp-button-chip').forEach(label => {
+          const txt = label.querySelector('span');
+          label.style.display = (!txt || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        });
+        
+        // Filter swatches
+        wrapper.querySelectorAll('.cfp-color-swatch').forEach(label => {
+          const txt = label.querySelector('.cfp-swatch-label') || label;
+          label.style.display = (!txt || txt.title.toLowerCase().includes(q) || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        });
       });
-    }
+    });
+
+    // View more toggle
+    sidebar.querySelectorAll('.cfp-view-more-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const wrapper = btn.closest('.cfp-group__content');
+        const hiddenItems = wrapper.querySelectorAll('.cfp-view-more-hidden');
+        const isExpanded = btn.textContent.includes('less');
+        
+        if (isExpanded) {
+          hiddenItems.forEach(el => el.style.display = 'none');
+          btn.textContent = '+ View more';
+        } else {
+          hiddenItems.forEach(el => el.style.display = '');
+          btn.textContent = '- View less';
+        }
+      });
+    });
 
     // Price input changes
     const minInput = document.getElementById('cfp-price-min');
@@ -770,13 +972,102 @@
       availability: [],
       priceRanges: [],
       minPrice: 0,
-      maxPrice: 9999,
+      maxPrice: 999999,
       sortBy: activeFilters.sortBy,
       page: 1
     };
 
     fetchAndRenderData();
     closeSidebar();
+  }
+
+  function removeFilter(type, val) {
+    if (type === 'price') {
+      activeFilters.minPrice = 0;
+      activeFilters.maxPrice = 999999;
+      activeFilters.priceRanges = [];
+    } else if (type === 'vendor') {
+      activeFilters.vendors = activeFilters.vendors.filter(x => x !== val);
+    } else if (type === 'type') {
+      activeFilters.types = activeFilters.types.filter(x => x !== val);
+    } else if (type === 'tag') {
+      activeFilters.tags = activeFilters.tags.filter(x => x !== val);
+    } else if (type === 'title') {
+      activeFilters.titles = activeFilters.titles.filter(x => x !== val);
+    } else if (type === 'collection') {
+      activeFilters.collections = activeFilters.collections.filter(x => x !== val);
+    } else if (type === 'availability') {
+      activeFilters.availability = activeFilters.availability.filter(x => x !== val);
+    } else if (type.startsWith('option-')) {
+      const k = type.replace('option-', '');
+      activeFilters.options[k] = activeFilters.options[k].filter(x => x !== val);
+    } else if (type.startsWith('metafield-')) {
+      const k = type.replace('metafield-', '');
+      activeFilters.metafields[k] = activeFilters.metafields[k].filter(x => x !== val);
+    }
+    activeFilters.page = 1;
+    fetchAndRenderData();
+  }
+
+  function renderBreadcrumbs() {
+    const breadcrumbs = document.getElementById('cfp-breadcrumbs');
+    if (!breadcrumbs) return;
+
+    if (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) {
+      breadcrumbs.style.display = 'none';
+      breadcrumbs.innerHTML = '';
+      return;
+    }
+
+    let chipsHTML = '';
+    let hasFilters = false;
+
+    const addChip = (label, type, val) => {
+      hasFilters = true;
+      chipsHTML += `<span class="cfp-breadcrumb-chip" data-type="${type}" data-val="${val}">${label} <button class="cfp-breadcrumb-remove">&times;</button></span>`;
+    };
+
+    activeFilters.vendors.forEach(v => addChip(`Vendor: ${v}`, 'vendor', v));
+    activeFilters.types.forEach(v => addChip(`Type: ${v}`, 'type', v));
+    activeFilters.tags.forEach(v => addChip(`Tag: ${v}`, 'tag', v));
+    (activeFilters.titles || []).forEach(v => addChip(`Title: ${v}`, 'title', v));
+    activeFilters.collections.forEach(v => addChip(`Collection: ${v}`, 'collection', v));
+    activeFilters.availability.forEach(v => addChip(`Availability: ${v.replace('_', ' ')}`, 'availability', v));
+    
+    Object.keys(activeFilters.options).forEach(k => {
+      activeFilters.options[k].forEach(v => addChip(`${k}: ${v}`, `option-${k}`, v));
+    });
+    
+    Object.keys(activeFilters.metafields).forEach(k => {
+      activeFilters.metafields[k].forEach(v => addChip(`${k.split('.')[1] || k}: ${v}`, `metafield-${k}`, v));
+    });
+
+    if (activeFilters.minPrice > 0 || activeFilters.maxPrice < 999999) {
+      addChip(`Price: $${activeFilters.minPrice} - $${activeFilters.maxPrice}`, 'price', 'range');
+    }
+
+    if (hasFilters) {
+      chipsHTML += `<span class="cfp-breadcrumb-clear" style="cursor:pointer; font-size:13px; text-decoration:underline; margin-left:10px;">Clear All</span>`;
+      breadcrumbs.innerHTML = chipsHTML;
+      breadcrumbs.style.display = 'flex';
+
+      // Attach events
+      breadcrumbs.querySelectorAll('.cfp-breadcrumb-chip').forEach(chip => {
+        chip.querySelector('.cfp-breadcrumb-remove').addEventListener('click', () => {
+          const t = chip.getAttribute('data-type');
+          const v = chip.getAttribute('data-val');
+          removeFilter(t, v);
+        });
+      });
+      
+      const clearBtn = breadcrumbs.querySelector('.cfp-breadcrumb-clear');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', clearAllFilters);
+      }
+    } else {
+      breadcrumbs.style.display = 'none';
+      breadcrumbs.innerHTML = '';
+    }
   }
 
   function updateActiveCountBadge() {
@@ -849,9 +1140,14 @@
         grid.parentElement.insertBefore(wrapper, grid);
       }
 
+      const breadcrumbs = document.getElementById('cfp-breadcrumbs');
+
       if (topBar) {
         wrapper.appendChild(topBar);
         topBar.style.display = 'flex';
+      }
+      if (breadcrumbs) {
+        wrapper.appendChild(breadcrumbs);
       }
       wrapper.appendChild(sidebar);
       wrapper.appendChild(grid);

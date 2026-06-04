@@ -525,6 +525,15 @@ export default function PinningEditor() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background-color: #94a3b8;
         }
+        .product-search-card .pin-btn-overlay {
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.2s, visibility 0.2s;
+        }
+        .product-search-card:hover .pin-btn-overlay {
+          opacity: 1;
+          visibility: visible;
+        }
       `}</style>
       <ui-title-bar title={name}>
         <button
@@ -838,6 +847,7 @@ export default function PinningEditor() {
                   {searchResults.map((prod) => (
                       <div
                         key={prod.id}
+                        className="product-search-card"
                         draggable
                         onDragStart={(e) => {
                           e.dataTransfer.effectAllowed = "copy";
@@ -868,17 +878,17 @@ export default function PinningEditor() {
                           )}
                           
                           {/* Pin Button overlay */}
-                          <div style={{ position: "absolute", top: "8px", right: "8px" }}>
+                          <div className="pin-btn-overlay" style={{ position: "absolute", top: "8px", right: "8px" }}>
                             <button 
                               onClick={() => handlePin(prod)} 
-                              style={{ width: "28px", height: "28px", background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e2e8f0", cursor: "pointer", color: "#007bff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)", transition: "all 0.1s" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "#007bff"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.border = "none"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "#007bff"; e.currentTarget.style.border = "1px solid #e2e8f0"; }}
+                              style={{ width: "32px", height: "32px", background: "#007bff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", color: "#fff", boxShadow: "0 2px 6px rgba(0,123,255,0.4)", transition: "transform 0.1s" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.1)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                               onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"}
-                              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+                              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1.1)"}
                               title="Pin this product"
                             >
-                              <svg style={{ width: "14px", height: "14px", transform: "rotate(45deg)" }} fill="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                              <svg style={{ width: "16px", height: "16px", transform: "rotate(45deg)" }} fill="currentColor" viewBox="0 0 24 24"><path d="M16 12V4h1a1 1 0 000-2H7a1 1 0 000 2h1v8l-2 3v2h5v6l1 1 1-1v-6h5v-2l-2-3z"></path></svg>
                             </button>
                           </div>
                         </div>

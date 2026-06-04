@@ -380,9 +380,20 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
   const [mainCollections, setMainCollections] = useState([{ id: Date.now(), collection: "" }]);
   const [keepMainCollectionsUnchanged, setKeepMainCollectionsUnchanged] = useState(false);
 
+  // Swatch State
+  const [swatchConfig, setSwatchConfig] = useState({
+    circleSwatch: true,
+    showLabel: false,
+    layout: "Grid",
+    colors: {}
+  });
+  const [swatchSearch, setSwatchSearch] = useState("");
+  const [selectedSwatch, setSelectedSwatch] = useState(null);
+  const [hoveredSwatch, setHoveredSwatch] = useState(null);
   // Preview State
   const [device, setDevice] = useState("desktop");
   const [layout, setLayout] = useState("sidebar");
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
 
   const [advanced, setAdvanced] = useState({
     displayTooltip: false,
@@ -412,7 +423,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         setExcludedValues(initialData.excludedValues || []);
         setManualValues(initialData.manualValues || []);
         setSortManualValues(initialData.sortManualValues || false);
-        setDisplayMode(initialData.displayMode || "List");
+        if (initialData.displayMode) {
+          const mode = initialData.displayMode;
+          setDisplayMode(mode.charAt(0).toUpperCase() + mode.slice(1).toLowerCase());
+        } else {
+          setDisplayMode("List");
+        }
         
         if (initialData.priceRanges) setPriceRanges(initialData.priceRanges.map(r => ({ ...r, from: r.from !== undefined ? r.from : (r.min || ""), to: r.to !== undefined ? r.to : (r.max || "") })));
         if (initialData.saleRanges) setSaleRanges(initialData.saleRanges);
@@ -421,6 +437,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         if (initialData.stockStatusConfig) setStockStatusConfig(initialData.stockStatusConfig);
         if (initialData.ratingColor) setRatingColor(initialData.ratingColor);
         if (initialData.sliderConfig) setSliderConfig(initialData.sliderConfig);
+        if (initialData.swatchConfig) setSwatchConfig(initialData.swatchConfig);
 
         if (initialData.advanced) {
           setAdvanced(prev => ({ ...prev, ...initialData.advanced }));
@@ -476,6 +493,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           outOfStock: true, outOfStockLabel: "Out of stock", outOfStockType: "checkbox"
         });
         setRatingColor("#ffff00");
+        setSwatchConfig({
+          circleSwatch: true,
+          showLabel: false,
+          layout: "Grid",
+          colors: {}
+        });
         setSliderConfig({
           sliderRange: 4,
           sliderStep: 0.1,
@@ -490,6 +513,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         });
       }
       setActiveTab("general");
+      setPreviewCollapsed(false);
     }
   }, [isOpen, initialData]);
 
@@ -583,21 +607,25 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     );
   };
 
-  const renderSliderPreview = (isTopLayout) => {
+  const getColorHex = (colorName) => {
+    const colors = {
+      black: '#1a1a1a', white: '#ffffff', red: '#e63946', blue: '#4361ee', green: '#2a9d8f', yellow: '#e9c46a', orange: '#f4a261', pink: '#ffb5a7', grey: '#8d99ae', gray: '#8d99ae', purple: '#7209b7', brown: '#6c584c'
+    };
+    return colors[colorName.toLowerCase()] || colorName;
+  };
+
+  const renderSliderPreview = (isTopLayout, currentDevice = "desktop") => {
     const { sliderRange, sliderColor, sliderValueSymbols, sliderPrefix, sliderSuffix, showInputPrefixSuffix } = sliderConfig;
     const ticks = [];
-    const points = Math.max(2, sliderRange + 1);
-    
-    // For visual preview, let's assume a range 0 to 1,000,000
+    const intervals = parseInt(sliderRange) > 0 ? parseInt(sliderRange) : 4;
+    const points = intervals + 1;
     const maxVal = 1000000;
     
     const formatValue = (val) => {
       if (val === 0) return '0';
-      if (val === maxVal) return `1M`;
-      if (val === 250000) return `250k`;
-      if (val === 500000) return `500k`;
-      if (val === 750000) return `750k`;
-      return val;
+      if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.0', '') + 'M';
+      if (val >= 1000) return (val / 1000).toFixed(1).replace('.0', '') + 'k';
+      return val.toFixed(1).replace('.0', '');
     };
 
     for (let i = 0; i < points; i++) {
@@ -605,25 +633,28 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
       const val = (i / (points - 1)) * maxVal;
       ticks.push(
         <div key={i} style={{ position: "absolute", left: `${percent}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", top: "4px" }}>
-          <div style={{ width: "1px", height: "6px", background: "#6d7175", marginBottom: "4px" }}></div>
+          <div style={{ width: "1px", height: "6px", background: sliderColor || "#202223", marginBottom: "4px" }}></div>
           <span style={{ fontSize: "10px", color: "#202223", fontWeight: "400" }}>{sliderPrefix}{formatValue(val)}{sliderSuffix}</span>
         </div>
       );
     }
 
+    const hasBorderBox = currentDevice === "desktop" && isTopLayout;
+    const showTooltipArrow = currentDevice === "desktop" && isTopLayout;
+
     return (
       <div style={{ 
         display: "flex", flexDirection: "column", gap: "28px", 
-        padding: isTopLayout ? "16px" : "12px 0",
-        background: isTopLayout ? "#ffffff" : "transparent",
-        borderRadius: isTopLayout ? "8px" : "0",
-        border: isTopLayout ? "1px solid #e1e3e5" : "none",
-        boxShadow: isTopLayout ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+        padding: hasBorderBox ? "16px" : "12px 0",
+        background: hasBorderBox ? "#ffffff" : "transparent",
+        borderRadius: hasBorderBox ? "8px" : "0",
+        border: hasBorderBox ? "1px solid #e1e3e5" : "none",
+        boxShadow: showTooltipArrow ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
         position: "relative",
-        marginTop: isTopLayout ? "8px" : "0",
+        marginTop: showTooltipArrow ? "8px" : "0",
         paddingBottom: "32px"
       }}>
-        {isTopLayout && (
+        {showTooltipArrow && (
           <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
         )}
         
@@ -636,15 +667,15 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           <span style={{ color: "#202223", fontWeight: "400" }}>-</span>
           <div style={{ flex: 1, position: "relative" }}>
             {showInputPrefixSuffix && sliderPrefix && <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderPrefix}</span>}
-            <input type="text" value="1000000" readOnly style={{ width: "100%", padding: `8px 12px`, paddingLeft: showInputPrefixSuffix && sliderPrefix ? "24px" : "12px", paddingRight: showInputPrefixSuffix && sliderSuffix ? "24px" : "12px", borderRadius: "4px", border: "1px solid #c9cccf", fontSize: "13px", color: "#202223", textAlign: "center" }} />
+            <input type="text" value={maxVal} readOnly style={{ width: "100%", padding: `8px 12px`, paddingLeft: showInputPrefixSuffix && sliderPrefix ? "24px" : "12px", paddingRight: showInputPrefixSuffix && sliderSuffix ? "24px" : "12px", borderRadius: "4px", border: "1px solid #c9cccf", fontSize: "13px", color: "#202223", textAlign: "center" }} />
             {showInputPrefixSuffix && sliderSuffix && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#6d7175", fontSize: "13px" }}>{sliderSuffix}</span>}
           </div>
         </div>
 
         <div style={{ padding: "0 10px", marginTop: "4px" }}>
-          <div style={{ position: "relative", height: "2px", background: "#202223" }}>
-            <div style={{ position: "absolute", left: "0%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid #202223`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
-            <div style={{ position: "absolute", left: "100%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid #202223`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
+          <div style={{ position: "relative", height: "2px", background: sliderColor || "#202223" }}>
+            <div style={{ position: "absolute", left: "0%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid ${sliderColor || "#202223"}`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
+            <div style={{ position: "absolute", left: "100%", top: "50%", transform: "translate(-50%, -50%)", width: "18px", height: "18px", background: "#fff", border: `2px solid ${sliderColor || "#202223"}`, borderRadius: "50%", cursor: "pointer", zIndex: 2 }}></div>
             {ticks}
           </div>
         </div>
@@ -770,7 +801,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       setOptionType(val);
                       
                       // Check if current display mode is valid for the new option type
-                      const validModes = ["tags", "color", "denominations", "title"].includes(val) ? ["List", "Box", "Swatch"] : ["List", "Box"];
+                      const validModes = ["price", "percent_sale", "weight", "review_rating"].includes(val) ? ["List", "Range"] : ["List", "Box", "Swatch"];
                       if (!validModes.includes(displayMode)) {
                         setDisplayMode("List");
                       }
@@ -827,31 +858,32 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     value={displayMode} 
                     onChange={setDisplayMode} 
                     options={
-                      ["tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) ? ["List", "Box", "Swatch"] 
-                      : ["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? ["List", "Range"]
-                      : ["List", "Box"]
+                      ["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? ["List", "Range"]
+                      : ["List", "Box", "Swatch"]
                     } 
                     width="100%"
                   />
                 </div>
 
                 {/* Navigation Collections */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Checkbox checked={navCollections} onChange={setNavCollections} />
-                    <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Navigation collections</span>
-                    <TooltipIcon content={"On a collection page, if this option is checked and user selects a collection, he/she is redirected to the corresponding collection page. Manual values must be used in this case."} />
+                {!["vendor", "product_type", "denominations", "title", "size"].includes(optionType) && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Checkbox checked={navCollections} onChange={setNavCollections} />
+                      <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Navigation collections</span>
+                      <TooltipIcon content={"On a collection page, if this option is checked and user selects a collection, he/she is redirected to the corresponding collection page. Manual values must be used in this case."} />
+                    </div>
+                    {navCollections && (
+                      <SimpleDropdown 
+                        value={childType} 
+                        onChange={setChildType} 
+                        options={["None", "Tags", "Collections", "Hyperlink"]} 
+                      />
+                    )}
                   </div>
-                  {navCollections && (
-                    <SimpleDropdown 
-                      value={childType} 
-                      onChange={setChildType} 
-                      options={["None", "Tags", "Collections", "Hyperlink"]} 
-                    />
-                  )}
-                </div>
+                )}
 
-                {navCollections && (
+                {navCollections && !["vendor", "product_type", "denominations", "title", "size"].includes(optionType) && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginLeft: "28px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Main collection</label>
@@ -963,9 +995,19 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider color</label>
                                 <TooltipIcon content="Color of the active slider track." />
                               </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 16px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 16px", border: "1px solid transparent" }}>
                                 <input type="text" value={sliderConfig.sliderColor} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", padding: "6px 0", outline: "none" }} />
-                                <div style={{ width: "16px", height: "16px", background: sliderConfig.sliderColor, border: "1px solid rgba(0,0,0,0.1)", borderRadius: "2px" }}></div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <div style={{ position: "relative", width: "16px", height: "16px", borderRadius: "2px", overflow: "hidden", border: "1px solid rgba(0,0,0,0.1)" }}>
+                                    <input type="color" value={sliderConfig.sliderColor || "#007bff"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", top: "-10px", left: "-10px", width: "40px", height: "40px", cursor: "pointer", border: "none", padding: 0 }} />
+                                  </div>
+                                  <div style={{ position: "relative" }}>
+                                    <input type="color" value={sliderConfig.sliderColor || "#007bff"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", opacity: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                                    <svg viewBox="0 0 20 20" style={{ width: "12px", height: "12px", fill: "#007bff" }}>
+                                      <path d="M2 14.5v3.5h3.5l10.19-10.19-3.5-3.5L2 14.5zm16.14-9.8c.2-.2.2-.51 0-.71l-2.79-2.79c-.2-.2-.51-.2-.71 0l-1.68 1.68 3.5 3.5 1.68-1.68z" />
+                                    </svg>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                             <div style={{ flex: 1 }}>
@@ -1175,6 +1217,210 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       </div>
 
                     </div>
+                  ) : displayMode === "Swatch" ? (
+                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setSwatchConfig({...swatchConfig, circleSwatch: !swatchConfig.circleSwatch})}>
+                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.circleSwatch ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                              <span style={{ position: "absolute", height: "14px", width: "14px", left: swatchConfig.circleSwatch ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "14px", color: "#202223", fontWeight: "500" }}>{swatchConfig.circleSwatch ? "Circle swatch" : "Rectangle swatch"}</span>
+                        </div>
+                        <div style={{ position: "relative", width: "250px" }}>
+                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
+                          <input 
+                            type="text"
+                            placeholder="Search swatch value"
+                            value={swatchSearch}
+                            onChange={(e) => setSwatchSearch(e.target.value)}
+                            style={{ width: "100%", padding: "8px 16px 8px 36px", borderRadius: "20px", border: "1px solid #e1e3e5", background: "#f0f4f9", fontSize: "13px", color: "#007bff", outline: "none" }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setSwatchConfig({...swatchConfig, showLabel: !swatchConfig.showLabel})}>
+                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.showLabel ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                              <span style={{ position: "absolute", height: "14px", width: "14px", left: swatchConfig.showLabel ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Show swatch label</span>
+                        </div>
+                        {swatchConfig.showLabel && (
+                          <div style={{ width: "150px" }}>
+                            <select 
+                              value={swatchConfig.layout || "Grid"} 
+                              onChange={(e) => setSwatchConfig({...swatchConfig, layout: e.target.value})}
+                              style={{ width: "100%", padding: "8px 12px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px", outline: "none", cursor: "pointer" }}
+                            >
+                              <option value="Grid">Grid</option>
+                              <option value="List">List</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", maxHeight: "200px", overflowY: "auto", padding: "10px", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#f9fafb" }}>
+                        {currentOptionsLabels.filter(l => l.toLowerCase().includes(swatchSearch.toLowerCase())).map(label => {
+                          const isSelected = selectedSwatch === label;
+                          const colorData = swatchConfig.colors[label];
+                          return (
+                            <div 
+                              key={label}
+                              onClick={() => setSelectedSwatch(label)}
+                              onMouseEnter={() => setHoveredSwatch(label)}
+                              onMouseLeave={() => setHoveredSwatch(null)}
+                              style={{ 
+                                display: "flex", alignItems: "center", gap: "6px", cursor: "pointer",
+                                padding: "4px", borderRadius: "50%",
+                                background: isSelected ? "#e3f1df" : "transparent",
+                                border: isSelected ? "1px solid #4caf50" : "1px solid transparent",
+                                position: "relative"
+                              }}
+                            >
+                              <div style={{ 
+                                width: "32px", height: "32px", 
+                                borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", 
+                                background: colorData?.type === "color" && colorData.value ? colorData.value : (colorData?.type === "image" && colorData.value ? `url(${colorData.value}) center/cover` : getColorHex(label)), 
+                                border: "1px solid #c9cccf",
+                                display: "flex", alignItems: "center", justifyContent: "center"
+                              }}>
+                              </div>
+                              {hoveredSwatch === label && (
+                                <div style={{
+                                  position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: "8px",
+                                  background: "#202223", color: "#fff", fontSize: "12px", padding: "4px 8px",
+                                  borderRadius: "4px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none"
+                                }}>
+                                  {label}
+                                  <div style={{
+                                    position: "absolute", bottom: "-4px", left: "50%", transform: "translateX(-50%)",
+                                    borderWidth: "4px 4px 0", borderStyle: "solid", borderColor: "#202223 transparent transparent transparent"
+                                  }}></div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {selectedSwatch && (
+                        <div style={{ padding: "16px", background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", marginTop: "8px" }}>
+                          <div style={{ fontSize: "13px", color: "#202223", marginBottom: "12px" }}>
+                            Assign a color or pattern to <strong>{selectedSwatch}</strong> option. For a color swatch enter a HEX value. For a pattern swatch paste an image URL.
+                          </div>
+                          
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 12px", flex: 1 }}>
+                              <div style={{ position: "relative", width: "24px", height: "24px", borderRadius: "4px", overflow: "hidden", border: "1px solid #c9cccf", flexShrink: 0 }}>
+                                <input 
+                                  type="color" 
+                                  value={swatchConfig.colors[selectedSwatch]?.type === "color" && swatchConfig.colors[selectedSwatch]?.value ? swatchConfig.colors[selectedSwatch].value : "#ffffff"} 
+                                  onChange={(e) => setSwatchConfig({
+                                    ...swatchConfig, 
+                                    colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "color", value: e.target.value } }
+                                  })}
+                                  style={{ position: "absolute", top: "-10px", left: "-10px", width: "50px", height: "50px", cursor: "pointer", border: "none", padding: 0 }} 
+                                />
+                              </div>
+                              <input 
+                                type="text"
+                                placeholder="HEX code"
+                                value={swatchConfig.colors[selectedSwatch]?.type === "color" && swatchConfig.colors[selectedSwatch]?.value ? swatchConfig.colors[selectedSwatch].value : ""}
+                                onChange={(e) => setSwatchConfig({
+                                  ...swatchConfig, 
+                                  colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "color", value: e.target.value } }
+                                })}
+                                style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", outline: "none" }}
+                              />
+                            </div>
+                            <span style={{ fontSize: "13px", color: "#6d7175", fontWeight: "600" }}>OR</span>
+                            <div style={{ flex: 1 }}>
+                              <input 
+                                type="text"
+                                placeholder="https://www.my-site.com/my-image.png"
+                                value={swatchConfig.colors[selectedSwatch]?.type === "image" && swatchConfig.colors[selectedSwatch]?.value ? swatchConfig.colors[selectedSwatch].value : ""}
+                                onChange={(e) => setSwatchConfig({
+                                  ...swatchConfig, 
+                                  colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "image", value: e.target.value } }
+                                })}
+                                style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px", outline: "none" }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", marginTop: "16px" }}>
+                        <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setUseManualValues(!useManualValues)}>
+                          <span style={{ position: "absolute", inset: 0, backgroundColor: useManualValues ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                            <span style={{ position: "absolute", height: "14px", width: "14px", left: useManualValues ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "13px", color: useManualValues ? "#202223" : "#6d7175" }}>
+                          {useManualValues ? "The manual values below are shown to your customers" : `No manual values. Your customers see all ${filterTitle || "Color (product option)"} values.`}
+                        </span>
+                      </div>
+                      
+                      {!useManualValues ? (
+                        <div style={{ marginBottom: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                            <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Excluded values</label>
+                            <TooltipIcon content="The option values that should not be shown in the filter." />
+                          </div>
+                          <MultiSelectDropdown 
+                            value={excludedValues}
+                            onChange={setExcludedValues}
+                            options={currentOptionsLabels}
+                            placeholder="Select values to exclude"
+                            renderTagsOutside={true}
+                          />
+                          {excludedValues.length > 0 && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                              {excludedValues.map(v => (
+                                <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                  {v}
+                                  <span onClick={() => setExcludedValues(excludedValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ marginBottom: "16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                              <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Manual values</label>
+                              <TooltipIcon content="The option values that should be shown in the filter." />
+                            </div>
+                            <MultiSelectDropdown 
+                              value={manualValues}
+                              onChange={setManualValues}
+                              options={currentOptionsLabels}
+                              placeholder="Select values to show"
+                              renderTagsOutside={true}
+                            />
+                            {manualValues.length > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
+                                {manualValues.map(v => (
+                                  <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                    {v}
+                                    <span onClick={() => setManualValues(manualValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <Checkbox checked={sortManualValues} onChange={setSortManualValues} />
+                            <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Sort manual values</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   ) : (
                     <>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
@@ -1269,12 +1515,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
               <div style={{ display: "flex", flexDirection: "column", gap: "24px", paddingBottom: "24px" }}>
                 {/* Display tooltip */}
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Checkbox 
-                      checked={advanced.displayTooltip} 
-                      onChange={(checked) => setAdvanced({ ...advanced, displayTooltip: checked })} 
-                    />
-                    <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Display tooltip</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, displayTooltip: !advanced.displayTooltip })}>
+                      <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.displayTooltip ? "#007bff" : "#fff", border: `1px solid ${advanced.displayTooltip ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                      <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.displayTooltip ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.displayTooltip ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
+                    </div>
+                    <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, displayTooltip: !advanced.displayTooltip })}>Display tooltip</label>
                     <TooltipIcon content="Show a tooltip icon next to the filter title." />
                   </div>
                   
@@ -1295,7 +1541,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   )}
                 </div>
 
-                {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) ? (
+                {!["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? (
                   <>
                     {/* Values transformation */}
                     <div>
@@ -1370,21 +1616,21 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
                     <h4 style={{ margin: 0, fontSize: "13px", color: "#202223" }}>On desktop</h4>
                     
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Checkbox 
-                        checked={advanced.desktopCollapsed} 
-                        onChange={checked => setAdvanced({ ...advanced, desktopCollapsed: checked })} 
-                      />
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Initially collapsed</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopCollapsed ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopCollapsed ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
+                      </div>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
                       <TooltipIcon content="Filter block will be collapsed when the page loads on desktop." />
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Checkbox 
-                        checked={advanced.desktopSearchBox} 
-                        onChange={checked => setAdvanced({ ...advanced, desktopSearchBox: checked })} 
-                      />
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show search box</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopSearchBox: !advanced.desktopSearchBox })}>
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopSearchBox ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopSearchBox ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopSearchBox ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopSearchBox ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
+                      </div>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopSearchBox: !advanced.desktopSearchBox })}>Show search box</label>
                       <TooltipIcon content="Show a search input inside the filter block on desktop." />
                     </div>
                   </div>
@@ -1392,12 +1638,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
                     <h4 style={{ margin: 0, fontSize: "13px", color: "#202223" }}>On mobile</h4>
                     
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "32px" }}>
-                      <Checkbox 
-                        checked={advanced.mobileSearchBox} 
-                        onChange={checked => setAdvanced({ ...advanced, mobileSearchBox: checked })} 
-                      />
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show search box</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "32px" }}>
+                      <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, mobileSearchBox: !advanced.mobileSearchBox })}>
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.mobileSearchBox ? "#007bff" : "#fff", border: `1px solid ${advanced.mobileSearchBox ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.mobileSearchBox ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.mobileSearchBox ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
+                      </div>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, mobileSearchBox: !advanced.mobileSearchBox })}>Show search box</label>
                       <TooltipIcon content="Show a search input inside the filter block on mobile." />
                     </div>
                   </div>
@@ -1408,16 +1654,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     {/* Restricted Options (e.g. Price) only show Initially Collapsed */}
                     <div style={{ marginTop: "16px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#202223", display: "block", marginBottom: "12px" }}>On desktop</label>
-                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                        <input 
-                          type="checkbox" 
-                          checked={advanced.desktopCollapsed} 
-                          onChange={e => setAdvanced({ ...advanced, desktopCollapsed: e.target.checked })} 
-                          style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                        />
-                        <span style={{ fontSize: "14px", color: "#007bff" }}>Initially collapsed</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>
+                          <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                          <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopCollapsed ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopCollapsed ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
+                        </div>
+                        <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
                         <TooltipIcon content="When checked, the filter is initially collapsed." />
-                      </label>
+                      </div>
                     </div>
                   </>
                 )}
@@ -1463,10 +1707,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
               </div>
 
               {/* Preview Box */}
-              <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px", minHeight: "200px", overflowY: "auto", flex: 1 }}>
+              <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px", overflowY: "auto" }}>
                 {device === "desktop" ? (
                   <>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <div 
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", cursor: "pointer" }}
+                      onClick={() => setPreviewCollapsed(!previewCollapsed)}
+                    >
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}>
                         <h3 style={{ margin: 0, fontSize: "12px", fontWeight: "700", color: "#202223", textTransform: "uppercase" }}>
                           {filterTitle || "COLLECTION"}
@@ -1475,10 +1722,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           <div title={advanced.tooltipContent} style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#f4f6f8", color: "#8c9196", fontSize: "9px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #d2d5d8", cursor: "help" }}>?</div>
                         )}
                       </div>
-                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#202223", transform: advanced.desktopCollapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><path d="M5 8l5 5 5-5z" /></svg>
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#202223", transform: previewCollapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><path d="M5 8l5 5 5-5z" /></svg>
                     </div>
 
-                    {!advanced.desktopCollapsed && (
+                    {!previewCollapsed && (
                       <div style={{ 
                         display: "flex", 
                         flexDirection: "column", 
@@ -1487,7 +1734,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible",
                         paddingRight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "4px" : "0"
                       }}>
-                        {displayMode === "Range" ? renderSliderPreview(layout === "top") : (
+                        {displayMode === "Range" ? renderSliderPreview(layout === "top", device) : (
                           <div style={{
                             display: "flex", flexDirection: "column", gap: "8px",
                             padding: layout === "top" ? "16px" : "0",
@@ -1501,7 +1748,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {layout === "top" && (
                               <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
                             )}
-                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.desktopSearchBox && (
+                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations", "size"].includes(optionType) && advanced.desktopSearchBox && (
                               <input 
                                 type="text" 
                                 placeholder="Filter options" 
@@ -1510,27 +1757,61 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             )}
 
                             {displayMode === "Box" ? (
-                              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                                {currentOptionsData
-                                  .filter(item => !excludedValues.includes(item.label))
-                                  .map(item => (
-                                    <div key={item.label} style={{ padding: "6px 8px", border: "1px solid #c9cccf", borderRadius: "0px", fontSize: "12px", color: "#202223", background: "#fff", display: "inline-block", alignSelf: "flex-start" }}>
-                                      {item.isStars ? renderStars(item.label) : item.label}
-                                    </div>
-                                  ))
-                                }
-                              </div>
+                              <>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                  {currentOptionsData
+                                    .filter(item => !excludedValues.includes(item.label))
+                                    .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
+                                    .map(item => (
+                                      <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
+                                        {item.isStars ? renderStars(item.label) : item.label}
+                                      </div>
+                                    ))
+                                  }
+                                </div>
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                )}
+                              </>
+                            ) : displayMode === "Swatch" ? (
+                              <>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", flexDirection: (swatchConfig.layout === "List" ? "column" : "row") }}>
+                                  {currentOptionsData
+                                    .filter(item => !excludedValues.includes(item.label))
+                                    .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
+                                    .map(item => {
+                                      const cData = swatchConfig.colors[item.label];
+                                      const bg = cData?.type === "color" && cData.value ? cData.value : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
+                                      const isList = swatchConfig.layout === "List";
+                                      return (
+                                        <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
+                                          <div style={{ width: "24px", height: "24px", borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", background: bg, border: "1px solid #c9cccf", flexShrink: 0 }}></div>
+                                          {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.label}</span>}
+                                        </div>
+                                      );
+                                    })
+                                  }
+                                </div>
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                )}
+                              </>
                             ) : (
                               <>
                                 {currentOptionsData
                                   .filter(item => !excludedValues.includes(item.label))
+                                  .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                   .map(item => (
-                                    <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#202223" }}>
-                                      <span>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                    <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#202223" }}>
+                                      <div style={{ width: "16px", height: "16px", border: "1px solid #8c9196", borderRadius: "2px", background: "#fff", flexShrink: 0 }}></div>
+                                      <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.label) : item.label}</span>
                                       {item.count > 0 && <span style={{ color: "#8c9196" }}>({item.count})</span>}
                                     </div>
                                   ))
                                 }
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                )}
                                 {layout !== "top" && <div style={{ height: "1px", background: "#e1e3e5", width: "100%", marginTop: "4px" }}></div>}
                               </>
                             )}
@@ -1561,7 +1842,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       maxHeight: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") && advanced.maxHeight ? advanced.maxHeight : "none", 
                       overflowY: (advanced.showMoreType === "Scrollbar" || advanced.showMoreType === "View more with scrollbar") ? "auto" : "visible"
                     }}>
-                      {displayMode === "Range" ? renderSliderPreview(false) : (
+                      {displayMode === "Range" ? renderSliderPreview(false, device) : (
                         <>
                           {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.mobileSearchBox && (
                             <input 
@@ -1570,15 +1851,49 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
                             />
                           )}
-                          {currentOptionsData
-                            .filter(item => !excludedValues.includes(item.label))
-                            .map(item => (
-                              <div key={item.label} style={{ display: "flex", gap: "4px", fontSize: "13px", color: "#202223" }}>
-                                <span>{item.isStars ? renderStars(item.label) : item.label}</span>
-                                {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
-                              </div>
-                            ))
-                          }
+                          
+                          {displayMode === "Box" ? (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                              {currentOptionsData
+                                .filter(item => !excludedValues.includes(item.label))
+                                .map(item => (
+                                  <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
+                                    {item.isStars ? renderStars(item.label) : item.label}
+                                  </div>
+                                ))
+                              }
+                            </div>
+                          ) : displayMode === "Swatch" ? (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", flexDirection: (swatchConfig.layout === "List" ? "column" : "row") }}>
+                              {currentOptionsData
+                                .filter(item => !excludedValues.includes(item.label))
+                                .map(item => {
+                                  const cData = swatchConfig.colors[item.label];
+                                  const bg = cData?.type === "color" && cData.value ? cData.value : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
+                                  const isList = swatchConfig.layout === "List";
+                                  return (
+                                    <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
+                                      <div style={{ width: "24px", height: "24px", borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", background: bg, border: "1px solid #c9cccf", flexShrink: 0 }}></div>
+                                      {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.label}</span>}
+                                    </div>
+                                  );
+                                })
+                              }
+                            </div>
+                          ) : (
+                            <>
+                              {currentOptionsData
+                                .filter(item => !excludedValues.includes(item.label))
+                                .map(item => (
+                                  <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#202223" }}>
+                                    <div style={{ width: "16px", height: "16px", border: "1px solid #8c9196", borderRadius: "2px", background: "#fff", flexShrink: 0 }}></div>
+                                    <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                    {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
+                                  </div>
+                                ))
+                              }
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -1600,7 +1915,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             onClick={() => onSave({ 
               filterId: initialData?.id,
               optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
-              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig
+              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig, swatchConfig
             })}
             style={{ borderRadius: "20px", padding: "8px 24px", background: "#007bff", border: "none" }}
           >
