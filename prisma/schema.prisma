@@ -205,6 +205,8 @@ model MerchandisingRule {
   id              String   @id @default(cuid())
   shop            String
   name            String
+  ruleType        String   @default("collection") // "collection" or "search"
+  searchQueries   String[] // Target search queries for search merchandising
   collections     String[] // Array of selected collections like ["Formal", "Prom"]
   customerTags    String?
   locales         String?
@@ -239,8 +241,11 @@ model MerchandisingRuleCondition {
 model PinnedProductRule {
   id            String   @id @default(cuid())
   shop          String
-  name          String   @default("Pinning Rule")
-  collections   String[] // Array of collection IDs, or empty if applyToAll is true
+  name              String   @default("Pinning Rule")
+  ruleType          String   @default("collection") // "collection" or "search"
+  searchQueries     String[] // Target search terms
+  applyToSearchType String   @default("both") // "instant", "page", or "both"
+  collections       String[] // Array of collection IDs, or empty if applyToAll is true
   applyToAll    Boolean  @default(false)
   products      Json
   status        Boolean  @default(true)

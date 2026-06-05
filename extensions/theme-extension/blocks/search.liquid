@@ -1,0 +1,12 @@
+{% if template.name == 'search' %}
+  {% render 'collectionFilterPro' %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "Filter Pro Search",
+  "target": "section",
+  "templates": ["search"],
+  "settings": []
+}
+{% endschema %}

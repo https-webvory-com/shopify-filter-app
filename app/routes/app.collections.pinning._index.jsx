@@ -61,7 +61,7 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
 
   const pinningRules = await prisma.pinnedProductRule.findMany({
-    where: { shop },
+    where: { shop, ruleType: "collection" },
     orderBy: { createdAt: "desc" },
   });
 

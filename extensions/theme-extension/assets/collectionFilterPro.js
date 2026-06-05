@@ -5,6 +5,7 @@
 
 (function () {
   'use strict';
+  const customSettings = window.collectionFilterProSettings || {};
  
   const sidebar = document.getElementById('cfp-sidebar');
   const topBar = document.getElementById('cfp-top-bar');
@@ -213,6 +214,10 @@
         countLabel.style.display = '';
         countLabel.textContent = `${totalCount} product${totalCount === 1 ? '' : 's'}`;
       }
+    }
+
+    if (templateName === 'search') {
+      document.title = document.title.replace(/\d+\s*results?/i, `${totalCount} result${totalCount === 1 ? '' : 's'}`);
     }
 
     if (products.length === 0) {
@@ -1104,10 +1109,10 @@
   }
 
   // ── 8. Find grid elements on Dawn and other standard themes ──────────
-  const gridSelectors = [
+  const gridSelectors = customSettings.gridSelectors || [
     '#product-grid', '#CollectionProductGrid', '.product-grid', '.collection-grid',
     '.main-collection-grid', 'ul.grid', '.grid--view-items', '.boost-pfs-filter-products',
-    '#js-product-grid', '.products-grid', '.collection-products', '.product-list'
+    '#js-product-grid', '.products-grid', '.collection-products', '.product-list', '[data-product-grid]'
   ];
 
   let isAttached = false;
@@ -1119,7 +1124,22 @@
         return found;
       }
     }
-    return null;
+    
+    let fallback = document.getElementById('cfp-fallback-grid');
+    if (!fallback) {
+      fallback = document.createElement('div');
+      fallback.id = 'cfp-fallback-grid';
+      fallback.className = 'cfp-products-grid cfp-fallback';
+      
+      const sidebarEl = document.getElementById('cfp-sidebar');
+      if (sidebarEl && sidebarEl.parentElement) {
+        sidebarEl.parentElement.insertBefore(fallback, sidebarEl.nextSibling);
+      } else {
+        const main = document.querySelector('.template-search') || document.querySelector('#MainContent') || document.querySelector('.main-content') || document.body;
+        main.appendChild(fallback);
+      }
+    }
+    return fallback;
   }
 
   function findAndInject() {
@@ -1127,9 +1147,21 @@
 
     const grid = findGrid();
     if (grid) {
-      // Hide theme filters
-      const hideSelectors = ['.facets', '.facets-container', '.facets-wrapper', '.collection-filters', 'facet-filters-form', '.product-count', '.pagination', 'nav.pagination', '.page-list', '.page-links', '.pagination-wrapper', '.pagination__nav'];
+      grid.style.display = 'block';
+
+      const hideSelectors = customSettings.hideSelectors || ['.facets', '.facets-container', '.facets-wrapper', '.collection-filters', 
+'facet-filters-form', '.product-count', '.pagination', 'nav.pagination', '.page-list', '.page-links', 
+'.pagination-wrapper', '.pagination__nav'];
       hideSelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
+      });
+
+      const universalEmptySelectors = [
+        '[role="status"]', '.empty-state', '[data-empty-state]', '.search--empty', 
+        '.template-search__empty-results', '.template-search__results--empty', 
+        '.collection--empty', '#EmptyState', '.search-results__empty'
+      ];
+      universalEmptySelectors.forEach(sel => {
         document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
       });
 

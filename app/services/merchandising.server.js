@@ -60,12 +60,37 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
     where: {
       shop,
       status: true,
+      ruleType: "collection",
       collections: { has: collectionTitle },
     },
     orderBy: { createdAt: "desc" },
   });
 
   return specificRule;
+}
+
+export async function getActivePinningRuleForSearch(shop, searchQuery) {
+  if (!shop || !searchQuery) return null;
+
+  const activeRules = await prisma.pinnedProductRule.findMany({
+    where: {
+      shop,
+      status: true,
+      ruleType: "search",
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const queryLower = searchQuery.toLowerCase();
+
+  for (const rule of activeRules) {
+    if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
+    if (rule.searchQueries.some(q => q.toLowerCase() === queryLower)) {
+      return rule;
+    }
+  }
+
+  return null;
 }
 
 /**

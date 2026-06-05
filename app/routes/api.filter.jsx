@@ -4,6 +4,7 @@ import {
   getActiveRuleForCollection,
   applyMerchandisingRules,
   getActivePinningRuleForCollection,
+  getActivePinningRuleForSearch,
   buildIncludeWhereClause,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
@@ -146,10 +147,16 @@ export const loader = async ({ request }) => {
     }
 
     // 🚚 2. Fetch Active Pinning Rule & Merchandising Rules Early 🚚
-    const activePinningRule = await getActivePinningRuleForCollection(
-      shop,
-      resolvedCollectionTitle,
-    );
+    let activePinningRule = null;
+    if (isSearch && searchQuery) {
+      activePinningRule = await getActivePinningRuleForSearch(shop, searchQuery);
+    } else {
+      activePinningRule = await getActivePinningRuleForCollection(
+        shop,
+        resolvedCollectionTitle,
+      );
+    }
+
     let pinnedIds = [];
     if (activePinningRule && activePinningRule.products) {
       try {
@@ -225,13 +232,15 @@ export const loader = async ({ request }) => {
     }
 
     if (isSearch && searchQuery) {
-      andConditions.push({
-        OR: [
-          { title: { contains: searchQuery, mode: "insensitive" } },
-          { vendor: { contains: searchQuery, mode: "insensitive" } },
-          { productType: { contains: searchQuery, mode: "insensitive" } },
-        ],
-      });
+      const searchOr = [
+        { title: { contains: searchQuery, mode: "insensitive" } },
+        { vendor: { contains: searchQuery, mode: "insensitive" } },
+        { productType: { contains: searchQuery, mode: "insensitive" } },
+      ];
+      if (pinnedIdsWhere) {
+        searchOr.push(pinnedIdsWhere);
+      }
+      andConditions.push({ OR: searchOr });
     }
 
     // Build variant level filter (price, stock, size, color options)
