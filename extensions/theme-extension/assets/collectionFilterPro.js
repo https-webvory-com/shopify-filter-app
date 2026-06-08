@@ -27,7 +27,7 @@
   console.log("check againg 2")
 
   // ── 1. Global Filter State ──────────────────────────────────────────
-  const PAGE_SIZE = 24;
+  const PAGE_SIZE = 28;
 
   let activeFilters = {
     vendors: [],
@@ -46,7 +46,116 @@
   };
 
   let maxPriceLimit = 1000;
+
+  // URL state synchronization setup
+  function parseURLState() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    if (urlParams.has('q')) activeFilters.q = urlParams.get('q');
+    else if (searchTerms) activeFilters.q = searchTerms;
+
+    if (urlParams.has('page')) activeFilters.page = parseInt(urlParams.get('page')) || 1;
+    if (urlParams.has('sortBy')) activeFilters.sortBy = urlParams.get('sortBy');
+    if (urlParams.has('minPrice')) activeFilters.minPrice = parseInt(urlParams.get('minPrice')) || 0;
+    if (urlParams.has('maxPrice')) activeFilters.maxPrice = parseInt(urlParams.get('maxPrice')) || 999999;
+    
+    ['vendors', 'types', 'tags', 'collections'].forEach(key => {
+      if (urlParams.has(key) && urlParams.get(key)) {
+        activeFilters[key] = urlParams.get(key).split(',');
+      }
+    });
+    
+    for (const [key, value] of urlParams.entries()) {
+      if (key.startsWith('option_') && value) {
+        const opt = key.replace('option_', '');
+        activeFilters.options[opt] = value.split(',');
+      } else if (key.startsWith('metafield_') && value) {
+        const meta = key.replace('metafield_', '');
+        activeFilters.metafields[meta] = value.split(',');
+      }
+    }
+  }
+
+  function syncStateToURL() {
+    const params = new URLSearchParams(window.location.search);
+    
+    if (activeFilters.q) params.set('q', activeFilters.q);
+    else params.delete('q');
+
+    if (activeFilters.page > 1) params.set('page', activeFilters.page);
+    else params.delete('page');
+
+    if (activeFilters.sortBy && activeFilters.sortBy !== 'created-descending') params.set('sortBy', activeFilters.sortBy);
+    else params.delete('sortBy');
+
+    if (activeFilters.minPrice > 0) params.set('minPrice', activeFilters.minPrice);
+    else params.delete('minPrice');
+
+    if (activeFilters.maxPrice < 999999) params.set('maxPrice', activeFilters.maxPrice);
+    else params.delete('maxPrice');
+
+    ['vendors', 'types', 'tags', 'collections'].forEach(key => {
+      if (activeFilters[key] && activeFilters[key].length > 0) params.set(key, activeFilters[key].join(','));
+      else params.delete(key);
+    });
+
+    for (let key of Array.from(params.keys())) {
+      if (key.startsWith('option_') || key.startsWith('metafield_')) params.delete(key);
+    }
+    
+    Object.keys(activeFilters.options || {}).forEach(opt => {
+      if (activeFilters.options[opt].length > 0) params.set('option_' + opt, activeFilters.options[opt].join(','));
+    });
+    
+    Object.keys(activeFilters.metafields || {}).forEach(meta => {
+      if (activeFilters.metafields[meta].length > 0) params.set('metafield_' + meta, activeFilters.metafields[meta].join(','));
+    });
+
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState(null, '', newUrl);
+  }
+
+  parseURLState(); // Call immediately to populate activeFilters
+
   let globalSettings = {}; // Updated dynamically from product prices
+  let cfpLastSettings = [];
+  let cfpGroupToggleState = {};
+  let cfpGroupScrollState = {};
+
+    const getCleanLabel = (type, val) => {
+      if (!cfpLastSettings || cfpLastSettings.length === 0) return { label: type.charAt(0).toUpperCase() + type.slice(1), cleanVal: val };
+      
+      let group = null;
+      if (type === 'tag') {
+        group = cfpLastSettings.find(s => (s.filterType === 'tag' || s.filterType === 'tags') && s.config && s.config.prefix && val.toLowerCase().startsWith(s.config.prefix.toLowerCase()));
+        if (group) {
+          return {
+            label: group.label || 'Tag',
+            cleanVal: val.slice(group.config.prefix.length)
+          };
+        }
+      } else if (type.startsWith('option-')) {
+        const key = type.replace('option-', '');
+        group = cfpLastSettings.find(s => (s.filterType === 'option' || s.type === 'option') && (s.filterKey === key || s.key === key));
+        if (group && group.config && group.config.prefix && val.toLowerCase().startsWith(group.config.prefix.toLowerCase())) {
+          return {
+            label: group.label || key,
+            cleanVal: val.slice(group.config.prefix.length)
+          };
+        }
+      } else if (type.startsWith('metafield-')) {
+        const key = type.replace('metafield-', '');
+        group = cfpLastSettings.find(s => (s.filterType === 'metafield' || s.type === 'metafield') && (s.filterKey === key || s.key === key));
+        if (group && group.config && group.config.prefix && val.toLowerCase().startsWith(group.config.prefix.toLowerCase())) {
+          return {
+            label: group.label || key,
+            cleanVal: val.slice(group.config.prefix.length)
+          };
+        }
+      }
+      return { label: type.charAt(0).toUpperCase() + type.slice(1), cleanVal: val };
+    };
+
 
   // ── 2. Initialization ───────────────────────────────────────────────
   let activeMerchandisingRule = null;
@@ -88,7 +197,9 @@
 
   // ── 3. Fetch data from Shopify App Proxy ──────────────────────────────
   
-  async function fetchAndRenderData() {
+  async function fetchAndRenderData(isLoadMore = false) {
+      syncStateToURL(); // Sync URL
+
     if (window._cfpInitialized && globalSettings && globalSettings.scrollUpOnFilterValuesChange && !globalSettings.horizontalFilters) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -139,7 +250,7 @@
       // Sorting & Pagination
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
-
+      queryParams.append('limit', PAGE_SIZE);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
 
@@ -152,18 +263,17 @@
         globalSettings = data.globalSettings;
         applyGlobalSettings(globalSettings);
       }
-
-
+      
       if (data.products) {
-        renderProducts(data.products, data.totalCount);
+        renderProducts(data.products, data.totalCount, isLoadMore);
       }
       if (data.settings && data.facets) {
+        cfpLastSettings = data.settings;
         renderFilterSidebar(data.settings, data.facets, data.totalCount);
       }
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
-
 
     } catch (e) {
       console.error("CFP: API Query error", e);
@@ -201,7 +311,7 @@
   }
 
   // ── 4. Render Products Grid ────────────────────────────────────────
-  function renderProducts(products, totalCount) {
+  function renderProducts(products, totalCount, isLoadMore) {
     const grid = findGrid();
     if (!grid) return;
 
@@ -236,7 +346,9 @@
     // Apply grid layout without removing existing theme classes
     grid.classList.add('cfp-products-grid');
 
-    grid.innerHTML = products.map(product => {
+    
+    const productsHtml = products.map(product => {
+
       const primaryImg = product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
       const secondaryImg = (product.merchandisingImage && product.images?.[0] && product.images?.[0] !== product.merchandisingImage) ? product.images[0] : (product.images?.[1] || primaryImg);
       const price = parseFloat(product.priceMin).toFixed(2);
@@ -266,49 +378,53 @@
         </div>
       `;
     }).join('');
+    
+    if (isLoadMore) {
+      // Remove old pagination if it exists inside grid
+      const oldPagination = grid.querySelector('.cfp-load-more-container');
+      if (oldPagination) oldPagination.remove();
+      
+      grid.insertAdjacentHTML('beforeend', productsHtml);
+    } else {
+      grid.innerHTML = productsHtml;
+    }
+
     renderPagination(grid, totalCount);
   }
 
   function renderPagination(grid, totalCount) {
-    const existing = document.getElementById('cfp-pagination');
+    const existing = document.querySelector('.cfp-load-more-container');
     if (existing) existing.remove();
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-    if (totalPages <= 1) return;
+    if (activeFilters.page >= totalPages) return;
 
     const pagination = document.createElement('div');
-    pagination.id = 'cfp-pagination';
-    pagination.className = 'cfp-pagination';
+    pagination.className = 'cfp-load-more-container';
+    
+    pagination.style.cssText = 'grid-column: 1 / -1 !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 40px 0 !important; width: 100% !important; max-width: 100% !important; margin: 0 auto; clear: both;';
+
+    const viewedCount = Math.min(activeFilters.page * PAGE_SIZE, totalCount);
+    const percentage = Math.round((viewedCount / totalCount) * 100);
+
     pagination.innerHTML = `
-      <button class="cfp-pagination__button" data-direction="prev" ${activeFilters.page <= 1 ? 'disabled' : ''}>
-        Previous
-      </button>
-      <span class="cfp-pagination__label">Page ${activeFilters.page} of ${totalPages}</span>
-      <button class="cfp-pagination__button" data-direction="next" ${activeFilters.page >= totalPages ? 'disabled' : ''}>
-        Next
+      <div class="cfp-progress-text" style="margin-bottom: 15px; font-size: 14px; color: #4a4a4a;">
+        You've viewed ${viewedCount} of ${totalCount} products
+      </div>
+      <div class="cfp-progress-bar-container" style="width: 250px; height: 4px; background: #e0e0e0; margin-bottom: 20px; border-radius: 2px; overflow: hidden;">
+        <div class="cfp-progress-bar" style="width: ${percentage}%; height: 100%; background: #008060; transition: width 0.3s ease;"></div>
+      </div>
+      <button class="cfp-btn cfp-btn--primary" id="cfp-load-more-btn" style="padding: 12px 40px; font-weight: bold; letter-spacing: 1px; cursor: pointer;">
+        LOAD MORE
       </button>
     `;
 
-    pagination.addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-direction]');
-      if (!button) return;
-      const direction = button.dataset.direction;
-      if (direction === 'prev' && activeFilters.page > 1) {
-        activeFilters.page -= 1;
-        fetchAndRenderData();
-      }
-      if (direction === 'next' && activeFilters.page < totalPages) {
-        activeFilters.page += 1;
-        fetchAndRenderData();
-      }
+    pagination.querySelector('#cfp-load-more-btn').addEventListener('click', () => {
+      activeFilters.page += 1;
+      fetchAndRenderData(true);
     });
 
-    const wrapper = document.querySelector('.cfp-layout-wrapper');
-    if (wrapper) {
-      wrapper.insertAdjacentElement('afterend', pagination);
-    } else {
-      grid.insertAdjacentElement('afterend', pagination);
-    }
+    grid.appendChild(pagination);
   }
 
   // ── 5. Render Filters Sidebar dynamically ──────────────────────────────
@@ -316,12 +432,22 @@
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
 
+    
     // Cache scroll position
     const scrollTop = body.scrollTop;
 
+    // Save inner scroll areas
+    body.querySelectorAll('.cfp-scroll-area').forEach(el => {
+      const parentId = el.closest('.cfp-group__content') ? el.closest('.cfp-group__content').id : null;
+      if (parentId) {
+        cfpGroupScrollState[parentId] = el.scrollTop;
+      }
+    });
+
+
     let html = '';
 
-    settings.forEach(setting => {
+    settings.forEach((setting, index) => {
       if (!setting.isEnabled) return;
 
       let type = setting.filterType || setting.type;
@@ -337,6 +463,15 @@
       const adv = config.advanced || {};
       const prefix = config.prefix || "";
       const displayMode = setting.displayMode || "List";
+
+      const getDisplayLabel = (val, pref) => {
+        if (!val) return '';
+        if (pref && val.toLowerCase().startsWith(pref.toLowerCase())) {
+          return val.slice(pref.length);
+        }
+        return val;
+      };
+
       
       let groupContent = '';
 
@@ -360,7 +495,7 @@
       } 
       else if (type === 'price' && displayMode.toLowerCase() === 'range') {
         const s = config.sliderConfig || {};
-        const prefixStr = s.sliderPrefix || prefix || "$";
+        const prefixStr = s.sliderPrefix || (setting.type === "price_range" ? "$" : "");
         const suffixStr = s.sliderSuffix || "";
         const step = s.sliderStep || 1;
         // Calculate max price from priceRanges
@@ -541,8 +676,8 @@
             <select class="cfp-select" name="${inputName}">
               <option value="">Any ${setting.label}</option>
               ${items.map(item => `
-                <option value="${item.value}" ${activeArray.includes(item.value) ? 'selected' : ''}>
-                  ${prefix}${item.label || item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}
+                <option value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'selected' : ''}>
+                  ${getDisplayLabel(item.label || item.value, prefix)} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}
                 </option>
               `).join('')}
             </select>
@@ -583,9 +718,9 @@
                   
                   return `
                     <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: 6px; cursor: pointer; flex-direction: ${isList ? 'row' : 'column'}; justify-content: ${isList ? 'flex-start' : 'center'};" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
-                      <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''} style="display:none;">
-                      <span class="cfp-swatch-circle" style="${bgStyle} width: 24px; height: 24px; display: inline-block; ${isCircle ? 'border-radius: 50%;' : 'border-radius: 4px;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${activeArray.includes(item.value) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0;"></span>
-                      ${showLabel ? `<span class="cfp-swatch-label" style="font-size: ${isList ? '13px' : '12px'}; text-align: ${isList ? 'left' : 'center'};">${item.value}</span>` : `<span class="cfp-swatch-label" style="display:none;">${item.value}</span>`}
+                      <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''} style="display:none;">
+                      <span class="cfp-swatch-circle" style="${bgStyle} width: 24px; height: 24px; display: inline-block; ${isCircle ? 'border-radius: 50%;' : 'border-radius: 4px;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0;"></span>
+                      ${showLabel ? `<span class="cfp-swatch-label" style="font-size: ${isList ? '13px' : '12px'}; text-align: ${isList ? 'left' : 'center'};">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display:none;">${getDisplayLabel(item.value, prefix)}</span>`}
                     </label>
                   `;
                 }).join('')}
@@ -609,8 +744,8 @@
                   const hide = isViewMore && idx >= limit;
                   return `
                   <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
-                    <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
-                    <span>${prefix}${item.label || item.value}</span>
+                    <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
+                    <span>${getDisplayLabel(item.label || item.value, prefix)}</span>
                   </label>
                   `;
                 }).join('')}
@@ -633,9 +768,9 @@
                 const hide = isViewMore && idx >= limit;
                 return `
                 <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}">
-                  <input type="checkbox" name="${inputName}" value="${item.value}" ${activeArray.includes(item.value) ? 'checked' : ''}>
+                  <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                   <span class="cfp-checkbox__box"></span>
-                  <span class="cfp-checkbox__label">${prefix}${item.label || item.value}</span>
+                  <span class="cfp-checkbox__label">${getDisplayLabel(item.label || item.value, prefix)}</span>
                   <span class="cfp-checkbox__count">${item.count}</span>
                 </label>
                 `;
@@ -646,10 +781,17 @@
         }
       }
 
-      const isCollapsed = adv.desktopCollapsed;
+      
+      const groupId = `cfp-group-${setting.id || index}-${type}-${key || ''}`;
+      let isCollapsed = adv.desktopCollapsed;
+      if (cfpGroupToggleState[groupId] !== undefined) {
+        isCollapsed = !cfpGroupToggleState[groupId];
+      }
+      
       html += `
-        <div class="cfp-group" data-group="${type}-${key || ''}">
-          <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="cfp-group-${type}-${key || ''}">
+        <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="${config.multipleSelection === true}">
+          <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="${groupId}">
+
             <div style="display: flex; align-items: center; gap: 6px;">
               <span>${setting.label}</span>
               ${adv.displayTooltip ? `
@@ -658,15 +800,25 @@
             </div>
             <svg class="cfp-chevron" viewBox="0 0 20 20" style="width: 12px; height: 12px; fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
           </button>
-          <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${type}-${key || ''}">
+          <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${setting.id || index}-${type}-${key || ''}">
             ${groupContent}
           </div>
         </div>
       `;
     });
 
+    
     body.innerHTML = html;
     body.scrollTop = scrollTop;
+
+    // Restore inner scroll areas
+    body.querySelectorAll('.cfp-scroll-area').forEach(el => {
+      const parentId = el.closest('.cfp-group__content') ? el.closest('.cfp-group__content').id : null;
+      if (parentId && cfpGroupScrollState[parentId] !== undefined) {
+        el.scrollTop = cfpGroupScrollState[parentId];
+      }
+    });
+
 
     setupCollapsibleToggles();
     setupDynamicFieldListeners();
@@ -728,6 +880,7 @@
         const content = document.getElementById(contentId);
         toggle.setAttribute('aria-expanded', String(!expanded));
         if (content) content.classList.toggle('cfp-collapsed', expanded);
+          cfpGroupToggleState[contentId] = !expanded;
       });
     });
   }
@@ -906,6 +1059,30 @@
         const val = checkbox.value;
         const checked = checkbox.checked;
 
+        const groupEl = checkbox.closest('.cfp-group');
+        const isMultiple = groupEl ? groupEl.getAttribute('data-multiple') === 'true' : true;
+
+        if (!isMultiple && checked) {
+          groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            if (cb !== checkbox) cb.checked = false;
+          });
+          if (name === 'availability') activeFilters.availability = [];
+          else if (name === 'vendor') activeFilters.vendors = [];
+          else if (name === 'type') activeFilters.types = [];
+          else if (name === 'collection') activeFilters.collections = [];
+          else if (name === 'tag' || name === 'tags') activeFilters.tags = [];
+          else if (name === 'price') activeFilters.priceRanges = [];
+          else if (name === 'title') activeFilters.titles = [];
+          else if (name.startsWith('option-')) {
+            const optionName = name.replace('option-', '');
+            activeFilters.options[optionName] = [];
+          }
+          else if (name.startsWith('metafield-')) {
+            const metafieldKey = name.replace('metafield-', '');
+            activeFilters.metafields[metafieldKey] = [];
+          }
+        }
+
         activeFilters.page = 1;
 
         if (name === 'availability') {
@@ -917,7 +1094,7 @@
         } else if (name === 'collection') {
           updateFilterArray(activeFilters.collections, val, checked);
         } else if (name === 'tag' || name === 'tags') {
-          updateFilterArray(activeFilters.tags, val, checked);
+          updateFilterArray(activeFilters.tags, getCleanLabel('tag', val).cleanVal, checked);
         } else if (name === 'price') {
           updateFilterArray(activeFilters.priceRanges, val, checked);
           if (activeFilters.priceRanges.length > 0) {
@@ -1032,15 +1209,46 @@
       chipsHTML += `<span class="cfp-breadcrumb-chip" data-type="${type}" data-val="${val}">${label} <button class="cfp-breadcrumb-remove">&times;</button></span>`;
     };
 
-    activeFilters.vendors.forEach(v => addChip(`Vendor: ${v}`, 'vendor', v));
-    activeFilters.types.forEach(v => addChip(`Type: ${v}`, 'type', v));
-    activeFilters.tags.forEach(v => addChip(`Tag: ${v}`, 'tag', v));
-    (activeFilters.titles || []).forEach(v => addChip(`Title: ${v}`, 'title', v));
-    activeFilters.collections.forEach(v => addChip(`Collection: ${v}`, 'collection', v));
-    activeFilters.availability.forEach(v => addChip(`Availability: ${v.replace('_', ' ')}`, 'availability', v));
+    const getCleanLabel = (type, val) => {
+      if (!cfpLastSettings || cfpLastSettings.length === 0) return { label: type.charAt(0).toUpperCase() + type.slice(1), cleanVal: val };
+      
+      let group = null;
+      if (type === 'tag') {
+        group = cfpLastSettings.find(s => (s.filterType === 'tag' || s.filterType === 'tags') && s.config && s.config.prefix && val.toLowerCase().startsWith(s.config.prefix.toLowerCase()));
+      } else if (type.startsWith('option-')) {
+        group = cfpLastSettings.find(s => s.filterType === 'option' && s.filterKey === type.replace('option-', ''));
+      } else if (type.startsWith('metafield-')) {
+        group = cfpLastSettings.find(s => s.filterType === 'metafield' && s.filterKey === type.replace('metafield-', ''));
+      }
+
+      let label = group ? group.label : (type.startsWith('option-') ? type.replace('option-', '') : type.charAt(0).toUpperCase() + type.slice(1));
+      let cleanVal = val;
+      if (group && group.config && group.config.prefix) {
+        const pref = group.config.prefix;
+        if (val.toLowerCase().startsWith(pref.toLowerCase())) {
+           cleanVal = val.slice(pref.length);
+        }
+      }
+      return { label, cleanVal };
+    };
+
+    activeFilters.vendors.forEach(v => addChip(v, 'vendor', v));
+    activeFilters.types.forEach(v => addChip(v, 'type', v));
+    
+    activeFilters.tags.forEach(v => {
+      const { label, cleanVal } = getCleanLabel('tag', v);
+      addChip(cleanVal, 'tag', v);
+    });
+    
+    (activeFilters.titles || []).forEach(v => addChip(v, 'title', v));
+    activeFilters.collections.forEach(v => addChip(v, 'collection', v));
+    activeFilters.availability.forEach(v => addChip(v.replace('_', ' '), 'availability', v));
     
     Object.keys(activeFilters.options).forEach(k => {
-      activeFilters.options[k].forEach(v => addChip(`${k}: ${v}`, `option-${k}`, v));
+      activeFilters.options[k].forEach(v => {
+        const { label, cleanVal } = getCleanLabel(`option-${k}`, v);
+        addChip(cleanVal, `option-${k}`, v);
+      });
     });
     
     Object.keys(activeFilters.metafields).forEach(k => {
@@ -1048,7 +1256,7 @@
     });
 
     if (activeFilters.minPrice > 0 || activeFilters.maxPrice < 999999) {
-      addChip(`Price: $${activeFilters.minPrice} - $${activeFilters.maxPrice}`, 'price', 'range');
+      addChip(`${activeFilters.minPrice} - ${activeFilters.maxPrice}`, 'price', 'range');
     }
 
     if (hasFilters) {

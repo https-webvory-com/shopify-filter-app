@@ -46,14 +46,14 @@ facet-filters-form,
 .cfp-breadcrumbs {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: center !important;
   gap: 8px;
   margin-bottom: 20px;
   width: 100%;
 }
 .cfp-breadcrumb-chip {
   display: inline-flex;
-  align-items: center;
+  align-items: center !important;
   gap: 6px;
   background: var(--cfp-surface);
   border: 1px solid var(--cfp-border);
@@ -72,7 +72,7 @@ facet-filters-form,
   color: var(--cfp-text-muted);
   padding: 0;
   display: flex;
-  align-items: center;
+  align-items: center !important;
   justify-content: center;
   transition: color var(--cfp-transition);
 }
@@ -90,7 +90,7 @@ facet-filters-form,
 /* ─── Top Bar (Horizontal above products) ─────────────────────────────── */
 .cfp-top-bar {
   display: flex !important;
-  align-items: center;
+  align-items: center !important;
   justify-content: space-between;
   padding: 12px 0;
   margin-bottom: 20px;
@@ -104,7 +104,7 @@ facet-filters-form,
 }
 .cfp-sort-wrapper {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   gap: 12px;
 }
 .cfp-sort-wrapper label {
@@ -151,7 +151,7 @@ facet-filters-form,
   border-radius: 0;
   box-shadow: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
   /* Desktop: sticky so it scrolls with the viewport */
   position: sticky;
@@ -210,7 +210,7 @@ facet-filters-form,
 /* ─── Sidebar Header ─────────────────────────────────────────────────── */
 .cfp-sidebar__header {
   display: none; /* Hidden on desktop */
-  align-items: center;
+  align-items: center !important;
   justify-content: space-between;
   padding: 18px 18px 14px;
   border-bottom: 1px solid var(--cfp-border);
@@ -227,12 +227,12 @@ facet-filters-form,
 }
 .cfp-sidebar__header-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   gap: 2px;
 }
 .cfp-sidebar__title {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   gap: 8px;
   font-size: 15px;
   font-weight: 700;
@@ -246,7 +246,7 @@ facet-filters-form,
 }
 .cfp-close-btn {
   display: none; /* Hidden on desktop */
-  align-items: center;
+  align-items: center !important;
   justify-content: center;
   width: 32px;
   height: 32px;
@@ -280,7 +280,7 @@ facet-filters-form,
 
 .cfp-group__toggle {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   justify-content: space-between;
   width: 100%;
   padding: 18px 0;
@@ -296,7 +296,7 @@ facet-filters-form,
 
 .cfp-tooltip-icon {
   display: inline-flex;
-  align-items: center;
+  align-items: center !important;
   justify-content: center;
   width: 14px;
   height: 14px;
@@ -373,7 +373,7 @@ facet-filters-form,
 .cfp-group__content {
   padding: 4px 0 14px;
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   gap: 2px;
 }
 .cfp-group__content.cfp-collapsed { display: none; }
@@ -415,7 +415,7 @@ facet-filters-form,
 /* ─── Checkbox ───────────────────────────────────────────────────────── */
 .cfp-checkbox {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   gap: 10px;
   padding: 5px 6px;
   border-radius: 6px;
@@ -433,7 +433,7 @@ facet-filters-form,
   border: 1.5px solid var(--cfp-border);
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: center !important;
   justify-content: center;
   transition: background var(--cfp-transition), border-color var(--cfp-transition);
   position: relative;
@@ -468,7 +468,7 @@ facet-filters-form,
 /* ─── Price Range ────────────────────────────────────────────────────── */
 .cfp-price-inputs {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   gap: 12px;
   margin-bottom: 24px;
   margin-top: 4px;
@@ -476,7 +476,7 @@ facet-filters-form,
 .cfp-price-input-wrap { flex: 1; }
 .cfp-price-field {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   border: 1px solid #e1e3e5;
   border-radius: 4px;
   padding: 10px 12px;
@@ -548,7 +548,7 @@ facet-filters-form,
 
 /* ─── Brand Search ───────────────────────────────────────────────────── */
 .cfp-search-input-wrap {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center !important; gap: 8px;
   border: 1px solid var(--cfp-border);
   border-radius: var(--cfp-radius-sm);
   padding: 7px 10px;
@@ -573,8 +573,8 @@ facet-filters-form,
   gap: 10px 4px;
 }
 .cfp-color-swatch {
-  display: flex; flex-direction: column;
-  align-items: center; gap: 4px; cursor: pointer;
+  display: flex; flex-direction: column !important;
+  align-items: center !important; gap: 4px; cursor: pointer;
 }
 .cfp-color-swatch input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-swatch-circle {
@@ -596,7 +596,7 @@ facet-filters-form,
 .cfp-size-chip { position: relative; cursor: pointer; }
 .cfp-size-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-size-chip span {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center !important; justify-content: center;
   min-width: 40px; padding: 5px 8px;
   border-radius: var(--cfp-radius-sm);
   border: 1.5px solid var(--cfp-border);
@@ -621,7 +621,7 @@ facet-filters-form,
 .cfp-button-chip { position: relative; cursor: pointer; }
 .cfp-button-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-button-chip span {
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center !important; justify-content: center;
   padding: 8px; border-radius: var(--cfp-radius-sm);
   border: 1px solid var(--cfp-border);
   font-size: 13px; font-weight: 500;
@@ -693,7 +693,7 @@ facet-filters-form,
     bottom: 22px;
     left: 50%;
     transform: translateX(-50%);
-    align-items: center;
+    align-items: center !important;
     gap: 8px;
     padding: 13px 26px;
     background: var(--cfp-accent);
@@ -713,7 +713,7 @@ facet-filters-form,
   }
 }
 .cfp-active-badge {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center !important; justify-content: center;
   min-width: 20px; height: 20px; padding: 0 5px;
   background: white; color: var(--cfp-accent);
   border-radius: 99px; font-size: 11px; font-weight: 700;
@@ -738,8 +738,8 @@ facet-filters-form,
 
 .cfp-no-products {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: column !important;
+  align-items: center !important;
   justify-content: center;
   text-align: center;
   padding: 48px 24px;
@@ -755,7 +755,7 @@ facet-filters-form,
 
 .cfp-pagination {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   justify-content: center;
   gap: 12px;
   margin: 30px 0 10px;
@@ -785,7 +785,7 @@ facet-filters-form,
 
 .cfp-product-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   background: var(--cfp-bg);
   border: 1px solid var(--cfp-border);
   border-radius: var(--cfp-radius);
@@ -804,7 +804,7 @@ facet-filters-form,
   text-decoration: none;
   color: inherit;
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   height: 100%;
 }
 
@@ -858,7 +858,7 @@ facet-filters-form,
 .cfp-product-card__info {
   padding: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: column !important;
   flex-grow: 1;
 }
 
@@ -886,7 +886,7 @@ facet-filters-form,
 
 .cfp-product-card__price-row {
   display: flex;
-  align-items: center;
+  align-items: center !important;
   gap: 8px;
   margin-top: auto;
 }
@@ -903,43 +903,6 @@ facet-filters-form,
   color: var(--cfp-text-light);
   font-weight: 500;
 }
-
-
-/* --- Global Filter Settings Styles --- */
-.cfp-dark-mode {
-  --cfp-bg: #1a1a1a;
-  --cfp-text: #e0e0e0;
-  --cfp-border: #333;
-  background-color: var(--cfp-bg);
-  color: var(--cfp-text);
-}
-.cfp-dark-mode .cfp-sidebar {
-  background-color: var(--cfp-bg);
-  color: var(--cfp-text);
-}
-.cfp-dark-mode .cfp-filter-group-header {
-  color: var(--cfp-text);
-}
-.cfp-dark-mode .cfp-filter-list label {
-  color: var(--cfp-text);
-}
-.cfp-horizontal-layout .cfp-layout-wrapper {
-  flex-direction: column !important;
-}
-.cfp-horizontal-layout .cfp-sidebar {
-  width: 100% !important;
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 20px;
-}
-.cfp-horizontal-layout .cfp-sidebar > div {
-  flex: 1 1 200px;
-}
-@media (max-width: 768px) {
-  .cfp-desktop-like-mobile .cfp-sidebar {
-    position: static !important;
-    transform: none !important;
-    width: 100% !important;
 
 
 /* --- Global Filter Settings Styles --- */
@@ -1045,4 +1008,71 @@ facet-filters-form,
   .cfp-mobile-horizontal-scrolling .cfp-mobile-trigger {
     display: none !important;
   }
+}
+
+
+/* --- Load More Pagination --- */
+.cfp-load-more-container {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  margin: 40px auto !important;
+  max-width: 100% !important;
+  width: 100%;
+}
+.cfp-load-more-text {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 15px;
+}
+.cfp-load-more-bar {
+  max-width: 400px !important;
+  width: 100%;
+  height: 2px;
+  background-color: #e0e0e0;
+  border-radius: 2px;
+  margin-bottom: 25px;
+  overflow: hidden;
+}
+.cfp-load-more-progress {
+  height: 100%;
+  background-color: #2dc4d9; /* The cyan color from screenshot */
+  transition: width 0.3s ease;
+}
+.cfp-load-more-btn {
+  width: 100%;
+  max-width: 300px;
+  padding: 14px 20px;
+  background-color: transparent !important;
+  color: #000 !important;
+  border: 1px solid #ddd !important;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.cfp-load-more-btn:hover {
+  border-color: #000 !important;
+  background-color: #fafafa !important;
+}
+.cfp-load-more-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* --- Hide Theme Pagination --- */
+.pagination, nav.pagination, .page-list, .page-links, .pagination-wrapper, .pagination__nav, .collection-pagination, .pagination-container, nav[aria-label="Pagination"], div[aria-label="Pagination"], .shopify-pagination {
+  display: none !important;
+}
+
+/* --- Bruteforce Hide Theme Pagination --- */
+#pagination, #Pagination, [id*="pagination"], [id*="Pagination"], [class*="pagination"], [class*="Pagination"] {
+  display: none !important;
+}
+
+/* Ensure our own pagination container (cfp-load-more-container) is NOT hidden by the wildcard rule above */
+.cfp-load-more-container {
+  display: flex !important;
 }

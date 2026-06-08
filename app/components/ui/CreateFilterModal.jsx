@@ -1,7 +1,5 @@
 import React, { useState,useEffect } from "react";
-// import { Modal } from "./Modal";
 import { Button } from "./Button";
-import { IconButton } from "./IconButton";
 import { Checkbox } from "./Checkbox";
 
 const Tooltip = ({ content, children }) => {
@@ -134,7 +132,7 @@ const OptionTypeDropdown = ({ value, onChange }) => {
   );
 };
 
-const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select values", renderTagsOutside = false }) => {
+const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select values", renderTagsOutside = false, prefixLabel = "" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = React.useRef(null);
@@ -164,6 +162,7 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
         style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+          {prefixLabel && (<span style={{ color: "#202223", fontWeight: "normal", fontSize: "14px" }}>{prefixLabel}</span>)}
           {value.length === 0 || renderTagsOutside ? <span style={{ opacity: 0.7, color: "#007bff", fontWeight: "normal" }}>{placeholder}</span> : value.map(v => (
             <span key={v} style={{ background: "#d1e4fb", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
               {v}
@@ -591,7 +590,42 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
   };
 
   let currentOptionsData = getDummyData(optionType);
-  const currentOptionsLabels = currentOptionsData.map(o => o.label);
+  const currentOptionsLabels = currentOptionsData
+    .map((o, idx) => {
+      if (!prefix) return o.label;
+      if (!o.label.startsWith("Sample ")) return o.label;
+      if (prefix === "Style_") {
+        const styles = ["Simple", "Casual", "Modern", "Classic", "Timeless", "Formal"];
+        if (idx < styles.length) return `${prefix}${styles[idx]}`;
+      }
+      return `${prefix}${o.label.replace("Sample ", "")}`;
+    })
+    .filter(label => !prefix || label.toLowerCase().startsWith(prefix.toLowerCase()));
+
+  const previewOptionsData = (() => {
+    let filtered = currentOptionsData;
+    if (prefix) {
+      filtered = filtered.map((o, idx) => {
+        if (!o.label.startsWith("Sample ")) return o;
+        if (prefix === "Style_") {
+          const styles = ["Simple", "Casual", "Modern", "Classic", "Timeless", "Formal"];
+          if (idx < styles.length) return { ...o, label: `${prefix}${styles[idx]}` };
+        }
+        return { ...o, label: `${prefix}${o.label.replace("Sample ", "")}` };
+      });
+    }
+    if (prefix) filtered = filtered.filter(item => item.label.toLowerCase().startsWith(prefix.toLowerCase()));
+    if (useManualValues) {
+       if (manualValues.length > 0) filtered = filtered.filter(item => manualValues.includes(item.label));
+    } else {
+       if (excludedValues.length > 0) filtered = filtered.filter(item => !excludedValues.includes(item.label));
+    }
+    return filtered.map(item => {
+       let displayLabel = item.label;
+       if (prefix && displayLabel.toLowerCase().startsWith(prefix.toLowerCase())) displayLabel = displayLabel.slice(prefix.length);
+       return { ...item, displayLabel };
+    });
+  })();
 
   const renderStars = (ratingStr) => {
     const num = parseInt(ratingStr);
@@ -1263,7 +1297,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         )}
                       </div>
 
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", maxHeight: "200px", overflowY: "auto", padding: "10px", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#f9fafb" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", padding: "10px", paddingTop: "24px", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#f9fafb" }}>
                         {currentOptionsLabels.filter(l => l.toLowerCase().includes(swatchSearch.toLowerCase())).map(label => {
                           const isSelected = selectedSwatch === label;
                           const colorData = swatchConfig.colors[label];
@@ -1377,7 +1411,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             options={currentOptionsLabels}
                             placeholder="Select values to exclude"
                             renderTagsOutside={true}
-                          />
+                              prefixLabel={prefix}
+                            />
                           {excludedValues.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
                               {excludedValues.map(v => (
@@ -1402,6 +1437,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               options={currentOptionsLabels}
                               placeholder="Select values to show"
                               renderTagsOutside={true}
+                              prefixLabel={prefix}
                             />
                             {manualValues.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
@@ -1446,7 +1482,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             options={currentOptionsLabels}
                             placeholder="Select values to exclude"
                             renderTagsOutside={true}
-                          />
+                              prefixLabel={prefix}
+                            />
                           {excludedValues.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
                               {excludedValues.map(v => (
@@ -1471,6 +1508,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               options={currentOptionsLabels}
                               placeholder="Select values to show"
                               renderTagsOutside={true}
+                              prefixLabel={prefix}
                             />
                             {manualValues.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
@@ -1759,25 +1797,23 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {displayMode === "Box" ? (
                               <>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                                  {currentOptionsData
-                                    .filter(item => !excludedValues.includes(item.label))
+                                  {previewOptionsData
                                     .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                     .map(item => (
                                       <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
-                                        {item.isStars ? renderStars(item.label) : item.label}
+                                        {item.isStars ? renderStars(item.displayLabel) : item.displayLabel}
                                       </div>
                                     ))
                                   }
                                 </div>
-                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
                                   <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                               </>
                             ) : displayMode === "Swatch" ? (
                               <>
                                 <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", flexDirection: (swatchConfig.layout === "List" ? "column" : "row") }}>
-                                  {currentOptionsData
-                                    .filter(item => !excludedValues.includes(item.label))
+                                  {previewOptionsData
                                     .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                     .map(item => {
                                       const cData = swatchConfig.colors[item.label];
@@ -1786,30 +1822,29 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                       return (
                                         <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
                                           <div style={{ width: "24px", height: "24px", borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", background: bg, border: "1px solid #c9cccf", flexShrink: 0 }}></div>
-                                          {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.label}</span>}
+                                          {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.displayLabel}</span>}
                                         </div>
                                       );
                                     })
                                   }
                                 </div>
-                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
                                   <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                               </>
                             ) : (
                               <>
-                                {currentOptionsData
-                                  .filter(item => !excludedValues.includes(item.label))
+                                {previewOptionsData
                                   .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                   .map(item => (
                                     <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#202223" }}>
                                       <div style={{ width: "16px", height: "16px", border: "1px solid #8c9196", borderRadius: "2px", background: "#fff", flexShrink: 0 }}></div>
-                                      <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                      <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.displayLabel) : item.displayLabel}</span>
                                       {item.count > 0 && <span style={{ color: "#8c9196" }}>({item.count})</span>}
                                     </div>
                                   ))
                                 }
-                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && currentOptionsData.length > 6 && (
+                                {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
                                   <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                                 {layout !== "top" && <div style={{ height: "1px", background: "#e1e3e5", width: "100%", marginTop: "4px" }}></div>}
@@ -1854,19 +1889,17 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           
                           {displayMode === "Box" ? (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                              {currentOptionsData
-                                .filter(item => !excludedValues.includes(item.label))
+                              {previewOptionsData
                                 .map(item => (
                                   <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
-                                    {item.isStars ? renderStars(item.label) : item.label}
+                                    {item.isStars ? renderStars(item.displayLabel) : item.displayLabel}
                                   </div>
                                 ))
                               }
                             </div>
                           ) : displayMode === "Swatch" ? (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", flexDirection: (swatchConfig.layout === "List" ? "column" : "row") }}>
-                              {currentOptionsData
-                                .filter(item => !excludedValues.includes(item.label))
+                              {previewOptionsData
                                 .map(item => {
                                   const cData = swatchConfig.colors[item.label];
                                   const bg = cData?.type === "color" && cData.value ? cData.value : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
@@ -1874,7 +1907,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   return (
                                     <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
                                       <div style={{ width: "24px", height: "24px", borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", background: bg, border: "1px solid #c9cccf", flexShrink: 0 }}></div>
-                                      {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.label}</span>}
+                                      {swatchConfig.showLabel && <span style={{ fontSize: "12px", textAlign: isList ? "left" : "center" }}>{item.displayLabel}</span>}
                                     </div>
                                   );
                                 })
@@ -1882,12 +1915,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             </div>
                           ) : (
                             <>
-                              {currentOptionsData
-                                .filter(item => !excludedValues.includes(item.label))
+                              {previewOptionsData
                                 .map(item => (
                                   <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#202223" }}>
                                     <div style={{ width: "16px", height: "16px", border: "1px solid #8c9196", borderRadius: "2px", background: "#fff", flexShrink: 0 }}></div>
-                                    <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.label) : item.label}</span>
+                                    <span style={{ flex: 1 }}>{item.isStars ? renderStars(item.displayLabel) : item.displayLabel}</span>
                                     {item.count > 0 && <span style={{ color: "#c9cccf" }}>({item.count})</span>}
                                   </div>
                                 ))

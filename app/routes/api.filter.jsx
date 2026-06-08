@@ -182,8 +182,8 @@ export const loader = async ({ request }) => {
       includeWhereClause = buildIncludeWhereClause(includes);
     }
 
-    // 🚚 3. Build Prisma Product Filter Clause 🚚
-    const where = {
+    // 🚚 3. Build Prisma Base Product Filter Clause 🚚
+    const baseWhere = {
       shop,
       status: "active",
     };
@@ -194,8 +194,6 @@ export const loader = async ({ request }) => {
     if (collections.length > 0) {
       collectionCondition = { collections: { some: { collectionId: { in: collections } } } };
     } else if (collectionHandle && collectionHandle.toLowerCase() !== "all") {
-      // Shopify's default "all" collection is special and may not be stored
-      // as a normal collection relationship in the product sync data.
       collectionCondition = { collections: { some: { collection: { handle: collectionHandle } } } };
     } else if (collectionId) {
       collectionCondition = { collections: { some: { collectionId } } };
@@ -212,23 +210,7 @@ export const loader = async ({ request }) => {
       if (pinnedIdsWhere) orArr.push(pinnedIdsWhere);
       andConditions.push({ OR: orArr });
     } else if (collectionCondition) {
-      Object.assign(where, collectionCondition);
-    }
-
-    if (vendors.length > 0) {
-      where.vendor = { in: vendors };
-    }
-
-    if (types.length > 0) {
-      where.productType = { in: types };
-    }
-
-    if (tags.length > 0) {
-      where.tags = { hasSome: tags };
-    }
-
-    if (titles.length > 0) {
-      where.title = { in: titles };
+      Object.assign(baseWhere, collectionCondition);
     }
 
     if (isSearch && searchQuery) {
@@ -243,294 +225,228 @@ export const loader = async ({ request }) => {
       andConditions.push({ OR: searchOr });
     }
 
-    // Build variant level filter (price, stock, size, color options)
-    const variantConditions = [];
-
-    // Price constraint
-    variantConditions.push({
-      price: { gte: minPrice, lte: maxPrice },
-    });
-
-    // Stock availability constraint
-    if (availability.length > 0) {
-      if (
-        availability.includes("in_stock") &&
-        !availability.includes("out_of_stock")
-      ) {
-        variantConditions.push({ available: true });
-      } else if (
-        availability.includes("out_of_stock") &&
-        !availability.includes("in_stock")
-      ) {
-        variantConditions.push({ available: false });
-      }
-    } else {
-      // Apply global setting if a filter is selected and no explicit availability filter is set
-      const hasAnyFilterSelected = 
-        vendors.length > 0 || 
-        types.length > 0 || 
-        collections.length > 0 || 
-        tags.length > 0 || 
-        titles.length > 0 || 
-        Object.values(optionsFilters).some(v => v.length > 0) ||
-        Object.values(metafieldsFilters).some(v => v.length > 0) ||
-        (minPrice > 0 || maxPrice < 9999);
-        
-      if (globalSettings.hideUnavailableVariantsWhenSelected && hasAnyFilterSelected) {
-        variantConditions.push({ available: true });
-      }
-    }
-
-    // Variant options constraints (Size, Color, etc.)
-    Object.entries(optionsFilters).forEach(([optionName, values]) => {
-      if (values.length > 0) {
-        variantConditions.push({
-          OR: [
-            { option1: { in: values } },
-            { option2: { in: values } },
-            { option3: { in: values } },
-          ],
-        });
-      }
-    });
-
-    if (variantConditions.length > 0) {
-      where.variants = {
-        some: {
-          AND: variantConditions,
-        },
-      };
-    }
-
-    // Metafields constraints
-    const metafieldConditions = [];
-    Object.entries(metafieldsFilters).forEach(([metafieldKey, values]) => {
-      if (values.length > 0 && metafieldKey.includes(".")) {
-        const [namespace, key] = metafieldKey.split(".");
-        metafieldConditions.push({
-          metafields: {
-            some: {
-              namespace,
-              key,
-              value: { in: values },
-            },
-          },
-        });
-      }
-    });
-
-    if (metafieldConditions.length > 0) {
-      where.AND = metafieldConditions;
-    }
-
     if (andConditions.length > 0) {
-      where.AND = andConditions;
+      baseWhere.AND = andConditions;
     }
 
     // 🚚 4. Establish Order By 🚚
     let orderBy = {};
     switch (sortBy) {
-      case "title-ascending":
-        orderBy = { title: "asc" };
-        break;
-      case "title-descending":
-        orderBy = { title: "desc" };
-        break;
-      case "price-ascending":
-        orderBy = { priceMin: "asc" };
-        break;
-      case "price-descending":
-        orderBy = { priceMax: "desc" };
-        break;
-      case "created-ascending":
-        orderBy = { createdAt: "asc" };
-        break;
-      case "created-descending":
-      default:
-        orderBy = { createdAt: "desc" };
-        break;
+      case "title-ascending": orderBy = { title: "asc" }; break;
+      case "title-descending": orderBy = { title: "desc" }; break;
+      case "price-ascending": orderBy = { priceMin: "asc" }; break;
+      case "price-descending": orderBy = { priceMax: "desc" }; break;
+      case "created-ascending": orderBy = { createdAt: "asc" }; break;
+      case "created-descending": default: orderBy = { createdAt: "desc" }; break;
     }
 
-    // 🚚 5. Execute Parallel Database Queries 🚚
-    const [totalCount, allMatchedProducts] = await Promise.all([
-      // Count of filtered products
-      prisma.product.count({ where }),
-      // Matched products with variants and metafields for facet computations and sorting
-      prisma.product.findMany({
-        where,
-        select: {
-          id: true,
-          createdAt: true,
-          priceMin: true,
-          priceMax: true,
-          vendor: true,
-          productType: true,
-          tags: true,
-          title: true,
-          collections: {
-            select: {
-              collectionId: true,
-              collection: {
-                select: {
-                  title: true,
-                },
-              },
-            },
-          },
-          options: true,
-          variants: {
-            select: {
-              available: true,
-              price: true,
-              compareAtPrice: true,
-              inventory: true,
-              option1: true,
-              option2: true,
-              option3: true,
-              imageUrl: true,
-            },
-          },
-          metafields: {
-            select: {
-              namespace: true,
-              key: true,
-              value: true,
-            },
+    // 🚚 5. Execute Base Database Query & Smart In-Memory Filtering 🚚
+    const baseProducts = await prisma.product.findMany({
+      where: baseWhere,
+      select: {
+        id: true,
+        createdAt: true,
+        priceMin: true,
+        priceMax: true,
+        vendor: true,
+        productType: true,
+        tags: true,
+        title: true,
+        collections: {
+          select: { collectionId: true, collection: { select: { title: true } } },
+        },
+        options: true,
+        variants: {
+          select: {
+            available: true, price: true, compareAtPrice: true, inventory: true,
+            option1: true, option2: true, option3: true, imageUrl: true,
           },
         },
-      }),
-    ]);
+        metafields: { select: { namespace: true, key: true, value: true } },
+      },
+    });
 
-    // ── 5. Compute Facets in Memory ────────────────────────────────────
+    const matchesFilters = (product, excludeFacetGroup = null) => {
+      if (excludeFacetGroup !== 'vendor' && vendors.length > 0) {
+         if (!vendors.includes(product.vendor)) return false;
+      }
+      if (excludeFacetGroup !== 'productType' && types.length > 0) {
+         if (!types.includes(product.productType)) return false;
+      }
+      if (excludeFacetGroup !== 'tag' && tags.length > 0) {
+         if (!tags.some(t => product.tags && (product.tags.includes(t) || product.tags.some(pt => pt.endsWith('_' + t))))) return false;
+      }
+      if (excludeFacetGroup !== 'title' && titles.length > 0) {
+         if (!titles.includes(product.title)) return false;
+      }
+      
+      let matchingVariants = product.variants || [];
+      if (excludeFacetGroup !== 'price') {
+          matchingVariants = matchingVariants.filter(v => {
+              const p = parseFloat(v.price || 0);
+              return p >= minPrice && p <= maxPrice;
+          });
+      }
+      if (excludeFacetGroup !== 'availability' && availability.length > 0) {
+          if (availability.includes("in_stock") && !availability.includes("out_of_stock")) {
+              matchingVariants = matchingVariants.filter(v => v.available);
+          } else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) {
+              matchingVariants = matchingVariants.filter(v => !v.available);
+          }
+      } else if (excludeFacetGroup !== 'availability') {
+          const hasAnyFilterSelected = vendors.length > 0 || types.length > 0 || collections.length > 0 || tags.length > 0 || titles.length > 0 || Object.values(optionsFilters).some(v => v.length > 0) || Object.values(metafieldsFilters).some(v => v.length > 0) || (minPrice > 0 || maxPrice < 9999);
+          if (globalSettings && globalSettings.hideUnavailableVariantsWhenSelected && hasAnyFilterSelected) {
+              matchingVariants = matchingVariants.filter(v => v.available);
+          }
+      }
+      
+      for (const [optionName, values] of Object.entries(optionsFilters)) {
+          if (excludeFacetGroup === `option:${optionName}`) continue;
+          if (values.length > 0) {
+              matchingVariants = matchingVariants.filter(v => 
+                  values.includes(v.option1) || values.includes(v.option2) || values.includes(v.option3)
+              );
+          }
+      }
+      
+      if (matchingVariants.length === 0) return false;
+      
+      for (const [metafieldKey, values] of Object.entries(metafieldsFilters)) {
+          if (excludeFacetGroup === `metafield:${metafieldKey}`) continue;
+          if (values.length > 0 && metafieldKey.includes(".")) {
+              const [namespace, key] = metafieldKey.split(".");
+              const hasMetafield = product.metafields && product.metafields.some(m => m.namespace === namespace && m.key === key && values.includes(m.value));
+              if (!hasMetafield) return false;
+          }
+      }
+      return true;
+    };
+
+    const allMatchedProducts = baseProducts.filter(p => matchesFilters(p, null));
+    const totalCount = allMatchedProducts.length;
+
+    // ── 5. Compute Smart Facets in Memory ────────────────────────────────────
     const vendorCounts = {};
     const typeCounts = {};
     const tagCounts = {};
     const titleCounts = {};
-    const optionCounts = {}; // e.g. { "Size": { "S": 5, "M": 12 }, "Color": { "Red": 4 } }
-    const metafieldCounts = {}; // e.g. { "custom.material": { "Cotton": 8 } }
+    const optionCounts = {};
+    const metafieldCounts = {};
     const collectionCounts = {};
     let inStockCount = 0;
     let outOfStockCount = 0;
 
-    // Extract price ranges from the active group filter
-    const priceFilter = activeGroupFilters
-      ? activeGroupFilters.find(
-          (f) => f.filterType === "price" || f.type === "price",
-        )
-      : null;
+    const priceFilter = activeGroupFilters ? activeGroupFilters.find((f) => f.filterType === "price" || f.type === "price") : null;
     let priceRangesConfig = [];
     if (priceFilter && priceFilter.config) {
       try {
-        const configObj =
-          typeof priceFilter.config === "string"
-            ? JSON.parse(priceFilter.config)
-            : priceFilter.config;
+        const configObj = typeof priceFilter.config === "string" ? JSON.parse(priceFilter.config) : priceFilter.config;
         priceRangesConfig = configObj.priceRanges || [];
       } catch (e) {}
     }
     const priceRangeCounts = priceRangesConfig.map((r) => ({ ...r, count: 0 }));
 
-    allMatchedProducts.forEach((p) => {
-      if (p.collections) {
-        p.collections.forEach((pc) => {
-          const id = pc.collectionId;
-          const title = pc.collection?.title || id;
-          if (!collectionCounts[id]) collectionCounts[id] = { title, count: 0 };
-          collectionCounts[id].count += 1;
+    // Helper to process facets safely
+    const processFacetsForGroup = (excludeGroup, processor) => {
+       const filteredProducts = excludeGroup === null ? allMatchedProducts : baseProducts.filter(p => matchesFilters(p, excludeGroup));
+       filteredProducts.forEach(processor);
+    };
+
+    // 1. Collections
+    processFacetsForGroup(null, (p) => {
+       if (p.collections) {
+         p.collections.forEach((pc) => {
+           const id = pc.collectionId;
+           const title = pc.collection?.title || id;
+           if (!collectionCounts[id]) collectionCounts[id] = { title, count: 0 };
+           collectionCounts[id].count += 1;
+         });
+       }
+    });
+
+    // 2. Vendors
+    processFacetsForGroup('vendor', (p) => {
+       if (p.vendor) vendorCounts[p.vendor] = (vendorCounts[p.vendor] || 0) + 1;
+    });
+
+    // 3. Product Types
+    processFacetsForGroup('productType', (p) => {
+       if (p.productType) typeCounts[p.productType] = (typeCounts[p.productType] || 0) + 1;
+    });
+
+    // 4. Tags
+    processFacetsForGroup('tag', (p) => {
+       if (p.tags) {
+         p.tags.forEach((tag) => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; });
+       }
+    });
+
+    // 5. Titles
+    processFacetsForGroup('title', (p) => {
+       if (p.title) titleCounts[p.title] = (titleCounts[p.title] || 0) + 1;
+    });
+
+    // 6. Availability
+    processFacetsForGroup('availability', (p) => {
+       const hasInStock = p.variants.some((v) => v.available);
+       if (hasInStock) inStockCount++; else outOfStockCount++;
+    });
+
+    // 7. Price Ranges
+    processFacetsForGroup('price', (p) => {
+       if (priceRangeCounts.length > 0 && p.variants.length > 0) {
+         let minProductPrice = Infinity;
+         p.variants.forEach((v) => {
+           const vPrice = parseFloat(v.price || 0);
+           if (vPrice < minProductPrice) minProductPrice = vPrice;
+         });
+         if (minProductPrice !== Infinity) {
+           priceRangeCounts.forEach((r) => {
+             const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
+             const rMaxVal = r.max !== undefined ? r.max : r.to;
+             const rMax = (rMaxVal === "" || rMaxVal === null || rMaxVal === undefined) ? Infinity : parseFloat(rMaxVal);
+             if (minProductPrice >= rMin && minProductPrice <= rMax) r.count += 1;
+           });
+         }
+       }
+    });
+
+    // 8. Options
+    const activeOptionNames = activeGroupFilters ? activeGroupFilters.filter(f => f.filterType === 'option' || f.type === 'option').map(f => f.filterKey || f.key) : [];
+    Object.keys(optionsFilters).forEach(k => { if(!activeOptionNames.includes(k)) activeOptionNames.push(k); });
+    
+    activeOptionNames.forEach(optName => {
+        if (!optionCounts[optName]) optionCounts[optName] = {};
+        processFacetsForGroup(`option:${optName}`, (p) => {
+            let optionsList = [];
+            if (typeof p.options === "string") {
+              try { optionsList = JSON.parse(p.options) || []; } catch (e) {}
+            } else { optionsList = p.options || []; }
+            
+            p.variants.forEach((v) => {
+              if (v.option1 && optionsList[0] && optionsList[0].name === optName) optionCounts[optName][v.option1] = (optionCounts[optName][v.option1] || 0) + 1;
+              if (v.option2 && optionsList[1] && optionsList[1].name === optName) optionCounts[optName][v.option2] = (optionCounts[optName][v.option2] || 0) + 1;
+              if (v.option3 && optionsList[2] && optionsList[2].name === optName) optionCounts[optName][v.option3] = (optionCounts[optName][v.option3] || 0) + 1;
+            });
         });
-      }
-      // Vendor counts
-      if (p.vendor) {
-        vendorCounts[p.vendor] = (vendorCounts[p.vendor] || 0) + 1;
-      }
+    });
 
-      // Product Type counts
-      if (p.productType) {
-        typeCounts[p.productType] = (typeCounts[p.productType] || 0) + 1;
-      }
+    // 9. Metafields
+    const activeMetafieldNames = activeGroupFilters ? activeGroupFilters.filter(f => f.filterType === 'metafield' || f.type === 'metafield').map(f => f.filterKey || f.key) : [];
+    Object.keys(metafieldsFilters).forEach(k => { if(!activeMetafieldNames.includes(k)) activeMetafieldNames.push(k); });
 
-      // Tag counts
-      if (p.tags) {
-        p.tags.forEach((tag) => {
-          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-        });
-      }
-
-      // Title counts
-      if (p.title) {
-        titleCounts[p.title] = (titleCounts[p.title] || 0) + 1;
-      }
-
-      // Option counts
-      let optionsList = [];
-      if (typeof p.options === "string") {
-        try {
-          optionsList = JSON.parse(p.options) || [];
-        } catch (e) {}
-      } else {
-        optionsList = p.options || [];
-      }
-      p.variants.forEach((v) => {
-        if (v.option1 && optionsList[0]) {
-          const optName = optionsList[0].name;
-          if (!optionCounts[optName]) optionCounts[optName] = {};
-          optionCounts[optName][v.option1] =
-            (optionCounts[optName][v.option1] || 0) + 1;
-        }
-        if (v.option2 && optionsList[1]) {
-          const optName = optionsList[1].name;
-          if (!optionCounts[optName]) optionCounts[optName] = {};
-          optionCounts[optName][v.option2] =
-            (optionCounts[optName][v.option2] || 0) + 1;
-        }
-        if (v.option3 && optionsList[2]) {
-          const optName = optionsList[2].name;
-          if (!optionCounts[optName]) optionCounts[optName] = {};
-          optionCounts[optName][v.option3] =
-            (optionCounts[optName][v.option3] || 0) + 1;
-        }
-      });
-
-      // Metafields counts
-      if (p.metafields) {
-        p.metafields.forEach((m) => {
-          const facetKey = `${m.namespace}.${m.key}`;
-          if (!metafieldCounts[facetKey]) metafieldCounts[facetKey] = {};
-          metafieldCounts[facetKey][m.value] =
-            (metafieldCounts[facetKey][m.value] || 0) + 1;
-        });
-      }
-
-      // Availability counts
-      const hasInStock = p.variants.some((v) => v.available);
-      if (hasInStock) {
-        inStockCount++;
-      } else {
-        outOfStockCount++;
-      }
-
-      // Price range counts
-      if (priceRangeCounts.length > 0 && p.variants.length > 0) {
-        let minProductPrice = Infinity;
-        p.variants.forEach((v) => {
-          const vPrice = parseFloat(v.price || 0);
-          if (vPrice < minProductPrice) minProductPrice = vPrice;
-        });
-        if (minProductPrice !== Infinity) {
-          priceRangeCounts.forEach((r) => {
-            const rMinVal = r.min !== undefined ? r.min : r.from;
-            const rMin = parseFloat(rMinVal) || 0;
-            const rMaxVal = r.max !== undefined ? r.max : r.to;
-            const rMax =
-              rMaxVal === "" || rMaxVal === null || rMaxVal === undefined
-                ? Infinity
-                : parseFloat(rMaxVal);
-            if (minProductPrice >= rMin && minProductPrice <= rMax) {
-              r.count += 1;
+    activeMetafieldNames.forEach(metaKey => {
+        if (!metafieldCounts[metaKey]) metafieldCounts[metaKey] = {};
+        processFacetsForGroup(`metafield:${metaKey}`, (p) => {
+            if (p.metafields) {
+               p.metafields.forEach((m) => {
+                 const facetKey = `${m.namespace}.${m.key}`;
+                 if (facetKey === metaKey) {
+                    metafieldCounts[facetKey][m.value] = (metafieldCounts[facetKey][m.value] || 0) + 1;
+                 }
+               });
             }
-          });
-        }
-      }
+        });
     });
 
     // ── 6. Apply Merchandising Scores and Sort ─────────────────────────

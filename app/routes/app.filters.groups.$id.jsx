@@ -1,4 +1,7 @@
 import { useEffect, useState, useRef } from "react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   useActionData,
   useLoaderData,
@@ -491,6 +494,25 @@ function DisplayModeBadge({ mode }) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────
+const SortableItem = ({ id, item, index }) => {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div 
+      ref={setNodeRef} 
+      {...attributes} 
+      {...listeners} 
+      style={{ ...style, cursor: "grab", display: "flex", alignItems: "center", padding: "12px", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#fff", marginBottom: "8px", zIndex: transform ? 1000 : 1, position: "relative" }}
+    >
+      <div style={{ marginRight: "12px", color: "#8c9196", display: "flex" }}>
+        <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+      </div>
+      <div style={{ flex: 1, fontWeight: "500", fontSize: "14px", color: "#202223" }}>{item.label}</div>
+      <div style={{ color: "#8c9196", fontSize: "12px", background: "#f4f6f8", padding: "2px 8px", borderRadius: "10px" }}>Pos: {index + 1}</div>
+    </div>
+  );
+};
+
 export default function FilterGroupDetail() {
   const { group, detectedOptions, shopifyCollections, storeData } =
     useLoaderData();
@@ -550,6 +572,45 @@ export default function FilterGroupDetail() {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterStatusView, setFilterStatusView] = useState("all"); // 'all', 'active', 'inactive'
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+  const [reorderItems, setReorderItems] = useState([]);
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  useEffect(() => {
+    if (isReorderModalOpen) {
+      setReorderItems([...group.filters].sort((a, b) => a.order - b.order));
+    }
+  }, [isReorderModalOpen, group.filters]);
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setReorderItems((items) => {
+        const oldIndex = items.findIndex(item => item.id === active.id);
+        const newIndex = items.findIndex(item => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  const saveReorder = () => {
+    const orderedIds = reorderItems.map(item => item.id);
+    submit({ intent: "reorderFilters", orderedIds: JSON.stringify(orderedIds) }, { method: "post" });
+    setIsReorderModalOpen(false);
+  };
+  
+  const sortReorderAZ = () => {
+    setReorderItems([...reorderItems].sort((a, b) => a.label.localeCompare(b.label)));
+  };
+  
+  const sortReorderZA = () => {
+    setReorderItems([...reorderItems].sort((a, b) => b.label.localeCompare(a.label)));
+  };
+
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [isAdvancedFilterOpen, setIsAdvancedFilterOpen] = useState(false);
   const [advancedConditions, setAdvancedConditions] = useState([]);
@@ -1292,6 +1353,21 @@ export default function FilterGroupDetail() {
 
               {/* Icons */}
               <button
+                  onClick={() => setIsReorderModalOpen(true)}
+                  title="Reorder Filters"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    color: "#007bff",
+                    display: "flex",
+                    marginRight: "16px"
+                  }}
+                >
+                  <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "currentColor" }}><path d="M5.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm13 5.5a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10zm0-6a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10z"/></svg>
+                </button>
+                <button
                 onClick={() => setIsCustomizeColumnsOpen(true)}
                 style={{
                   background: "none",
@@ -1553,7 +1629,27 @@ export default function FilterGroupDetail() {
                           color: "#6d7175",
                         }}
                       >
-                        All values
+                        {(() => {
+                          let configObj = {};
+                          try {
+                            configObj = typeof filter.config === "string" ? JSON.parse(filter.config) : (filter.config || {});
+                          } catch (e) {}
+                          
+                          if (configObj.useManualValues) {
+                            return <span>Manual values</span>;
+                          }
+                          return (
+                            <span style={{ 
+                              background: "#e4e5e7", 
+                              padding: "4px 8px", 
+                              borderRadius: "4px", 
+                              color: "#202223",
+                              fontSize: "12px"
+                            }}>
+                              All values
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ padding: "14px 16px" }}>
                         <label
@@ -1971,6 +2067,36 @@ export default function FilterGroupDetail() {
       )}
 
       <Modal
+          isOpen={isReorderModalOpen}
+          onClose={() => setIsReorderModalOpen(false)}
+          title="Reorder Filters"
+          width="500px"
+          footer={
+            <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button variant="default" onClick={sortReorderAZ} style={{ borderRadius: "20px", border: "1px solid #e1e3e5" }}>Sort A-Z</Button>
+                <Button variant="default" onClick={sortReorderZA} style={{ borderRadius: "20px", border: "1px solid #e1e3e5" }}>Sort Z-A</Button>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button variant="default" onClick={() => setIsReorderModalOpen(false)} style={{ borderRadius: "20px", padding: "8px 24px", border: "1px solid #e1e3e5" }}>Cancel</Button>
+                <Button variant="primary" onClick={saveReorder} style={{ borderRadius: "20px", padding: "8px 24px", background: "#51a2ff", border: "none" }}>Save Order</Button>
+              </div>
+            </div>
+          }
+        >
+          <div style={{ padding: "0 20px 20px 20px", maxHeight: "60vh", overflowY: "auto" }}>
+            <p style={{ color: "#6d7175", fontSize: "13px", marginBottom: "16px" }}>Drag and drop filters to reorder them on the storefront.</p>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={reorderItems} strategy={verticalListSortingStrategy}>
+                {reorderItems.map((item, index) => (
+                  <SortableItem key={item.id} id={item.id} item={item} index={index} />
+                ))}
+              </SortableContext>
+            </DndContext>
+          </div>
+        </Modal>
+
+        <Modal
         isOpen={isCustomizeColumnsOpen}
         onClose={() => setIsCustomizeColumnsOpen(false)}
         title="Customize Columns"
