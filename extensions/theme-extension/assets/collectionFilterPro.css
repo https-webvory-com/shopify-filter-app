@@ -1648,3 +1648,41 @@ facet-filters-form,
   min-width: 24px !important;
   box-sizing: border-box !important;
 }
+
+/* 8. Price Slider Overrides */
+.noUi-handle {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  box-shadow: none !important;
+}
+.noUi-handle::after, .noUi-handle::before {
+  display: none !important;
+}
+.noUi-handle .noUi-touch-area {
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
+}
+
+/* 9. Hide Counts globally */
+.cfp-checkbox__count {
+  display: none !important;
+}
+
+/* 10. Swatch Grids */
+.cfp-color-grid--list {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 20px 16px !important;
+}
+
+/* 11. Search Box Overrides */
+.cfp-search-input-wrap {
+  border-radius: 20px !important;
+  padding: 8px 14px !important;
+}
+.cfp-search-input {
+  font-family: 'Montserrat', 'Poppins', 'Inter', sans-serif !important;
+  font-size: 14px !important;
+}

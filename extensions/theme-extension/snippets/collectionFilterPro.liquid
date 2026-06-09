@@ -1,6 +1,44 @@
 <script>
   document.documentElement.classList.add('cfp-loading-init');
-  setTimeout(() => document.documentElement.classList.remove('cfp-loading-init'), 2000);
+  (function() {
+    let skeletonHtml = '';
+    for (let i = 0; i < 8; i++) {
+      skeletonHtml += '<div class="cfp-skeleton-card"><div class="cfp-skeleton cfp-skeleton-image"></div><div style="text-align: center; padding-top: 8px;"><div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-vendor"></div><div class="cfp-skeleton cfp-skeleton-title"></div><div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-price"></div></div></div>';
+    }
+
+    const injectSkeleton = (grid) => {
+      if (!grid.hasAttribute('data-skeleton-injected')) {
+        grid.setAttribute('data-skeleton-injected', 'true');
+        grid.classList.add('cfp-products-grid');
+        grid.innerHTML = skeletonHtml;
+        document.documentElement.classList.remove('cfp-loading-init');
+      }
+    };
+
+    const findGrid = () => {
+      return document.querySelector('#product-grid, .collection-grid, .product-grid, .grid--view-items, ul.grid, #CollectionProductGrid');
+    };
+
+    let existingGrid = findGrid();
+    if (existingGrid && !existingGrid.classList.contains('cfp-sidebar') && !existingGrid.closest('.cfp-sidebar')) {
+      injectSkeleton(existingGrid);
+    } else {
+      const observer = new MutationObserver(() => {
+        const grid = findGrid();
+        if (grid && !grid.classList.contains('cfp-sidebar') && !grid.closest('.cfp-sidebar')) {
+          injectSkeleton(grid);
+          observer.disconnect();
+        }
+      });
+
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+
+      setTimeout(() => {
+        observer.disconnect();
+        document.documentElement.classList.remove('cfp-loading-init');
+      }, 2000);
+    }
+  })();
 </script>
 <style>
   html.cfp-loading-init .product-grid,
@@ -11,6 +49,40 @@
     opacity: 0 !important;
     pointer-events: none !important;
   }
+  
+  /* Inline Skeleton CSS for instant first paint without blank space */
+  @keyframes cfpSkeletonShimmer {
+    0% { background-position: -468px 0; }
+    100% { background-position: 468px 0; }
+  }
+  .cfp-skeleton {
+    background: #f6f7f8;
+    background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+    background-repeat: no-repeat;
+    background-size: 800px 100%;
+    animation-duration: 1.5s;
+    animation-fill-mode: forwards;
+    animation-iteration-count: infinite;
+    animation-name: cfpSkeletonShimmer;
+    animation-timing-function: linear;
+  }
+  .cfp-skeleton-card { display: flex; flex-direction: column; gap: 12px; }
+  .cfp-skeleton-image { width: 100%; aspect-ratio: 2/3; border-radius: 4px; }
+  .cfp-skeleton-text { height: 12px; border-radius: 2px; }
+  .cfp-skeleton-vendor { width: 40%; margin: 0 auto; }
+  .cfp-skeleton-title { width: 80%; height: 16px; margin: 4px auto; }
+  .cfp-skeleton-price { width: 30%; margin: 0 auto; }
+
+  .cfp-products-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(220px, 1fr)) !important;
+    gap: 24px !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  @media (max-width: 1200px) { .cfp-products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
+  @media (max-width: 900px) { .cfp-products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 16px !important; } }
+  @media (max-width: 480px) { .cfp-products-grid { gap: 12px !important; } }
 </style>
 {{ 'collectionFilterPro.css' | asset_url | stylesheet_tag }}
 
