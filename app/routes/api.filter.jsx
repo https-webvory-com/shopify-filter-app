@@ -120,7 +120,7 @@ export const loader = async ({ request }) => {
     const availability = url.searchParams.getAll("availability[]");
     const titles = url.searchParams.getAll("title[]");
 
-    const sortBy = url.searchParams.get("sortBy") || "created-descending";
+    const sortBy = url.searchParams.get("sortBy") || "best-selling";
     const page = parseInt(url.searchParams.get("page") || "1");
     const limit = parseInt(url.searchParams.get("limit") || "24");
 

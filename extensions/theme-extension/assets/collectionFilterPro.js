@@ -10,7 +10,7 @@
   const sidebar = document.getElementById('cfp-sidebar');
   const topBar = document.getElementById('cfp-top-bar');
   const overlay = document.getElementById('cfp-overlay');
-  const triggerBtn = document.getElementById('cfp-trigger-btn');
+  const triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
   const closeBtn = document.getElementById('cfp-close-btn');
   const applyBtn = document.getElementById('cfp-apply-btn');
   const clearBtn = document.getElementById('cfp-clear-btn');
@@ -160,8 +160,10 @@
   // ── 2. Initialization ───────────────────────────────────────────────
   let activeMerchandisingRule = null;
 
-  async function init() {
+    async function init() {
     setupStaticEventListeners();
+    const grid = findGrid();
+    if (grid) renderSkeleton(grid);
     await fetchMerchandisingRule();
     await fetchAndRenderData();
   }
@@ -253,8 +255,11 @@
       queryParams.append('limit', PAGE_SIZE);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
-
-      const response = await fetch(`/apps/collection-filter-pro/api/filter?${queryParams.toString()}`);
+        if (!isLoadMore) {
+          const grid = findGrid();
+          if (grid) renderSkeleton(grid);
+        }
+        const response = await fetch(`/apps/collection-filter-pro/api/filter?${queryParams.toString()}`);
       const data = await response.json();
 
       sidebar.classList.remove('cfp-loading');
@@ -311,6 +316,31 @@
   }
 
   // ── 4. Render Products Grid ────────────────────────────────────────
+
+  function renderSkeleton(grid) {
+    if (!grid) return;
+    let skeletonHtml = '';
+    for (let i = 0; i < 8; i++) {
+      skeletonHtml += `
+        <div class="cfp-skeleton-card">
+          <div class="cfp-skeleton cfp-skeleton-image"></div>
+          <div style="text-align: center; padding-top: 8px;">
+            <div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-vendor"></div>
+            <div class="cfp-skeleton cfp-skeleton-title"></div>
+            <div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-price"></div>
+          </div>
+        </div>
+      `;
+    }
+    grid.classList.add('cfp-products-grid');
+    grid.innerHTML = skeletonHtml;
+    // hide pagination if exists during loading
+    const oldPagination = document.querySelector('.cfp-load-more-container');
+    if (oldPagination) oldPagination.style.display = 'none';
+    
+    document.documentElement.classList.remove('cfp-loading-init');
+  }
+
   function renderProducts(products, totalCount, isLoadMore) {
     const grid = findGrid();
     if (!grid) return;
@@ -349,7 +379,25 @@
     
     const productsHtml = products.map(product => {
 
-      const primaryImg = product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+      let variantImg = null;
+        if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
+          const selectedValues = [];
+          Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
+          
+          if (selectedValues.length > 0 && product.variants && product.variants.length > 0) {
+            // Find a variant that matches one of the selected option values
+            const matchedVariant = product.variants.find(v => 
+              (v.option1 && selectedValues.includes(v.option1)) ||
+              (v.option2 && selectedValues.includes(v.option2)) ||
+              (v.option3 && selectedValues.includes(v.option3))
+            );
+            if (matchedVariant && matchedVariant.imageUrl) {
+              variantImg = matchedVariant.imageUrl;
+            }
+          }
+        }
+  
+        const primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
       const secondaryImg = (product.merchandisingImage && product.images?.[0] && product.images?.[0] !== product.merchandisingImage) ? product.images[0] : (product.images?.[1] || primaryImg);
       const price = parseFloat(product.priceMin).toFixed(2);
       const comparePrice = product.variants?.[0]?.compareAtPrice 
@@ -845,6 +893,11 @@
 
   // ── 7. Setup Interactivity Listeners ─────────────────────────────────
   function setupStaticEventListeners() {
+    document.body.addEventListener('click', function(e) {
+      if (e.target.closest('#cfp-drawer-trigger-btn')) {
+        openSidebar();
+      }
+    });
     if (triggerBtn) triggerBtn.addEventListener('click', openSidebar);
     if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
     if (overlay) overlay.addEventListener('click', closeSidebar);
@@ -862,6 +915,33 @@
     }
 
     // Top Bar Sorting
+    // Custom Dropdown Sorting Logic
+    document.body.addEventListener('click', function(e) {
+      const trigger = e.target.closest('#cfp-custom-sort-trigger');
+      const dropdown = document.getElementById('cfp-custom-sort-dropdown');
+      const sortContainer = document.getElementById('cfp-custom-sort');
+      
+      if (trigger) {
+        sortContainer.classList.toggle('is-open');
+      } else if (!e.target.closest('#cfp-custom-sort')) {
+        if (sortContainer) sortContainer.classList.remove('is-open');
+      }
+
+      const option = e.target.closest('.cfp-custom-sort__option');
+      if (option) {
+        const val = option.getAttribute('data-value');
+        const text = option.textContent;
+        const label = document.getElementById('cfp-custom-sort-label');
+        if (label) label.textContent = text;
+        
+        activeFilters.sortBy = val;
+        activeFilters.page = 1;
+        fetchAndRenderData();
+        
+        if (sortContainer) sortContainer.classList.remove('is-open');
+      }
+    });
+
     const sortSelect = document.getElementById('cfp-sort-select-top');
     if (sortSelect) {
       sortSelect.addEventListener('change', () => {
@@ -1046,9 +1126,7 @@
         arr.length = 0;
         if (val) arr.push(val);
 
-        if (window.innerWidth > 991) {
-          fetchAndRenderData();
-        }
+        fetchAndRenderData();
       });
     });
 
@@ -1126,9 +1204,7 @@
         }
 
         // Fetch storefront updates in real-time (instant changes on desktop)
-        if (window.innerWidth > 991) {
-          fetchAndRenderData();
-        }
+        fetchAndRenderData();
       });
     });
   }
@@ -1328,7 +1404,7 @@
   function findGrid() {
     for (let i = 0; i < gridSelectors.length; i++) {
       const found = document.querySelector(gridSelectors[i]);
-      if (found && found.offsetHeight > 50 && !found.closest('.cfp-sidebar')) {
+      if (found && !found.closest('.cfp-sidebar')) {
         return found;
       }
     }
