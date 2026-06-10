@@ -2,7 +2,7 @@
 
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-application_url = "https://aisearchfilter.webvory.com"
+application_url = "https://bless-pharmaceuticals-ann-das.trycloudflare.com"
 embedded = true
 handle = "ai-smart-search-filter"
 
@@ -30,10 +30,10 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://aisearchfilter.webvory.com/api/auth"
+  "https://bless-pharmaceuticals-ann-das.trycloudflare.com/api/auth"
 ]
 
 [app_proxy]
-url = "https://aisearchfilter.webvory.com"
+url = "https://bless-pharmaceuticals-ann-das.trycloudflare.com"
 subpath = "collection-filter-pro"
 prefix = "apps"

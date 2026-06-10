@@ -704,6 +704,14 @@
 
         if (!items || items.length === 0) return;
 
+        // Apply prefix filtering for tags and collections
+        if (prefix && (type === 'tag' || type === 'tags' || type === 'collection')) {
+          items = items.filter(i => {
+            const valStr = i.value || "";
+            return valStr.toLowerCase().startsWith(prefix.toLowerCase());
+          });
+        }
+
         // Apply advanced exclusions and manual sorts
         if (config.excludedValues && config.excludedValues.length > 0) {
           items = items.filter(i => !config.excludedValues.includes(i.value));

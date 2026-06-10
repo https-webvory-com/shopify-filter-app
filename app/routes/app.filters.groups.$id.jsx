@@ -369,13 +369,38 @@ export const action = async ({ request, params }) => {
     const filterId = formData.get("filterId");
     const label = formData.get("label");
     const displayMode = formData.get("displayMode");
+    
+    let filterType = formData.get("filterType");
+    let filterKey = formData.get("filterKey") || null;
+    
     const config = formData.get("config")
       ? JSON.parse(formData.get("config"))
       : undefined;
 
+    // Fix for option types
+    const isDynamicOption = ![
+      "collection",
+      "vendor",
+      "product_type",
+      "tags",
+      "price",
+      "percent_sale",
+      "weight",
+      "review_rating",
+      "stock_status",
+      "inventory_locations",
+    ].includes(filterType);
+
+    if (isDynamicOption && filterType) {
+      filterKey = filterType;
+      filterType = "option";
+    }
+
     await prisma.filterGroupItem.update({
       where: { id: filterId },
       data: {
+        ...(filterType ? { filterType } : {}),
+        ...(filterKey !== undefined ? { filterKey } : {}),
         label,
         displayMode,
         ...(config !== undefined ? { config } : {}),

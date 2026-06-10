@@ -68,13 +68,29 @@ const OPTION_TYPES = [
   { value: "review_rating", label: "Review rating" },
 ];
 
-const OptionTypeDropdown = ({ value, onChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = React.useRef(null);
-  const selectedLabel = OPTION_TYPES.find(o => o.value === value)?.label || "Select";
-  
-  const filteredOptions = OPTION_TYPES.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+const OptionTypeDropdown = ({ value, onChange, storeData }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const dropdownRef = React.useRef(null);
+    
+    // Generate dynamic option types from storeData
+    const dynamicTypes = storeData?.options 
+      ? Object.keys(storeData.options).map(key => ({
+          value: key,
+          label: `${key.charAt(0).toUpperCase() + key.slice(1)} (product option)`
+        }))
+      : [];
+      
+    // Merge predefined with dynamic (avoiding duplicates)
+    const predefinedKeys = OPTION_TYPES.map(o => o.value);
+    const combinedOptions = [
+      ...OPTION_TYPES,
+      ...dynamicTypes.filter(d => !predefinedKeys.includes(d.value))
+    ];
+
+    const selectedLabel = combinedOptions.find(o => o.value === value)?.label || "Select";
+    
+    const filteredOptions = combinedOptions.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
 
   React.useEffect(() => {
     const handleClickOutside = (e) => {
@@ -826,9 +842,16 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   </div>
                   <OptionTypeDropdown 
                     value={optionType} 
+                    storeData={storeData}
                     onChange={(val, label) => {
                       // If the current title matches the old option type label, update it to the new one
-                      const oldLabel = (OPTION_TYPES.find(o => o.value === optionType)?.label || "Collection").replace(" (product option)", "");
+                      let oldLabel = "Collection";
+                      if (OPTION_TYPES.find(o => o.value === optionType)) {
+                        oldLabel = OPTION_TYPES.find(o => o.value === optionType).label;
+                      } else if (storeData?.options && storeData.options[optionType]) {
+                        oldLabel = optionType.charAt(0).toUpperCase() + optionType.slice(1);
+                      }
+                      oldLabel = oldLabel.replace(" (product option)", "");
                       if (filterTitle === oldLabel) {
                         setFilterTitle(label.replace(" (product option)", ""));
                       }
