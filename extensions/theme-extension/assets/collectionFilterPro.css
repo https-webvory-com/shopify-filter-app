@@ -171,7 +171,7 @@ facet-filters-form,
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,.45);
-    backdrop-filter: blur(3px);
+    backdrop-filter: none;
     z-index: 9998;
     opacity: 0;
     pointer-events: none;
@@ -1328,7 +1328,7 @@ facet-filters-form,
     position: fixed !important;
     inset: 0 !important;
     background: rgba(0,0,0,.45) !important;
-    backdrop-filter: blur(3px) !important;
+    backdrop-filter: none !important;
     z-index: 2147483646 !important;
     opacity: 0;
     pointer-events: none;
