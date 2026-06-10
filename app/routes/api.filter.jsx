@@ -25,6 +25,10 @@ export const loader = async ({ request }) => {
 
     const globalSettings = await getFilterGlobalSettings(shop);
 
+    const mergedValues = await prisma.mergedValue.findMany({
+      where: { shop, isActive: true },
+    });
+
     // ── 0. Parse Query Parameters (needed for resolving group) ───────
     const collectionId = url.searchParams.get("collectionId");
     const collectionHandle = url.searchParams.get("collectionHandle");
@@ -113,10 +117,10 @@ export const loader = async ({ request }) => {
 
     // ── 2. Parse Remaining Query Parameters ────────────────────────────
 
-    const vendors = url.searchParams.getAll("vendor[]");
-    const types = url.searchParams.getAll("type[]");
+    let vendors = url.searchParams.getAll("vendor[]");
+    let types = url.searchParams.getAll("type[]");
     const collections = url.searchParams.getAll("collection[]");
-    const tags = url.searchParams.getAll("tags[]");
+    let tags = url.searchParams.getAll("tags[]");
     const availability = url.searchParams.getAll("availability[]");
     const titles = url.searchParams.getAll("title[]");
 
@@ -144,6 +148,29 @@ export const loader = async ({ request }) => {
           metafieldsFilters[metafieldKey] = [];
         metafieldsFilters[metafieldKey].push(value);
       }
+    }
+
+    const expandFilterValues = (type, values) => {
+      let expanded = [...values];
+      for (const val of values) {
+        const rules = mergedValues.filter(
+          (m) =>
+            m.filterType.toLowerCase() === type.toLowerCase() &&
+            m.targetValue.toLowerCase() === val.toLowerCase()
+        );
+        for (const r of rules) {
+          expanded.push(...r.sourceValues);
+        }
+      }
+      return [...new Set(expanded)];
+    };
+
+    vendors = expandFilterValues("vendor", vendors);
+    types = expandFilterValues("product_type", types);
+    tags = expandFilterValues("tags", tags);
+
+    for (const key of Object.keys(optionsFilters)) {
+      optionsFilters[key] = expandFilterValues(key, optionsFilters[key]);
     }
 
     // 🚚 2. Fetch Active Pinning Rule & Merchandising Rules Early 🚚
@@ -352,6 +379,14 @@ export const loader = async ({ request }) => {
        filteredProducts.forEach(processor);
     };
 
+    const getTargetValue = (type, rawValue) => {
+        const rule = mergedValues.find(
+            m => m.filterType.toLowerCase() === type.toLowerCase() && 
+                 m.sourceValues.some(sv => sv.toLowerCase() === rawValue.toLowerCase())
+        );
+        return rule ? rule.targetValue : rawValue;
+    };
+
     // 1. Collections
     processFacetsForGroup(null, (p) => {
        if (p.collections) {
@@ -366,18 +401,27 @@ export const loader = async ({ request }) => {
 
     // 2. Vendors
     processFacetsForGroup('vendor', (p) => {
-       if (p.vendor) vendorCounts[p.vendor] = (vendorCounts[p.vendor] || 0) + 1;
+       if (p.vendor) {
+           const tv = getTargetValue("vendor", p.vendor);
+           vendorCounts[tv] = (vendorCounts[tv] || 0) + 1;
+       }
     });
 
     // 3. Product Types
     processFacetsForGroup('productType', (p) => {
-       if (p.productType) typeCounts[p.productType] = (typeCounts[p.productType] || 0) + 1;
+       if (p.productType) {
+           const tv = getTargetValue("product_type", p.productType);
+           typeCounts[tv] = (typeCounts[tv] || 0) + 1;
+       }
     });
 
     // 4. Tags
     processFacetsForGroup('tag', (p) => {
        if (p.tags) {
-         p.tags.forEach((tag) => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; });
+         p.tags.forEach((tag) => {
+             const tv = getTargetValue("tags", tag);
+             tagCounts[tv] = (tagCounts[tv] || 0) + 1;
+         });
        }
     });
 
@@ -424,9 +468,18 @@ export const loader = async ({ request }) => {
             } else { optionsList = p.options || []; }
             
             p.variants.forEach((v) => {
-              if (v.option1 && optionsList[0] && optionsList[0].name === optName) optionCounts[optName][v.option1] = (optionCounts[optName][v.option1] || 0) + 1;
-              if (v.option2 && optionsList[1] && optionsList[1].name === optName) optionCounts[optName][v.option2] = (optionCounts[optName][v.option2] || 0) + 1;
-              if (v.option3 && optionsList[2] && optionsList[2].name === optName) optionCounts[optName][v.option3] = (optionCounts[optName][v.option3] || 0) + 1;
+              if (v.option1 && optionsList[0] && optionsList[0].name === optName) {
+                  const tv = getTargetValue(optName, v.option1);
+                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
+              }
+              if (v.option2 && optionsList[1] && optionsList[1].name === optName) {
+                  const tv = getTargetValue(optName, v.option2);
+                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
+              }
+              if (v.option3 && optionsList[2] && optionsList[2].name === optName) {
+                  const tv = getTargetValue(optName, v.option3);
+                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
+              }
             });
         });
     });
@@ -491,6 +544,7 @@ export const loader = async ({ request }) => {
       // Return group filters (FilterGroupItem[]) if available, else empty
       settings: activeGroupFilters || [],
       globalSettings,
+      mergedValues,
       debug: {
         resolvedCollectionId,
         resolvedCollectionTitle,

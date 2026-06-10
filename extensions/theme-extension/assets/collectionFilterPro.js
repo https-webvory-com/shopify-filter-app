@@ -269,7 +269,7 @@
       }
       
       if (data.products) {
-        renderProducts(data.products, data.totalCount, isLoadMore);
+        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues);
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
@@ -364,7 +364,7 @@
   }
 
 
-  function renderProducts(products, totalCount, isLoadMore) {
+  function renderProducts(products, totalCount, isLoadMore, mergedValues) {
     // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
@@ -424,12 +424,25 @@
           const selectedValues = [];
           Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
           
+          // Expand selected values using mergedValues to ensure we match variants correctly
+          let expandedSelectedValues = [...selectedValues];
+          if (mergedValues && mergedValues.length > 0) {
+              for(const v of selectedValues) {
+                 const rules = mergedValues.filter(m => m.targetValue.toLowerCase() === v.toLowerCase());
+                 for(const r of rules) {
+                     expandedSelectedValues.push(...r.sourceValues);
+                 }
+              }
+          }
+
           if (selectedValues.length > 0 && product.variants && product.variants.length > 0) {
-            // Find a variant that matches one of the selected option values
+            // Lowercase all for case-insensitive matching
+            const expandedLower = expandedSelectedValues.map(x => x.toLowerCase());
+            // Find a variant that matches one of the expanded selected option values
             const matchedVariant = product.variants.find(v => 
-              (v.option1 && selectedValues.includes(v.option1)) ||
-              (v.option2 && selectedValues.includes(v.option2)) ||
-              (v.option3 && selectedValues.includes(v.option3))
+              (v.option1 && expandedLower.includes(v.option1.toLowerCase())) ||
+              (v.option2 && expandedLower.includes(v.option2.toLowerCase())) ||
+              (v.option3 && expandedLower.includes(v.option3.toLowerCase()))
             );
             if (matchedVariant && matchedVariant.imageUrl) {
               variantImg = matchedVariant.imageUrl;
