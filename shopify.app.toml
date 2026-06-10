@@ -2,9 +2,9 @@
 
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-handle = "ai-smart-search-filter"
-application_url = "https://insurance-boot-anywhere-priced.trycloudflare.com"
+application_url = " https://aisearchfilter.webvory.com"
 embedded = true
+handle = "ai-smart-search-filter"
 
 [build]
 automatically_update_urls_on_dev = true
@@ -13,31 +13,27 @@ automatically_update_urls_on_dev = true
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
-
-  [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/products"
-  topics = [
-    "products/create",
-    "products/update",
-    "products/delete"
-  ]
+  topics = [ "products/create", "products/update", "products/delete" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions,read_inventory,read_locations,read_themes"
-
+scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
-redirect_urls = [ "https://insurance-boot-anywhere-priced.trycloudflare.com/api/auth" ]
-
+redirect_urls = [
+  " https://aisearchfilter.webvory.com/api/auth"
+]
 
 [app_proxy]
-url = "https://insurance-boot-anywhere-priced.trycloudflare.com"
-prefix = "apps"
+url = " https://aisearchfilter.webvory.com"
 subpath = "collection-filter-pro"
+prefix = "apps"

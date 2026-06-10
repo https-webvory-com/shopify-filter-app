@@ -348,14 +348,12 @@
     let skeletonHtml = '';
     for (let i = 0; i < 8; i++) {
       skeletonHtml += `
-        <div class="cfp-product-card" style="border: none; box-shadow: none;">
-          <div class="cfp-product-image-wrapper" style="background-color: #f0f0f0; min-height: 250px;">
-            <div class="cfp-sk-anim" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">&nbsp;</div>
-          </div>
-          <div class="cfp-product-info" style="text-align: center;">
-            <div class="cfp-sk-anim" style="height: 12px; width: 40%; margin: 0 auto 8px auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
-            <div class="cfp-sk-anim" style="height: 16px; width: 80%; margin: 0 auto 8px auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
-            <div class="cfp-sk-anim" style="height: 14px; width: 30%; margin: 0 auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
+        <div class="cfp-product-card cfp-skeleton-card">
+          <div class="cfp-skeleton-image cfp-skeleton">&nbsp;</div>
+          <div class="cfp-product-card__info" style="align-items: center;">
+            <div class="cfp-skeleton-text cfp-skeleton-vendor cfp-skeleton">&nbsp;</div>
+            <div class="cfp-skeleton-text cfp-skeleton-title cfp-skeleton" style="margin-top: 8px; margin-bottom: 8px;">&nbsp;</div>
+            <div class="cfp-skeleton-text cfp-skeleton-price cfp-skeleton">&nbsp;</div>
           </div>
         </div>
       `;
@@ -588,8 +586,9 @@
         const prefixStr = s.sliderPrefix || (setting.type === "price_range" ? "$" : "");
         const suffixStr = s.sliderSuffix || "";
         const step = s.sliderStep || 1;
-        // Calculate max price from priceRanges
+        // Calculate max and min price from priceRanges
         let maxLimit = 100000;
+        let minLimit = 0;
         if (facets && facets.priceRanges && facets.priceRanges.length > 0) {
           const maxValues = facets.priceRanges.map(r => {
             const parts = r.label ? r.label.split('-') : [];
@@ -597,14 +596,26 @@
           });
           const highest = Math.max(...maxValues);
           if (highest > 0) maxLimit = highest;
+
+          const minValues = facets.priceRanges.map(r => {
+            const parts = r.label ? r.label.split('-') : [];
+            return parts.length === 2 ? parseFloat(parts[0]) : 0;
+          });
+          const lowest = Math.min(...minValues);
+          if (lowest >= 0) minLimit = lowest;
         }
 
         maxPriceLimit = maxLimit; // Update global for active badge computation if needed
 
-        const fillLeft = (activeFilters.minPrice / maxLimit) * 100;
+        let effectiveMin = activeFilters.minPrice;
+        if (effectiveMin < minLimit) effectiveMin = minLimit;
         let effectiveMax = activeFilters.maxPrice;
         if (effectiveMax === 999999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
-        const fillRight = 100 - (effectiveMax / maxLimit) * 100;
+        if (effectiveMax < minLimit) effectiveMax = minLimit;
+
+        const rangeDiff = maxLimit - minLimit;
+        const fillLeft = rangeDiff > 0 ? ((effectiveMin - minLimit) / rangeDiff) * 100 : 0;
+        const fillRight = rangeDiff > 0 ? 100 - ((effectiveMax - minLimit) / rangeDiff) * 100 : 0;
         
         const intervals = parseInt(s.sliderRange) > 0 ? parseInt(s.sliderRange) : 4;
         const points = intervals + 1;
@@ -621,7 +632,7 @@
 
         for (let i = 0; i < points; i++) {
           const percent = (i / (points - 1)) * 100;
-          const val = (i / (points - 1)) * maxLimit;
+          const val = minLimit + (i / (points - 1)) * (maxLimit - minLimit);
           ticksHtml += `
             <div style="position: absolute; left: ${percent}%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; top: 16px; z-index: 0; pointer-events: none;">
               <div style="width: 1px; height: 8px; background: ${sliderColor}; margin-bottom: 4px;"></div>
@@ -637,7 +648,7 @@
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${activeFilters.minPrice}" min="0" step="${step}">
+                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${effectiveMin}" min="${minLimit}" step="${step}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -645,7 +656,7 @@
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${effectiveMax}" min="0" step="${step}">
+                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${effectiveMax}" min="${minLimit}" step="${step}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -653,8 +664,8 @@
             
             <div class="cfp-range-track" id="cfp-slider-track">
               <div class="cfp-range-fill" id="cfp-slider-fill" style="left: ${fillLeft}%; right: ${fillRight}%;"></div>
-              <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="0" max="${maxLimit}" value="${activeFilters.minPrice}" step="${step}">
-              <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="0" max="${maxLimit}" value="${effectiveMax}" step="${step}">
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="${minLimit}" max="${maxLimit}" value="${effectiveMin}" step="${step}">
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="${minLimit}" max="${maxLimit}" value="${effectiveMax}" step="${step}">
               ${ticksHtml}
             </div>
           </div>
@@ -679,10 +690,17 @@
         else if (type === 'vendor') items = facets.vendors || [];
         else if (type === 'product_type') items = facets.productTypes || [];
         else if (type === 'collection') items = facets.collections || [];
-        else if (type === 'tag' || type === 'tags') items = facets.tags || [];
+        else if (type === 'tag' || type === 'tags') {
+          items = facets.tags || [];
+          console.log("CFP Debug: Resolving tags for group", setting.label, "initial items:", JSON.stringify(items));
+        }
         else if (type === 'title') items = facets.titles || [];
         else if (type === 'option') items = facets.options?.[key] || [];
         else if (type === 'metafield') items = facets.metafields?.[key] || [];
+
+        if (type === 'tag' || type === 'tags') {
+          console.log("CFP Debug: Group", setting.label, "before excluded/manual check:", JSON.stringify(items));
+        }
 
         if (!items || items.length === 0) return;
 
@@ -695,6 +713,9 @@
           if (config.sortManualValues) {
             items.sort((a,b) => config.manualValues.indexOf(a.value) - config.manualValues.indexOf(b.value));
           }
+        }
+        if (type === 'tag' || type === 'tags') {
+          console.log("CFP Debug: Group", setting.label, "final items resolved:", JSON.stringify(items));
         }
         // Apply Values Transformation
         if (adv.valuesTransformation && adv.valuesTransformation !== "No transformation") {
@@ -741,7 +762,13 @@
                           (type === 'metafield') ? `metafield-${key}` : type;
 
         const isColor = type === 'option' && (key.toLowerCase().includes('color') || key.toLowerCase().includes('colour'));
-        const resolvedMode = displayMode;
+        let resolvedMode = displayMode;
+        if (resolvedMode.toLowerCase() === 'chips' || resolvedMode.toLowerCase() === 'buttons') {
+          resolvedMode = 'Box/Button';
+        }
+        if (type === 'option' && key.toLowerCase().includes('size')) {
+          resolvedMode = 'Box/Button';
+        }
         
         const showMoreType = adv.showMoreType || "Scrollbar";
         const limit = 6;
@@ -776,14 +803,14 @@
         else if (resolvedMode === "Swatch") {
           const swatchConf = config.swatchConfig || {};
           const isCircle = swatchConf.circleSwatch !== false;
-          const showLabel = swatchConf.showLabel === true;
+          const showLabel = true;
           const hasSearch = adv.desktopSearchBox;
 
           groupContent = `
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -834,10 +861,27 @@
                     let visualHtml = '';
                     if (useImageLayout) {
                       if (isImageItem) {
-                        visualHtml = `<img src="${colorValue}" alt="${item.value}" style="width: auto; height: 80px; object-fit: contain; margin-bottom: 8px; ${isActive ? 'outline: 2px solid #000; outline-offset: 4px;' : ''}">`;
+                        visualHtml = `
+                          <div class="cfp-swatch-image-wrapper" style="position: relative; display: inline-flex; align-items: flex-end; justify-content: center; width: auto; height: 80px; margin-bottom: 0px;">
+                            <img src="${colorValue}" alt="${item.value}" style="width: auto; height: 80px; object-fit: contain; border-radius: 4px;">
+                            ${isActive ? `
+                              <span class="cfp-swatch-checked-badge" style="position: absolute; bottom: 8px; right: -4px; width: 18px; height: 18px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;">
+                                <svg viewBox="0 0 24 24" style="width: 10px; height: 10px; fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;"><polyline points="20 6 9 17 4 12"/></svg>
+                              </span>
+                            ` : ''}
+                          </div>
+                        `;
                       } else {
-                        // Empty placeholder if icon is missing but group is image-based. Added &nbsp; to prevent :empty CSS from hiding it.
-                        visualHtml = `<div style="width: 100%; height: 80px; background: transparent; margin-bottom: 8px; display: block;">&nbsp;</div>`;
+                        visualHtml = `
+                          <div class="cfp-swatch-image-wrapper" style="position: relative; display: inline-flex; align-items: flex-end; justify-content: center; width: auto; height: 80px; margin-bottom: 0px;">
+                            <div class="cfp-skeleton" style="width: 50px; height: 50px; border-radius: 4px;">&nbsp;</div>
+                            ${isActive ? `
+                              <span class="cfp-swatch-checked-badge" style="position: absolute; bottom: 8px; right: -4px; width: 18px; height: 18px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;">
+                                <svg viewBox="0 0 24 24" style="width: 10px; height: 10px; fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;"><polyline points="20 6 9 17 4 12"/></svg>
+                              </span>
+                            ` : ''}
+                          </div>
+                        `;
                       }
                     } else {
                       visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: 22px; height: 22px; display: inline-block; ${isCircle ? 'border-radius: 50%;' : 'border-radius: 4px;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${isActive ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0;"></span>`;
@@ -847,7 +891,7 @@
                       <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''} ${useImageLayout ? 'cfp-swatch-is-image' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: ${useImageLayout ? '4px' : '8px'}; cursor: pointer; flex-direction: ${useImageLayout ? 'column' : 'row'}; justify-content: flex-start; text-align: center; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${visualHtml}
-                        ${showLabel || useImageLayout ? `<span class="cfp-swatch-label" style="font-family: 'Montserrat', 'Poppins', 'Inter', sans-serif; font-size: ${useImageLayout ? '14px' : '15px'}; text-align: ${useImageLayout ? 'center' : 'left'}; color: #202223;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display:none;">${getDisplayLabel(item.value, prefix)}</span>`}
+                        ${showLabel || useImageLayout ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: ${useImageLayout ? '14px' : '15px'}; text-align: ${useImageLayout ? 'center' : 'left'}; color: #202223;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display:none;">${getDisplayLabel(item.value, prefix)}</span>`}
                       </label>
                     `;
                   }).join('');
@@ -863,7 +907,7 @@
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -888,7 +932,7 @@
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Search ${setting.label}...">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -909,7 +953,29 @@
         }
       }
 
-      
+      const hasActiveSelections = (() => {
+        if (type === 'vendor') return activeFilters.vendors.length > 0;
+        if (type === 'product_type') return activeFilters.types.length > 0;
+        if (type === 'collection') return activeFilters.collections.length > 0;
+        if (type === 'tag' || type === 'tags') return activeFilters.tags.length > 0;
+        if (type === 'availability') return activeFilters.availability.length > 0;
+        if (type === 'price') {
+          let minLimit = 0;
+          if (facets && facets.priceRanges && facets.priceRanges.length > 0) {
+            const minValues = facets.priceRanges.map(r => {
+              const parts = r.label ? r.label.split('-') : [];
+              return parts.length === 2 ? parseFloat(parts[0]) : 0;
+            });
+            const lowest = Math.min(...minValues);
+            if (lowest >= 0) minLimit = lowest;
+          }
+          return activeFilters.priceRanges.length > 0 || activeFilters.minPrice > minLimit || (activeFilters.maxPrice < maxPriceLimit && activeFilters.maxPrice > minLimit);
+        }
+        if (type === 'option') return (activeFilters.options[key] || []).length > 0;
+        if (type === 'metafield') return (activeFilters.metafields[key] || []).length > 0;
+        return false;
+      })();
+
       const groupId = `cfp-group-${setting.id || index}-${type}-${key || ''}`;
       let isCollapsed = adv.desktopCollapsed;
       if (cfpGroupToggleState[groupId] !== undefined) {
@@ -919,14 +985,18 @@
       html += `
         <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="${config.multipleSelection === true}">
           <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="${groupId}">
-
             <div style="display: flex; align-items: center; gap: 6px;">
               <span>${setting.label}</span>
               ${adv.displayTooltip ? `
                 <div class="cfp-tooltip-icon" data-tooltip="${(adv.tooltipContent || '').replace(/"/g, '&quot;')}">?</div>
               ` : ''}
             </div>
-            <svg class="cfp-chevron" viewBox="0 0 20 20" style="width: 12px; height: 12px; fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
+            <div style="display: flex; align-items: center;">
+              ${hasActiveSelections ? `
+                <span class="cfp-clear-group" data-type="${type}" data-key="${key || ''}" style="color: #8c9196; font-size: 13px; font-family: 'Poppins', sans-serif; font-weight: 400; text-transform: none; margin-right: 12px; cursor: pointer; transition: color 0.15s;">Clear</span>
+              ` : ''}
+              <svg class="cfp-chevron" viewBox="0 0 20 20" style="width: 12px; height: 12px; fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
+            </div>
           </button>
           <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${setting.id || index}-${type}-${key || ''}">
             ${groupContent}
@@ -994,6 +1064,18 @@
       clearBtn.addEventListener('click', clearAllFilters);
     }
 
+    // Individual group clear button click handler
+    document.body.addEventListener('click', function(e) {
+      const clearGroupBtn = e.target.closest('.cfp-clear-group');
+      if (clearGroupBtn) {
+        e.stopPropagation();
+        e.preventDefault();
+        const type = clearGroupBtn.getAttribute('data-type');
+        const key = clearGroupBtn.getAttribute('data-key');
+        clearGroupFilter(type, key);
+      }
+    });
+
     // Top Bar Sorting
     // Custom Dropdown Sorting Logic
     document.body.addEventListener('click', function(e) {
@@ -1055,19 +1137,24 @@
         // Filter list items
         wrapper.querySelectorAll('.cfp-checkbox').forEach(label => {
           const txt = label.querySelector('.cfp-checkbox__label');
-          label.style.display = (!txt || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+          const matches = !txt || txt.textContent.toLowerCase().includes(q);
+          label.classList.toggle('cfp-search-hidden', !matches);
         });
         
         // Filter button chips
         wrapper.querySelectorAll('.cfp-button-chip').forEach(label => {
           const txt = label.querySelector('span');
-          label.style.display = (!txt || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+          const matches = !txt || txt.textContent.toLowerCase().includes(q);
+          label.classList.toggle('cfp-search-hidden', !matches);
         });
         
         // Filter swatches
         wrapper.querySelectorAll('.cfp-color-swatch').forEach(label => {
-          const txt = label.querySelector('.cfp-swatch-label') || label;
-          label.style.display = (!txt || txt.title.toLowerCase().includes(q) || txt.textContent.toLowerCase().includes(q)) ? '' : 'none';
+          const txt = label.querySelector('.cfp-swatch-label');
+          const titleVal = label.getAttribute('title') || '';
+          const txtVal = txt ? txt.textContent : '';
+          const matches = titleVal.toLowerCase().includes(q) || txtVal.toLowerCase().includes(q);
+          label.classList.toggle('cfp-search-hidden', !matches);
         });
       });
     });
@@ -1100,10 +1187,12 @@
       if(!fill || !rangeMin || !rangeMax) return;
       const minVal = parseFloat(rangeMin.value) || 0;
       const maxVal = parseFloat(rangeMax.value) || 0;
+      const minLimit = parseFloat(rangeMin.min) || 0;
       const maxLimit = parseFloat(rangeMin.max) || 1000;
+      const rangeDiff = maxLimit - minLimit;
       
-      let leftPercent = (minVal / maxLimit) * 100;
-      let rightPercent = 100 - (maxVal / maxLimit) * 100;
+      let leftPercent = rangeDiff > 0 ? ((minVal - minLimit) / rangeDiff) * 100 : 0;
+      let rightPercent = rangeDiff > 0 ? 100 - ((maxVal - minLimit) / rangeDiff) * 100 : 0;
       if(leftPercent < 0) leftPercent = 0;
       if(rightPercent < 0) rightPercent = 0;
       if(leftPercent > 100) leftPercent = 100;
@@ -1317,6 +1406,28 @@
 
     fetchAndRenderData();
     closeSidebar();
+  }
+
+  function clearGroupFilter(type, key) {
+    if (type === 'vendor') activeFilters.vendors = [];
+    else if (type === 'product_type') activeFilters.types = [];
+    else if (type === 'collection') activeFilters.collections = [];
+    else if (type === 'tag' || type === 'tags') activeFilters.tags = [];
+    else if (type === 'availability') activeFilters.availability = [];
+    else if (type === 'title') activeFilters.titles = [];
+    else if (type === 'price') {
+      activeFilters.minPrice = 0;
+      activeFilters.maxPrice = 999999;
+      activeFilters.priceRanges = [];
+    }
+    else if (type === 'option') {
+      activeFilters.options[key] = [];
+    }
+    else if (type === 'metafield') {
+      activeFilters.metafields[key] = [];
+    }
+    activeFilters.page = 1;
+    fetchAndRenderData();
   }
 
   function removeFilter(type, val) {

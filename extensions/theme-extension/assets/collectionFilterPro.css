@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:wght@400;500;600;700&display=swap');
+
 /* ===================================================
    Collection Filter Pro — Storefront Styles
    =================================================== */
@@ -5,17 +7,17 @@
 :root {
   /* Colors are now dynamic via collectionFilterPro.liquid */
   --cfp-bg: #ffffff;
-  --cfp-surface: #f8f9fb;
-  --cfp-border: #e5e7eb;
-  --cfp-text: #111827;
-  --cfp-text-muted: #6b7280;
-  --cfp-text-light: #9ca3af;
-  --cfp-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.05);
-  --cfp-shadow-lg: 0 20px 40px -8px rgba(0,0,0,.18);
-  --cfp-radius: 12px;
-  --cfp-radius-sm: 6px;
-  --cfp-sidebar-w: 272px;
-  --cfp-transition: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  --cfp-surface: #ffffff;
+  --cfp-border: #e2e8f0;
+  --cfp-text: #111111;
+  --cfp-text-muted: #4a5568;
+  --cfp-text-light: #a0aec0;
+  --cfp-shadow: none;
+  --cfp-shadow-lg: 0 10px 30px rgba(0,0,0,0.06);
+  --cfp-radius: 0px;
+  --cfp-radius-sm: 0px;
+  --cfp-sidebar-w: 350px;
+  --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ─── Theme Filter Kill Switch ───────────────────────────────────────── */
@@ -152,7 +154,7 @@ facet-filters-form,
   box-shadow: none;
   display: flex;
   flex-direction: column !important;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  font-family: 'Poppins', sans-serif;
   /* Desktop: sticky so it scrolls with the viewport */
   position: sticky;
   top: 20px;
@@ -234,10 +236,11 @@ facet-filters-form,
   display: flex;
   align-items: center !important;
   gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--cfp-text);
-  letter-spacing: -0.01em;
+  font-family: 'Playfair Display', serif !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  color: var(--cfp-text) !important;
+  letter-spacing: 0.02em !important;
 }
 .cfp-sidebar__count {
   font-size: 11px;
@@ -251,9 +254,9 @@ facet-filters-form,
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid var(--cfp-border);
   background: transparent;
   cursor: pointer;
+  border:none;
   color: var(--cfp-text-muted);
   transition: background var(--cfp-transition), color var(--cfp-transition);
 }
@@ -275,7 +278,7 @@ facet-filters-form,
 .cfp-sidebar__body::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
 
 /* ─── Filter Group ───────────────────────────────────────────────────── */
-.cfp-group { border-bottom: 1px solid var(--cfp-border); }
+.cfp-group { border-bottom: 1px solid var(--cfp-border); padding:8px 0}
 .cfp-group:last-child { border-bottom: none; }
 
 .cfp-group__toggle {
@@ -283,15 +286,16 @@ facet-filters-form,
   align-items: center !important;
   justify-content: space-between;
   width: 100%;
-  padding: 18px 0;
+  padding: 8px 0;
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 800;
-  color: #202223;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #111111 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
 }
 
 .cfp-tooltip-icon {
@@ -347,17 +351,6 @@ facet-filters-form,
   opacity: 1;
   visibility: visible;
 }
-  padding: 18px 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 800;
-  color: #202223;
-  text-align: left;
-  text-transform: uppercase;
-  transition: background var(--cfp-transition);
-}
 .cfp-group__toggle:hover { background: transparent; }
 
 .cfp-chevron {
@@ -365,6 +358,8 @@ facet-filters-form,
   color: var(--cfp-text-muted);
   transition: transform var(--cfp-transition);
   transform: rotate(180deg);
+  width: 22px !important;
+  height: 22px !important;
 }
 .cfp-group__toggle[aria-expanded="false"] .cfp-chevron {
   transform: rotate(0deg);
@@ -455,7 +450,7 @@ facet-filters-form,
 }
 .cfp-checkbox input[type="checkbox"]:checked ~ .cfp-checkbox__box::after { opacity: 1; }
 
-.cfp-checkbox__label { flex: 1; font-size: 15px; font-weight: 400; color: #202223; }
+.cfp-checkbox__label { flex: 1; font-size: 14px; font-weight: 400; color: #202223; }
 .cfp-checkbox__count {
   font-size: 11px;
   color: var(--cfp-text-light);
@@ -549,114 +544,155 @@ facet-filters-form,
 /* ─── Brand Search ───────────────────────────────────────────────────── */
 .cfp-search-input-wrap {
   display: flex; align-items: center !important; gap: 8px;
-  border: 1px solid var(--cfp-border);
-  border-radius: var(--cfp-radius-sm);
-  padding: 7px 10px;
-  background: var(--cfp-surface);
-  margin-bottom: 10px;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 99px !important;
+  padding: 8px 14px !important;
+  background: #fafafa !important;
+  margin-bottom: 16px;
   color: var(--cfp-text-muted);
-  transition: border-color var(--cfp-transition), box-shadow var(--cfp-transition);
+  transition: border-color var(--cfp-transition);
+  box-shadow: none !important;
 }
 .cfp-search-input-wrap:focus-within {
-  border-color: var(--cfp-accent);
-  box-shadow: 0 0 0 3px var(--cfp-accent-light);
+  border-color: #cbd5e1 !important;
+  box-shadow: none !important;
 }
 .cfp-search-input {
-  border: none; background: transparent;
-  font-size: 13px; color: var(--cfp-text); outline: none; width: 100%;
+  border: none !important; background: transparent !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 14px !important; color: var(--cfp-text) !important; outline: none !important; width: 100% !important;
+  box-shadow: none !important;
+}
+
+.cfp-search-hidden,
+.cfp-color-swatch.cfp-search-hidden,
+.cfp-checkbox.cfp-search-hidden,
+.cfp-button-chip.cfp-search-hidden {
+  display: none !important;
 }
 
 /* ─── Color Swatches ─────────────────────────────────────────────────── */
 .cfp-color-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px 4px;
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 12px 8px !important;
+  padding: 4px 0 !important;
 }
 .cfp-color-swatch {
-  display: flex;
-  cursor: pointer;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 .cfp-color-swatch input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-swatch-circle {
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 2px solid transparent;
-  box-shadow: 0 1px 3px rgba(0,0,0,.12);
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  flex-shrink: 0 !important;
+  margin: 4px !important;
 }
-.cfp-color-swatch:hover .cfp-swatch-circle { transform: scale(1.12); }
+.cfp-color-swatch:hover .cfp-swatch-circle {
+  border-color: #000000 !important;
+}
 .cfp-color-swatch input:checked ~ .cfp-swatch-circle {
-  border-color: var(--cfp-accent);
-  box-shadow: 0 0 0 3px var(--cfp-accent-light);
-  transform: scale(1.08);
+  border-color: #000000 !important;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #000000 !important;
 }
-.cfp-swatch-label { font-size: 10px; color: var(--cfp-text-muted); text-align: center; }
+.cfp-swatch-label {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  color: #1a1a1a !important;
+  text-align: left !important;
+  display: inline-block !important;
+}
 
 /* ─── Size Chips ─────────────────────────────────────────────────────── */
-.cfp-size-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.cfp-size-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px !important;
+}
 .cfp-size-chip { position: relative; cursor: pointer; }
 .cfp-size-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-size-chip span {
-  display: flex; align-items: center !important; justify-content: center;
-  min-width: 40px; padding: 5px 8px;
-  border-radius: var(--cfp-radius-sm);
-  border: 1.5px solid var(--cfp-border);
-  font-size: 12.5px; font-weight: 500;
-  color: var(--cfp-text-muted);
-  background: var(--cfp-surface);
-  transition: all var(--cfp-transition);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 10px 4px !important;
+  border: 1px solid #e2e8f0 !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #1a1a1a !important;
+  background: #ffffff !important;
+  border-radius: 0px !important;
+  transition: all var(--cfp-transition) !important;
+  text-align: center !important;
 }
 .cfp-size-chip:hover span {
-  border-color: var(--cfp-accent);
-  color: var(--cfp-accent);
-  background: var(--cfp-accent-light);
+  border-color: #000000 !important;
+  color: #000000 !important;
 }
 .cfp-size-chip input:checked ~ span {
-  background: var(--cfp-accent);
-  border-color: var(--cfp-accent);
-  color: white; font-weight: 600;
+  background: #000000 !important;
+  border-color: #000000 !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
 }
 
 /* ─── Button Boxes ───────────────────────────────────────────────────── */
-.cfp-button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cfp-button-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px !important;
+}
 .cfp-button-chip { position: relative; cursor: pointer; }
 .cfp-button-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .cfp-button-chip span {
-  display: flex; align-items: center !important; justify-content: center;
-  padding: 0 10px; border-radius: 2px;
-  border: 1px solid #e1e3e5;
-  font-size: 13px; font-weight: 400;
-  color: #202223;
-  background: #ffffff;
-  height: 40px;
-  transition: all var(--cfp-transition);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 10px 4px !important;
+  border: 1px solid #e2e8f0 !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #1a1a1a !important;
+  background: #ffffff !important;
+  border-radius: 0px !important;
+  height: 40px !important;
+  transition: all var(--cfp-transition) !important;
 }
 .cfp-button-chip:hover span {
-  border-color: #000000;
-  color: #000000;
+  border-color: #000000 !important;
+  color: #000000 !important;
 }
 .cfp-button-chip input:checked ~ span {
-  background: #000000;
-  border-color: #000000;
-  color: #ffffff; font-weight: 800;
+  background: #000000 !important;
+  border-color: #000000 !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
 }
 
 /* ─── Footer Buttons ─────────────────────────────────────────────────── */
 .cfp-sidebar__footer {
-  display: none; /* Hidden on desktop */
+  display: flex !important;
   gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--cfp-border);
+  padding: 16px  0 0 !important;
+  border-top: none !important;
   background: var(--cfp-bg);
   flex-shrink: 0;
 }
-@media (max-width: 991px) {
-  .cfp-sidebar__footer {
-    display: flex;
-  }
-}
 .cfp-btn {
   flex: 1; padding: 10px 12px;
-  border-radius: var(--cfp-radius-sm);
+  border-radius: 0px !important;
   font-size: 13px; font-weight: 600;
   cursor: pointer;
   transition: all var(--cfp-transition);
@@ -671,16 +707,29 @@ facet-filters-form,
   background: var(--cfp-accent);
   color: var(--cfp-accent-text);
 }
+.cfp-btn--apply-all,
 .cfp-btn--primary {
-  background: var(--cfp-accent) !important;
-  color: var(--cfp-accent-text) !important;
-  border: 1px solid var(--cfp-accent) !important;
+  width: 100% !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 0px !important;
+  padding: 16px !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  box-shadow: none !important;
+  transition: background 0.2s ease !important;
 }
+.cfp-btn--apply-all:hover,
 .cfp-btn--primary:hover {
-  background: var(--cfp-accent-hover); border-color: var(--cfp-accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(92,106,196,.4);
+  background: #1a1a1a !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
+.cfp-btn--apply-all:active,
 .cfp-btn--primary:active { transform: none; box-shadow: none; }
 
 /* ─── Mobile Trigger Button ──────────────────────────────────────────── */
@@ -724,7 +773,7 @@ facet-filters-form,
 .cfp-products-grid {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(220px, 1fr)) !important;
-  gap: 24px !important;
+  gap: 10px !important;
   width: 100% !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -1098,7 +1147,7 @@ facet-filters-form,
     position: absolute;
     top: 12px;
     bottom: auto !important;
-    left: 0px;
+    left: 4px;
     background: #ff3333;
     color: white;
     padding: 4px 8px;
@@ -1313,7 +1362,7 @@ facet-filters-form,
   left: 0 !important;
 }
 .cfp-sidebar__header {
-  padding: 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid #eee;
   display: flex;
   justify-content: space-between;
@@ -1332,7 +1381,7 @@ facet-filters-form,
 .cfp-sidebar__body {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 6px 20px;
 }
 .cfp-sidebar__footer {
   padding: 0;
@@ -1440,25 +1489,25 @@ facet-filters-form,
 .cfp-custom-sort.is-open .cfp-custom-sort__trigger svg { transform: rotate(180deg); }
 .cfp-custom-sort__dropdown { position: absolute; top: calc(100% + 4px); right: 0; min-width: 180px; background: #ffffff; border: 1px solid #e1e3e5; border-radius: 4px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: none; flex-direction: column; padding: 8px 0; }
 .cfp-custom-sort.is-open .cfp-custom-sort__dropdown { display: flex; }
-.cfp-custom-sort__option { padding: 8px 16px; cursor: pointer; color: #4a4a4a; transition: background 0.1s; }
+.cfp-custom-sort__option { padding: 4px 12px; cursor: pointer; color: #4a4a4a; transition: background 0.1s; }
 .cfp-custom-sort__option:hover { background: #f4f6f8; color: #202223; }
 .cfp-custom-sort__option.is-selected { color: #202223; font-weight: 500; }
 
 /* Skeleton Loader */
-@keyframes cfpSkeletonShimmer {
-  0% { background-position: -468px 0; }
-  100% { background-position: 468px 0; }
+@keyframes cfpSkeletonGlassShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 .cfp-skeleton {
-  background: #f6f7f8;
-  background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
-  background-repeat: no-repeat;
-  background-size: 800px 100%;
-  animation-duration: 1.5s;
-  animation-fill-mode: forwards;
-  animation-iteration-count: infinite;
-  animation-name: cfpSkeletonShimmer;
-  animation-timing-function: linear;
+  background: linear-gradient(
+    90deg,
+    #cccccc 25%,
+    #d8d8d8 50%,
+    #cccccc 75%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: cfpSkeletonGlassShimmer 1.5s infinite linear !important;
+  border: none !important;
 }
 .cfp-skeleton-card {
   display: flex;
@@ -1467,8 +1516,9 @@ facet-filters-form,
 }
 .cfp-skeleton-image {
   width: 100%;
-  aspect-ratio: 2/3;
-  border-radius: 4px;
+  height: 0;
+  padding-bottom: 150%; /* Perfect 2:3 vertical aspect ratio */
+  border-radius: 6px;
 }
 .cfp-skeleton-text {
   height: 12px;
@@ -1559,8 +1609,8 @@ facet-filters-form,
 }
 
 .cfp-swatch-label {
-  font-size: 11px !important;
-  color: #4a4a4a !important;
+  font-size: 12px !important;
+  color: #121212 !important;
   text-align: center !important;
   line-height: 1.2 !important;
   word-break: break-word !important;
@@ -1674,7 +1724,7 @@ facet-filters-form,
 .cfp-color-grid--list {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
-  gap: 20px 16px !important;
+  gap: 8px !important;
 }
 
 /* 11. Search Box Overrides */
