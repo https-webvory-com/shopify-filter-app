@@ -24,7 +24,7 @@
   const templateName = sidebar.dataset.templateName || '';
   const searchTerms = sidebar.dataset.searchTerms || '';
 
-  console.log("check againg yyy")
+  console.log("check againg 1")
 
   // ── 1. Global Filter State ──────────────────────────────────────────
   const PAGE_SIZE = 28;
@@ -162,9 +162,9 @@
 
     async function init() {
     setupStaticEventListeners();
-    const grid = findGrid();
-    if (grid) renderSkeleton(grid);
+    renderSkeleton();
     await fetchMerchandisingRule();
+    
     await fetchAndRenderData();
   }
 
@@ -256,8 +256,7 @@
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
         if (!isLoadMore) {
-          const grid = findGrid();
-          if (grid) renderSkeleton(grid);
+          renderSkeleton();
         }
         const response = await fetch(`/apps/collection-filter-pro/api/filter?${queryParams.toString()}`);
       const data = await response.json();
@@ -317,33 +316,76 @@
 
   // ── 4. Render Products Grid ────────────────────────────────────────
 
-  function renderSkeleton(grid) {
-    if (!grid) return;
+  function renderSkeleton() {
+    // Hide pagination during loading
+    const oldPagination = document.querySelector('.cfp-load-more-container');
+    if (oldPagination) oldPagination.style.display = 'none';
+
+    // Ensure products container exists
+    let productContainer = document.getElementById('cfp-products-container');
+    if (!productContainer) {
+      productContainer = document.createElement('div');
+      productContainer.id = 'cfp-products-container';
+      productContainer.className = 'cfp-products-grid';
+      
+      const wrapper = document.querySelector('.cfp-layout-wrapper');
+      if (wrapper) {
+        // Insert before native grid if it exists, otherwise just append
+        const grid = findGrid();
+        if (grid && wrapper.contains(grid)) {
+          wrapper.insertBefore(productContainer, grid);
+        } else {
+          wrapper.appendChild(productContainer);
+        }
+      } else {
+        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        main.appendChild(productContainer);
+      }
+    }
+
+    // Inject the real skeleton using the exact same classes as real products
+    // This ensures the browser treats them exactly like real products and doesn't collapse them
     let skeletonHtml = '';
     for (let i = 0; i < 8; i++) {
       skeletonHtml += `
-        <div class="cfp-skeleton-card">
-          <div class="cfp-skeleton cfp-skeleton-image"></div>
-          <div style="text-align: center; padding-top: 8px;">
-            <div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-vendor"></div>
-            <div class="cfp-skeleton cfp-skeleton-title"></div>
-            <div class="cfp-skeleton cfp-skeleton-text cfp-skeleton-price"></div>
+        <div class="cfp-product-card" style="border: none; box-shadow: none;">
+          <div class="cfp-product-image-wrapper" style="background-color: #f0f0f0; min-height: 250px;">
+            <div class="cfp-sk-anim" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0;">&nbsp;</div>
+          </div>
+          <div class="cfp-product-info" style="text-align: center;">
+            <div class="cfp-sk-anim" style="height: 12px; width: 40%; margin: 0 auto 8px auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
+            <div class="cfp-sk-anim" style="height: 16px; width: 80%; margin: 0 auto 8px auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
+            <div class="cfp-sk-anim" style="height: 14px; width: 30%; margin: 0 auto; background-color: #e0e0e0; border-radius: 2px;">&nbsp;</div>
           </div>
         </div>
       `;
     }
-    grid.classList.add('cfp-products-grid');
-    grid.innerHTML = skeletonHtml;
-    // hide pagination if exists during loading
-    const oldPagination = document.querySelector('.cfp-load-more-container');
-    if (oldPagination) oldPagination.style.display = 'none';
+    productContainer.innerHTML = skeletonHtml;
     
-    document.documentElement.classList.remove('cfp-loading-init');
+    productContainer.style.setProperty('display', 'grid', 'important');
   }
 
+
   function renderProducts(products, totalCount, isLoadMore) {
-    const grid = findGrid();
-    if (!grid) return;
+    // Get or create our dedicated products container (a plain div, never Dawn's ul)
+    let productContainer = document.getElementById('cfp-products-container');
+    if (!productContainer) {
+      productContainer = document.createElement('div');
+      productContainer.id = 'cfp-products-container';
+      productContainer.className = 'cfp-products-grid';
+      const nativeGrid = findGrid();
+      if (nativeGrid) {
+        // Permanently hide Dawn's native ul grid
+        nativeGrid.style.setProperty('display', 'none', 'important');
+        nativeGrid.parentElement.insertBefore(productContainer, nativeGrid.nextSibling);
+      } else {
+        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        main.appendChild(productContainer);
+      }
+    }
+    const grid = productContainer;
+    // Make products container visible (skeleton may have hidden it)
+    grid.style.display = 'grid';
 
     // Update count labels
     const countLabel = document.querySelector('.cfp-product-count');
@@ -1440,8 +1482,9 @@
   let isAttached = false;
 
   function findGrid() {
+    const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
     for (let i = 0; i < gridSelectors.length; i++) {
-      const found = document.querySelector(gridSelectors[i]);
+      const found = main.querySelector(gridSelectors[i]);
       if (found && !found.closest('.cfp-sidebar')) {
         return found;
       }
@@ -1469,7 +1512,8 @@
 
     const grid = findGrid();
     if (grid) {
-      grid.style.display = 'block';
+      // Do NOT show the native grid — it's permanently hidden by CSS
+      // We render products into cfp-products-container instead
 
       const hideSelectors = customSettings.hideSelectors || ['.facets', '.facets-container', '.facets-wrapper', '.collection-filters', 
 'facet-filters-form', '.product-count', '.pagination', 'nav.pagination', '.page-list', '.page-links', 
@@ -1504,12 +1548,21 @@
         wrapper.appendChild(breadcrumbs);
       }
       wrapper.appendChild(sidebar);
+
+      // Move products container into wrapper if it already exists
+      const productsContainer = document.getElementById('cfp-products-container');
+      if (productsContainer) {
+        wrapper.appendChild(productsContainer);
+      }
+
+      // Append native grid last (it's hidden by CSS, but needs to be in wrapper for findGrid())
       wrapper.appendChild(grid);
       
       sidebar.style.display = 'flex';
       isAttached = true;
     }
   }
+
 
   const observer = new MutationObserver(findAndInject);
   observer.observe(document.body, { childList: true, subtree: true });

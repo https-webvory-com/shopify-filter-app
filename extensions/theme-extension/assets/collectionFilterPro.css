@@ -138,7 +138,7 @@ facet-filters-form,
   width: 100% !important;
 }
 .cfp-layout-wrapper > *:not(.cfp-sidebar):not(.cfp-top-bar):not(.cfp-breadcrumbs) {
-  flex: 1 1 0 !important;
+  flex: 1 1 auto !important;
   min-width: 0 !important;
 }
 
