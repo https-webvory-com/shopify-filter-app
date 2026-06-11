@@ -82,13 +82,13 @@ const OptionTypeDropdown = ({ value, onChange, storeData }) => {
       : [];
       
     // Merge predefined with dynamic (avoiding duplicates)
-    const predefinedKeys = OPTION_TYPES.map(o => o.value);
+    const predefinedKeysLower = OPTION_TYPES.map(o => o.value.toLowerCase());
     const combinedOptions = [
       ...OPTION_TYPES,
-      ...dynamicTypes.filter(d => !predefinedKeys.includes(d.value))
+      ...dynamicTypes.filter(d => !predefinedKeysLower.includes(d.value.toLowerCase()))
     ];
 
-    const selectedLabel = combinedOptions.find(o => o.value === value)?.label || "Select";
+    const selectedLabel = combinedOptions.find(o => (o.value || "").toLowerCase() === (value || "").toLowerCase())?.label || "Select";
     
     const filteredOptions = combinedOptions.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
 
@@ -592,8 +592,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     if (DUMMY_DATA[type]) return DUMMY_DATA[type];
     
     // Check if it's a dynamic option type (like 'color', 'size', 'title', 'denominations')
-    if (storeData?.options && storeData.options[type]) {
-      return storeData.options[type].map(v => ({ label: v.value, count: v.count }));
+    if (storeData?.options) {
+      const matchedKey = Object.keys(storeData.options).find(k => k.toLowerCase() === type.toLowerCase());
+      if (matchedKey && storeData.options[matchedKey]) {
+        return storeData.options[matchedKey].map(v => ({ label: v.value, count: v.count }));
+      }
     }
 
     // Fallback dummy data if nothing exists
