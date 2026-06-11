@@ -404,7 +404,7 @@
       grid.innerHTML = `
         <div class="cfp-no-products">
           <p>No products match your selected filters.</p>
-          <button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline">Reset Filters</button>
+          <button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline" style="max-width: 137px; margin: 23px auto; width: 100%;">Reset Filters</button>
         </div>
       `;
       const resetBtn = document.getElementById('cfp-reset-inline');
@@ -515,7 +515,7 @@
       <div class="cfp-progress-bar-container" style="width: 250px; height: 4px; background: #e0e0e0; margin-bottom: 20px; border-radius: 2px; overflow: hidden;">
         <div class="cfp-progress-bar" style="width: ${percentage}%; height: 100%; background: #008060; transition: width 0.3s ease;"></div>
       </div>
-      <button class="cfp-btn cfp-btn--primary" id="cfp-load-more-btn" style="padding: 12px 40px; font-weight: bold; letter-spacing: 1px; cursor: pointer;">
+      <button class="cfp-btn cfp-btn--primary" id="cfp-load-more-btn" style="max-width: 300px; margin: 0 auto; padding: 12px 40px; font-weight: bold; letter-spacing: 1px; cursor: pointer;">
         LOAD MORE
       </button>
     `;

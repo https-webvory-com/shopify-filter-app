@@ -174,10 +174,10 @@ export const loader = async ({ request, params }) => {
     if (p.options && Array.isArray(p.options)) {
       for (const opt of p.options) {
         if (opt.name && opt.values) {
-          const optNameLower = opt.name.toLowerCase();
-          if (!optionsMap.has(optNameLower))
-            optionsMap.set(optNameLower, new Map());
-          const valMap = optionsMap.get(optNameLower);
+          const optName = opt.name;
+          if (!optionsMap.has(optName))
+            optionsMap.set(optName, new Map());
+          const valMap = optionsMap.get(optName);
           for (const v of opt.values) {
             valMap.set(v, (valMap.get(v) || 0) + 1);
           }
@@ -712,7 +712,7 @@ export default function FilterGroupDetail() {
       optionType:
         filter.filterType === "option"
           ? filter.filterKey
-            ? filter.filterKey.toLowerCase()
+            ? filter.filterKey
             : "option"
           : filter.filterType,
       filterTitle: filter.label,

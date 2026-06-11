@@ -585,7 +585,7 @@ export default function FilterGroups() {
 
       <s-stack direction="block" gap="base">
         {/* Info Banner */}
-        <s-box
+        {/* <s-box
           padding="base"
           style={{
             background: "#f1f2f4",
@@ -623,7 +623,7 @@ export default function FilterGroups() {
               </s-paragraph>
             </div>
           </s-stack>
-        </s-box>
+        </s-box> */}
 
         {/* Toolbar & Groups Table */}
         <div

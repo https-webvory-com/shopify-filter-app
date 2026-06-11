@@ -915,7 +915,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     value={displayMode} 
                     onChange={setDisplayMode} 
                     options={
-                      ["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? ["List", "Range"]
+                      ["price", "percent_sale", "weight", "review_rating"].includes(optionType?.toLowerCase()) ? ["List", "Range"]
                       : ["List", "Box", "Swatch"]
                     } 
                     width="100%"
@@ -923,7 +923,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 </div>
 
                 {/* Navigation Collections */}
-                {!["vendor", "product_type", "denominations", "title", "size"].includes(optionType) && (
+                {!["vendor", "product_type", "denominations", "title", "size"].includes(optionType?.toLowerCase()) && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={navCollections} onChange={setNavCollections} />
@@ -940,7 +940,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   </div>
                 )}
 
-                {navCollections && !["vendor", "product_type", "denominations", "title", "size"].includes(optionType) && (
+                {navCollections && !["vendor", "product_type", "denominations", "title", "size"].includes(optionType?.toLowerCase()) && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginLeft: "28px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Main collection</label>
@@ -1009,7 +1009,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     </Tooltip>
                   </div>
                   
-                  {["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? (
+                  {["price", "percent_sale", "weight", "review_rating"].includes(optionType?.toLowerCase()) ? (
                     <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                       
                       {displayMode === "Range" ? (
@@ -1602,7 +1602,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   )}
                 </div>
 
-                {!["price", "percent_sale", "weight", "review_rating"].includes(optionType) ? (
+                {!["price", "percent_sale", "weight", "review_rating"].includes(optionType?.toLowerCase()) ? (
                   <>
                     {/* Values transformation */}
                     <div>
@@ -1809,7 +1809,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {layout === "top" && (
                               <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
                             )}
-                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations", "size"].includes(optionType) && advanced.desktopSearchBox && (
+                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
                               <input 
                                 type="text" 
                                 placeholder="Filter options" 
@@ -1902,7 +1902,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     }}>
                       {displayMode === "Range" ? renderSliderPreview(false, device) : (
                         <>
-                          {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType) && advanced.mobileSearchBox && (
+                          {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
                             <input 
                               type="text" 
                               placeholder="Filter options" 
