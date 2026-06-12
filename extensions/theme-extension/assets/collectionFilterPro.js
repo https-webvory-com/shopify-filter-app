@@ -512,8 +512,8 @@
       <div class="cfp-progress-text" style="margin-bottom: 15px; font-size: 14px; color: #4a4a4a;">
         You've viewed ${viewedCount} of ${totalCount} products
       </div>
-      <div class="cfp-progress-bar-container" style="width: 250px; height: 4px; background: #e0e0e0; margin-bottom: 20px; border-radius: 2px; overflow: hidden;">
-        <div class="cfp-progress-bar" style="width: ${percentage}%; height: 100%; background: #008060; transition: width 0.3s ease;"></div>
+      <div class="cfp-progress-bar-container" style="width: 250px !important; height: 4px !important; background-color: #e0e0e0 !important; margin-bottom: 20px !important; border-radius: 2px !important; overflow: hidden !important; display: block !important;">
+        <div class="cfp-progress-bar" style="display: block !important; width: ${percentage}% !important; height: 100% !important; min-height: 4px !important; background-color: #000000 !important; transition: width 0.3s ease;"></div>
       </div>
       <button class="cfp-btn cfp-btn--primary" id="cfp-load-more-btn" style="max-width: 300px; margin: 0 auto; padding: 12px 40px; font-weight: bold; letter-spacing: 1px; cursor: pointer;">
         LOAD MORE
@@ -573,8 +573,16 @@
         return val;
       };
 
-      
       let groupContent = '';
+      let items = [];
+      const activeArray = (type === 'vendor') ? activeFilters.vendors :
+                          (type === 'product_type') ? activeFilters.types :
+                          (type === 'collection') ? activeFilters.collections :
+                          (type === 'tag' || type === 'tags') ? activeFilters.tags :
+                          (type === 'price') ? activeFilters.priceRanges :
+                          (type === 'title') ? (activeFilters.titles || []) :
+                          (type === 'option') ? (activeFilters.options[key] || []) :
+                          (activeFilters.metafields[key] || []);
 
       if (type === 'availability') {
         const inStockCount = facets.availability?.inStock || 0;
@@ -602,20 +610,28 @@
         // Calculate max and min price from priceRanges
         let maxLimit = 100000;
         let minLimit = 0;
-        if (facets && facets.priceRanges && facets.priceRanges.length > 0) {
-          const maxValues = facets.priceRanges.map(r => {
-            const parts = r.label ? r.label.split('-') : [];
-            return parts.length === 2 ? parseFloat(parts[1]) : 0;
-          });
-          const highest = Math.max(...maxValues);
-          if (highest > 0) maxLimit = highest;
-
-          const minValues = facets.priceRanges.map(r => {
-            const parts = r.label ? r.label.split('-') : [];
-            return parts.length === 2 ? parseFloat(parts[0]) : 0;
-          });
-          const lowest = Math.min(...minValues);
-          if (lowest >= 0) minLimit = lowest;
+        if (facets && facets.priceRanges) {
+          if (facets.priceRanges.maxLimit !== undefined) {
+             maxLimit = facets.priceRanges.maxLimit;
+             minLimit = facets.priceRanges.minLimit;
+          } else {
+            const rangesList = facets.priceRanges.ranges ? facets.priceRanges.ranges : (Array.isArray(facets.priceRanges) ? facets.priceRanges : []);
+            if (rangesList.length > 0) {
+              const maxValues = rangesList.map(r => {
+                const parts = r.label ? r.label.split('-') : [];
+                return parts.length === 2 ? parseFloat(parts[1]) : 0;
+              });
+              const highest = Math.max(...maxValues);
+              if (highest > 0) maxLimit = highest;
+    
+              const minValues = rangesList.map(r => {
+                const parts = r.label ? r.label.split('-') : [];
+                return parts.length === 2 ? parseFloat(parts[0]) : 0;
+              });
+              const lowest = Math.min(...minValues);
+              if (lowest >= 0) minLimit = lowest;
+            }
+          }
         }
 
         maxPriceLimit = maxLimit; // Update global for active badge computation if needed
@@ -686,9 +702,10 @@
       } 
       else {
         // Resolve dynamic items
-        let items = [];
+        items = [];
         if (type === 'price') {
-          items = (facets.priceRanges || []).map(r => {
+          const rangesList = facets.priceRanges && facets.priceRanges.ranges ? facets.priceRanges.ranges : (Array.isArray(facets.priceRanges) ? facets.priceRanges : []);
+          items = rangesList.map(r => {
             const minStr = r.min !== undefined ? r.min : (r.from || "");
             const maxStr = r.max !== undefined ? r.max : (r.to || "");
             let parsedLabel = (r.label || "").replace("{0}", minStr);
@@ -769,15 +786,6 @@
            }
         }
 
-
-        const activeArray = (type === 'vendor') ? activeFilters.vendors :
-                            (type === 'product_type') ? activeFilters.types :
-                            (type === 'collection') ? activeFilters.collections :
-                            (type === 'tag' || type === 'tags') ? activeFilters.tags :
-                            (type === 'price') ? activeFilters.priceRanges :
-                            (type === 'title') ? (activeFilters.titles || []) :
-                            (type === 'option') ? (activeFilters.options[key] || []) :
-                            (activeFilters.metafields[key] || []);
 
         const inputName = (type === 'option') ? `option-${key}` : 
                           (type === 'metafield') ? `metafield-${key}` : type;
@@ -975,26 +983,31 @@
       }
 
       const hasActiveSelections = (() => {
-        if (type === 'vendor') return activeFilters.vendors.length > 0;
-        if (type === 'product_type') return activeFilters.types.length > 0;
-        if (type === 'collection') return activeFilters.collections.length > 0;
-        if (type === 'tag' || type === 'tags') return activeFilters.tags.length > 0;
-        if (type === 'availability') return activeFilters.availability.length > 0;
         if (type === 'price') {
           let minLimit = 0;
-          if (facets && facets.priceRanges && facets.priceRanges.length > 0) {
-            const minValues = facets.priceRanges.map(r => {
-              const parts = r.label ? r.label.split('-') : [];
-              return parts.length === 2 ? parseFloat(parts[0]) : 0;
-            });
-            const lowest = Math.min(...minValues);
-            if (lowest >= 0) minLimit = lowest;
+          if (facets && facets.priceRanges) {
+            if (facets.priceRanges.minLimit !== undefined) {
+               minLimit = facets.priceRanges.minLimit;
+            } else {
+              const rangesList = facets.priceRanges.ranges ? facets.priceRanges.ranges : (Array.isArray(facets.priceRanges) ? facets.priceRanges : []);
+              if (rangesList.length > 0) {
+                const minValues = rangesList.map(r => {
+                  const parts = r.label ? r.label.split('-') : [];
+                  return parts.length === 2 ? parseFloat(parts[0]) : 0;
+                });
+                const lowest = Math.min(...minValues);
+                if (lowest >= 0) minLimit = lowest;
+              }
+            }
           }
           return activeFilters.priceRanges.length > 0 || activeFilters.minPrice > minLimit || (activeFilters.maxPrice < maxPriceLimit && activeFilters.maxPrice > minLimit);
         }
-        if (type === 'option') return (activeFilters.options[key] || []).length > 0;
-        if (type === 'metafield') return (activeFilters.metafields[key] || []).length > 0;
-        return false;
+        if (type === 'availability') return activeFilters.availability.length > 0;
+        
+        return items.some(item => 
+          activeArray.includes(item.value) || 
+          ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))
+        );
       })();
 
       const groupId = `cfp-group-${setting.id || index}-${type}-${key || ''}`;
@@ -1332,23 +1345,26 @@
 
         if (!isMultiple && checked) {
           groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-            if (cb !== checkbox) cb.checked = false;
+            if (cb !== checkbox) {
+              cb.checked = false;
+              const cbVal = cb.value;
+              if (name === 'availability') updateFilterArray(activeFilters.availability, cbVal, false);
+              else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
+              else if (name === 'type') updateFilterArray(activeFilters.types, cbVal, false);
+              else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
+              else if (name === 'tag' || name === 'tags') updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
+              else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
+              else if (name === 'title') updateFilterArray(activeFilters.titles, cbVal, false);
+              else if (name.startsWith('option-')) {
+                const optionName = name.replace('option-', '');
+                if (activeFilters.options[optionName]) updateFilterArray(activeFilters.options[optionName], cbVal, false);
+              }
+              else if (name.startsWith('metafield-')) {
+                const metafieldKey = name.replace('metafield-', '');
+                if (activeFilters.metafields[metafieldKey]) updateFilterArray(activeFilters.metafields[metafieldKey], cbVal, false);
+              }
+            }
           });
-          if (name === 'availability') activeFilters.availability = [];
-          else if (name === 'vendor') activeFilters.vendors = [];
-          else if (name === 'type') activeFilters.types = [];
-          else if (name === 'collection') activeFilters.collections = [];
-          else if (name === 'tag' || name === 'tags') activeFilters.tags = [];
-          else if (name === 'price') activeFilters.priceRanges = [];
-          else if (name === 'title') activeFilters.titles = [];
-          else if (name.startsWith('option-')) {
-            const optionName = name.replace('option-', '');
-            activeFilters.options[optionName] = [];
-          }
-          else if (name.startsWith('metafield-')) {
-            const metafieldKey = name.replace('metafield-', '');
-            activeFilters.metafields[metafieldKey] = [];
-          }
         }
 
         activeFilters.page = 1;
@@ -1676,10 +1692,12 @@
         wrapper.appendChild(topBar);
         topBar.style.display = 'flex';
       }
-      if (breadcrumbs) {
-        wrapper.appendChild(breadcrumbs);
-      }
-      wrapper.appendChild(sidebar);
+        if (breadcrumbs) {
+          sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
+          breadcrumbs.style.padding = '15px 20px 0';
+          breadcrumbs.style.marginBottom = '0';
+        }
+        wrapper.appendChild(sidebar);
 
       // Move products container into wrapper if it already exists
       const productsContainer = document.getElementById('cfp-products-container');

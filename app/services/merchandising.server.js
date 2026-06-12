@@ -304,7 +304,7 @@ function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "price-ascending")
     return (parseFloat(a.priceMin) || 0) - (parseFloat(b.priceMin) || 0);
   if (sortBy === "price-descending")
-    return (parseFloat(b.priceMax) || 0) - (parseFloat(a.priceMax) || 0);
+    return (parseFloat(b.priceMin) || 0) - (parseFloat(a.priceMin) || 0);
   if (sortBy === "created-ascending")
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
 

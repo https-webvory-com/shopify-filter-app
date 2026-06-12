@@ -244,7 +244,6 @@ const OPTION_TYPES = [
   { value: "product_type", label: "Product type" },
   { value: "tags", label: "Tags" },
   { value: "color", label: "Color (product option)" },
-  { value: "denominations", label: "Denominations (product option)" },
   { value: "size", label: "Size (product option)" },
   { value: "slot", label: "slot (product option)" },
   { value: "title", label: "Title (product option)" },

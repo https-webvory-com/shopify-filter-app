@@ -2,7 +2,7 @@ import React from "react";
 
 export function Checkbox({ checked, onChange, style = {} }) {
   return (
-    <label style={{ display: "inline-flex", cursor: "pointer", ...style }}>
+    <label style={{ display: "inline-flex", position: "relative", cursor: "pointer", ...style }}>
       <input
         type="checkbox"
         checked={checked}
@@ -35,8 +35,9 @@ export function Checkbox({ checked, onChange, style = {} }) {
             strokeLinecap: "round",
             strokeLinejoin: "round",
             pointerEvents: "none",
-            left: "3px",
-            top: "3px"
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)"
           }}
         >
           <path d="M3 7l2.5 2.5L11 4" />

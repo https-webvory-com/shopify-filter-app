@@ -262,7 +262,7 @@ export const loader = async ({ request }) => {
       case "title-ascending": orderBy = { title: "asc" }; break;
       case "title-descending": orderBy = { title: "desc" }; break;
       case "price-ascending": orderBy = { priceMin: "asc" }; break;
-      case "price-descending": orderBy = { priceMax: "desc" }; break;
+      case "price-descending": orderBy = { priceMin: "desc" }; break;
       case "created-ascending": orderBy = { createdAt: "asc" }; break;
       case "created-descending": default: orderBy = { createdAt: "desc" }; break;
     }
@@ -437,20 +437,32 @@ export const loader = async ({ request }) => {
     });
 
     // 7. Price Ranges
+    let absoluteMinPrice = Infinity;
+    let absoluteMaxPrice = -Infinity;
+    
     processFacetsForGroup('price', (p) => {
-       if (priceRangeCounts.length > 0 && p.variants.length > 0) {
+       if (p.variants.length > 0) {
          let minProductPrice = Infinity;
+         let maxProductPrice = -Infinity;
+         
          p.variants.forEach((v) => {
            const vPrice = parseFloat(v.price || 0);
            if (vPrice < minProductPrice) minProductPrice = vPrice;
+           if (vPrice > maxProductPrice) maxProductPrice = vPrice;
          });
+         
          if (minProductPrice !== Infinity) {
-           priceRangeCounts.forEach((r) => {
-             const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
-             const rMaxVal = r.max !== undefined ? r.max : r.to;
-             const rMax = (rMaxVal === "" || rMaxVal === null || rMaxVal === undefined) ? Infinity : parseFloat(rMaxVal);
-             if (minProductPrice >= rMin && minProductPrice <= rMax) r.count += 1;
-           });
+           if (minProductPrice < absoluteMinPrice) absoluteMinPrice = minProductPrice;
+           if (maxProductPrice > absoluteMaxPrice) absoluteMaxPrice = maxProductPrice;
+           
+           if (priceRangeCounts.length > 0) {
+             priceRangeCounts.forEach((r) => {
+               const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
+               const rMaxVal = r.max !== undefined ? r.max : r.to;
+               const rMax = (rMaxVal === "" || rMaxVal === null || rMaxVal === undefined) ? Infinity : parseFloat(rMaxVal);
+               if (minProductPrice >= rMin && minProductPrice <= rMax) r.count += 1;
+             });
+           }
          }
        }
     });
@@ -592,7 +604,11 @@ export const loader = async ({ request }) => {
           inStock: inStockCount,
           outOfStock: outOfStockCount,
         },
-        priceRanges: priceRangeCounts,
+        priceRanges: {
+          ranges: priceRangeCounts,
+          minLimit: absoluteMinPrice === Infinity ? 0 : absoluteMinPrice,
+          maxLimit: absoluteMaxPrice === -Infinity ? 100000 : absoluteMaxPrice
+        },
       },
     });
   } catch (err) {

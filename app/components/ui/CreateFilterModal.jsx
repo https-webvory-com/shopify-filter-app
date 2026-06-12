@@ -58,7 +58,6 @@ const OPTION_TYPES = [
   { value: "product_type", label: "Product type" },
   { value: "tags", label: "Tags" },
   { value: "color", label: "Color (product option)" },
-  { value: "denominations", label: "Denominations (product option)" },
   { value: "title", label: "Title (product option)" },
   { value: "price", label: "Price" },
   { value: "percent_sale", label: "Percent sale" },
@@ -409,6 +408,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
   const [device, setDevice] = useState("desktop");
   const [layout, setLayout] = useState("sidebar");
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [draggedManualIndex, setDraggedManualIndex] = useState(null);
 
   const [advanced, setAdvanced] = useState({
     displayTooltip: false,
@@ -591,7 +591,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     // If it's a known top-level type, return its data
     if (DUMMY_DATA[type]) return DUMMY_DATA[type];
     
-    // Check if it's a dynamic option type (like 'color', 'size', 'title', 'denominations')
+    // Check if it's a dynamic option type (like 'color', 'size', 'title')
     if (storeData?.options) {
       const matchedKey = Object.keys(storeData.options).find(k => k.toLowerCase() === type.toLowerCase());
       if (matchedKey && storeData.options[matchedKey]) {
@@ -926,7 +926,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 </div>
 
                 {/* Navigation Collections */}
-                {!["vendor", "product_type", "denominations", "title", "size"].includes(optionType?.toLowerCase()) && (
+                {optionType?.toLowerCase() === "collection" && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={navCollections} onChange={setNavCollections} />
@@ -943,7 +943,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   </div>
                 )}
 
-                {navCollections && !["vendor", "product_type", "denominations", "title", "size"].includes(optionType?.toLowerCase()) && (
+                {navCollections && optionType?.toLowerCase() === "collection" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginLeft: "28px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Main collection</label>
@@ -1467,8 +1467,29 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             />
                             {manualValues.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
-                                {manualValues.map(v => (
-                                  <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                {manualValues.map((v, index) => (
+                                  <span 
+                                    key={v} 
+                                    draggable
+                                    onDragStart={(e) => setDraggedManualIndex(index)}
+                                    onDragEnd={() => setDraggedManualIndex(null)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      if (draggedManualIndex === null || draggedManualIndex === index) return;
+                                      const newVals = [...manualValues];
+                                      const draggedItem = newVals[draggedManualIndex];
+                                      newVals.splice(draggedManualIndex, 1);
+                                      newVals.splice(index, 0, draggedItem);
+                                      setManualValues(newVals);
+                                      setDraggedManualIndex(null);
+                                    }}
+                                    style={{ 
+                                      background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
+                                      fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500",
+                                      cursor: "grab", opacity: draggedManualIndex === index ? 0.5 : 1
+                                    }}>
+                                    <span style={{cursor: "grab", marginRight: "-2px"}}>⋮⋮</span>
                                     {v}
                                     <span onClick={() => setManualValues(manualValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
                                   </span>
@@ -1538,8 +1559,29 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             />
                             {manualValues.length > 0 && (
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
-                                {manualValues.map(v => (
-                                  <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                {manualValues.map((v, index) => (
+                                  <span 
+                                    key={v} 
+                                    draggable
+                                    onDragStart={(e) => setDraggedManualIndex(index)}
+                                    onDragEnd={() => setDraggedManualIndex(null)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      if (draggedManualIndex === null || draggedManualIndex === index) return;
+                                      const newVals = [...manualValues];
+                                      const draggedItem = newVals[draggedManualIndex];
+                                      newVals.splice(draggedManualIndex, 1);
+                                      newVals.splice(index, 0, draggedItem);
+                                      setManualValues(newVals);
+                                      setDraggedManualIndex(null);
+                                    }}
+                                    style={{ 
+                                      background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
+                                      fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500",
+                                      cursor: "grab", opacity: draggedManualIndex === index ? 0.5 : 1
+                                    }}>
+                                    <span style={{cursor: "grab", marginRight: "-2px"}}>⋮⋮</span>
                                     {v}
                                     <span onClick={() => setManualValues(manualValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
                                   </span>
@@ -1563,7 +1605,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <TooltipIcon content="When checked, users can choose multiple filter option values." />
                   </div>
 
-                  {multipleSelection && (
+                  {multipleSelection && ["collection", "tags", "inventory_locations"].includes(optionType?.toLowerCase()) && (
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={narrowDown} onChange={setNarrowDown} />
                       <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Narrow down filter option values</span>
@@ -1812,12 +1854,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {layout === "top" && (
                               <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
                             )}
-                            {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
-                              <input 
-                                type="text" 
-                                placeholder="Filter options" 
-                                style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "13px", marginBottom: "8px" }} 
-                              />
+                            {["vendor", "collection", "product_type", "tags", "color", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
+                              <div style={{ marginBottom: "12px", position: "relative" }}>
+                                <input 
+                                  type="text" 
+                                  placeholder="Filter options" 
+                                  style={{ padding: "6px 10px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "13px", marginBottom: "8px" }} 
+                                />
+                              </div>
                             )}
 
                             {displayMode === "Box" ? (
@@ -1905,12 +1949,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     }}>
                       {displayMode === "Range" ? renderSliderPreview(false, device) : (
                         <>
-                          {["vendor", "collection", "product_type", "tags", "color", "denominations", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
-                            <input 
-                              type="text" 
-                              placeholder="Filter options" 
-                              style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
-                            />
+                          {["vendor", "collection", "product_type", "tags", "color", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
+                            <div style={{ marginBottom: "12px", position: "relative" }}>
+                              <input 
+                                type="text" 
+                                placeholder="Filter options" 
+                                style={{ padding: "8px 12px", borderRadius: "4px", border: "1px solid #e1e3e5", fontSize: "14px", marginBottom: "8px" }} 
+                              />
+                            </div>
                           )}
                           
                           {displayMode === "Box" ? (
