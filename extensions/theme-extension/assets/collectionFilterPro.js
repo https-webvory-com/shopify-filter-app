@@ -634,6 +634,10 @@
           }
         }
 
+        if (minLimit >= maxLimit) {
+          return; // Hide the price filter if there's no range to select
+        }
+
         maxPriceLimit = maxLimit; // Update global for active badge computation if needed
 
         let effectiveMin = activeFilters.minPrice;
