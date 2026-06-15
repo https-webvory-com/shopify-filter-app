@@ -257,8 +257,10 @@ export const loader = async ({ request }) => {
       try {
         const imgs =
           typeof p.images === "string" ? JSON.parse(p.images) : p.images;
-        if (imgs && imgs.length > 0)
-          image = imgs[0]?.url || imgs[0]?.originalSrc || imgs[0]?.src || null;
+        if (imgs && imgs.length > 0) {
+          const firstImg = imgs[0];
+          image = typeof firstImg === "string" ? firstImg : (firstImg?.url || firstImg?.originalSrc || firstImg?.src || null);
+        }
       } catch (e) {}
     }
     return { title: p.title, image };

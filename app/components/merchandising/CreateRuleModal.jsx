@@ -619,7 +619,7 @@ export default function CreateRuleModal({
                           <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
                             {[
                             "Date", "Price", "Discount", "Percent sales", "Vendor", "Collections",
-                            "Color (product option)", "Size (product option)", "slot (product option)", "Title (product option)",
+                            "Color (product option)", "Size (product option)", "slot (product option)",
                             "Available", "Product type", "Tags", "Product", "SKU", "Barcode", "Locations", "Rating"
                             ].filter(f => f.toLowerCase().includes(fieldSearch.toLowerCase())).map(field => (
                               <div 

@@ -12,9 +12,20 @@ export async function getActiveRuleForCollection(shop, collectionTitle, currentC
     where: {
       shop,
       status: true,
-      collections: { has: collectionTitle },
-      OR: [{ startDate: null }, { startDate: { lte: now } }],
-      AND: [{ OR: [{ endDate: null }, { endDate: { gte: now } }] }],
+      AND: [
+        {
+          OR: [
+            { collections: { has: collectionTitle } },
+            { collections: { equals: [] } }
+          ]
+        },
+        {
+          OR: [{ startDate: null }, { startDate: { lte: now } }]
+        },
+        {
+          OR: [{ endDate: null }, { endDate: { gte: now } }]
+        }
+      ]
     },
     include: { conditions: true },
     orderBy: { createdAt: "desc" },
@@ -198,9 +209,26 @@ function checkRuleMatch(product, condition) {
 export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
   let filteredProducts = products;
 
+  // Parse pinned product IDs early so we can protect them from being excluded
+  let pinnedIds = [];
+  if (pinningRule && pinningRule.products) {
+    try {
+      const parsedPins =
+        typeof pinningRule.products === "string"
+          ? JSON.parse(pinningRule.products)
+          : pinningRule.products;
+      if (Array.isArray(parsedPins)) {
+        pinnedIds = parsedPins.map((p) => p.id);
+      }
+    } catch (e) {console.error("Error parsing pinned products:", e);}
+  }
+
   if (rule && rule.conditions && rule.conditions.length > 0) {
     // 1. Filter Phase: Handle Exclude
     filteredProducts = products.filter((p) => {
+      // Priority: Pinned products cannot be excluded
+      if (pinnedIds.includes(p.id)) return true;
+
       const matchesExclude = rule.conditions.some(
         (cond) => cond.action === "Exclude" && checkRuleMatch(p, cond),
       );
@@ -247,20 +275,6 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
   } else {
     // Ensure score is 0 if no rules
     filteredProducts.forEach((p) => (p.merchandisingScore = 0));
-  }
-
-  // Parse pinned product IDs
-  let pinnedIds = [];
-  if (pinningRule && pinningRule.products) {
-    try {
-      const parsedPins =
-        typeof pinningRule.products === "string"
-          ? JSON.parse(pinningRule.products)
-          : pinningRule.products;
-      if (Array.isArray(parsedPins)) {
-        pinnedIds = parsedPins.map((p) => p.id);
-      }
-    } catch (e) {console.error("Error parsing pinned products:", e);}
   }
 
   // Sort logic

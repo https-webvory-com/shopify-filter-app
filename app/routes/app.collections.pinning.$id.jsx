@@ -698,63 +698,7 @@ export default function PinningEditor() {
               flexDirection: "column",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "24px",
-                marginBottom: "16px",
-              }}
-            >
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "14px",
-                  color: "#007bff",
-                  fontWeight: "500",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={applyToInstantSearch}
-                  onChange={(e) => setApplyToInstantSearch(e.target.checked)}
-                  style={{
-                    accentColor: "#007bff",
-                    width: "16px",
-                    height: "16px",
-                    cursor: "pointer",
-                  }}
-                />
-                Apply to instant search results
-              </label>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "14px",
-                  color: "#64748b",
-                  fontWeight: "500",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={applyToSearchResults}
-                  onChange={(e) => setApplyToSearchResults(e.target.checked)}
-                  style={{
-                    accentColor: "#007bff",
-                    width: "16px",
-                    height: "16px",
-                    cursor: "pointer",
-                  }}
-                />
-                Apply to search results
-              </label>
-            </div>
+
 
             <div
               style={{

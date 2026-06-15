@@ -41,7 +41,7 @@
     priceRanges: [], // selected price range strings
     minPrice: 0,
     maxPrice: 999999,
-    sortBy: 'created-descending',
+    sortBy: 'best-selling',
     page: 1
   };
 
@@ -85,7 +85,7 @@
     if (activeFilters.page > 1) params.set('page', activeFilters.page);
     else params.delete('page');
 
-    if (activeFilters.sortBy && activeFilters.sortBy !== 'created-descending') params.set('sortBy', activeFilters.sortBy);
+    if (activeFilters.sortBy && activeFilters.sortBy !== 'best-selling') params.set('sortBy', activeFilters.sortBy);
     else params.delete('sortBy');
 
     if (activeFilters.minPrice > 0) params.set('minPrice', activeFilters.minPrice);
@@ -726,14 +726,14 @@
         else if (type === 'collection') items = facets.collections || [];
         else if (type === 'tag' || type === 'tags') {
           items = facets.tags || [];
-          console.log("CFP Debug: Resolving tags for group", setting.label, "initial items:", JSON.stringify(items));
+          // console.log("CFP Debug: Resolving tags for group", setting.label, "initial items:", JSON.stringify(items));
         }
         else if (type === 'title') items = facets.titles || [];
         else if (type === 'option') items = facets.options?.[key] || [];
         else if (type === 'metafield') items = facets.metafields?.[key] || [];
 
         if (type === 'tag' || type === 'tags') {
-          console.log("CFP Debug: Group", setting.label, "before excluded/manual check:", JSON.stringify(items));
+          // console.log("CFP Debug: Group", setting.label, "before excluded/manual check:", JSON.stringify(items));
         }
 
         if (!items || items.length === 0) return;
@@ -757,7 +757,7 @@
           }
         }
         if (type === 'tag' || type === 'tags') {
-          console.log("CFP Debug: Group", setting.label, "final items resolved:", JSON.stringify(items));
+          //  console.log("CFP Debug: Group", setting.label, "final items resolved:", JSON.stringify(items));
         }
         // Apply Values Transformation
         if (adv.valuesTransformation && adv.valuesTransformation !== "No transformation") {
@@ -1238,6 +1238,12 @@
       
       fill.style.left = `${leftPercent}%`;
       fill.style.right = `${rightPercent}%`;
+      
+      if (minVal >= maxLimit) {
+        rangeMin.style.zIndex = "5";
+      } else {
+        rangeMin.style.zIndex = "3";
+      }
     }
 
     if (minInput && maxInput) {
@@ -1564,7 +1570,8 @@
     });
 
     if (activeFilters.minPrice > 0 || activeFilters.maxPrice < 999999) {
-      addChip(`${activeFilters.minPrice} - ${activeFilters.maxPrice}`, 'price', 'range');
+      const displayMax = activeFilters.maxPrice === 999999 ? maxPriceLimit : activeFilters.maxPrice;
+      addChip(`${activeFilters.minPrice} - ${displayMax}`, 'price', 'range');
     }
 
     if (hasFilters) {
