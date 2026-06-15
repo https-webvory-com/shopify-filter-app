@@ -277,6 +277,9 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
     filteredProducts.forEach((p) => (p.merchandisingScore = 0));
   }
 
+  // Determine if a custom sort is applied
+  const isCustomSort = sortBy && sortBy !== "best-selling" && sortBy !== "relevance";
+
   // Sort logic
   filteredProducts.sort((a, b) => {
     const aPinIndex = pinnedIds.indexOf(a.id);
@@ -293,8 +296,8 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
     if (aIsPinned) return -1;
     if (bIsPinned) return 1;
 
-    // Neither pinned: sort by score, then default
-    if (a.merchandisingScore !== b.merchandisingScore) {
+    // Neither pinned: sort by score ONLY if no custom sort is applied
+    if (!isCustomSort && a.merchandisingScore !== b.merchandisingScore) {
       return b.merchandisingScore - a.merchandisingScore;
     }
     return defaultSortComparison(a, b, sortBy);
