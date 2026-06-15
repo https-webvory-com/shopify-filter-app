@@ -173,15 +173,32 @@ export const loader = async ({ request }) => {
       optionsFilters[key] = expandFilterValues(key, optionsFilters[key]);
     }
 
+    // Determine if user has actively selected any filters or changed default sorting
+    const userHasFilters = 
+        vendors.length > 0 || 
+        types.length > 0 || 
+        collections.length > 0 || 
+        tags.length > 0 || 
+        titles.length > 0 || 
+        availability.length > 0 ||
+        Object.values(optionsFilters).some(v => v.length > 0) || 
+        Object.values(metafieldsFilters).some(v => v.length > 0) || 
+        (minPrice > 0 || maxPrice < 9999999) || 
+        sortBy !== "best-selling";
+
     // 🚚 2. Fetch Active Pinning Rule & Merchandising Rules Early 🚚
     let activePinningRule = null;
-    if (isSearch && searchQuery) {
-      activePinningRule = await getActivePinningRuleForSearch(shop, searchQuery);
-    } else {
-      activePinningRule = await getActivePinningRuleForCollection(
-        shop,
-        resolvedCollectionTitle,
-      );
+    
+    // Only apply pinning rule if NO user filters or custom sorting are active
+    if (!userHasFilters) {
+      if (isSearch && searchQuery) {
+        activePinningRule = await getActivePinningRuleForSearch(shop, searchQuery);
+      } else {
+        activePinningRule = await getActivePinningRuleForCollection(
+          shop,
+          resolvedCollectionTitle,
+        );
+      }
     }
 
     let pinnedIds = [];
