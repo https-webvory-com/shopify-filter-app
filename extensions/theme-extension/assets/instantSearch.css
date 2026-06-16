@@ -1,0 +1,384 @@
+/* Instant Search UI - Full Screen Modal Overlay */
+
+.cfp-search-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999998;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  backdrop-filter: blur(2px);
+}
+
+.cfp-search-modal-overlay.cfp-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The modal wrapper sliding from top */
+.cfp-search-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: #ffffff;
+  z-index: 9999999;
+  transform: translateY(-100%);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out, visibility 0s linear 0.3s;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  max-height: 90vh;
+}
+
+.cfp-search-modal.cfp-open {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out, visibility 0s linear 0s;
+}
+
+/* Header with the big input */
+.cfp-search-header {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 20px 40px;
+  background: #fff;
+  display: flex;
+  justify-content: center;
+}
+
+.cfp-search-input-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 1600px; /* Wider to match reference */
+  margin: 0 auto;
+  gap: 20px;
+}
+
+.cfp-search-icon {
+  width: 24px;
+  height: 24px;
+  color: #000;
+  flex-shrink: 0;
+}
+
+#cfp-main-search-input {
+  flex: 1;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  font-size: 24px !important; /* Larger text */
+  padding: 10px 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  color: #000 !important;
+  width: 100%;
+  font-family: inherit;
+  border-radius: 0 !important;
+  min-height: auto !important;
+  line-height: normal !important;
+}
+
+#cfp-main-search-input:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#cfp-main-search-input::placeholder {
+  color: #666 !important;
+  opacity: 1;
+}
+
+.cfp-search-close-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.cfp-search-close-btn:hover {
+  transform: scale(1.1);
+}
+
+.cfp-search-close-btn svg {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.5;
+}
+
+/* Body containing results */
+.cfp-search-body {
+  display: none;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 40px;
+  gap: 60px;
+  overflow-y: auto;
+}
+
+.cfp-search-body.cfp-has-results {
+  display: flex;
+}
+
+/* Loading State */
+.cfp-search-loading-container {
+  width: 100%;
+  padding: 60px 0;
+  text-align: center;
+  display: none;
+}
+
+.cfp-search-loading-container.cfp-active {
+  display: block;
+}
+
+.cfp-search-spinner {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(0,0,0,0.1);
+  border-radius: 50%;
+  border-top-color: #000;
+  animation: cfp-spin 0.8s linear infinite;
+}
+
+@keyframes cfp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Layout Columns */
+.cfp-search-column-left {
+  flex: 1;
+  border-right: 1px solid #e2e8f0;
+  padding-right: 20px;
+}
+
+.cfp-search-column-right {
+  flex: 0 0 250px;
+  padding-left: 20px;
+}
+
+.cfp-search-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 1px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+/* Collections List */
+.cfp-search-collections-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cfp-search-collections-list li {
+  margin-bottom: 15px;
+}
+
+.cfp-search-collections-list a {
+  color: #1e293b;
+  text-decoration: none;
+  font-size: 15px;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cfp-search-collections-list a:hover {
+  color: #2563eb;
+}
+
+.cfp-search-collections-list a svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.4;
+}
+
+/* Product Grid */
+.cfp-search-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 25px;
+}
+
+.cfp-search-product-card {
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease;
+}
+
+.cfp-search-product-card:hover {
+  transform: translateY(-4px);
+}
+
+.cfp-search-product-image-wrap {
+  width: 100%;
+  aspect-ratio: 3/4;
+  background: #f8fafc;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.cfp-search-product-image-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cfp-search-product-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+  text-align: center;
+}
+
+.cfp-search-no-results {
+  text-align: center;
+  padding: 40px;
+  color: #64748b;
+  width: 100%;
+}
+
+/* Recent Searches */
+.cfp-recent-searches-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cfp-recent-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid transparent;
+}
+
+.cfp-recent-search-item:hover {
+  background: #f8fafc;
+}
+
+.cfp-recent-search-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  text-decoration: none;
+  font-size: 14px;
+  flex: 1;
+}
+
+.cfp-history-icon {
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+}
+
+.cfp-remove-recent-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.cfp-remove-recent-btn:hover {
+  color: #ef4444;
+}
+
+.cfp-remove-recent-btn svg {
+  width: 14px;
+  height: 14px;
+}
+/* Skeleton Loader Classes */
+.cfp-skeleton {
+  background: #f1f5f9;
+  border-radius: 4px;
+  animation: cfp-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes cfp-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.cfp-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.cfp-skeleton-img {
+  width: 100%;
+  aspect-ratio: 3/4;
+}
+
+.cfp-skeleton-text {
+  height: 16px;
+  width: 80%;
+  margin: 4px auto 0;
+}
+
+.cfp-skeleton-price {
+  height: 16px;
+  width: 40%;
+  margin: 0 auto;
+}
+
+.cfp-skeleton-collection {
+  height: 20px;
+  width: 70%;
+  margin: 10px 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .cfp-search-header {
+    padding: 15px 20px;
+  }
+  .cfp-search-body {
+    flex-direction: column;
+    gap: 30px;
+    padding: 20px;
+  }
+  .cfp-search-column-left {
+    flex: none;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    padding-right: 0;
+    padding-bottom: 20px;
+  }
+  .cfp-search-product-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+}

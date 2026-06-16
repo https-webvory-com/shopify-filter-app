@@ -64,6 +64,79 @@
 
 <div id="cfp-overlay" class="cfp-overlay" aria-hidden="true"></div>
 
+{% if template.name == 'search' %}
+  <script>
+    // Set the search page title to match the requested format: "Search - Store Name"
+    document.title = "Search - {{ shop.name | escape }}";
+  </script>
+  <style>
+    /* Aggressively hide Dawn theme's default search header to prevent duplicate inputs & predictive search clash */
+    .template-search__header, 
+    .template-search__search,
+    .search-modal__content {
+      display: none !important;
+    }
+    
+    /* Exclude header elements from being hidden */
+    header .search-modal__content,
+    sticky-header .search-modal__content,
+    .header .search-modal__content {
+      display: block !important;
+    }
+  </style>
+
+  <div class="cfp-page-header" style="text-align: center; margin: 40px auto; max-width: 600px;">
+    <h1 style="margin-bottom: 20px; font-size: 28px;">Search</h1>
+    
+    <style>
+      /* Force thin grey border and override Dawn's thick black borders */
+      .cfp-inline-search-form .field:after,
+      .cfp-inline-search-form .field:before {
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .cfp-inline-search-form .field {
+        border: 1px solid rgba(0, 0, 0, 0.2) !important;
+        border-radius: 2px !important;
+        background: #fff;
+      }
+      .cfp-inline-search-form .field__input {
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+      }
+      .cfp-inline-search-form .field__input:focus {
+        box-shadow: none !important;
+        outline: none !important;
+      }
+      .cfp-inline-search-form .field__label {
+        background-color: #ffffff;
+        padding: 0 4px;
+        margin-left: -4px;
+        color: rgba(0, 0, 0, 0.6);
+        font-size: 13px;
+      }
+    </style>
+
+    <form action="{{ routes.search_url }}" method="get" class="cfp-inline-search-form" style="margin-bottom: 20px;">
+      <div class="field">
+        <input 
+          class="search__input field__input" 
+          id="Cfp-Search-In-Template" 
+          type="search" 
+          name="q" 
+          value="{{ search.terms | escape }}" 
+          placeholder=" "
+        >
+        <label class="field__label" for="Cfp-Search-In-Template">Search for...</label>
+        <button type="submit" class="search__button field__button" aria-label="Search" style="color: rgba(0,0,0,0.6);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
 <!-- Top Bar (Injected above products) -->
 <div id="cfp-top-bar" class="cfp-top-bar" style="display:none;">
   <div class="cfp-top-bar__left">

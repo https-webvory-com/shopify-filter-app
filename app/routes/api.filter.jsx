@@ -2,6 +2,7 @@ import { data } from "react-router";
 import prisma from "../db.server";
 import {
   getActiveRuleForCollection,
+  getActiveRuleForSearch,
   applyMerchandisingRules,
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
@@ -37,7 +38,9 @@ export const loader = async ({ request }) => {
     const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
     const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
     const isSearch = url.searchParams.get("isSearch") === "true";
-    const searchQuery = url.searchParams.get("q");
+    const searchQuery = url.searchParams.get("q") || "";
+    const searchType = url.searchParams.get("searchType") || "page";
+
     // ── 1. Fetch Active Filter Group ───────────────────────────────────
     let activeGroupFilters = null;
     let targetGroup = null;
@@ -192,7 +195,7 @@ export const loader = async ({ request }) => {
     // Only apply pinning rule if NO user filters or custom sorting are active
     if (!userHasFilters) {
       if (isSearch && searchQuery) {
-        activePinningRule = await getActivePinningRuleForSearch(shop, searchQuery);
+        activePinningRule = await getActivePinningRuleForSearch(shop, searchQuery, searchType);
       } else {
         activePinningRule = await getActivePinningRuleForCollection(
           shop,
@@ -214,11 +217,20 @@ export const loader = async ({ request }) => {
       } catch (e) {}
     }
 
-    const activeRule = await getActiveRuleForCollection(
-      shop,
-      resolvedCollectionTitle,
-      currentCustomerTags
-    );
+    let activeRule = null;
+    if (isSearch && searchQuery) {
+      activeRule = await getActiveRuleForSearch(
+        shop,
+        searchQuery,
+        currentCustomerTags
+      );
+    } else {
+      activeRule = await getActiveRuleForCollection(
+        shop,
+        resolvedCollectionTitle,
+        currentCustomerTags
+      );
+    }
 
     let includeWhereClause = null;
     if (activeRule && activeRule.conditions) {
@@ -260,8 +272,7 @@ export const loader = async ({ request }) => {
     if (isSearch && searchQuery) {
       const searchOr = [
         { title: { contains: searchQuery, mode: "insensitive" } },
-        { vendor: { contains: searchQuery, mode: "insensitive" } },
-        { productType: { contains: searchQuery, mode: "insensitive" } },
+        { variants: { some: { sku: { contains: searchQuery, mode: "insensitive" } } } }
       ];
       if (pinnedIdsWhere) {
         searchOr.push(pinnedIdsWhere);
@@ -302,7 +313,7 @@ export const loader = async ({ request }) => {
         options: true,
         variants: {
           select: {
-            available: true, price: true, compareAtPrice: true, inventory: true,
+            id: true, available: true, price: true, compareAtPrice: true, inventory: true,
             option1: true, option2: true, option3: true, imageUrl: true,
           },
         },

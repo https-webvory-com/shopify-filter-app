@@ -170,31 +170,25 @@
 
   // ── 2.5 Fetch Merchandising Rule ──────────────────────────────────
   async function fetchMerchandisingRule() {
-    try {
-      const queryParams = new URLSearchParams();
-      queryParams.append('shop', shop);
-      
-      if (window.cfpCustomerTags) {
-        queryParams.append('customer_tags', window.cfpCustomerTags);
-      }
-
-      if (collectionHandle) {
-        queryParams.append('collectionHandle', collectionHandle);
-      } else if (collectionId) {
-        queryParams.append('collectionId', collectionId);
-      }
-
-      const response = await fetch(`/apps/collection-filter-pro/api/merchandising?${queryParams.toString()}`);
-      const data = await response.json();
-      
-      if (data && data.rule) {
-        activeMerchandisingRule = data.rule;
-        console.log("CFP: Active Merchandising Rule loaded", activeMerchandisingRule);
-        // You can use activeMerchandisingRule here to render banners or badges
-      }
-    } catch (e) {
-      console.error("CFP: Merchandising API error", e);
-    }
+    // try {
+    //   const queryParams = new URLSearchParams();
+    //   queryParams.append('shop', shop);
+    //   if (window.cfpCustomerTags) {
+    //     queryParams.append('customer_tags', window.cfpCustomerTags);
+    //   }
+    //   if (collectionHandle) {
+    //     queryParams.append('collectionHandle', collectionHandle);
+    //   } else if (collectionId) {
+    //     queryParams.append('collectionId', collectionId);
+    //   }
+    //   const response = await fetch(`/apps/collection-filter-pro/api/merchandising?${queryParams.toString()}`);
+    //   const data = await response.json();
+    //   if (data && data.rule) {
+    //     activeMerchandisingRule = data.rule;
+    //   }
+    // } catch (e) {
+    //   console.error("CFP: Merchandising API error", e);
+    // }
   }
 
   // ── 3. Fetch data from Shopify App Proxy ──────────────────────────────
@@ -1695,6 +1689,12 @@
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
         grid.parentElement.insertBefore(wrapper, grid);
+      }
+
+      // Automatically move the Search Header above the wrapper
+      const pageHeader = document.querySelector('.cfp-page-header');
+      if (pageHeader && wrapper.parentElement && pageHeader.parentElement !== wrapper.parentElement) {
+        wrapper.parentElement.insertBefore(pageHeader, wrapper);
       }
 
       const breadcrumbs = document.getElementById('cfp-breadcrumbs');

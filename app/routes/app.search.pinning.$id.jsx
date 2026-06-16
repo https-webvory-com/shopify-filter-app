@@ -85,7 +85,7 @@ export const action = async ({ request, params }) => {
       name,
       ruleType: "search",
       searchQueries: searchQueriesJSON ? JSON.parse(searchQueriesJSON) : [],
-      
+      applyToSearchType,
       products: JSON.parse(productsJSON),
       status: true,
     };
@@ -480,6 +480,16 @@ export default function PinningEditor() {
   };
 
   const handleSave = () => {
+    if (searchQueries.length === 0) {
+      shopify.toast.show("Please add at least one search query", { isError: true });
+      return;
+    }
+
+    if (products.length === 0) {
+      shopify.toast.show("Please pin at least one product", { isError: true });
+      return;
+    }
+
     let applyToSearchType = "both";
     if (applyToInstantSearch && !applyToSearchResults) applyToSearchType = "instant";
     if (!applyToInstantSearch && applyToSearchResults) applyToSearchType = "page";

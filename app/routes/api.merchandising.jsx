@@ -1,59 +1,67 @@
 import { data } from "react-router";
-import { getActiveRuleForCollection } from "../services/merchandising.server";
+import { getActiveRuleForCollection, getActiveRuleForSearch } from "../services/merchandising.server";
 import prisma from "../db.server";
 
 /**
  * API Endpoint: /api/merchandising
  * Method: GET
- * Purpose: Returns the active merchandising rule for a given collection on the storefront.
+ * Purpose: Returns the active merchandising rule for a given collection or search on the storefront.
  */
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   const collectionHandle = url.searchParams.get("collectionHandle");
   const collectionId = url.searchParams.get("collectionId");
+  const isSearch = url.searchParams.get("isSearch") === "true";
+  const searchQuery = url.searchParams.get("q");
 
   if (!shop) {
     return data({ error: "Missing shop parameter" }, { status: 400 });
   }
 
   try {
-    let resolvedCollectionTitle = "";
+    let activeRule = null;
 
-    // Resolve Collection Title
-    if (collectionHandle) {
-      if (collectionHandle.toLowerCase() === "all") {
-        resolvedCollectionTitle = "all";
-      } else {
-        const coll = await prisma.collection.findFirst({
-          where: { handle: collectionHandle, shop },
+    if (isSearch && searchQuery) {
+      activeRule = await getActiveRuleForSearch(shop, searchQuery);
+    } else {
+      let resolvedCollectionTitle = "";
+
+      // Resolve Collection Title
+      if (collectionHandle) {
+        if (collectionHandle.toLowerCase() === "all") {
+          resolvedCollectionTitle = "all";
+        } else {
+          const coll = await prisma.collection.findFirst({
+            where: { handle: collectionHandle, shop },
+          });
+          if (coll) resolvedCollectionTitle = coll.title;
+        }
+      }
+      
+      if (!resolvedCollectionTitle && collectionId) {
+        const formattedId = collectionId.includes("gid://") 
+          ? collectionId 
+          : `gid://shopify/Collection/${collectionId}`;
+          
+        const coll = await prisma.collection.findUnique({
+          where: { id: formattedId },
         });
         if (coll) resolvedCollectionTitle = coll.title;
       }
-    }
-    
-    if (!resolvedCollectionTitle && collectionId) {
-      const formattedId = collectionId.includes("gid://") 
-        ? collectionId 
-        : `gid://shopify/Collection/${collectionId}`;
-        
-      const coll = await prisma.collection.findUnique({
-        where: { id: formattedId },
-      });
-      if (coll) resolvedCollectionTitle = coll.title;
-    }
 
-    if (!resolvedCollectionTitle) {
-      return data(
-        { rule: null, message: "No collection matched." },
-        { status: 404 },
+      if (!resolvedCollectionTitle) {
+        return data(
+          { rule: null, message: "No collection matched." },
+          { status: 404 },
+        );
+      }
+
+      activeRule = await getActiveRuleForCollection(
+        shop,
+        resolvedCollectionTitle,
       );
     }
-
-    const activeRule = await getActiveRuleForCollection(
-      shop,
-      resolvedCollectionTitle,
-    );
 
     return data({ rule: activeRule });
   } catch (error) {

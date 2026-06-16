@@ -50,6 +50,58 @@ export async function getActiveRuleForCollection(shop, collectionTitle, currentC
 }
 
 /**
+ * Fetches the active merchandising rule for a given shop and search query.
+ */
+export async function getActiveRuleForSearch(shop, searchQuery, currentCustomerTags = []) {
+  if (!shop || !searchQuery) return null;
+
+  const now = new Date();
+
+  // Find rules where ruleType is 'search'
+  const rules = await prisma.merchandisingRule.findMany({
+    where: {
+      shop,
+      status: true,
+      ruleType: "search",
+      AND: [
+        {
+          OR: [{ startDate: null }, { startDate: { lte: now } }]
+        },
+        {
+          OR: [{ endDate: null }, { endDate: { gte: now } }]
+        }
+      ]
+    },
+    include: { conditions: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const queryLower = searchQuery.toLowerCase();
+
+  for (const rule of rules) {
+    if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
+    
+    // Check if any of the search queries match the user's query
+    if (rule.searchQueries.some(q => q.toLowerCase() === queryLower)) {
+      if (!rule.customerTags || rule.customerTags.trim() === "") {
+        return rule; // Rule applies to everyone
+      }
+
+      // Rule has specific customer tags, check if currentCustomerTags intersect
+      const requiredTags = rule.customerTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      const userTags = currentCustomerTags.map(t => t.trim().toLowerCase());
+
+      const hasMatchingTag = requiredTags.some(tag => userTags.includes(tag));
+      if (hasMatchingTag) {
+        return rule;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Fetches the active pinning rule for a given shop and collection.
  */
 export async function getActivePinningRuleForCollection(shop, collectionTitle) {
@@ -80,7 +132,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   return specificRule;
 }
 
-export async function getActivePinningRuleForSearch(shop, searchQuery) {
+export async function getActivePinningRuleForSearch(shop, searchQuery, searchType = "page") {
   if (!shop || !searchQuery) return null;
 
   const activeRules = await prisma.pinnedProductRule.findMany({
@@ -96,6 +148,12 @@ export async function getActivePinningRuleForSearch(shop, searchQuery) {
 
   for (const rule of activeRules) {
     if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
+    
+    // Check if the rule applies to this type of search (instant vs page)
+    if (rule.applyToSearchType !== "both" && rule.applyToSearchType !== searchType) {
+      continue;
+    }
+
     if (rule.searchQueries.some(q => q.toLowerCase() === queryLower)) {
       return rule;
     }
