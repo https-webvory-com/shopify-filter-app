@@ -395,20 +395,36 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function fetchDefaultView() {
-    renderLoading(true);
+    document.getElementById("cfp-search-body").classList.add("cfp-has-results");
+    const cacheKey = `cfp_instant_default_${shopDomain}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    let hasCachedData = false;
+
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        renderRecentSearches("");
+        renderCollections(parsed.collectionsData, "", true);
+        renderProducts(parsed.productsData, "", true);
+        hasCachedData = true;
+      } catch (e) {}
+    }
+
+    if (!hasCachedData) {
+      renderLoading(true);
+    }
 
     try {
-      // 1. Fetch 4 popular products
+      // 1. Fetch 4 popular products in background
       const productsPromise = fetch(
         `${CONFIG.apiUrl}?shop=${shopDomain}&limit=4&sortBy=best-selling`
       ).then((res) => res.json());
 
-      // 2. Fetch all/popular collections
+      // 2. Fetch all/popular collections in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
       const collectionsPromise = fetch(`${rootUrl}collections.json?limit=5`)
         .then(res => {
            if(res.ok) return res.json();
-           // fallback to suggest if collections.json is blocked
            return fetch(`${rootUrl}search/suggest.json?q=a&resources[type]=collection&resources[limit]=5`).then(r => r.json());
         });
 
@@ -417,19 +433,33 @@ document.addEventListener("DOMContentLoaded", function () {
         collectionsPromise,
       ]);
 
-      renderRecentSearches("");
-      renderCollections(collectionsData, "", true);
-      renderProducts(productsData, "", true);
+      // 3. Update Cache silently
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        productsData,
+        collectionsData
+      }));
+
+      // 4. Update UI with fresh data if user hasn't typed anything yet
+      const inputEl = document.getElementById("cfp-main-search-input");
+      const currentQuery = inputEl ? inputEl.value : "";
+      if (!currentQuery) {
+        renderRecentSearches("");
+        renderCollections(collectionsData, "", true);
+        renderProducts(productsData, "", true);
+      }
 
     } catch (error) {
       console.error("Instant Search Default View Error:", error);
-      document.getElementById("cfp-search-products").innerHTML = 
-        `<div class="cfp-search-no-results">Unable to load trending products.</div>`;
-      if (document.getElementById("cfp-search-collections")) {
-         document.getElementById("cfp-search-collections").innerHTML = "";
+      if (!hasCachedData) {
+        document.getElementById("cfp-search-products").innerHTML = 
+          `<div class="cfp-search-no-results">Unable to load trending products.</div>`;
+        if (document.getElementById("cfp-search-collections")) {
+           document.getElementById("cfp-search-collections").innerHTML = "";
+        }
       }
     } finally {
-      renderLoading(false);
+      if (!hasCachedData) renderLoading(false);
     }
   }
 
@@ -494,16 +524,35 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function performSearch(query) {
-    renderLoading(true);
+    document.getElementById("cfp-search-body").classList.add("cfp-has-results");
+    const trimmedQuery = query.trim().toLowerCase();
+    
+    const cacheKey = `cfp_instant_search_${shopDomain}_${trimmedQuery}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    let hasCachedData = false;
+
     renderRecentSearches(query);
 
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        renderCollections(parsed.collectionsData, query);
+        renderProducts(parsed.productsData, query);
+        hasCachedData = true;
+      } catch (e) {}
+    }
+
+    if (!hasCachedData) {
+      renderLoading(true);
+    }
+
     try {
-      // 1. Fetch products from OUR API
+      // 1. Fetch products from OUR API in background
       const productsPromise = fetch(
         `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}`
       ).then((res) => res.json());
 
-      // 2. Fetch collections from Shopify Predictive Search API
+      // 2. Fetch collections from Shopify Predictive Search API in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
       const collectionsPromise = fetch(
         `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=5`
@@ -514,16 +563,30 @@ document.addEventListener("DOMContentLoaded", function () {
         collectionsPromise,
       ]);
 
-      renderCollections(collectionsData, query);
-      renderProducts(productsData, query);
+      // 3. Update Cache silently
+      sessionStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        productsData,
+        collectionsData
+      }));
+
+      // 4. Update UI with fresh data if user hasn't changed query
+      const inputEl = document.getElementById("cfp-main-search-input");
+      const currentQuery = inputEl ? inputEl.value.trim().toLowerCase() : "";
+      if (currentQuery === trimmedQuery) {
+        renderCollections(collectionsData, query);
+        renderProducts(productsData, query);
+      }
 
     } catch (error) {
       console.error("Instant Search Error:", error);
-      document.getElementById("cfp-search-products").innerHTML = 
-        `<div class="cfp-search-no-results">Something went wrong. Please try again.</div>`;
-      document.getElementById("cfp-search-collections").innerHTML = "";
+      if (!hasCachedData) {
+        document.getElementById("cfp-search-products").innerHTML = 
+          `<div class="cfp-search-no-results">Something went wrong. Please try again.</div>`;
+        document.getElementById("cfp-search-collections").innerHTML = "";
+      }
     } finally {
-      renderLoading(false);
+      if (!hasCachedData) renderLoading(false);
     }
   }
 
@@ -611,6 +674,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // 2. Extract Color Swatches from Variants
       let swatchesHtml = "";
       let defaultImageUrl = "";
+      let hasMatchedColor = false;
       
       if (colorOptionIndex !== -1 && p.variants && p.variants.length > 0) {
         const optionKey = `option${colorOptionIndex + 1}`; // option1, option2, or option3
@@ -629,16 +693,31 @@ document.addEventListener("DOMContentLoaded", function () {
           swatchesHtml += `<div class="cfp-product-swatches">`;
           const colorsArray = Array.from(uniqueColors.entries());
           
+          let activeIndex = 0;
+          if (query) {
+             const q = query.toLowerCase();
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(q));
+             if (foundIndex !== -1) {
+                activeIndex = foundIndex;
+                hasMatchedColor = true;
+             }
+          }
+
+          defaultImageUrl = colorsArray[activeIndex][1].imgUrl;
+          
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
-             const isActive = (index === 0 && query && query.toLowerCase().includes(colorName.toLowerCase())) ? 'cfp-swatch-active' : '';
+             const isActive = index === activeIndex ? 'cfp-swatch-active' : '';
              
-             // We use onclick to change the main image and update the product URL.
+             // We use onmouseenter for instant preview and onclick for selection.
              swatchesHtml += `<div class="cfp-swatch-item ${isActive} ${isHidden}" 
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-search-product-card');
                            card.querySelector('.cfp-main-img').src='${data.imgUrl}';
+                           const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
+                           swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
+                           this.classList.add('cfp-swatch-active');
                            if('${data.variantId}') card.href='/products/${p.handle}?variant=${data.variantId}';">
                 <img src="${data.imgUrl}" alt="${colorName}" />
              </div>`;
@@ -656,15 +735,15 @@ document.addEventListener("DOMContentLoaded", function () {
                   ">+${extraCount}</div>`;
           }
           swatchesHtml += `</div>`;
-          
-          // Optionally pick the first color's image as default if no merchandising image
-          defaultImageUrl = colorsArray[0][1].imgUrl;
         }
       }
 
       // 3. Extract main image
       let imageUrl = "";
-      if (p.merchandisingImage) {
+      if (hasMatchedColor && defaultImageUrl) {
+        // If search matched a color swatch, force use that color's image!
+        imageUrl = defaultImageUrl;
+      } else if (p.merchandisingImage) {
         imageUrl = p.merchandisingImage;
       } else if (p.images) {
         try {

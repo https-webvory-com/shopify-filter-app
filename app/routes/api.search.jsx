@@ -22,15 +22,28 @@ export const loader = async ({ request }) => {
     // 1. Fetch Organic Search Results from local synced database
     if (query && query.trim() !== "") {
       query = query.trim().toLowerCase();
-      // Extremely basic search simulation matching title or tags. 
-      // In a real production app, use Prisma Full-Text Search or dedicated indexing.
+      // Enhanced Search Simulation: Match Title, Tags, Vendor, ProductType, SKU, and Variant Options (Colors, Sizes)
       organicProducts = await prisma.product.findMany({
         where: {
           shop: shop,
           status: { equals: "ACTIVE", mode: "insensitive" },
           OR: [
             { title: { contains: query, mode: "insensitive" } },
-            { tags: { has: query } }
+            { tags: { has: query } },
+            { productType: { contains: query, mode: "insensitive" } },
+            { vendor: { contains: query, mode: "insensitive" } },
+            {
+              variants: {
+                some: {
+                  OR: [
+                    { sku: { contains: query, mode: "insensitive" } },
+                    { option1: { contains: query, mode: "insensitive" } },
+                    { option2: { contains: query, mode: "insensitive" } },
+                    { option3: { contains: query, mode: "insensitive" } }
+                  ]
+                }
+              }
+            }
           ]
         },
         include: { variants: true },

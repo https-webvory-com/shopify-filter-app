@@ -444,8 +444,7 @@
           }
         }
   
-        const primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
-      const secondaryImg = (product.merchandisingImage && product.images?.[0] && product.images?.[0] !== product.merchandisingImage) ? product.images[0] : (product.images?.[1] || primaryImg);
+        let primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
       const price = parseFloat(product.priceMin).toFixed(2);
       const comparePrice = product.variants?.[0]?.compareAtPrice 
         ? parseFloat(product.variants[0].compareAtPrice).toFixed(2) 
@@ -453,17 +452,113 @@
 
       const onSale = comparePrice && parseFloat(comparePrice) > parseFloat(price);
 
+      // Extract Color Swatches from Variants
+      let colorOptionIndex = -1;
+      let parsedOptions = [];
+      if (product.options) {
+        try {
+          parsedOptions = typeof product.options === 'string' ? JSON.parse(product.options) : product.options;
+          colorOptionIndex = parsedOptions.findIndex(o => o.name && (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour'));
+        } catch(e){}
+      }
+
+      let swatchesHtml = "";
+      if (colorOptionIndex !== -1 && product.variants && product.variants.length > 0) {
+        const optionKey = `option${colorOptionIndex + 1}`;
+        const uniqueColors = new Map();
+
+        product.variants.forEach(v => {
+          const colorName = v[optionKey];
+          if (colorName && !uniqueColors.has(colorName) && v.imageUrl) {
+            const numericId = v.id ? v.id.replace('gid://shopify/ProductVariant/', '') : '';
+            uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId });
+          }
+        });
+
+        if (uniqueColors.size > 0) {
+          swatchesHtml += `<div class="cfp-product-swatches">`;
+          const colorsArray = Array.from(uniqueColors.entries());
+          
+          let activeIndex = 0;
+          let matchedColorUrl = "";
+
+          // 1. Check if there's a search query matching a color
+          if (activeFilters.q && activeFilters.q.trim() !== "") {
+             const qLower = activeFilters.q.toLowerCase().trim();
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower));
+             if (foundIndex !== -1) {
+                activeIndex = foundIndex;
+             }
+          } else if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
+             // 2. Check if there's an active color filter matching a color
+             let selectedValues = [];
+             Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
+             if (mergedValues && mergedValues.length > 0) {
+                 const expanded = [...selectedValues];
+                 for(const v of selectedValues) {
+                     const rules = mergedValues.filter(m => m.targetValue.toLowerCase() === v.toLowerCase());
+                     for(const r of rules) {
+                         expanded.push(...r.sourceValues);
+                     }
+                 }
+                 selectedValues = expanded;
+             }
+             const expandedLower = selectedValues.map(x => x.toLowerCase());
+             const foundIndex = colorsArray.findIndex(c => expandedLower.includes(c[0].toLowerCase()));
+             if (foundIndex !== -1) {
+                activeIndex = foundIndex;
+             }
+          }
+
+          matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
+
+          colorsArray.forEach(([colorName, data], index) => {
+             const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
+             const isActive = index === activeIndex ? 'cfp-swatch-active' : '';
+             
+             swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}" 
+                  data-tooltip="${colorName}" 
+                  onclick="event.preventDefault(); 
+                           const card = this.closest('.cfp-product-card');
+                           card.querySelector('.cfp-product-card__image--primary').src='${data.imgUrl}';
+                           const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
+                           swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
+                           this.classList.add('cfp-swatch-active');
+                           if('${data.variantId}') card.querySelector('a').href='/products/${product.handle}?variant=${data.variantId}';">
+                <img src="${data.imgUrl}" alt="${colorName}" />
+             </div>`;
+          });
+          
+          if (colorsArray.length > 5) {
+             const extraCount = colorsArray.length - 5;
+             swatchesHtml += `<div class="cfp-swatch-more" 
+                  onclick="event.preventDefault(); 
+                           const container = this.closest('.cfp-product-swatches');
+                           const hiddenItems = container.querySelectorAll('.cfp-swatch-item:nth-child(n+6)');
+                           const isExpanded = this.textContent.startsWith('-');
+                           hiddenItems.forEach(item => item.classList.toggle('cfp-swatch-hidden'));
+                           this.textContent = isExpanded ? '+' + ${extraCount} : '-' + ${extraCount};
+                  ">+${extraCount}</div>`;
+          }
+          swatchesHtml += `</div>`;
+          
+          if (matchedColorUrl) {
+             primaryImg = matchedColorUrl;
+          }
+        }
+      }
+
       return `
         <div class="cfp-product-card">
           <a href="/products/${product.handle}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
-              <img src="${secondaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" />
               ${onSale ? '<span class="cfp-product-card__badge">Sale</span>' : ''}
             </div>
             <div class="cfp-product-card__info">
               <span class="cfp-product-card__vendor">${product.vendor}</span>
               <h3 class="cfp-product-card__title">${product.title}</h3>
+              ${swatchesHtml}
               <div class="cfp-product-card__price-row">
                 <span class="cfp-product-card__price">$${price}</span>
                 ${onSale ? `<span class="cfp-product-card__compare-price">$${comparePrice}</span>` : ''}

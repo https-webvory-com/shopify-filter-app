@@ -272,7 +272,21 @@ export const loader = async ({ request }) => {
     if (isSearch && searchQuery) {
       const searchOr = [
         { title: { contains: searchQuery, mode: "insensitive" } },
-        { variants: { some: { sku: { contains: searchQuery, mode: "insensitive" } } } }
+        { tags: { has: searchQuery } },
+        { productType: { contains: searchQuery, mode: "insensitive" } },
+        { vendor: { contains: searchQuery, mode: "insensitive" } },
+        {
+          variants: {
+            some: {
+              OR: [
+                { sku: { contains: searchQuery, mode: "insensitive" } },
+                { option1: { contains: searchQuery, mode: "insensitive" } },
+                { option2: { contains: searchQuery, mode: "insensitive" } },
+                { option3: { contains: searchQuery, mode: "insensitive" } }
+              ]
+            }
+          }
+        }
       ];
       if (pinnedIdsWhere) {
         searchOr.push(pinnedIdsWhere);

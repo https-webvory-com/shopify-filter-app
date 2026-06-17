@@ -598,7 +598,69 @@ facet-filters-form,
   margin: 4px !important;
 }
 .cfp-color-swatch:hover .cfp-swatch-circle {
+  border-color: var(--cfp-accent) !important;
+  box-shadow: 0 0 0 1px var(--cfp-accent) !important;
+}
+
+/* ─── Product Card Swatches (On images) ────────────────────────── */
+.cfp-product-swatches {
+  display: flex !important;
+  gap: 6px !important;
+  justify-content: center !important;
+  margin-top: 10px !important;
+  margin-bottom: 5px !important;
+  flex-wrap: wrap !important;
+}
+
+.cfp-swatch-item {
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  padding: 2px !important;
+  transition: border-color 0.2s !important;
+  background: transparent !important;
+  box-sizing: border-box !important;
+}
+
+.cfp-swatch-item:hover, .cfp-swatch-item.cfp-swatch-active {
   border-color: #000000 !important;
+}
+
+.cfp-swatch-item img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 50% !important;
+  display: block !important;
+  border: 1px solid #e2e8f0 !important;
+  box-sizing: border-box !important;
+}
+
+.cfp-swatch-hidden {
+  display: none !important;
+}
+
+.cfp-swatch-more {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  background: #f1f5f9 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+  transition: background 0.2s, color 0.2s !important;
+}
+
+.cfp-swatch-more:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 .cfp-color-swatch input:checked ~ .cfp-swatch-circle {
   border-color: #000000 !important;
@@ -893,17 +955,7 @@ facet-filters-form,
   transition: transform 0.5s ease, opacity 0.5s ease;
 }
 
-.cfp-product-card__image--secondary {
-  opacity: 0;
-}
-
 .cfp-product-card:hover .cfp-product-card__image--primary {
-  opacity: 0;
-  transform: scale(1.05);
-}
-
-.cfp-product-card:hover .cfp-product-card__image--secondary {
-  opacity: 1;
   transform: scale(1.05);
 }
 
