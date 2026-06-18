@@ -1,6 +1,6 @@
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-application_url = "https://fees-landing-compression-rep.trycloudflare.com"
+application_url = "https://aisearchfilter.webvory.com"
 embedded = true
 handle = "ai-smart-search-filter"
 
@@ -41,10 +41,10 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://fees-landing-compression-rep.trycloudflare.com/api/auth"
+  "https://aisearchfilter.webvory.com/api/auth"
 ]
 
 [app_proxy]
-url = "https://fees-landing-compression-rep.trycloudflare.com"
+url = "https://aisearchfilter.webvory.com"
 subpath = "collection-filter-pro"
 prefix = "apps"
