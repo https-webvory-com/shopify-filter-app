@@ -542,6 +542,306 @@ export default function FilterGroups() {
         </button>
       </ui-title-bar>
 
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Custom styling for Filter Groups Page */
+        .filter-groups-container {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 16px !important;
+          box-shadow: 0 4px 20px rgba(30, 27, 75, 0.02) !important;
+          overflow: hidden;
+        }
+
+        .table-toolbar {
+          padding: 20px 24px !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
+          background: linear-gradient(90deg, #f8faff 0%, #f4f3ff 100%) !important; /* Premium subtle gradient */
+        }
+
+        /* Back link */
+        .back-link {
+          color: #5B21B6 !important;
+          text-decoration: none !important;
+          font-weight: 700 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          padding: 8px 14px !important;
+          border-radius: 8px !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+          border: 1px solid rgba(91, 33, 182, 0.08) !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .back-link:hover {
+          color: #ffffff !important;
+          background: #5B21B6 !important;
+          border-color: #5B21B6 !important;
+          transform: translateX(-2px);
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+        }
+
+        /* Dropdown trigger button */
+        .view-dropdown-btn {
+          background: #ffffff !important;
+          color: #1E1B4B !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 10px 18px !important;
+          border-radius: 10px !important; /* Premium modern corners */
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          cursor: pointer !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          transition: all 0.2s ease !important;
+          outline: none;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .view-dropdown-btn:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.02) !important;
+        }
+
+        /* Create button styling */
+        .btn-create-group {
+          background-color: #5B21B6 !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 10px !important; /* Match premium card rounding */
+          padding: 10px 20px !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          position: relative !important;
+          overflow: hidden !important;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+        }
+
+        .btn-create-group::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -120%;
+          width: 80%;
+          height: 100%;
+          background: linear-gradient(
+            90deg, 
+            rgba(255, 255, 255, 0) 0%, 
+            rgba(255, 255, 255, 0.4) 50%, 
+            rgba(255, 255, 255, 0) 100%
+          );
+          transform: skewX(-25deg);
+          transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-create-group:hover::after {
+          left: 150%;
+        }
+        .btn-create-group:hover {
+          background-color: #1E1B4B !important;
+          transform: translateY(-1px);
+          box-shadow: inset 0 1px 0px rgba(255, 255, 255, 0.2), 0 4px 12px rgba(30, 27, 75, 0.2) !important;
+        }
+
+        /* Search bar styling */
+        .search-input-field {
+          width: 100% !important;
+          padding: 10px 12px 10px 40px !important;
+          border-radius: 10px !important; /* Premium corners */
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          background-color: #ffffff !important;
+          font-size: 13.5px !important;
+          color: #1E1B4B !important;
+          font-weight: 500 !important;
+          outline: none !important;
+          transition: all 0.2s ease !important;
+          box-sizing: border-box !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .search-input-field:focus {
+          background-color: #ffffff !important;
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.1) !important;
+        }
+
+        /* Icon Buttons */
+        .toolbar-icon-btn {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          padding: 9px !important;
+          border-radius: 10px !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .toolbar-icon-btn:hover {
+          background-color: rgba(91, 33, 182, 0.04) !important;
+          border-color: #5B21B6 !important;
+        }
+        .toolbar-icon-btn svg {
+          stroke: #1E1B4B !important;
+          transition: stroke 0.2s ease !important;
+        }
+        .toolbar-icon-btn:hover svg {
+          stroke: #5B21B6 !important;
+        }
+
+        /* Table styling - Luxury dark navy header theme */
+        .groups-table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          text-align: left !important;
+        }
+        .groups-table th {
+          background: #1E1B4B !important; /* Deep navy luxury background */
+          border-bottom: 3px solid #5B21B6 !important; /* Indigo underline accent */
+          padding: 18px 24px !important;
+          font-weight: 700 !important;
+          font-size: 12.5px !important;
+          color: #ffffff !important; /* Sharp contrast white text */
+          text-transform: uppercase !important;
+          letter-spacing: 0.8px !important;
+        }
+        .groups-table tr {
+          border-bottom: 1px solid rgba(30, 27, 75, 0.06) !important;
+          transition: background-color 0.2s ease !important;
+        }
+        .groups-table tr:hover {
+          background-color: rgba(91, 33, 182, 0.02) !important;
+        }
+        .groups-table td {
+          padding: 18px 24px !important;
+          font-size: 14px !important;
+        }
+
+        /* Group Name button link */
+        .group-name-btn {
+          background: none !important;
+          border: none !important;
+          color: #1E1B4B !important;
+          font-size: 14.5px !important;
+          font-weight: 700 !important;
+          cursor: pointer !important;
+          padding: 0 !important;
+          transition: color 0.2s ease !important;
+        }
+        .group-name-btn:hover {
+          color: #5B21B6 !important;
+        }
+
+        /* Badges */
+        .badge-default-group {
+          margin-left: 8px !important;
+          padding: 4px 10px !important;
+          border-radius: 6px !important;
+          background: rgba(91, 33, 182, 0.08) !important;
+          color: #5B21B6 !important;
+          font-size: 10.5px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.5px !important;
+          border: 1px solid rgba(91, 33, 182, 0.15) !important;
+        }
+
+        .collection-tag-badge {
+          padding: 5px 12px !important;
+          border-radius: 8px !important;
+          background-color: rgba(91, 33, 182, 0.05) !important;
+          color: #5B21B6 !important;
+          border: 1px solid rgba(91, 33, 182, 0.12) !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          transition: all 0.2s ease !important;
+        }
+        .collection-tag-badge:hover {
+          background-color: rgba(91, 33, 182, 0.1) !important;
+          border-color: rgba(91, 33, 182, 0.2) !important;
+        }
+
+        /* Action icons inside rows */
+        .row-action-btn {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          cursor: pointer !important;
+          padding: 8px !important;
+          border-radius: 8px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 1px 3px rgba(30, 27, 75, 0.02) !important;
+        }
+        .row-action-btn:hover {
+          background-color: #fcfcff !important;
+          border-color: rgba(30, 27, 75, 0.15) !important;
+        }
+        .row-action-btn svg {
+          fill: #4b5563 !important;
+          transition: all 0.2s ease !important;
+        }
+        .btn-edit-action:hover svg {
+          fill: #5B21B6 !important;
+          transform: scale(1.08);
+        }
+        .btn-duplicate-action:hover svg {
+          fill: #10B981 !important;
+          transform: scale(1.08);
+        }
+        .btn-delete-action:hover svg {
+          fill: #DB3A5D !important;
+          transform: scale(1.08);
+        }
+
+        /* Switch toggle custom styling */
+        .toggle-switch-slider {
+          background-color: #e2e8f0 !important;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        input:checked + .toggle-switch-slider {
+          background-color: #10B981 !important;
+        }
+
+        /* Always Active Badge */
+        .badge-always-active {
+          padding: 4px 10px !important;
+          border-radius: 6px !important;
+          background: rgba(16, 185, 129, 0.08) !important;
+          color: #10B981 !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          border: 1px solid rgba(16, 185, 129, 0.15) !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+        }
+        .badge-always-active::before {
+          content: '' !important;
+          width: 6px !important;
+          height: 6px !important;
+          background-color: #10B981 !important;
+          border-radius: 50% !important;
+          display: inline-block !important;
+        }
+
+        /* Glassmorphic Dropdown Popups */
+        .glass-popup-menu {
+          background: rgba(255, 255, 255, 0.98) !important;
+          backdrop-filter: blur(10px) !important;
+          -webkit-backdrop-filter: blur(10px) !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 12px !important;
+          box-shadow: 0 10px 25px -5px rgba(30, 27, 75, 0.08) !important;
+        }
+      ` }} />
+
       <div
         style={{
           marginBottom: "20px",
@@ -557,14 +857,7 @@ export default function FilterGroups() {
             e.preventDefault();
             navigate("/app/filters");
           }}
-          style={{
-            color: "#006e52",
-            textDecoration: "none",
-            fontWeight: "500",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
+          className="back-link"
         >
           <svg
             style={{ width: "16px", height: "16px" }}
@@ -575,7 +868,7 @@ export default function FilterGroups() {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="2"
+              strokeWidth="2.5"
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             ></path>
           </svg>
@@ -626,21 +919,27 @@ export default function FilterGroups() {
         </s-box> */}
 
         {/* Toolbar & Groups Table */}
-        <div
+        <div 
+          className="filter-groups-container"
           style={{
-            background: "#fff",
-            border: "1px solid #e1e3e5",
-            borderRadius: "8px",
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "12px",
+            boxShadow: "0 1px 3px rgba(30, 27, 75, 0.02)",
+            overflow: "hidden",
+            marginTop: "16px"
           }}
         >
           {/* Toolbar */}
-          <div
+          <div 
+            className="table-toolbar"
             style={{
-              padding: "16px",
+              padding: "20px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              borderBottom: "1px solid #e1e3e5",
+              borderBottom: "1px solid #e2e8f0",
+              background: "#ffffff"
             }}
           >
             {/* Left Actions */}
@@ -649,19 +948,20 @@ export default function FilterGroups() {
               <div style={{ position: "relative" }} className="filter-dropdown-inside">
                 <button
                   onClick={() => setShowViewsDropdown(!showViewsDropdown)}
+                  className="view-dropdown-btn"
                   style={{
-                    background: "#f1f8ff",
-                    color: "#007bff",
-                    padding: "8px 16px",
-                    borderRadius: "20px",
-                    border: "none",
-                    fontSize: "14px",
+                    background: "rgba(91, 33, 182, 0.06)",
+                    color: "#5B21B6",
+                    border: "1px solid rgba(91, 33, 182, 0.12)",
+                    padding: "10px 18px",
+                    borderRadius: "10px",
+                    fontSize: "13.5px",
                     fontWeight: "600",
-                    outline: "none",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
+                    transition: "all 0.2s ease"
                   }}
                 >
                   {getActiveViewLabel()} ({filteredGroups.length})
@@ -672,7 +972,7 @@ export default function FilterGroups() {
                       height: "14px",
                       fill: "none",
                       stroke: "currentColor",
-                      strokeWidth: "1.5",
+                      strokeWidth: "2.5",
                     }}
                   >
                     <path d="M5 7l5 5 5-5" />
@@ -681,17 +981,19 @@ export default function FilterGroups() {
 
                 {showViewsDropdown && (
                   <div
+                    className="glass-popup-menu"
                     style={{
                       position: "absolute",
                       top: "100%",
                       left: 0,
                       marginTop: "8px",
-                      background: "#fff",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                      border: "1px solid #e4e5e7",
                       width: "240px",
                       zIndex: 100,
+                      background: "rgba(255, 255, 255, 0.98)",
+                      border: "1px solid rgba(30, 27, 75, 0.08)",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 25px rgba(30, 27, 75, 0.08)",
+                      overflow: "hidden"
                     }}
                   >
                     {[
@@ -728,10 +1030,10 @@ export default function FilterGroups() {
                           justifyContent: "space-between",
                           alignItems: "center",
                           cursor: "pointer",
-                          color: activeView === view.id ? "#007bff" : "#202223",
+                          color: activeView === view.id ? "#5B21B6" : "#1E1B4B",
                           fontWeight: activeView === view.id ? "600" : "400",
                           borderBottom:
-                            view.id === "all" ? "1px solid #e4e5e7" : "none",
+                            view.id === "all" ? "1px solid rgba(30, 27, 75, 0.08)" : "none",
                         }}
                       >
                         {view.label}
@@ -741,11 +1043,9 @@ export default function FilterGroups() {
                             style={{
                               width: "16px",
                               height: "16px",
-                              fill: "#007bff",
-                              stroke: "#007bff",
+                              fill: "#5B21B6",
+                              stroke: "#5B21B6",
                               strokeWidth: "1.5",
-                              strokeLinejoin: "round",
-                              strokeLinecap: "round",
                             }}
                           >
                             <path d="M10 2l2.4 5.4 5.6.8-4.2 4.2 1 5.6-5.2-3.2-5.2 3.2 1-5.6-4.2-4.2 5.6-.8z" />
@@ -757,10 +1057,8 @@ export default function FilterGroups() {
                               width: "16px",
                               height: "16px",
                               fill: "none",
-                              stroke: "#66b2ff",
+                              stroke: "rgba(91, 33, 182, 0.5)",
                               strokeWidth: "1.5",
-                              strokeLinejoin: "round",
-                              strokeLinecap: "round",
                             }}
                           >
                             <path d="M10 2l2.4 5.4 5.6.8-4.2 4.2 1 5.6-5.2-3.2-5.2 3.2 1-5.6-4.2-4.2 5.6-.8z" />
@@ -775,18 +1073,22 @@ export default function FilterGroups() {
               {/* Create filter group button */}
               <button
                 onClick={() => setShowCreate(true)}
+                className="btn-create-group"
                 style={{
-                  background: "#007bff",
-                  color: "#fff",
+                  backgroundColor: "#5B21B6",
+                  color: "#ffffff",
                   border: "none",
-                  borderRadius: "20px",
-                  padding: "8px 20px",
-                  fontSize: "14px",
+                  borderRadius: "10px",
+                  padding: "10px 20px",
+                  fontSize: "13.5px",
                   fontWeight: "600",
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "8px",
+                  position: "relative",
+                  overflow: "hidden",
+                  transition: "all 0.3s ease"
                 }}
               >
                 Create filter group
@@ -805,7 +1107,7 @@ export default function FilterGroups() {
                       height: "14px",
                       fill: "none",
                       stroke: "currentColor",
-                      strokeWidth: "1.5",
+                      strokeWidth: "2.5",
                     }}
                   >
                     <path d="M5 7l5 5 5-5" />
@@ -814,7 +1116,7 @@ export default function FilterGroups() {
               </button>
             </div>
 
-            {/* Right Actions (Search & Icons) */}
+            {/* Right Actions */}
             <div
               style={{
                 display: "flex",
@@ -832,12 +1134,12 @@ export default function FilterGroups() {
                     width: "18px",
                     height: "18px",
                     fill: "none",
-                    stroke: "#0066cc",
-                    strokeWidth: "1.5",
+                    stroke: "#5B21B6",
+                    strokeWidth: "2.5",
                     position: "absolute",
                     left: "14px",
                     top: "50%",
-                    transform: "translateY(-50%)",
+                    transform: "translateY(-50%)"
                   }}
                 >
                   <circle cx="8.5" cy="8.5" r="5" />
@@ -848,31 +1150,34 @@ export default function FilterGroups() {
                   placeholder="Search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  className="search-input-field"
                   style={{
                     width: "100%",
                     padding: "10px 12px 10px 40px",
-                    borderRadius: "20px",
-                    border: "none",
-                    backgroundColor: "#f0f4f9",
-                    fontSize: "14px",
-                    color: "#0066cc",
+                    borderRadius: "10px",
+                    border: "1px solid #e2e8f0",
+                    backgroundColor: "#f9fafb",
+                    fontSize: "13.5px",
+                    color: "#1E1B4B",
                     outline: "none",
                     fontWeight: "500",
-                    boxSizing: "border-box",
+                    boxSizing: "border-box"
                   }}
                 />
               </div>
               <button
                 onClick={openColumnsModal}
+                className="toolbar-icon-btn"
+                title="Customize Columns"
                 style={{
                   background: "none",
                   border: "none",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  padding: 0,
+                  padding: "8px",
+                  borderRadius: "8px"
                 }}
-                title="Customize Columns"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -880,8 +1185,8 @@ export default function FilterGroups() {
                     width: "22px",
                     height: "22px",
                     fill: "none",
-                    stroke: "#0066cc",
-                    strokeWidth: "1.5",
+                    stroke: "#1E1B4B",
+                    strokeWidth: "1.8",
                   }}
                 >
                   <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
@@ -890,15 +1195,17 @@ export default function FilterGroups() {
               </button>
               <button
                 onClick={() => setShowFilterModal(true)}
+                className="toolbar-icon-btn"
+                title="Filter"
                 style={{
                   background: "none",
                   border: "none",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  padding: 0,
+                  padding: "8px",
+                  borderRadius: "8px"
                 }}
-                title="Filter"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -906,8 +1213,8 @@ export default function FilterGroups() {
                     width: "22px",
                     height: "22px",
                     fill: "none",
-                    stroke: "#0066cc",
-                    strokeWidth: "1.5",
+                    stroke: "#1E1B4B",
+                    strokeWidth: "1.8",
                     strokeLinecap: "round",
                   }}
                 >
@@ -920,30 +1227,28 @@ export default function FilterGroups() {
             </div>
           </div>
 
-          <table
+          <table 
+            className="groups-table"
             style={{
               width: "100%",
-              borderCollapse: "collapse",
-              textAlign: "left",
+              borderCollapse: "collapse"
             }}
           >
             <thead>
-              <tr
-                style={{
-                  borderBottom: "1px solid #e1e3e5",
-                  background: "#fafafa",
-                }}
-              >
+              <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                 {columns
                   .filter((c) => c.isVisible)
                   .map((col) => (
-                    <th
+                    <th 
                       key={col.id}
                       style={{
-                        padding: "12px 16px",
+                        background: "#1E1B4B",
+                        padding: "16px 20px",
                         fontWeight: "600",
                         fontSize: "13px",
-                        color: "#6d7175",
+                        color: "#ffffff",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px"
                       }}
                     >
                       {col.label}
@@ -957,7 +1262,7 @@ export default function FilterGroups() {
                   <td
                     colSpan={columns.filter((c) => c.isVisible).length}
                     style={{
-                      padding: "24px",
+                      padding: "32px",
                       textAlign: "center",
                       color: "#6d7175",
                       fontSize: "14px",
@@ -968,43 +1273,47 @@ export default function FilterGroups() {
                 </tr>
               ) : (
                 filteredGroups.map((group) => (
-                  <tr
+                  <tr 
                     key={group.id}
-                    style={{ borderBottom: "1px solid #f1f2f4" }}
+                    style={{
+                      borderBottom: "1px solid #e2e8f0",
+                      transition: "background-color 0.2s ease"
+                    }}
                   >
                     {columns
                       .filter((c) => c.isVisible)
                       .map((col) => {
                         if (col.id === "name") {
                           return (
-                            <td key="name" style={{ padding: "14px 16px" }}>
+                            <td key="name" style={{ padding: "18px 20px" }}>
                               <button
-                                onClick={() =>
-                                  navigate(`/app/filters/groups/${group.id}`)
-                                }
+                                onClick={() => navigate(`/app/filters/groups/${group.id}`)}
+                                className="group-name-btn"
                                 style={{
                                   background: "none",
                                   border: "none",
-                                  color: "#202223",
+                                  color: "#1E1B4B",
                                   fontSize: "14px",
-                                  fontWeight: "600",
+                                  fontWeight: "700",
                                   cursor: "pointer",
                                   padding: 0,
-                                  textAlign: "left",
+                                  textAlign: "left"
                                 }}
                               >
                                 {group.name}
                               </button>
                               {group.isDefault && (
-                                <span
+                                <span 
+                                  className="badge-default-group"
                                   style={{
                                     marginLeft: "8px",
-                                    padding: "2px 6px",
-                                    borderRadius: "4px",
-                                    background: "#e4e5e7",
-                                    color: "#6d7175",
-                                    fontSize: "11px",
-                                    fontWeight: "600",
+                                    padding: "3px 10px",
+                                    borderRadius: "6px",
+                                    background: "rgba(91, 33, 182, 0.08)",
+                                    color: "#5B21B6",
+                                    fontSize: "10.5px",
+                                    fontWeight: "700",
+                                    letterSpacing: "0.5px"
                                   }}
                                 >
                                   DEFAULT
@@ -1015,30 +1324,14 @@ export default function FilterGroups() {
                         }
                         if (col.id === "collections") {
                           return (
-                            <td
-                              key="collections"
-                              style={{ padding: "14px 16px" }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: "4px",
-                                }}
-                              >
+                            <td key="collections" style={{ padding: "18px 20px" }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                                 {group.collections
                                   .filter((c) => c.pageType === "collection")
                                   .map((c) => (
-                                    <span
-                                      key={c.id}
-                                      style={{
-                                        padding: "2px 8px",
-                                        borderRadius: "4px",
-                                        backgroundColor: "#e4e5e7",
-                                        color: "#202223",
-                                        border: "1px solid #c9cccf",
-                                        fontSize: "12px",
-                                      }}
+                                    <span 
+                                      key={c.id} 
+                                      className="collection-tag-badge"
                                     >
                                       {c.collectionTitle}
                                     </span>
@@ -1049,27 +1342,14 @@ export default function FilterGroups() {
                         }
                         if (col.id === "pages") {
                           return (
-                            <td key="pages" style={{ padding: "14px 16px" }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: "4px",
-                                }}
-                              >
+                            <td key="pages" style={{ padding: "18px 20px" }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                                 {group.collections
                                   .filter((c) => c.pageType === "search")
                                   .map((c) => (
-                                    <span
-                                      key={c.id}
-                                      style={{
-                                        padding: "2px 8px",
-                                        borderRadius: "4px",
-                                        backgroundColor: "#e4e5e7",
-                                        color: "#202223",
-                                        border: "1px solid #c9cccf",
-                                        fontSize: "12px",
-                                      }}
+                                    <span 
+                                      key={c.id} 
+                                      className="collection-tag-badge"
                                     >
                                       {c.collectionTitle}
                                     </span>
@@ -1080,23 +1360,13 @@ export default function FilterGroups() {
                         }
                         if (col.id === "status") {
                           return (
-                            <td key="status" style={{ padding: "14px 16px" }}>
+                            <td key="status" style={{ padding: "18px 20px" }}>
                               {group.isDefault ? (
-                                <span
-                                  style={{ color: "#6d7175", fontSize: "13px" }}
-                                >
+                                <span className="badge-always-active">
                                   Always Active
                                 </span>
                               ) : (
-                                <label
-                                  style={{
-                                    position: "relative",
-                                    display: "inline-block",
-                                    width: "40px",
-                                    height: "22px",
-                                    cursor: "pointer",
-                                  }}
-                                >
+                                <label style={{ position: "relative", display: "inline-block", width: "40px", height: "22px", cursor: "pointer" }}>
                                   <input
                                     type="checkbox"
                                     checked={group.status}
@@ -1104,14 +1374,13 @@ export default function FilterGroups() {
                                     style={{ opacity: 0, width: 0, height: 0 }}
                                   />
                                   <span
+                                    className="toggle-switch-slider"
                                     style={{
                                       position: "absolute",
                                       inset: 0,
-                                      backgroundColor: group.status
-                                        ? "#008060"
-                                        : "#8c9196",
                                       borderRadius: "34px",
-                                      transition: "0.2s",
+                                      backgroundColor: group.status ? "#10B981" : "#e2e8f0",
+                                      transition: "all 0.3s ease"
                                     }}
                                   >
                                     <span
@@ -1134,90 +1403,60 @@ export default function FilterGroups() {
                         }
                         if (col.id === "action") {
                           return (
-                            <td
-                              key="action"
-                              style={{
-                                padding: "14px 16px",
-                                textAlign: "right",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "12px",
-                                  justifyContent: "flex-end",
-                                  alignItems: "center",
-                                }}
-                              >
+                            <td key="action" style={{ padding: "18px 20px", textAlign: "right" }}>
+                              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
                                 <button
-                                  onClick={() =>
-                                    navigate(`/app/filters/groups/${group.id}`)
-                                  }
+                                  onClick={() => navigate(`/app/filters/groups/${group.id}`)}
+                                  className="row-action-btn btn-edit-action"
+                                  title="Edit"
                                   style={{
                                     background: "none",
                                     border: "none",
                                     cursor: "pointer",
-                                    padding: 0,
-                                    display: "flex",
-                                    alignItems: "center",
+                                    padding: "6px",
+                                    borderRadius: "6px",
+                                    display: "inline-flex",
+                                    alignItems: "center"
                                   }}
-                                  title="Edit"
                                 >
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    style={{
-                                      width: "16px",
-                                      height: "16px",
-                                      fill: "#5c5f62",
-                                    }}
-                                  >
+                                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
                                     <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828zM5 12v1h1l7.586-7.586-1-1L5 12zM3 16h14v2H3v-2z" />
                                   </svg>
                                 </button>
                                 <button
                                   onClick={() => handleDuplicate(group.id)}
+                                  className="row-action-btn btn-duplicate-action"
+                                  title="Duplicate"
                                   style={{
                                     background: "none",
                                     border: "none",
                                     cursor: "pointer",
-                                    padding: 0,
-                                    display: "flex",
-                                    alignItems: "center",
+                                    padding: "6px",
+                                    borderRadius: "6px",
+                                    display: "inline-flex",
+                                    alignItems: "center"
                                   }}
-                                  title="Duplicate"
                                 >
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    style={{
-                                      width: "16px",
-                                      height: "16px",
-                                      fill: "#5c5f62",
-                                    }}
-                                  >
+                                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
                                     <path d="M14 6h-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-8 6V4h6v2h-2a2 2 0 0 0-2 2v4H6zm8 4H8V8h6v8z" />
                                   </svg>
                                 </button>
                                 {!group.isDefault && (
                                   <button
                                     onClick={() => handleDelete(group.id)}
+                                    className="row-action-btn btn-delete-action"
+                                    title="Delete"
                                     style={{
                                       background: "none",
                                       border: "none",
                                       cursor: "pointer",
-                                      padding: 0,
-                                      display: "flex",
-                                      alignItems: "center",
+                                      padding: "6px",
+                                      borderRadius: "6px",
+                                      display: "inline-flex",
+                                      alignItems: "center"
                                     }}
-                                    title="Delete"
                                   >
-                                    <svg
-                                      viewBox="0 0 20 20"
-                                      style={{
-                                        width: "16px",
-                                        height: "16px",
-                                        fill: "#d82c0d",
-                                      }}
-                                    >
+                                    <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#d82c0d" }}>
                                       <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
                                     </svg>
                                   </button>
@@ -1527,11 +1766,12 @@ export default function FilterGroups() {
           <div
             style={{
               background: "#fff",
-              borderRadius: "12px",
-              padding: "24px 32px 32px",
+              borderRadius: "16px",
+              padding: "26px",
               width: "700px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+              boxShadow: "0 24px 64px rgba(30, 27, 75, 0.12)",
               position: "relative",
+              overflow: "visible",
             }}
           >
             <button
@@ -1548,7 +1788,7 @@ export default function FilterGroups() {
             >
               <svg
                 viewBox="0 0 20 20"
-                style={{ width: "20px", height: "20px", fill: "#5c5f62" }}
+                style={{ width: "20px", height: "20px", fill: "#c9cccf" }}
               >
                 <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
               </svg>
@@ -1556,10 +1796,10 @@ export default function FilterGroups() {
 
             <h2
               style={{
-                margin: "0 0 32px",
+                margin: "0 0 24px",
                 fontSize: "18px",
-                fontWeight: 600,
-                color: "#202223",
+                fontWeight: 700,
+                color: "#1E1B4B",
               }}
             >
               Filter
@@ -1583,21 +1823,22 @@ export default function FilterGroups() {
                 }}
               >
                 <span>Show results matching</span>
-                <div style={{ position: "relative", display: "inline-block" }}>
+                 <div style={{ position: "relative", display: "inline-block" }}>
                   <select
                     value={filterMatch}
                     onChange={(e) => setFilterMatch(e.target.value)}
                     style={{
                       appearance: "none",
-                      background: "#f0f4f9",
-                      color: "#007bff",
-                      padding: "6px 28px 6px 12px",
-                      borderRadius: "16px",
-                      border: "none",
-                      fontSize: "14px",
-                      fontWeight: "500",
+                      background: "#ffffff",
+                      color: "#1E1B4B",
+                      padding: "8px 28px 8px 16px",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(30, 27, 75, 0.12)",
+                      fontSize: "13.5px",
+                      fontWeight: "600",
                       outline: "none",
                       cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
                     }}
                   >
                     <option value="all">all</option>
@@ -1609,7 +1850,7 @@ export default function FilterGroups() {
                       width: "12px",
                       height: "12px",
                       fill: "none",
-                      stroke: "#007bff",
+                      stroke: "#1e1b4b",
                       strokeWidth: "1.5",
                       position: "absolute",
                       right: "10px",
@@ -1629,13 +1870,24 @@ export default function FilterGroups() {
                   onClick={() => setFilterConditions([])}
                   style={{
                     background: "#fff",
-                    border: "1px solid #007bff",
-                    color: "#007bff",
-                    borderRadius: "16px",
-                    padding: "6px 16px",
-                    fontSize: "13px",
+                    border: "1px solid rgba(30, 27, 75, 0.12)",
+                    color: "#4b5563",
+                    borderRadius: "10px",
+                    padding: "8px 16px",
+                    fontSize: "13.5px",
                     fontWeight: "600",
                     cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "#DB3A5D";
+                    e.currentTarget.style.color = "#DB3A5D";
+                    e.currentTarget.style.background = "rgba(219, 58, 93, 0.04)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)";
+                    e.currentTarget.style.color = "#4b5563";
+                    e.currentTarget.style.background = "#fff";
                   }}
                 >
                   CLEAR ALL
@@ -1675,16 +1927,17 @@ export default function FilterGroups() {
                       }}
                       style={{
                         appearance: "none",
-                        background: "#f0f4f9",
-                        color: "#007bff",
-                        padding: "8px 32px 8px 16px",
-                        borderRadius: "20px",
-                        border: "none",
-                        fontSize: "14px",
-                        fontWeight: "500",
+                        background: "#ffffff",
+                        color: "#1E1B4B",
+                        padding: "10px 32px 10px 16px",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(30, 27, 75, 0.12)",
+                        fontSize: "13.5px",
+                        fontWeight: "600",
                         outline: "none",
                         cursor: "pointer",
                         width: "100%",
+                        boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
                       }}
                     >
                       <option value="name">Item name</option>
@@ -1696,7 +1949,7 @@ export default function FilterGroups() {
                         width: "14px",
                         height: "14px",
                         fill: "none",
-                        stroke: "#007bff",
+                        stroke: "#1e1b4b",
                         strokeWidth: "1.5",
                         position: "absolute",
                         right: "12px",
@@ -1720,16 +1973,17 @@ export default function FilterGroups() {
                       }}
                       style={{
                         appearance: "none",
-                        background: "#f0f4f9",
-                        color: "#007bff",
-                        padding: "8px 32px 8px 16px",
-                        borderRadius: "20px",
-                        border: "none",
-                        fontSize: "14px",
-                        fontWeight: "500",
+                        background: "#ffffff",
+                        color: "#1E1B4B",
+                        padding: "10px 32px 10px 16px",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(30, 27, 75, 0.12)",
+                        fontSize: "13.5px",
+                        fontWeight: "600",
                         outline: "none",
                         cursor: "pointer",
                         width: "100%",
+                        boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
                       }}
                     >
                       {cond.field === "name" ? (
@@ -1756,7 +2010,7 @@ export default function FilterGroups() {
                         width: "14px",
                         height: "14px",
                         fill: "none",
-                        stroke: "#007bff",
+                        stroke: "#1e1b4b",
                         strokeWidth: "1.5",
                         position: "absolute",
                         right: "12px",
@@ -1788,14 +2042,15 @@ export default function FilterGroups() {
                         }}
                         style={{
                           width: "100%",
-                          padding: "8px 16px",
-                          borderRadius: "20px",
-                          border: "none",
-                          backgroundColor: "#f0f4f9",
-                          fontSize: "14px",
-                          color: "#6d7175",
+                          padding: "10px 16px",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(30, 27, 75, 0.12)",
+                          backgroundColor: "#ffffff",
+                          fontSize: "13.5px",
+                          color: "#1E1B4B",
                           outline: "none",
                           boxSizing: "border-box",
+                          boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
                         }}
                       />
                     ) : (
@@ -1803,8 +2058,8 @@ export default function FilterGroups() {
                         style={{
                           position: "relative",
                           display: "inline-block",
-                          width: "40px",
-                          height: "22px",
+                          width: "44px",
+                          height: "24px",
                           cursor: "pointer",
                         }}
                       >
@@ -1825,7 +2080,7 @@ export default function FilterGroups() {
                             position: "absolute",
                             inset: 0,
                             backgroundColor:
-                              cond.value === "true" ? "#008060" : "#8c9196",
+                              cond.value === "true" ? "#10B981" : "rgba(30, 27, 75, 0.12)",
                             borderRadius: "34px",
                             transition: "0.2s",
                           }}
@@ -1833,13 +2088,14 @@ export default function FilterGroups() {
                           <span
                             style={{
                               position: "absolute",
-                              height: "16px",
-                              width: "16px",
-                              left: cond.value === "true" ? "20px" : "4px",
+                              height: "18px",
+                              width: "18px",
+                              left: cond.value === "true" ? "23px" : "3px",
                               bottom: "3px",
                               backgroundColor: "white",
                               transition: "0.2s",
                               borderRadius: "50%",
+                              boxShadow: "0 1px 3px rgba(30,27,75,0.1)",
                             }}
                           />
                         </span>
@@ -1862,7 +2118,11 @@ export default function FilterGroups() {
                       padding: "8px",
                       display: "flex",
                       alignItems: "center",
+                      borderRadius: "8px",
+                      transition: "all 0.2s ease",
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "rgba(219, 58, 93, 0.08)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "none"}
                   >
                     <svg
                       viewBox="0 0 20 20"
@@ -1870,7 +2130,7 @@ export default function FilterGroups() {
                         width: "18px",
                         height: "18px",
                         fill: "none",
-                        stroke: "#007bff",
+                        stroke: "#DB3A5D",
                         strokeWidth: "1.5",
                       }}
                     >
@@ -1882,7 +2142,7 @@ export default function FilterGroups() {
               ))}
 
               <div
-                style={{ marginTop: filterConditions.length > 0 ? "8px" : "0" }}
+                style={{ marginTop: filterConditions.length > 0 ? "12px" : "0" }}
               >
                 <button
                   onClick={() =>
@@ -1897,19 +2157,29 @@ export default function FilterGroups() {
                     ])
                   }
                   style={{
-                    background: "#007bff",
+                    background: "#5B21B6",
                     color: "#fff",
                     border: "none",
-                    borderRadius: "20px",
-                    padding: "8px 24px",
-                    fontSize: "14px",
-                    fontWeight: "600",
+                    borderRadius: "10px",
+                    padding: "12px 24px",
+                    fontSize: "14.5px",
+                    fontWeight: "700",
                     cursor: "pointer",
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
                     gap: "8px",
                     width: filterConditions.length > 0 ? "auto" : "100%",
+                    transition: "all 0.2s ease",
+                    boxShadow: "0 4px 12px rgba(91, 33, 182, 0.15)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#1E1B4B";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(30, 27, 75, 0.2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#5B21B6";
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(91, 33, 182, 0.15)";
                   }}
                 >
                   <span style={{ fontSize: "16px", fontWeight: "300" }}>+</span>{" "}
@@ -1930,13 +2200,24 @@ export default function FilterGroups() {
                 onClick={() => setShowFilterModal(false)}
                 style={{
                   background: "#fff",
-                  border: "1px solid #c9cccf",
-                  borderRadius: "20px",
-                  padding: "8px 24px",
-                  fontSize: "14px",
+                  border: "1px solid rgba(30, 27, 75, 0.12)",
+                  borderRadius: "10px",
+                  padding: "12px 24px",
+                  fontSize: "14.5px",
                   fontWeight: "600",
-                  color: "#6d7175",
+                  color: "#4b5563",
                   cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#f9fafb";
+                  e.currentTarget.style.color = "#111827";
+                  e.currentTarget.style.borderColor = "#d1d5db";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#fff";
+                  e.currentTarget.style.color = "#4b5563";
+                  e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)";
                 }}
               >
                 CANCEL
@@ -1944,14 +2225,24 @@ export default function FilterGroups() {
               <button
                 onClick={() => setShowFilterModal(false)}
                 style={{
-                  background: "#66b2ff",
+                  background: "#5B21B6",
                   border: "none",
-                  borderRadius: "20px",
-                  padding: "8px 32px",
-                  fontSize: "14px",
-                  fontWeight: "600",
+                  borderRadius: "10px",
+                  padding: "12px 32px",
+                  fontSize: "14.5px",
+                  fontWeight: "700",
                   color: "#fff",
                   cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  boxShadow: "0 4px 12px rgba(91, 33, 182, 0.15)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#1E1B4B";
+                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(30, 27, 75, 0.2)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#5B21B6";
+                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(91, 33, 182, 0.15)";
                 }}
               >
                 OK

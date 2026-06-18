@@ -269,7 +269,6 @@ export default function PinningIndex() {
         style={{
           fontFamily: "Inter, sans-serif",
           background: "#f8f9fa",
-          minHeight: "100vh",
           padding: "20px",
         }}
       >
@@ -298,7 +297,7 @@ export default function PinningIndex() {
                   padding: "8px 16px",
                   borderRadius: "20px",
                   cursor: "pointer",
-                  color: "#007bff",
+                  color: "#5B21B6",
                   fontSize: "14px",
                   fontWeight: "500",
                 }}
@@ -345,7 +344,7 @@ export default function PinningIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "all" ? "#007bff" : "#334155",
+                      color: statusFilter === "all" ? "#5B21B6" : "#334155",
                       fontWeight: statusFilter === "all" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -360,7 +359,7 @@ export default function PinningIndex() {
                       style={{
                         width: "16px",
                         height: "16px",
-                        color: statusFilter === "all" ? "#007bff" : "#cbd5e1",
+                        color: statusFilter === "all" ? "#5B21B6" : "#cbd5e1",
                       }}
                       fill={statusFilter === "all" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -386,7 +385,7 @@ export default function PinningIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "active" ? "#007bff" : "#334155",
+                      color: statusFilter === "active" ? "#5B21B6" : "#334155",
                       fontWeight: statusFilter === "active" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -402,7 +401,7 @@ export default function PinningIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "active" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "active" ? "#5B21B6" : "#cbd5e1",
                       }}
                       fill={statusFilter === "active" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -429,7 +428,7 @@ export default function PinningIndex() {
                       cursor: "pointer",
                       fontSize: "14px",
                       color:
-                        statusFilter === "inactive" ? "#007bff" : "#334155",
+                        statusFilter === "inactive" ? "#5B21B6" : "#334155",
                       fontWeight: statusFilter === "inactive" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -445,7 +444,7 @@ export default function PinningIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "inactive" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "inactive" ? "#5B21B6" : "#cbd5e1",
                       }}
                       fill={
                         statusFilter === "inactive" ? "currentColor" : "none"
@@ -471,7 +470,7 @@ export default function PinningIndex() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                background: "#007bff",
+                background: "#5B21B6",
                 padding: "8px 16px",
                 borderRadius: "20px",
                 cursor: "pointer",
@@ -582,7 +581,7 @@ export default function PinningIndex() {
                 >
                   <div
                     onClick={() => { setSortOption("recent"); setIsSortDropdownOpen(false); }}
-                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "recent" ? "#007bff" : "#334155", fontWeight: sortOption === "recent" ? "500" : "400" }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "recent" ? "#5B21B6" : "#334155", fontWeight: sortOption === "recent" ? "500" : "400" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
@@ -590,7 +589,7 @@ export default function PinningIndex() {
                   </div>
                   <div
                     onClick={() => { setSortOption("oldest"); setIsSortDropdownOpen(false); }}
-                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "oldest" ? "#007bff" : "#334155", fontWeight: sortOption === "oldest" ? "500" : "400" }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "oldest" ? "#5B21B6" : "#334155", fontWeight: sortOption === "oldest" ? "500" : "400" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
@@ -775,12 +774,12 @@ export default function PinningIndex() {
               >
                 <div
                   style={{
-                    background: "#f0f7ff",
+                    background: "#f5f3ff",
                     padding: "16px 20px",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    borderBottom: "1px solid #e0f2fe",
+                    borderBottom: "1px solid #ede9fe",
                   }}
                 >
                   <h2
@@ -788,7 +787,7 @@ export default function PinningIndex() {
                       margin: 0,
                       fontSize: "16px",
                       fontWeight: "600",
-                      color: "#007bff",
+                      color: "#5B21B6",
                     }}
                   >
                     Target Search Queries
@@ -848,7 +847,7 @@ export default function PinningIndex() {
                         }
                       }}
                       style={{
-                        background: "#007bff",
+                        background: "#5B21B6",
                         color: "#fff",
                         border: "none",
                         padding: "0 16px",
@@ -924,7 +923,7 @@ export default function PinningIndex() {
                     onClick={proceedToCreate}
                     disabled={createSearchQueries.length === 0}
                     style={{
-                      background: createSearchQueries.length === 0 ? "#cbd5e1" : "#007bff",
+                      background: createSearchQueries.length === 0 ? "#cbd5e1" : "#5B21B6",
                       color: "#fff",
                       border: "none",
                       padding: "8px 16px",
@@ -970,7 +969,7 @@ export default function PinningIndex() {
               <button
                 onClick={handleCreateNew}
                 style={{
-                  background: "#007bff",
+                  background: "#5B21B6",
                   color: "#fff",
                   border: "none",
                   padding: "10px 20px",
@@ -1110,7 +1109,7 @@ export default function PinningIndex() {
                                     )
                                   }
                                   style={{
-                                    color: "#007bff",
+                                    color: "#5B21B6",
                                     cursor: "pointer",
                                   }}
                                 >
@@ -1147,7 +1146,7 @@ export default function PinningIndex() {
                                     height: "24px",
                                     background:
                                       rule.status !== false
-                                        ? "#007bff"
+                                        ? "#5B21B6"
                                         : "#cbd5e1",
                                     borderRadius: "12px",
                                     position: "relative",
@@ -1250,7 +1249,7 @@ export default function PinningIndex() {
                                       width: "16px",
                                       height: "16px",
                                       cursor: "pointer",
-                                      color: "#3b82f6",
+                                      color: "#7C3AED",
                                     }}
                                     fill="none"
                                     stroke="currentColor"

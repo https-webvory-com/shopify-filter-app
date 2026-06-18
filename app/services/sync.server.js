@@ -158,6 +158,12 @@ export async function syncProducts(shop, admin) {
     cursor = productsData.pageInfo.endCursor;
 
     for (const product of products) {
+      if (allFetchedProductIds.length >= 500) {
+        console.log("CFP: Reached 500 product limit. Stopping sync.");
+        hasNextPage = false;
+        break;
+      }
+      
       allFetchedProductIds.push(product.id);
 
       const optionsList = product.options.map((opt) => ({
@@ -304,12 +310,16 @@ export async function syncProducts(shop, admin) {
   }
 
   // 6. Delete products from DB that are no longer on Shopify (were deleted)
-  const deletedProductsCount = await prisma.product.deleteMany({
-    where: {
-      shop,
-      id: { notIn: allFetchedProductIds },
-    },
-  });
+  // Skip deletion if we hit the 500 product limit, so we don't delete the rest of the catalog
+  let deletedProductsCount = { count: 0 };
+  if (allFetchedProductIds.length < 500) {
+    deletedProductsCount = await prisma.product.deleteMany({
+      where: {
+        shop,
+        id: { notIn: allFetchedProductIds },
+      },
+    });
+  }
 
   // 7. Auto-seed FilterSetting records for every unique product option found
   await autoSeedOptionFilters(shop);

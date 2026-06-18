@@ -478,13 +478,130 @@ export default function MerchandisingIndex() {
         </button>
       </ui-title-bar>
 
+      <style>{`
+        .merch-toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: #ffffff !important;
+          padding: 16px 24px !important;
+          border-radius: 12px !important;
+          box-shadow: 0 1px 3px rgba(30, 27, 75, 0.05) !important;
+          border: 1px solid rgba(30, 27, 75, 0.05) !important;
+        }
+
+        .merch-back-link {
+          color: #5B21B6 !important;
+          text-decoration: none;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.2s ease;
+          width: fit-content;
+          font-size: 14px;
+        }
+        .merch-back-link:hover {
+          color: #1E1B4B !important;
+          transform: translateX(-2px);
+        }
+
+        .merch-btn-secondary {
+          display: flex;
+          align-items: center;
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          cursor: pointer !important;
+          color: #1E1B4B !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+        .merch-btn-secondary:hover {
+          background: rgba(91, 33, 182, 0.04) !important;
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+        }
+
+        .merch-btn-primary {
+          display: flex;
+          align-items: center;
+          background: #5B21B6 !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          cursor: pointer !important;
+          color: #ffffff !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          border: none !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(91, 33, 182, 0.15) !important;
+        }
+        .merch-btn-primary:hover {
+          background: #1e1b4b !important;
+          box-shadow: 0 4px 8px rgba(30, 27, 75, 0.2) !important;
+        }
+
+        .merch-search-container {
+          display: flex;
+          align-items: center;
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          width: 250px !important;
+          transition: all 0.2s ease !important;
+        }
+        .merch-search-container:focus-within {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 2px rgba(91, 33, 182, 0.1) !important;
+        }
+
+        .merch-icon-btn {
+          background: none !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          width: 38px !important;
+          height: 38px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          color: #64748b !important;
+          transition: all 0.2s ease !important;
+        }
+        .merch-icon-btn:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+        }
+
+        /* Empty State */
+        .merch-empty-heading {
+          font-size: 38px !important;
+          font-weight: 800 !important;
+          color: #1E1B4B !important;
+          margin-bottom: 16px !important;
+          letter-spacing: -0.5px !important;
+        }
+        .merch-empty-desc {
+          font-size: 15px !important;
+          color: #4b5563 !important;
+          line-height: 1.6 !important;
+          margin-bottom: 32px !important;
+          max-width: 650px !important;
+        }
+      `}</style>
+
       <div
         style={{
           marginBottom: "20px",
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          fontSize: "14px",
         }}
       >
         <a
@@ -493,14 +610,7 @@ export default function MerchandisingIndex() {
             e.preventDefault();
             navigate("/app/collections");
           }}
-          style={{
-            color: "#006e52",
-            textDecoration: "none",
-            fontWeight: "500",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
+          className="merch-back-link"
         >
           <svg
             style={{ width: "16px", height: "16px" }}
@@ -511,7 +621,7 @@ export default function MerchandisingIndex() {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="2"
+              strokeWidth="2.5"
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             ></path>
           </svg>
@@ -523,37 +633,16 @@ export default function MerchandisingIndex() {
         style={{
           fontFamily: "Inter, sans-serif",
           background: "#f8f9fa",
-          minHeight: "100vh",
           padding: "20px",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: "#fff",
-            padding: "12px 24px",
-            borderRadius: "8px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-          }}
-        >
+        <div className="merch-toolbar">
           <div style={{ display: "flex", gap: "12px" }}>
             {/* All rules dropdown */}
             <div style={{ position: "relative" }} className="merch-dropdown-inside">
               <div
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  background: "#f1f5f9",
-                  padding: "8px 16px",
-                  borderRadius: "20px",
-                  cursor: "pointer",
-                  color: "#007bff",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
+                className="merch-btn-secondary"
               >
                 {statusFilter === "all"
                   ? "All rules"
@@ -597,7 +686,7 @@ export default function MerchandisingIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "all" ? "#007bff" : "#334155",
+                      color: statusFilter === "all" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "all" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -612,7 +701,7 @@ export default function MerchandisingIndex() {
                       style={{
                         width: "16px",
                         height: "16px",
-                        color: statusFilter === "all" ? "#007bff" : "#cbd5e1",
+                        color: statusFilter === "all" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={statusFilter === "all" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -638,7 +727,7 @@ export default function MerchandisingIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "active" ? "#007bff" : "#334155",
+                      color: statusFilter === "active" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "active" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -654,7 +743,7 @@ export default function MerchandisingIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "active" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "active" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={statusFilter === "active" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -681,7 +770,7 @@ export default function MerchandisingIndex() {
                       cursor: "pointer",
                       fontSize: "14px",
                       color:
-                        statusFilter === "inactive" ? "#007bff" : "#334155",
+                        statusFilter === "inactive" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "inactive" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -697,7 +786,7 @@ export default function MerchandisingIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "inactive" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "inactive" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={
                         statusFilter === "inactive" ? "currentColor" : "none"
@@ -723,17 +812,7 @@ export default function MerchandisingIndex() {
                 setRuleToEdit(null);
                 setIsCreateRuleModalOpen(true);
               }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "#007bff",
-                padding: "8px 16px",
-                borderRadius: "20px",
-                cursor: "pointer",
-                color: "#fff",
-                fontSize: "14px",
-                fontWeight: "600",
-              }}
+              className="merch-btn-primary"
             >
               Create rule
               <div
@@ -757,17 +836,8 @@ export default function MerchandisingIndex() {
           </div>
 
           {/* Right side search */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "#f1f5f9",
-                padding: "8px 16px",
-                borderRadius: "20px",
-                width: "250px",
-              }}
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div className="merch-search-container">
               <svg
                 style={{
                   width: "16px",
@@ -782,7 +852,7 @@ export default function MerchandisingIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 ></path>
               </svg>
@@ -803,12 +873,7 @@ export default function MerchandisingIndex() {
             </div>
             <button
               onClick={() => setIsFilterModalOpen(true)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-              }}
+              className="merch-icon-btn"
             >
               <svg
                 style={{ width: "20px", height: "20px" }}
@@ -819,19 +884,14 @@ export default function MerchandisingIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 ></path>
               </svg>
             </button>
             <button
               onClick={() => setIsCustomizeColumnsOpen(true)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-              }}
+              className="merch-icon-btn"
             >
               <svg
                 style={{ width: "20px", height: "20px" }}
@@ -842,13 +902,13 @@ export default function MerchandisingIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
                 ></path>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                 ></path>
               </svg>
@@ -858,7 +918,7 @@ export default function MerchandisingIndex() {
 
         {/* Main Content */}
         <div
-          style={{ maxWidth: "1200px", margin: "40px auto", textAlign: "left" }}
+          style={{ maxWidth: "1200px", margin: "0 auto", textAlign: "left" }}
         >
           {navigation.state !== "idle" || fetcher.state !== "idle" ? (
             <div
@@ -872,8 +932,8 @@ export default function MerchandisingIndex() {
                 style={{
                   width: "40px",
                   height: "40px",
-                  border: "4px solid #cbd5e1",
-                  borderTop: "4px solid #007bff",
+                  border: "4px solid rgba(91, 33, 182, 0.2)",
+                  borderTop: "4px solid #5B21B6",
                   borderRadius: "50%",
                   animation: "spin 1s linear infinite",
                 }}
@@ -896,7 +956,7 @@ export default function MerchandisingIndex() {
                   width: "100%",
                   borderCollapse: "collapse",
                   fontSize: "14px",
-                  color: "#334155",
+                  color: "#1E1B4B",
                 }}
               >
                 <thead>
@@ -953,7 +1013,7 @@ export default function MerchandisingIndex() {
                                       width: "16px",
                                       height: "16px",
                                       cursor: "grab",
-                                      color: "#cbd5e1",
+                                      color: "rgba(91, 33, 182, 0.2)",
                                     }}
                                     fill="none"
                                     stroke="currentColor"
@@ -973,7 +1033,7 @@ export default function MerchandisingIndex() {
                                       setIsCreateRuleModalOpen(true);
                                     }}
                                     style={{
-                                      color: "#007bff",
+                                      color: "#5B21B6",
                                       fontWeight: "500",
                                       cursor: "pointer",
                                     }}
@@ -990,8 +1050,8 @@ export default function MerchandisingIndex() {
                                   rule.collections.length > 0 ? (
                                     <span
                                       style={{
-                                        background: "#eff6ff",
-                                        color: "#007bff",
+                                        background: "rgba(91, 33, 182, 0.08)",
+                                        color: "#5B21B6",
                                         padding: "4px 12px",
                                         borderRadius: "12px",
                                         fontSize: "12px",
@@ -1028,8 +1088,8 @@ export default function MerchandisingIndex() {
                                       width: "40px",
                                       height: "24px",
                                       background: rule.status
-                                        ? "#007bff"
-                                        : "#cbd5e1",
+                                        ? "#5B21B6"
+                                        : "rgba(91, 33, 182, 0.2)",
                                       borderRadius: "12px",
                                       position: "relative",
                                       cursor: "pointer",
@@ -1060,7 +1120,7 @@ export default function MerchandisingIndex() {
                                   key={c.id}
                                   style={{
                                     padding: "16px 24px",
-                                    color: "#cbd5e1",
+                                    color: "rgba(91, 33, 182, 0.2)",
                                   }}
                                 >
                                   <div style={{ display: "flex", gap: "16px" }}>
@@ -1165,65 +1225,109 @@ export default function MerchandisingIndex() {
             <div
               style={{
                 maxWidth: "800px",
-                margin: "100px auto",
-                textAlign: "left",
+                margin: "40px auto",
+                textAlign: "center",
+                background: "#ffffff",
+                padding: "60px 40px",
+                borderRadius: "16px",
+                boxShadow: "0 10px 30px rgba(30, 27, 75, 0.03)",
+                border: "1px solid rgba(30, 27, 75, 0.05)",
               }}
             >
-              <h1
+              <div
                 style={{
-                  fontSize: "42px",
-                  fontWeight: "800",
-                  color: "#007bff",
-                  marginBottom: "16px",
-                  letterSpacing: "-0.5px",
+                  width: "72px",
+                  height: "72px",
+                  borderRadius: "50%",
+                  background: "rgba(91, 33, 182, 0.08)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 24px auto",
+                  color: "#5B21B6",
                 }}
               >
+                <svg
+                  style={{ width: "32px", height: "32px" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  ></path>
+                </svg>
+              </div>
+
+              <h1 className="merch-empty-heading">
                 Add your merchandising rules
               </h1>
               <p
-                style={{
-                  fontSize: "16px",
-                  color: "#475569",
-                  lineHeight: "1.6",
-                  marginBottom: "32px",
-                  maxWidth: "700px",
-                }}
+                className="merch-empty-desc"
+                style={{ margin: "0 auto 32px auto" }}
               >
                 Help manipulate groups of products - push them to the top, bury
                 to the bottom of the results by adding new merchandising rules
                 to your store, or import your existing rules.
               </p>
 
-              <div style={{ display: "flex", gap: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "16px",
+                  justifyContent: "center",
+                }}
+              >
                 <button
                   onClick={() => {
                     setRuleToEdit(null);
                     setIsCreateRuleModalOpen(true);
                   }}
                   style={{
-                    background: "#007bff",
+                    background: "#5B21B6",
                     color: "#fff",
                     border: "none",
-                    padding: "10px 24px",
-                    borderRadius: "24px",
+                    padding: "12px 28px",
+                    borderRadius: "10px",
                     fontSize: "14px",
                     fontWeight: "600",
                     cursor: "pointer",
-                    boxShadow: "0 2px 4px rgba(0,123,255,0.2)",
+                    boxShadow: "0 4px 12px rgba(91, 33, 182, 0.2)",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#1e1b4b";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#5B21B6";
                   }}
                 >
                   Add rule
                 </button>
                 <button
                   style={{
-                    background: "#eff6ff",
-                    color: "#007bff",
-                    border: "none",
-                    padding: "10px 24px",
-                    borderRadius: "24px",
+                    background: "#ffffff",
+                    color: "#5B21B6",
+                    border: "1px solid rgba(91, 33, 182, 0.2)",
+                    padding: "12px 28px",
+                    borderRadius: "10px",
                     fontSize: "14px",
                     fontWeight: "600",
                     cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background =
+                      "rgba(91, 33, 182, 0.04)";
+                    e.currentTarget.style.borderColor = "#5B21B6";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#ffffff";
+                    e.currentTarget.style.borderColor =
+                      "rgba(91, 33, 182, 0.2)";
                   }}
                 >
                   Import rules
@@ -1276,7 +1380,7 @@ export default function MerchandisingIndex() {
                   margin: "0 0 16px 0",
                   fontSize: "18px",
                   fontWeight: "600",
-                  color: "#334155",
+                  color: "#1E1B4B",
                 }}
               >
                 Delete Rule
@@ -1303,7 +1407,7 @@ export default function MerchandisingIndex() {
                   style={{
                     padding: "10px 24px",
                     background: "#f8fafc",
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid rgba(91, 33, 182, 0.2)",
                     borderRadius: "24px",
                     color: "#64748b",
                     fontWeight: "600",

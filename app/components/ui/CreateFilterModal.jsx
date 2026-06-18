@@ -103,7 +103,7 @@ const OptionTypeDropdown = ({ value, onChange, storeData }) => {
     <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box" }}
       >
         {selectedLabel}
         <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor", transform: isOpen ? "rotate(180deg)" : "none", transition: "0.2s" }}><path d="M10 14a.997.997 0 0 1-.707-.293l-5-5a.999.999 0 1 1 1.414-1.414L10 11.586l4.293-4.293a.999.999 0 1 1 1.414 1.414l-5 5A.997.997 0 0 1 10 14z"/></svg>
@@ -112,14 +112,14 @@ const OptionTypeDropdown = ({ value, onChange, storeData }) => {
       {isOpen && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", border: "1px solid #e1e3e5", zIndex: 1000, padding: "12px 0", maxHeight: "350px", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "0 12px 12px 12px", borderBottom: "1px solid #e1e3e5" }}>
-            <div style={{ display: "flex", alignItems: "center", background: "#f0f4f9", borderRadius: "20px", padding: "8px 16px" }}>
-              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
+            <div style={{ display: "flex", alignItems: "center", background: "rgba(91, 33, 182, 0.04)", borderRadius: "10px", padding: "8px 16px" }}>
+              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5B21B6", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
               <input 
                 type="text" 
                 placeholder="Filter" 
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ border: "none", background: "transparent", outline: "none", color: "#007bff", width: "100%", fontSize: "14px" }}
+                style={{ border: "none", background: "transparent", outline: "none", color: "#1E1B4B", width: "100%", fontSize: "14px" }}
                 autoFocus
               />
             </div>
@@ -174,12 +174,12 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
     <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
       >
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", boxSizing: "border-box" }}>
           {prefixLabel && (<span style={{ color: "#202223", fontWeight: "normal", fontSize: "14px" }}>{prefixLabel}</span>)}
-          {value.length === 0 || renderTagsOutside ? <span style={{ opacity: 0.7, color: "#007bff", fontWeight: "normal" }}>{placeholder}</span> : value.map(v => (
-            <span key={v} style={{ background: "#d1e4fb", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+          {value.length === 0 || renderTagsOutside ? <span style={{ opacity: 0.7, color: "#5B21B6", fontWeight: "normal" }}>{placeholder}</span> : value.map(v => (
+            <span key={v} style={{ background: "rgba(91, 33, 182, 0.08)", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
               {v}
               <span onClick={(e) => { e.stopPropagation(); handleToggle(v); }} style={{ cursor: "pointer", marginLeft: "2px", fontWeight: "bold" }}>×</span>
             </span>
@@ -190,14 +190,14 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
       {isOpen && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", border: "1px solid #e1e3e5", zIndex: 1000, padding: "12px 0", maxHeight: "350px", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "0 12px 12px 12px", borderBottom: "1px solid #e1e3e5" }}>
-            <div style={{ display: "flex", alignItems: "center", background: "#f0f4f9", borderRadius: "20px", padding: "8px 16px" }}>
-              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
+            <div style={{ display: "flex", alignItems: "center", background: "rgba(91, 33, 182, 0.04)", borderRadius: "10px", padding: "8px 16px" }}>
+              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5B21B6", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
               <input 
                 type="text" 
                 placeholder="Filter" 
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ border: "none", background: "transparent", outline: "none", color: "#007bff", width: "100%", fontSize: "14px" }}
+                style={{ border: "none", background: "transparent", outline: "none", color: "#1E1B4B", width: "100%", fontSize: "14px" }}
                 autoFocus
               />
             </div>
@@ -242,9 +242,9 @@ const SingleSelectDropdown = ({ value, onChange, options, placeholder = "Select 
     <div style={{ position: "relative", width: "100%" }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: "40px", boxSizing: "border-box" }}
       >
-        <span style={{ color: value ? "#007bff" : "rgba(0, 123, 255, 0.7)", fontWeight: value ? "500" : "normal" }}>
+        <span style={{ color: value ? "#5B21B6" : "rgba(91, 33, 182, 0.7)", fontWeight: value ? "500" : "normal" }}>
           {value || placeholder}
         </span>
         <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor", transform: isOpen ? "rotate(180deg)" : "none", transition: "0.2s", flexShrink: 0 }}><path d="M10 14a.997.997 0 0 1-.707-.293l-5-5a.999.999 0 1 1 1.414-1.414L10 11.586l4.293-4.293a.999.999 0 1 1 1.414 1.414l-5 5A.997.997 0 0 1 10 14z"/></svg>
@@ -253,14 +253,14 @@ const SingleSelectDropdown = ({ value, onChange, options, placeholder = "Select 
       {isOpen && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", border: "1px solid #e1e3e5", zIndex: 1000, padding: "12px 0", maxHeight: "350px", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "0 12px 12px 12px", borderBottom: "1px solid #e1e3e5" }}>
-            <div style={{ display: "flex", alignItems: "center", background: "#f0f4f9", borderRadius: "20px", padding: "8px 16px" }}>
-              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
+            <div style={{ display: "flex", alignItems: "center", background: "rgba(91, 33, 182, 0.04)", borderRadius: "10px", padding: "8px 16px" }}>
+              <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5B21B6", marginRight: "8px" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
               <input 
                 type="text" 
                 placeholder="Filter" 
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ border: "none", background: "transparent", outline: "none", color: "#007bff", width: "100%", fontSize: "14px" }}
+                style={{ border: "none", background: "transparent", outline: "none", color: "#1E1B4B", width: "100%", fontSize: "14px" }}
                 onClick={e => e.stopPropagation()}
                 autoFocus
               />
@@ -302,7 +302,7 @@ const SimpleDropdown = ({ value, onChange, options, width = "200px" }) => {
     <div style={{ position: "relative", width }} ref={dropdownRef}>
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", boxSizing: "border-box" }}
       >
         <span>{value}</span>
         <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor", transform: isOpen ? "rotate(180deg)" : "none", transition: "0.2s" }}><path d="M10 14a.997.997 0 0 1-.707-.293l-5-5a.999.999 0 1 1 1.414-1.414L10 11.586l4.293-4.293a.999.999 0 1 1 1.414 1.414l-5 5A.997.997 0 0 1 10 14z"/></svg>
@@ -380,7 +380,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     sliderStep: 0.1,
     decimals: 0,
     rangeFormat: "{0} - {1}",
-    sliderColor: "#007bff",
+    sliderColor: "#5B21B6",
     sliderValueSymbols: "k,M,G,T,P,E",
     sliderPrefix: "",
     sliderSuffix: "",
@@ -519,7 +519,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           sliderStep: 0.1,
           decimals: 0,
           rangeFormat: "{0} - {1}",
-          sliderColor: "#007bff",
+          sliderColor: "#5B21B6",
           sliderValueSymbols: "k,M,G,T,P,E",
           sliderPrefix: "",
           sliderSuffix: "",
@@ -650,7 +650,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     const num = parseInt(ratingStr);
     if (isNaN(num)) return ratingStr;
     return (
-      <div style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "2px", alignItems: "center", boxSizing: "border-box" }}>
         {[1, 2, 3, 4, 5].map((star) => (
           <svg key={star} viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: star <= num ? "#FFC107" : "transparent", stroke: "#FFC107", strokeWidth: "1.5px" }}>
             <path d="M10 1.3l2.388 6.722h7.312l-5.938 4.056 2.388 6.722-5.938-4.056-5.938 4.056 2.388-6.722-5.938-4.056h7.312z" />
@@ -791,7 +791,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#202223" }}>
             {initialData ? "Edit Filters" : "Create a new filter"}
           </h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button onClick={onClose} style={{ background: "none", border: "1px solid rgba(30, 27, 75, 0.12)", cursor: "pointer", padding: 0 }}>
             <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#5c5f62" }}>
               <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
             </svg>
@@ -799,17 +799,38 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         </div>
 
         {/* Tabs and Preview Toggle */}
+        <style>{`
+          .custom-scrollbar-container::-webkit-scrollbar {
+            width: 6px !important;
+          }
+          .custom-scrollbar-container::-webkit-scrollbar-track {
+            background: rgba(30, 27, 75, 0.02) !important;
+            border-radius: 10px !important;
+          }
+          .custom-scrollbar-container::-webkit-scrollbar-thumb {
+            background: rgba(30, 27, 75, 0.15) !important;
+            border-radius: 10px !important;
+            transition: background 0.2s ease !important;
+          }
+          .custom-scrollbar-container::-webkit-scrollbar-thumb:hover {
+            background: #5B21B6 !important;
+          }
+          .custom-scrollbar-container {
+            scrollbar-width: thin !important;
+            scrollbar-color: rgba(30, 27, 75, 0.15) rgba(30, 27, 75, 0.02) !important;
+          }
+        `}</style>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 24px", borderBottom: "1px solid #e1e3e5", background: "#fcfcfc" }}>
           <div style={{ display: "flex", gap: "24px" }}>
             <div 
               onClick={() => setActiveTab("general")}
-              style={{ padding: "12px 0", cursor: "pointer", color: activeTab === "general" ? "#007bff" : "#6d7175", borderBottom: activeTab === "general" ? "3px solid #007bff" : "3px solid transparent", fontWeight: activeTab === "general" ? "600" : "500", fontSize: "14px" }}
+              style={{ padding: "12px 0", cursor: "pointer", color: activeTab === "general" ? "#5B21B6" : "#6d7175", borderBottom: activeTab === "general" ? "3px solid #5B21B6" : "3px solid transparent", fontWeight: activeTab === "general" ? "600" : "500", fontSize: "14px" }}
             >
               General
             </div>
             <div 
               onClick={() => setActiveTab("advanced")}
-              style={{ padding: "12px 0", cursor: "pointer", color: activeTab === "advanced" ? "#007bff" : "#6d7175", borderBottom: activeTab === "advanced" ? "3px solid #007bff" : "3px solid transparent", fontWeight: activeTab === "advanced" ? "600" : "500", fontSize: "14px" }}
+              style={{ padding: "12px 0", cursor: "pointer", color: activeTab === "advanced" ? "#5B21B6" : "#6d7175", borderBottom: activeTab === "advanced" ? "3px solid #5B21B6" : "3px solid transparent", fontWeight: activeTab === "advanced" ? "600" : "500", fontSize: "14px" }}
             >
               Advanced
             </div>
@@ -819,7 +840,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "8px" }}>
               <div style={{ position: "relative", width: "36px", height: "20px" }}>
                 <input type="checkbox" checked={showPreview} onChange={e => setShowPreview(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                <span style={{ position: "absolute", inset: 0, backgroundColor: showPreview ? "#007bff" : "#8c9196", borderRadius: "34px", transition: "0.2s" }}>
+                <span style={{ position: "absolute", inset: 0, backgroundColor: showPreview ? "#5B21B6" : "#8c9196", borderRadius: "34px", transition: "0.2s" }}>
                   <span style={{ position: "absolute", height: "14px", width: "14px", left: showPreview ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
                 </span>
               </div>
@@ -833,7 +854,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
           
           {/* Left Form Panel */}
-          <div style={{ flex: 1, padding: "24px", paddingBottom: "250px", overflowY: "auto", overflowX: "hidden", borderRight: showPreview ? "1px solid #e1e3e5" : "none" }}>
+          <div className="custom-scrollbar-container" style={{ flex: 1, padding: "24px", paddingBottom: "250px", overflowY: "auto", overflowX: "hidden", borderRight: showPreview ? "1px solid #e1e3e5" : "none" }}>
             {activeTab === "general" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                 
@@ -880,7 +901,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     placeholder="e.g. Gender:" 
                     value={prefix}
                     onChange={e => setPrefix(e.target.value)}
-                    style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
                   />
                 </div>
 
@@ -895,12 +916,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       type="text" 
                       value={filterTitle}
                       onChange={e => setFilterTitle(e.target.value)}
-                      style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
+                      style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
                     />
                     {filterTitle && (
                       <button 
                         onClick={() => setFilterTitle("")}
-                        style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "#d1e4fb", color: "#007bff", border: "none", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}
+                        style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "rgba(91, 33, 182, 0.08)", color: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}
                       >
                         ×
                       </button>
@@ -930,7 +951,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={navCollections} onChange={setNavCollections} />
-                      <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Navigation collections</span>
+                      <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Navigation collections</span>
                       <TooltipIcon content={"On a collection page, if this option is checked and user selects a collection, he/she is redirected to the corresponding collection page. Manual values must be used in this case."} />
                     </div>
                     {navCollections && (
@@ -954,7 +975,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       {mainCollections.map((mc, index) => (
                         <div key={mc.id} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           {/* Drag handle */}
-                          <div style={{ color: "#007bff", cursor: "grab", display: "flex", flexDirection: "column", gap: "3px" }}>
+                          <div style={{ color: "#5B21B6", cursor: "grab", display: "flex", flexDirection: "column", gap: "3px" }}>
                             <div style={{ display: "flex", gap: "3px" }}><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span></div>
                             <div style={{ display: "flex", gap: "3px" }}><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span></div>
                             <div style={{ display: "flex", gap: "3px" }}><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span><span style={{width:"4px",height:"4px",background:"currentColor",borderRadius:"50%"}}></span></div>
@@ -977,7 +998,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             onClick={() => {
                               setMainCollections(mainCollections.filter(item => item.id !== mc.id));
                             }}
-                            style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #007bff", background: "#fff", color: "#007bff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                            style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #5B21B6", background: "#fff", color: "#5B21B6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
                           >
                             <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M16 6H4a1 1 0 1 0 0 2h1v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8h1a1 1 0 1 0 0-2zM9 4a1 1 0 1 1 0-2h2a1 1 0 1 1 0 2H9zm2 12h2V8h-2v8zm-4 0h2V8H7v8z" /></svg>
                           </button>
@@ -989,7 +1010,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <Button 
                         variant="primary" 
                         onClick={() => setMainCollections([...mainCollections, { id: Date.now(), collection: "" }])}
-                        style={{ borderRadius: "20px", padding: "6px 16px", fontSize: "13px", background: "#007bff", border: "none", display: "flex", alignItems: "center", gap: "6px" }}
+                        style={{ borderRadius: "10px", padding: "6px 16px", fontSize: "13px", background: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)", display: "flex", alignItems: "center", gap: "6px" }}
                       >
                         <span style={{ fontSize: "16px" }}>+</span> Add item
                       </Button>
@@ -997,7 +1018,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
 
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", marginBottom: "8px" }}>
                       <Checkbox checked={keepMainCollectionsUnchanged} onChange={setKeepMainCollectionsUnchanged} />
-                      <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Keep main collections unchanged</span>
+                      <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Keep main collections unchanged</span>
                       <TooltipIcon content="When checked, the main collections will remain unchanged when navigating to child collections." />
                     </div>
                   </div>
@@ -1008,7 +1029,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                     <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>Values</span>
                     <Tooltip content="To merge values, go to App settings / Merged values.">
-                      <a href="#" style={{ fontSize: "13px", color: "#007bff", textDecoration: "none" }}>(want to merge values?)</a>
+                      <a href="#" style={{ fontSize: "13px", color: "#5B21B6", textDecoration: "none" }}>(want to merge values?)</a>
                     </Tooltip>
                   </div>
                   
@@ -1023,21 +1044,21 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider range</label>
                                 <TooltipIcon content="Number of range intervals shown below the slider." />
                               </div>
-                              <input type="number" value={sliderConfig.sliderRange} onChange={e => setSliderConfig({...sliderConfig, sliderRange: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="number" value={sliderConfig.sliderRange} onChange={e => setSliderConfig({...sliderConfig, sliderRange: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                             <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider step</label>
                                 <TooltipIcon content="Step increment for the slider." />
                               </div>
-                              <input type="number" step="0.1" value={sliderConfig.sliderStep} onChange={e => setSliderConfig({...sliderConfig, sliderStep: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="number" step="0.1" value={sliderConfig.sliderStep} onChange={e => setSliderConfig({...sliderConfig, sliderStep: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                             <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Decimals</label>
                                 <TooltipIcon content="Number of decimal places." />
                               </div>
-                              <input type="number" value={sliderConfig.decimals} onChange={e => setSliderConfig({...sliderConfig, decimals: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="number" value={sliderConfig.decimals} onChange={e => setSliderConfig({...sliderConfig, decimals: Number(e.target.value)})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                           </div>
                           
@@ -1046,7 +1067,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Range format</label>
                               <TooltipIcon content="Format using {0} for from and {1} for to." />
                             </div>
-                            <input type="text" value={sliderConfig.rangeFormat} onChange={e => setSliderConfig({...sliderConfig, rangeFormat: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            <input type="text" value={sliderConfig.rangeFormat} onChange={e => setSliderConfig({...sliderConfig, rangeFormat: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                           </div>
                           
                           <div style={{ display: "flex", gap: "20px" }}>
@@ -1055,15 +1076,15 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider color</label>
                                 <TooltipIcon content="Color of the active slider track." />
                               </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 16px", border: "1px solid transparent" }}>
-                                <input type="text" value={sliderConfig.sliderColor} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", padding: "6px 0", outline: "none" }} />
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#ffffff", borderRadius: "10px", padding: "4px 16px", border: "1px solid transparent" }}>
+                                <input type="text" value={sliderConfig.sliderColor} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ flex: 1, border: "1px solid rgba(30, 27, 75, 0.12)", background: "transparent", fontSize: "13px", color: "#5B21B6", padding: "6px 0", outline: "none", boxSizing: "border-box" }} />
                                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                   <div style={{ position: "relative", width: "16px", height: "16px", borderRadius: "2px", overflow: "hidden", border: "1px solid rgba(0,0,0,0.1)" }}>
-                                    <input type="color" value={sliderConfig.sliderColor || "#007bff"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", top: "-10px", left: "-10px", width: "40px", height: "40px", cursor: "pointer", border: "none", padding: 0 }} />
+                                    <input type="color" value={sliderConfig.sliderColor || "#5B21B6"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", top: "-10px", left: "-10px", width: "40px", height: "40px", cursor: "pointer", border: "1px solid rgba(30, 27, 75, 0.12)", padding: 0 }} />
                                   </div>
                                   <div style={{ position: "relative" }}>
-                                    <input type="color" value={sliderConfig.sliderColor || "#007bff"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", opacity: 0, width: "100%", height: "100%", cursor: "pointer" }} />
-                                    <svg viewBox="0 0 20 20" style={{ width: "12px", height: "12px", fill: "#007bff" }}>
+                                    <input type="color" value={sliderConfig.sliderColor || "#5B21B6"} onChange={e => setSliderConfig({...sliderConfig, sliderColor: e.target.value})} style={{ position: "absolute", opacity: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                                    <svg viewBox="0 0 20 20" style={{ width: "12px", height: "12px", fill: "#5B21B6" }}>
                                       <path d="M2 14.5v3.5h3.5l10.19-10.19-3.5-3.5L2 14.5zm16.14-9.8c.2-.2.2-.51 0-.71l-2.79-2.79c-.2-.2-.51-.2-.71 0l-1.68 1.68 3.5 3.5 1.68-1.68z" />
                                     </svg>
                                   </div>
@@ -1075,7 +1096,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider value symbols</label>
                                 <TooltipIcon content="Symbols for large numbers, e.g., k,M,G,T,P,E" />
                               </div>
-                              <input type="text" value={sliderConfig.sliderValueSymbols} onChange={e => setSliderConfig({...sliderConfig, sliderValueSymbols: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="text" value={sliderConfig.sliderValueSymbols} onChange={e => setSliderConfig({...sliderConfig, sliderValueSymbols: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                           </div>
 
@@ -1085,20 +1106,20 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider prefix</label>
                                 <TooltipIcon content="Prefix for slider inputs, e.g., $" />
                               </div>
-                              <input type="text" value={sliderConfig.sliderPrefix} onChange={e => setSliderConfig({...sliderConfig, sliderPrefix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="text" value={sliderConfig.sliderPrefix} onChange={e => setSliderConfig({...sliderConfig, sliderPrefix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                             <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                                 <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Slider suffix</label>
                                 <TooltipIcon content="Suffix for slider inputs." />
                               </div>
-                              <input type="text" value={sliderConfig.sliderSuffix} onChange={e => setSliderConfig({...sliderConfig, sliderSuffix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                              <input type="text" value={sliderConfig.sliderSuffix} onChange={e => setSliderConfig({...sliderConfig, sliderSuffix: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                             </div>
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <Checkbox checked={sliderConfig.showInputPrefixSuffix} onChange={val => setSliderConfig({...sliderConfig, showInputPrefixSuffix: val})} />
-                            <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff" }}>Show slider input prefix & suffix</label>
+                            <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6" }}>Show slider input prefix & suffix</label>
                             <TooltipIcon content="Show the prefix and suffix in the input boxes as well." />
                           </div>
 
@@ -1107,7 +1128,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Value formula</label>
                               <TooltipIcon content="Custom formula for calculating the value." />
                             </div>
-                            <input type="text" value={sliderConfig.valueFormula} onChange={e => setSliderConfig({...sliderConfig, valueFormula: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }} />
+                            <input type="text" value={sliderConfig.valueFormula} onChange={e => setSliderConfig({...sliderConfig, valueFormula: e.target.value})} style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }} />
                           </div>
                         </>
                       ) : (
@@ -1124,9 +1145,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         const setRanges = optionType === "price" ? setPriceRanges : optionType === "percent_sale" ? setSaleRanges : optionType === "weight" ? setWeightRanges : setReviewRanges;
                         
                         return (
-                          <div key={range.id} style={{ display: "flex", gap: "20px", alignItems: "center" }}>
+                          <div key={range.id} style={{ display: "flex", gap: "20px", alignItems: "center", boxSizing: "border-box" }}>
                             <input 
-                              style={{ flex: 1, padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px", fontWeight: "500", width: "100%" }}
+                              style={{ flex: 1, padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px", fontWeight: "500", width: "100%" }}
                               value={range.label}
                               onChange={(e) => {
                                 const newRanges = [...ranges];
@@ -1137,7 +1158,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
                               <Checkbox checked={range.from !== ""} onChange={() => {}} />
                               <input 
-                                style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", fontSize: "13px", fontWeight: "600", color: "#202223" }} 
+                                style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", fontSize: "13px", fontWeight: "600", color: "#202223" }} 
                                 value={range.from} 
                                 onChange={(e) => {
                                   const newRanges = [...ranges];
@@ -1153,7 +1174,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 setRanges(newRanges);
                               }} />
                               <input 
-                                style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: range.to !== "" ? "#f0f4f9" : "transparent", fontSize: "13px", color: "#202223", visibility: range.to !== "" ? "visible" : "hidden" }} 
+                                style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: range.to !== "" ? "#ffffff" : "transparent", fontSize: "13px", color: "#202223", visibility: range.to !== "" ? "visible" : "hidden" }} 
                                 value={range.to} 
                                 onChange={(e) => {
                                   const newRanges = [...ranges];
@@ -1168,13 +1189,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   const newId = Date.now();
                                   setRanges([...ranges.slice(0, idx+1), { id: newId, label: "", from: "", to: "" }, ...ranges.slice(idx+1)]);
                                 }}
-                                style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #007bff", background: "#fff", color: "#007bff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "18px" }}
+                                style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #5B21B6", background: "#fff", color: "#5B21B6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "18px" }}
                               >
                                 +
                               </button>
                               <button 
                                 onClick={() => setRanges(ranges.filter(r => r.id !== range.id))}
-                                style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #007bff", background: "#fff", color: "#007bff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                                style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #5B21B6", background: "#fff", color: "#5B21B6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
                               >
                                 <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M16 6H4a1 1 0 1 0 0 2h1v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8h1a1 1 0 1 0 0-2zM9 4a1 1 0 1 1 0-2h2a1 1 0 1 1 0 2H9zm2 12h2V8h-2v8zm-4 0h2V8H7v8z"/></svg>
                               </button>
@@ -1187,14 +1208,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       {optionType === "review_rating" && (
                         <div style={{ marginTop: "16px" }}>
                           <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175", display: "block", marginBottom: "8px" }}>Rating color</label>
-                          <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#ffffff", borderRadius: "10px", padding: "4px 16px" }}>
                             <input 
-                              style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", padding: "8px 0", outline: "none" }}
+                              style={{ flex: 1, border: "1px solid rgba(30, 27, 75, 0.12)", background: "transparent", fontSize: "13px", color: "#5B21B6", padding: "8px 0", outline: "none", boxSizing: "border-box" }}
                               value={ratingColor}
                               onChange={(e) => setRatingColor(e.target.value)}
                             />
                             <div style={{ width: "16px", height: "16px", background: ratingColor, border: "1px solid rgba(0,0,0,0.1)", borderRadius: "2px" }}></div>
-                            <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "#007bff", cursor: "pointer" }}><path d="M12.3 3.7l4 4L4 20H0v-4L12.3 3.7zm1.4-1.4L16 0l4 4-2.3 2.3-4-4z"/></svg>
+                            <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "#5B21B6", cursor: "pointer" }}><path d="M12.3 3.7l4 4L4 20H0v-4L12.3 3.7zm1.4-1.4L16 0l4 4-2.3 2.3-4-4z"/></svg>
                           </div>
                         </div>
                       )}
@@ -1205,12 +1226,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <Checkbox checked={stockStatusConfig.inStock.enabled} onChange={(val) => setStockStatusConfig({...stockStatusConfig, inStock: {...stockStatusConfig.inStock, enabled: val}})} />
-                          <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "600" }}>Show in stock filter option</span>
+                          <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "600" }}>Show in stock filter option</span>
                         </div>
                         {stockStatusConfig.inStock.enabled && (
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "200px" }}>
                             <input 
-                              style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px" }}
+                              style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px" }}
                               value={stockStatusConfig.inStock.label}
                               onChange={(e) => setStockStatusConfig({...stockStatusConfig, inStock: {...stockStatusConfig.inStock, label: e.target.value}})}
                             />
@@ -1224,13 +1245,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                               <Checkbox checked={stockStatusConfig.stockOnHand.enabled} onChange={(val) => setStockStatusConfig({...stockStatusConfig, stockOnHand: {...stockStatusConfig.stockOnHand, enabled: val}})} />
-                              <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Stock On Hand</span>
+                              <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Stock On Hand</span>
                               <TooltipIcon content="Products currently physically in stock" />
                             </div>
                             {stockStatusConfig.stockOnHand.enabled && (
                               <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "200px" }}>
                                 <input 
-                                  style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px" }}
+                                  style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px" }}
                                   value={stockStatusConfig.stockOnHand.label}
                                   onChange={(e) => setStockStatusConfig({...stockStatusConfig, stockOnHand: {...stockStatusConfig.stockOnHand, label: e.target.value}})}
                                 />
@@ -1242,13 +1263,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                               <Checkbox checked={stockStatusConfig.preOrder.enabled} onChange={(val) => setStockStatusConfig({...stockStatusConfig, preOrder: {...stockStatusConfig.preOrder, enabled: val}})} />
-                              <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Pre-Order</span>
+                              <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Pre-Order</span>
                               <TooltipIcon content="Products available for pre-order" />
                             </div>
                             {stockStatusConfig.preOrder.enabled && (
                               <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "200px" }}>
                                 <input 
-                                  style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px" }}
+                                  style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px" }}
                                   value={stockStatusConfig.preOrder.label}
                                   onChange={(e) => setStockStatusConfig({...stockStatusConfig, preOrder: {...stockStatusConfig.preOrder, label: e.target.value}})}
                                 />
@@ -1262,12 +1283,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <Checkbox checked={stockStatusConfig.outOfStock.enabled} onChange={(val) => setStockStatusConfig({...stockStatusConfig, outOfStock: {...stockStatusConfig.outOfStock, enabled: val}})} />
-                          <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Show out of stock filter option</span>
+                          <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Show out of stock filter option</span>
                         </div>
                         {stockStatusConfig.outOfStock.enabled && (
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "200px" }}>
                             <input 
-                              style={{ width: "100%", padding: "8px 16px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px" }}
+                              style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px" }}
                               value={stockStatusConfig.outOfStock.label}
                               onChange={(e) => setStockStatusConfig({...stockStatusConfig, outOfStock: {...stockStatusConfig.outOfStock, label: e.target.value}})}
                             />
@@ -1282,20 +1303,20 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setSwatchConfig({...swatchConfig, circleSwatch: !swatchConfig.circleSwatch})}>
-                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.circleSwatch ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.circleSwatch ? "#5B21B6" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
                               <span style={{ position: "absolute", height: "14px", width: "14px", left: swatchConfig.circleSwatch ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
                             </span>
                           </div>
                           <span style={{ fontSize: "14px", color: "#202223", fontWeight: "500" }}>{swatchConfig.circleSwatch ? "Circle swatch" : "Rectangle swatch"}</span>
                         </div>
                         <div style={{ position: "relative", width: "250px" }}>
-                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#007bff", position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
+                          <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5B21B6", position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm9.707 4.293l-4.82-4.82A5.968 5.968 0 0 0 14 8a6 6 0 1 0-6 6 5.968 5.968 0 0 0 3.473-1.113l4.82 4.82a.997.997 0 0 0 1.414 0 .999.999 0 0 0 0-1.414z"/></svg>
                           <input 
                             type="text"
                             placeholder="Search swatch value"
                             value={swatchSearch}
                             onChange={(e) => setSwatchSearch(e.target.value)}
-                            style={{ width: "100%", padding: "8px 16px 8px 36px", borderRadius: "20px", border: "1px solid #e1e3e5", background: "#f0f4f9", fontSize: "13px", color: "#007bff", outline: "none" }}
+                            style={{ width: "100%", padding: "8px 16px 8px 36px", borderRadius: "10px", border: "1px solid #e1e3e5", background: "#ffffff", fontSize: "13px", color: "#5B21B6", outline: "none", boxSizing: "border-box" }}
                           />
                         </div>
                       </div>
@@ -1303,18 +1324,18 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setSwatchConfig({...swatchConfig, showLabel: !swatchConfig.showLabel})}>
-                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.showLabel ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                            <span style={{ position: "absolute", inset: 0, backgroundColor: swatchConfig.showLabel ? "#5B21B6" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
                               <span style={{ position: "absolute", height: "14px", width: "14px", left: swatchConfig.showLabel ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
                             </span>
                           </div>
-                          <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Show swatch label</span>
+                          <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Show swatch label</span>
                         </div>
                         {swatchConfig.showLabel && (
                           <div style={{ width: "150px" }}>
                             <select 
                               value={swatchConfig.layout || "Grid"} 
                               onChange={(e) => setSwatchConfig({...swatchConfig, layout: e.target.value})}
-                              style={{ width: "100%", padding: "8px 12px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px", outline: "none", cursor: "pointer" }}
+                              style={{ width: "100%", padding: "8px 12px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px", outline: "none", cursor: "pointer" }}
                             >
                               <option value="Grid">Grid</option>
                               <option value="List">List</option>
@@ -1374,7 +1395,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           </div>
                           
                           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f0f4f9", borderRadius: "20px", padding: "4px 12px", flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#ffffff", borderRadius: "10px", padding: "4px 12px", flex: 1 }}>
                               <div style={{ position: "relative", width: "24px", height: "24px", borderRadius: "4px", overflow: "hidden", border: "1px solid #c9cccf", flexShrink: 0 }}>
                                 <input 
                                   type="color" 
@@ -1383,7 +1404,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                     ...swatchConfig, 
                                     colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "color", value: e.target.value } }
                                   })}
-                                  style={{ position: "absolute", top: "-10px", left: "-10px", width: "50px", height: "50px", cursor: "pointer", border: "none", padding: 0 }} 
+                                  style={{ position: "absolute", top: "-10px", left: "-10px", width: "50px", height: "50px", cursor: "pointer", border: "1px solid rgba(30, 27, 75, 0.12)", padding: 0 }} 
                                 />
                               </div>
                               <input 
@@ -1394,7 +1415,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   ...swatchConfig, 
                                   colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "color", value: e.target.value } }
                                 })}
-                                style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#007bff", outline: "none" }}
+                                style={{ flex: 1, border: "1px solid rgba(30, 27, 75, 0.12)", background: "transparent", fontSize: "13px", color: "#5B21B6", outline: "none", boxSizing: "border-box" }}
                               />
                             </div>
                             <span style={{ fontSize: "13px", color: "#6d7175", fontWeight: "600" }}>OR</span>
@@ -1407,7 +1428,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   ...swatchConfig, 
                                   colors: { ...swatchConfig.colors, [selectedSwatch]: { type: "image", value: e.target.value } }
                                 })}
-                                style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "13px", outline: "none" }}
+                                style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px", outline: "none", boxSizing: "border-box" }}
                               />
                             </div>
                           </div>
@@ -1416,7 +1437,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
 
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", marginTop: "16px" }}>
                         <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setUseManualValues(!useManualValues)}>
-                          <span style={{ position: "absolute", inset: 0, backgroundColor: useManualValues ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                          <span style={{ position: "absolute", inset: 0, backgroundColor: useManualValues ? "#5B21B6" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
                             <span style={{ position: "absolute", height: "14px", width: "14px", left: useManualValues ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
                           </span>
                         </div>
@@ -1442,7 +1463,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           {excludedValues.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
                               {excludedValues.map(v => (
-                                <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                <span key={v} style={{ background: "#5B21B6", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
                                   {v}
                                   <span onClick={() => setExcludedValues(excludedValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
                                 </span>
@@ -1485,7 +1506,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                       setDraggedManualIndex(null);
                                     }}
                                     style={{ 
-                                      background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
+                                      background: "#5B21B6", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
                                       fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500",
                                       cursor: "grab", opacity: draggedManualIndex === index ? 0.5 : 1
                                     }}>
@@ -1499,7 +1520,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
                             <Checkbox checked={sortManualValues} onChange={setSortManualValues} />
-                            <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Sort manual values</span>
+                            <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Sort manual values</span>
                           </div>
                         </>
                       )}
@@ -1508,7 +1529,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
                         <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setUseManualValues(!useManualValues)}>
-                          <span style={{ position: "absolute", inset: 0, backgroundColor: useManualValues ? "#007bff" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
+                          <span style={{ position: "absolute", inset: 0, backgroundColor: useManualValues ? "#5B21B6" : "#e1e3e5", borderRadius: "34px", transition: "0.2s" }}>
                             <span style={{ position: "absolute", height: "14px", width: "14px", left: useManualValues ? "19px" : "3px", bottom: "3px", backgroundColor: "white", borderRadius: "50%", transition: "0.2s" }} />
                           </span>
                         </div>
@@ -1534,7 +1555,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           {excludedValues.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
                               {excludedValues.map(v => (
-                                <span key={v} style={{ background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
+                                <span key={v} style={{ background: "#5B21B6", color: "#fff", padding: "4px 12px", borderRadius: "16px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500" }}>
                                   {v}
                                   <span onClick={() => setExcludedValues(excludedValues.filter(item => item !== v))} style={{ cursor: "pointer", background: "rgba(255,255,255,0.2)", borderRadius: "50%", width: "16px", height: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", lineHeight: 1 }}>×</span>
                                 </span>
@@ -1577,7 +1598,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                       setDraggedManualIndex(null);
                                     }}
                                     style={{ 
-                                      background: "#007bff", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
+                                      background: "#5B21B6", color: "#fff", padding: "4px 12px", borderRadius: "16px", 
                                       fontSize: "13px", display: "flex", alignItems: "center", gap: "6px", fontWeight: "500",
                                       cursor: "grab", opacity: draggedManualIndex === index ? 0.5 : 1
                                     }}>
@@ -1591,7 +1612,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
                             <Checkbox checked={sortManualValues} onChange={setSortManualValues} />
-                            <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Sort manual values</span>
+                            <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Sort manual values</span>
                           </div>
                         </>
                       )}
@@ -1601,14 +1622,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   {/* Multiple selection */}
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: multipleSelection ? "12px" : "0" }}>
                     <Checkbox checked={multipleSelection} onChange={setMultipleSelection} />
-                    <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Multiple selection</span>
+                    <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Multiple selection</span>
                     <TooltipIcon content="When checked, users can choose multiple filter option values." />
                   </div>
 
                   {multipleSelection && ["collection", "tags", "inventory_locations"].includes(optionType?.toLowerCase()) && (
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={narrowDown} onChange={setNarrowDown} />
-                      <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "500" }}>Narrow down filter option values</span>
+                      <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Narrow down filter option values</span>
                       <TooltipIcon content="When checked, products must match all selected values instead of any selected value." />
                     </div>
                   )}
@@ -1623,10 +1644,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, displayTooltip: !advanced.displayTooltip })}>
-                      <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.displayTooltip ? "#007bff" : "#fff", border: `1px solid ${advanced.displayTooltip ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                      <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.displayTooltip ? "#5B21B6" : "#fff", border: `1px solid ${advanced.displayTooltip ? "#5B21B6" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
                       <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.displayTooltip ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.displayTooltip ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
                     </div>
-                    <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, displayTooltip: !advanced.displayTooltip })}>Display tooltip</label>
+                    <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, displayTooltip: !advanced.displayTooltip })}>Display tooltip</label>
                     <TooltipIcon content="Show a tooltip icon next to the filter title." />
                   </div>
                   
@@ -1641,7 +1662,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         value={advanced.tooltipContent}
                         onChange={e => setAdvanced({ ...advanced, tooltipContent: e.target.value })}
                         placeholder="Type tooltip text here"
-                        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
                       />
                     </div>
                   )}
@@ -1689,12 +1710,12 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         type="text" 
                         value={advanced.maxHeight}
                         onChange={e => setAdvanced({ ...advanced, maxHeight: e.target.value })}
-                        style={{ width: "100%", padding: "10px 14px", borderRadius: "20px", border: "none", background: "#f0f4f9", color: "#007bff", fontSize: "14px", outline: "none" }}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "14px", outline: "none", boxSizing: "border-box" }}
                       />
                       {advanced.maxHeight && (
                         <button 
                           onClick={() => setAdvanced({ ...advanced, maxHeight: "" })}
-                          style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "#d1e4fb", color: "#007bff", border: "none", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}
+                          style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "rgba(91, 33, 182, 0.08)", color: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "12px" }}
                         >
                           ×
                         </button>
@@ -1724,19 +1745,19 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>
-                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#5B21B6" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#5B21B6" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
                         <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopCollapsed ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopCollapsed ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
                       </div>
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
                       <TooltipIcon content="Filter block will be collapsed when the page loads on desktop." />
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopSearchBox: !advanced.desktopSearchBox })}>
-                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopSearchBox ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopSearchBox ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopSearchBox ? "#5B21B6" : "#fff", border: `1px solid ${advanced.desktopSearchBox ? "#5B21B6" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
                         <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopSearchBox ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopSearchBox ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
                       </div>
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopSearchBox: !advanced.desktopSearchBox })}>Show search box</label>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopSearchBox: !advanced.desktopSearchBox })}>Show search box</label>
                       <TooltipIcon content="Show a search input inside the filter block on desktop." />
                     </div>
                   </div>
@@ -1746,10 +1767,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     
                     <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "32px" }}>
                       <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, mobileSearchBox: !advanced.mobileSearchBox })}>
-                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.mobileSearchBox ? "#007bff" : "#fff", border: `1px solid ${advanced.mobileSearchBox ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                        <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.mobileSearchBox ? "#5B21B6" : "#fff", border: `1px solid ${advanced.mobileSearchBox ? "#5B21B6" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
                         <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.mobileSearchBox ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.mobileSearchBox ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
                       </div>
-                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, mobileSearchBox: !advanced.mobileSearchBox })}>Show search box</label>
+                      <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, mobileSearchBox: !advanced.mobileSearchBox })}>Show search box</label>
                       <TooltipIcon content="Show a search input inside the filter block on mobile." />
                     </div>
                   </div>
@@ -1762,10 +1783,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#202223", display: "block", marginBottom: "12px" }}>On desktop</label>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                         <div style={{ position: "relative", width: "36px", height: "20px", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>
-                          <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#007bff" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#007bff" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
+                          <div style={{ position: "absolute", inset: 0, backgroundColor: advanced.desktopCollapsed ? "#5B21B6" : "#fff", border: `1px solid ${advanced.desktopCollapsed ? "#5B21B6" : "#c9cccf"}`, borderRadius: "34px", transition: "0.2s" }} />
                           <span style={{ position: "absolute", height: "14px", width: "14px", left: advanced.desktopCollapsed ? "19px" : "3px", bottom: "2px", backgroundColor: advanced.desktopCollapsed ? "#fff" : "#c9cccf", borderRadius: "50%", transition: "0.2s" }} />
                         </div>
-                        <label style={{ fontSize: "14px", fontWeight: "600", color: "#007bff", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
+                        <label style={{ fontSize: "14px", fontWeight: "600", color: "#5B21B6", cursor: "pointer" }} onClick={() => setAdvanced({ ...advanced, desktopCollapsed: !advanced.desktopCollapsed })}>Initially collapsed</label>
                         <TooltipIcon content="When checked, the filter is initially collapsed." />
                       </div>
                     </div>
@@ -1784,13 +1805,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 <div style={{ display: "flex", background: "#fff", borderRadius: "4px", border: "1px solid #c9cccf", overflow: "hidden" }}>
                   <button 
                     onClick={() => setDevice("desktop")}
-                    style={{ padding: "6px 12px", border: "none", background: device === "desktop" ? "#f4f6f8" : "#fff", color: device === "desktop" ? "#007bff" : "#6d7175", cursor: "pointer" }}
+                    style={{ padding: "6px 12px", border: "1px solid rgba(30, 27, 75, 0.12)", background: device === "desktop" ? "#f4f6f8" : "#fff", color: device === "desktop" ? "#5B21B6" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><path d="M17.5 3h-15C1.67 3 1 3.67 1 4.5v9c0 .83.67 1.5 1.5 1.5H7v2H5v1h10v-1h-2v-2h4.5c.83 0 1.5-.67 1.5-1.5v-9c0-.83-.67-1.5-1.5-1.5zm-.5 10H3V5h14v8z"/></svg>
                   </button>
                   <button 
                     onClick={() => setDevice("mobile")}
-                    style={{ padding: "6px 12px", border: "none", borderLeft: "1px solid #c9cccf", background: device === "mobile" ? "#f4f6f8" : "#fff", color: device === "mobile" ? "#007bff" : "#6d7175", cursor: "pointer" }}
+                    style={{ padding: "6px 12px", border: "1px solid rgba(30, 27, 75, 0.12)", borderLeft: "1px solid #c9cccf", background: device === "mobile" ? "#f4f6f8" : "#fff", color: device === "mobile" ? "#5B21B6" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M13 1H7C5.9 1 5 1.9 5 3v14c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm-3 16c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3-3H7V4h6v10z"/></svg>
                   </button>
@@ -1799,13 +1820,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 <div style={{ display: "flex", background: "#fff", borderRadius: "4px", border: "1px solid #c9cccf", overflow: "hidden" }}>
                   <button 
                     onClick={() => setLayout("sidebar")}
-                    style={{ padding: "6px 12px", border: layout === "sidebar" ? "1px solid #007bff" : "none", background: layout === "sidebar" ? "#f4f6f8" : "#fff", color: layout === "sidebar" ? "#007bff" : "#6d7175", cursor: "pointer" }}
+                    style={{ padding: "6px 12px", border: layout === "sidebar" ? "1px solid #5B21B6" : "none", background: layout === "sidebar" ? "#f4f6f8" : "#fff", color: layout === "sidebar" ? "#5B21B6" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><rect x="3" y="4" width="4" height="12"/><rect x="8" y="4" width="9" height="12" opacity="0.3"/></svg>
                   </button>
                   <button 
                     onClick={() => setLayout("top")}
-                    style={{ padding: "6px 12px", border: layout === "top" ? "1px solid #007bff" : "none", borderLeft: layout === "top" ? "1px solid #007bff" : "1px solid #c9cccf", background: layout === "top" ? "#f4f6f8" : "#fff", color: layout === "top" ? "#007bff" : "#6d7175", cursor: "pointer" }}
+                    style={{ padding: "6px 12px", border: layout === "top" ? "1px solid #5B21B6" : "none", borderLeft: layout === "top" ? "1px solid #5B21B6" : "1px solid #c9cccf", background: layout === "top" ? "#f4f6f8" : "#fff", color: layout === "top" ? "#5B21B6" : "#6d7175", cursor: "pointer" }}
                   >
                     <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><rect x="4" y="3" width="12" height="3"/><rect x="4" y="7" width="12" height="10" opacity="0.3"/></svg>
                   </button>
@@ -1870,14 +1891,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   {previewOptionsData
                                     .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                     .map(item => (
-                                      <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
+                                      <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "10px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
                                         {item.isStars ? renderStars(item.displayLabel) : item.displayLabel}
                                       </div>
                                     ))
                                   }
                                 </div>
                                 {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
-                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                  <div style={{ color: "#5B21B6", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                               </>
                             ) : displayMode === "Swatch" ? (
@@ -1899,7 +1920,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   }
                                 </div>
                                 {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
-                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                  <div style={{ color: "#5B21B6", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                               </>
                             ) : (
@@ -1915,7 +1936,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                   ))
                                 }
                                 {(advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") && previewOptionsData.length > 6 && (
-                                  <div style={{ color: "#007bff", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
+                                  <div style={{ color: "#5B21B6", fontSize: "13px", marginTop: "4px", textDecoration: "underline", cursor: "pointer" }}>+ View more</div>
                                 )}
                                 {layout !== "top" && <div style={{ height: "1px", background: "#e1e3e5", width: "100%", marginTop: "4px" }}></div>}
                               </>
@@ -1963,7 +1984,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                               {previewOptionsData
                                 .map(item => (
-                                  <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "20px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
+                                  <div key={item.label} style={{ padding: "6px 12px", border: "1px solid #c9cccf", borderRadius: "10px", fontSize: "12px", color: "#202223", background: "#f4f6f8" }}>
                                     {item.isStars ? renderStars(item.displayLabel) : item.displayLabel}
                                   </div>
                                 ))
@@ -2011,7 +2032,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
 
         {/* Footer */}
         <div style={{ padding: "16px 24px", display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #e1e3e5", background: "#fff" }}>
-          <Button variant="default" onClick={onClose} style={{ borderRadius: "20px", padding: "8px 24px", color: "#8c9196", border: "1px solid #e1e3e5" }}>
+          <Button variant="default" onClick={onClose} style={{ borderRadius: "10px", padding: "8px 24px", color: "#8c9196", border: "1px solid #e1e3e5" }}>
             CANCEL
           </Button>
           <Button 
@@ -2021,7 +2042,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
               optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
               displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig, swatchConfig
             })}
-            style={{ borderRadius: "20px", padding: "8px 24px", background: "#007bff", border: "none" }}
+            style={{ borderRadius: "10px", padding: "8px 24px", background: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)" }}
           >
             {initialData ? "UPDATE" : "CREATE"}
           </Button>
