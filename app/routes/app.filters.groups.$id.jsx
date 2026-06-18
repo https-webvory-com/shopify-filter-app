@@ -493,11 +493,11 @@ function getFilterTypeLabel(type, key) {
 
 function DisplayModeBadge({ mode }) {
   const colors = {
-    list: { bg: "#e4e5e7", text: "#202223" },
-    range: { bg: "#d1e9ff", text: "#0050b3" },
-    swatch: { bg: "#ffe4d6", text: "#8a2b06" },
-    button: { bg: "#e3f5e0", text: "#1a6130" },
-    dropdown: { bg: "#f3ebf9", text: "#4b1277" },
+    list: { bg: "rgba(30, 27, 75, 0.05)", text: "#1E1B4B", border: "rgba(30, 27, 75, 0.12)" },
+    range: { bg: "rgba(16, 185, 129, 0.05)", text: "#10B981", border: "rgba(16, 185, 129, 0.15)" },
+    swatch: { bg: "rgba(219, 58, 93, 0.05)", text: "#DB3A5D", border: "rgba(219, 58, 93, 0.15)" },
+    button: { bg: "rgba(91, 33, 182, 0.05)", text: "#5B21B6", border: "rgba(91, 33, 182, 0.15)" },
+    dropdown: { bg: "rgba(123, 96, 243, 0.06)", text: "#7B60F3", border: "rgba(123, 96, 243, 0.15)" },
   };
   const c = colors[mode] || colors.list;
   const label =
@@ -505,10 +505,11 @@ function DisplayModeBadge({ mode }) {
   return (
     <span
       style={{
-        padding: "2px 8px",
-        borderRadius: "4px",
+        padding: "4px 10px",
+        borderRadius: "6px",
         backgroundColor: c.bg,
         color: c.text,
+        border: `1px solid ${c.border}`,
         fontSize: "12px",
         fontWeight: "600",
       }}
@@ -521,19 +522,20 @@ function DisplayModeBadge({ mode }) {
 // ── Component ─────────────────────────────────────────────────────────
 const SortableItem = ({ id, item, index }) => {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: transform ? 1000 : 1 };
   return (
     <div 
       ref={setNodeRef} 
       {...attributes} 
       {...listeners} 
-      style={{ ...style, cursor: "grab", display: "flex", alignItems: "center", padding: "12px", border: "1px solid #e1e3e5", borderRadius: "8px", background: "#fff", marginBottom: "8px", zIndex: transform ? 1000 : 1, position: "relative" }}
+      style={style}
+      className="sortable-item-card"
     >
-      <div style={{ marginRight: "12px", color: "#8c9196", display: "flex" }}>
+      <div className="sortable-item-drag-handle">
         <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
       </div>
-      <div style={{ flex: 1, fontWeight: "500", fontSize: "14px", color: "#202223" }}>{item.label}</div>
-      <div style={{ color: "#8c9196", fontSize: "12px", background: "#f4f6f8", padding: "2px 8px", borderRadius: "10px" }}>Pos: {index + 1}</div>
+      <div className="sortable-item-label">{item.label}</div>
+      <div className="sortable-item-badge">Pos: {index + 1}</div>
     </div>
   );
 };
@@ -831,6 +833,564 @@ export default function FilterGroupDetail() {
   return (
     <s-page>
       <ui-title-bar title={group.name}></ui-title-bar>
+      
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Premium custom styling for Filter Group Detail page */
+        .back-link-breadcrumb {
+          color: #5B21B6 !important;
+          text-decoration: none !important;
+          font-weight: 700 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          padding: 8px 14px !important;
+          border-radius: 8px !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+          border: 1px solid rgba(91, 33, 182, 0.08) !important;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .back-link-breadcrumb:hover {
+          color: #ffffff !important;
+          background: #5B21B6 !important;
+          border-color: #5B21B6 !important;
+          transform: translateX(-2px);
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+        }
+
+        /* Group Info Card styling */
+        .group-info-card {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 16px !important;
+          box-shadow: 0 4px 20px rgba(30, 27, 75, 0.02) !important;
+          padding: 24px !important;
+          margin-bottom: 24px !important;
+        }
+        s-card {
+          --s-card-border-radius: 16px !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          box-shadow: 0 4px 20px rgba(30, 27, 75, 0.02) !important;
+          overflow: hidden !important;
+        }
+
+        .input-group-name {
+          width: 100% !important;
+          padding: 12px 16px !important;
+          border-radius: 10px !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          color: #1E1B4B !important;
+          outline: none !important;
+          transition: all 0.2s ease !important;
+          box-sizing: border-box !important;
+        }
+        .input-group-name:focus {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.1) !important;
+        }
+
+        /* Dropdown Trigger Box */
+        .collection-select-trigger {
+          width: 100% !important;
+          padding: 12px 16px !important;
+          border-radius: 10px !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          color: #1E1B4B !important;
+          cursor: pointer !important;
+          background: #ffffff !important;
+          user-select: none !important;
+          display: flex !important;
+          align-items: center !important;
+          flex-wrap: wrap !important;
+          gap: 6px !important;
+          transition: all 0.2s ease !important;
+          box-sizing: border-box !important;
+        }
+        .collection-select-trigger:hover {
+          border-color: #5B21B6 !important;
+        }
+
+        /* Collection Pill Badges */
+        .collection-pill {
+          display: inline-flex !important;
+          align-items: center !important;
+          background: rgba(91, 33, 182, 0.08) !important;
+          color: #5B21B6 !important;
+          padding: 4px 10px !important;
+          border-radius: 8px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          gap: 6px !important;
+          border: 1px solid rgba(91, 33, 182, 0.15) !important;
+          transition: all 0.2s ease !important;
+        }
+        .collection-pill:hover {
+          background: rgba(91, 33, 182, 0.12) !important;
+        }
+
+        /* Radio selectors */
+        input[type="radio"] {
+          accent-color: #5B21B6 !important;
+        }
+
+        /* Update button */
+        .btn-update-group {
+          background-color: #5B21B6 !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 10px !important;
+          padding: 10px 24px !important;
+          font-size: 13.5px !important;
+          font-weight: 700 !important;
+          cursor: pointer !important;
+          position: relative !important;
+          overflow: hidden !important;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+        }
+        .btn-update-group::after {
+          content: '' !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: -120% !important;
+          width: 80% !important;
+          height: 100% !important;
+          background: linear-gradient(
+            90deg, 
+            rgba(255, 255, 255, 0) 0%, 
+            rgba(255, 255, 255, 0.4) 50%, 
+            rgba(255, 255, 255, 0) 100%
+          ) !important;
+          transform: skewX(-25deg) !important;
+          transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .btn-update-group:hover::after {
+          left: 150% !important;
+        }
+        .btn-update-group:hover {
+          background-color: #1E1B4B !important;
+          box-shadow: 0 4px 12px rgba(30, 27, 75, 0.2) !important;
+          transform: translateY(-1px) !important;
+        }
+
+        /* Filters list container */
+        .filters-list-card {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 16px !important;
+          box-shadow: 0 4px 20px rgba(30, 27, 75, 0.02) !important;
+          overflow: hidden !important;
+        }
+
+        .filters-toolbar {
+          padding: 20px 24px !important;
+          display: flex !important;
+          align-items: center !important;
+          border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
+          background: linear-gradient(90deg, #f8faff 0%, #f4f3ff 100%) !important;
+        }
+
+        /* Filter View Button */
+        .btn-view-filters {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 10px 18px !important;
+          border-radius: 10px !important;
+          color: #1E1B4B !important;
+          font-weight: 600 !important;
+          font-size: 13.5px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .btn-view-filters:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+        }
+
+        /* Add Filter Split Button */
+        .btn-add-filter-main {
+          background: #5B21B6 !important;
+          color: #ffffff !important;
+          border: none !important;
+          padding: 10px 16px !important;
+          font-weight: 600 !important;
+          font-size: 13.5px !important;
+          cursor: pointer !important;
+          border-radius: 10px 0 0 10px !important;
+          position: relative !important;
+          overflow: hidden !important;
+          transition: all 0.2s ease !important;
+        }
+        .btn-add-filter-arrow {
+          background: #5B21B6 !important;
+          color: #ffffff !important;
+          border: none !important;
+          padding: 10px 12px !important;
+          cursor: pointer !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          border-radius: 0 10px 10px 0 !important;
+          border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
+          transition: all 0.2s ease !important;
+        }
+        .add-filter-split-btn:hover .btn-add-filter-main,
+        .add-filter-split-btn:hover .btn-add-filter-arrow {
+          background-color: #1E1B4B !important;
+        }
+
+        /* Search input inside list */
+        .search-filters-input {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 10px 16px 10px 40px !important;
+          border-radius: 10px !important;
+          font-size: 13.5px !important;
+          color: #1E1B4B !important;
+          width: 220px !important;
+          outline: none !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .search-filters-input:focus {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.1) !important;
+        }
+
+        /* Icon action buttons */
+        .btn-icon-action {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          cursor: pointer !important;
+          padding: 9px !important;
+          border-radius: 10px !important;
+          color: #1E1B4B !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .btn-icon-action:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background-color: rgba(91, 33, 182, 0.04) !important;
+        }
+
+        /* Table design */
+        .filters-table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          text-align: left !important;
+        }
+        .filters-table th {
+          background: #1E1B4B !important;
+          border-bottom: 3px solid #5B21B6 !important;
+          padding: 18px 24px !important;
+          font-weight: 700 !important;
+          font-size: 12.5px !important;
+          color: #ffffff !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.8px !important;
+        }
+        .filters-table tr {
+          border-bottom: 1px solid rgba(30, 27, 75, 0.06) !important;
+          transition: background-color 0.2s ease !important;
+        }
+        .filters-table tr:hover {
+          background-color: rgba(91, 33, 182, 0.02) !important;
+        }
+        .filters-table td {
+          padding: 18px 24px !important;
+          font-size: 14px !important;
+        }
+
+        /* Toggle switch */
+        .toggle-switch-slider {
+          background-color: #e2e8f0 !important;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        input:checked + .toggle-switch-slider {
+          background-color: #10B981 !important;
+        }
+
+        /* Row action small icon buttons */
+        .row-action-btn-small {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          cursor: pointer !important;
+          padding: 8px !important;
+          border-radius: 8px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-shadow: 0 1px 3px rgba(30, 27, 75, 0.02) !important;
+        }
+        .row-action-btn-small svg {
+          fill: #4b5563 !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .row-action-edit:hover {
+          background-color: #5B21B6 !important;
+          border-color: #5B21B6 !important;
+          transform: scale(1.15) !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.25) !important;
+        }
+        .row-action-edit:hover svg {
+          fill: #ffffff !important;
+        }
+        .row-action-duplicate:hover {
+          background-color: #10B981 !important;
+          border-color: #10B981 !important;
+          transform: scale(1.15) !important;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25) !important;
+        }
+        .row-action-duplicate:hover svg {
+          fill: #ffffff !important;
+        }
+        .row-action-delete:hover {
+          background-color: #DB3A5D !important;
+          border-color: #DB3A5D !important;
+          transform: scale(1.15) !important;
+          box-shadow: 0 4px 12px rgba(219, 58, 93, 0.25) !important;
+        }
+        .row-action-delete:hover svg {
+          fill: #ffffff !important;
+        }
+
+        /* Manual/All Values labels */
+        .badge-values-tag {
+          padding: 5px 12px !important;
+          border-radius: 8px !important;
+          background-color: rgba(30, 27, 75, 0.05) !important;
+          color: #1E1B4B !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          display: inline-flex !important;
+        }
+
+        /* Reorder Modal Styles */
+        .sortable-item-card {
+          display: flex !important;
+          align-items: center !important;
+          padding: 12px 16px !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 10px !important;
+          background: #ffffff !important;
+          margin-bottom: 10px !important;
+          position: relative !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+          cursor: grab !important;
+        }
+        .sortable-item-card:hover {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.08) !important;
+          background-color: rgba(91, 33, 182, 0.01) !important;
+        }
+        .sortable-item-drag-handle {
+          margin-right: 14px !important;
+          color: #8c9196 !important;
+          display: flex !important;
+          align-items: center !important;
+          transition: color 0.2s ease !important;
+        }
+        .sortable-item-card:hover .sortable-item-drag-handle {
+          color: #5B21B6 !important;
+        }
+        .sortable-item-label {
+          flex: 1 !important;
+          font-weight: 600 !important;
+          font-size: 14px !important;
+          color: #1E1B4B !important;
+        }
+        .sortable-item-badge {
+          color: #5B21B6 !important;
+          font-size: 11.5px !important;
+          font-weight: 700 !important;
+          background: rgba(91, 33, 182, 0.06) !important;
+          padding: 4px 10px !important;
+          border-radius: 20px !important;
+          border: 1px solid rgba(91, 33, 182, 0.12) !important;
+        }
+
+        /* Reorder Modal Buttons */
+        .btn-reorder-action {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          padding: 8px 16px !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          color: #1E1B4B !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+        }
+        .btn-reorder-action:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+        }
+        .btn-reorder-cancel {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          padding: 8px 20px !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          color: #4b5563 !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+        }
+        .btn-reorder-cancel:hover {
+          background: #f9fafb !important;
+          color: #111827 !important;
+          border-color: #d1d5db !important;
+        }
+        .btn-reorder-save {
+          background: #5B21B6 !important;
+          border: none !important;
+          border-radius: 10px !important;
+          padding: 8px 24px !important;
+          font-size: 13.5px !important;
+          font-weight: 700 !important;
+          color: #ffffff !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+        }
+        .btn-reorder-save:hover {
+          background: #1E1B4B !important;
+          box-shadow: 0 4px 12px rgba(30, 27, 75, 0.2) !important;
+          transform: translateY(-1px) !important;
+        }
+
+        /* Custom scrollbar for reorder modal */
+        .reorder-scroll-container::-webkit-scrollbar {
+          width: 6px !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-track {
+          background: rgba(30, 27, 75, 0.02) !important;
+          border-radius: 10px !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-thumb {
+          background: rgba(30, 27, 75, 0.15) !important;
+          border-radius: 10px !important;
+          transition: background 0.2s ease !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-thumb:hover {
+          background: #5B21B6 !important;
+        }
+        /* Firefox fallback */
+        .reorder-scroll-container {
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(30, 27, 75, 0.15) rgba(30, 27, 75, 0.02) !important;
+        }
+
+        /* Customize Columns Modal */
+        .customize-col-container {
+          display: flex !important;
+          gap: 40px !important;
+        }
+        .customize-col-section {
+          flex: 1 !important;
+        }
+        .customize-col-header {
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          margin-bottom: 20px !important;
+          justify-content: space-between !important;
+        }
+        .customize-col-btn-link {
+          background: none !important;
+          border: none !important;
+          color: #5B21B6 !important;
+          cursor: pointer !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          padding: 0 !important;
+          transition: color 0.2s ease !important;
+        }
+        .customize-col-btn-link:hover {
+          color: #1E1B4B !important;
+        }
+        .customize-col-list {
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 12px !important;
+        }
+        .customize-col-label {
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          cursor: pointer !important;
+          font-size: 14px !important;
+          color: #1E1B4B !important;
+          font-weight: 600 !important;
+          padding: 8px 12px !important;
+          border-radius: 8px !important;
+          border: 1px solid transparent !important;
+          transition: all 0.2s ease !important;
+        }
+        .customize-col-label:hover {
+          background: rgba(91, 33, 182, 0.04) !important;
+          border-color: rgba(91, 33, 182, 0.08) !important;
+        }
+        .customize-col-drag-card {
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          font-size: 14px !important;
+          color: #1E1B4B !important;
+          cursor: grab !important;
+          padding: 10px 14px !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 10px !important;
+          background: #ffffff !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .customize-col-drag-card:hover {
+          border-color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.01) !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.06) !important;
+        }
+        .customize-col-drag-handle {
+          color: #8c9196 !important;
+          display: flex !important;
+          align-items: center !important;
+          transition: color 0.2s ease !important;
+        }
+        .customize-col-drag-card:hover .customize-col-drag-handle {
+          color: #5B21B6 !important;
+        }
+        .customize-col-remove-btn {
+          background: none !important;
+          border: none !important;
+          cursor: pointer !important;
+          padding: 4px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 6px !important;
+          color: #8c9196 !important;
+          transition: all 0.2s ease !important;
+        }
+        .customize-col-remove-btn:hover {
+          background: rgba(219, 58, 93, 0.08) !important;
+          color: #DB3A5D !important;
+        }
+      ` }} />
+
       <div
         style={{
           marginBottom: "20px",
@@ -842,59 +1402,42 @@ export default function FilterGroupDetail() {
       >
         <Link
           to="/app/filters/groups"
-          style={{
-            color: "#006e52",
-            textDecoration: "underline",
-            fontWeight: "500",
-          }}
+          className="back-link-breadcrumb"
         >
+          <svg
+            style={{ width: "16px", height: "16px" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.5"
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            ></path>
+          </svg>
           Filter groups
         </Link>
         <span style={{ color: "#6d7175" }}>›</span>
-        <span style={{ color: "#202223", fontWeight: "600" }}>
+        <span style={{ color: "#1E1B4B", fontWeight: "700", fontSize: "14.5px" }}>
           {group.name}
         </span>
       </div>
 
       <s-stack direction="block" gap="base">
-        <s-card heading="Filter group information">
+        <div className="group-info-card">
+          <h2 style={{ fontSize: "16px", fontWeight: "700", color: "#1E1B4B", marginBottom: "20px" }}>
+            Filter group information
+          </h2>
           <div style={{ display: "flex", gap: "16px", marginTop: "8px" }}>
             <div style={{ flex: 1 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontWeight: 600,
-                  marginBottom: "8px",
-                  fontSize: "13px",
-                  color: "#6d7175",
-                }}
-              >
-                Name{" "}
-                <span
-                  style={{
-                    color: "#8c9196",
-                    fontWeight: "normal",
-                    fontSize: "11px",
-                    cursor: "help",
-                  }}
-                  title="The name of this filter group"
-                >
-                  ?
-                </span>
-              </label>
               <input
                 type="text"
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid #c9cccf",
-                  fontSize: "14px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
+                placeholder="Enter filter group name"
+                className="input-group-name"
               />
 
               {/* Editable Group Type & Collections */}
@@ -930,7 +1473,7 @@ export default function FilterGroupDetail() {
                     <span
                       style={{
                         fontSize: "14px",
-                        color: "#202223",
+                        color: "#1E1B4B",
                         fontWeight: groupType === "collections" ? "600" : "400",
                       }}
                     >
@@ -950,42 +1493,19 @@ export default function FilterGroupDetail() {
                       <s-text
                         variant="bodySm"
                         tone="subdued"
-                        style={{ display: "block", marginBottom: "6px" }}
+                        style={{ display: "block", marginBottom: "12px", fontSize: "13px", color: "#6d7175", fontWeight: "500" }}
                       >
                         Select collections using this filter group
                       </s-text>
                       <div
                         onClick={() => setShowCollDropdown(!showCollDropdown)}
-                        style={{
-                          padding: "10px 14px",
-                          borderRadius: "8px",
-                          border: "1px solid #c9cccf",
-                          fontSize: "13px",
-                          cursor: "pointer",
-                          background: "#f6f6f7",
-                          userSelect: "none",
-                          minHeight: "40px",
-                          display: "flex",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                          gap: "6px",
-                        }}
+                        className="collection-select-trigger"
                       >
                         {selectedColls.length > 0 ? (
                           selectedColls.map((c) => (
                             <span
                               key={c.id}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                background: "#007bff",
-                                color: "#fff",
-                                padding: "2px 8px",
-                                borderRadius: "12px",
-                                fontSize: "12px",
-                                fontWeight: "500",
-                                gap: "4px",
-                              }}
+                              className="collection-pill"
                             >
                               {c.title}
                               <span
@@ -1109,7 +1629,7 @@ export default function FilterGroupDetail() {
                     <span
                       style={{
                         fontSize: "14px",
-                        color: "#202223",
+                        color: "#1E1B4B",
                         fontWeight: groupType === "search" ? "600" : "400",
                       }}
                     >
@@ -1127,37 +1647,24 @@ export default function FilterGroupDetail() {
               justifyContent: "flex-end",
               marginTop: "16px",
               paddingTop: "16px",
-              borderTop: "1px solid #f1f2f4",
+              borderTop: "1px solid rgba(30, 27, 75, 0.08)",
             }}
           >
-            <s-button variant="primary" onClick={handleUpdateGroupSettings}>
+            <button className="btn-update-group" onClick={handleUpdateGroupSettings}>
               UPDATE
-            </s-button>
+            </button>
           </div>
-        </s-card>
+        </div>
 
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e1e3e5",
-            borderRadius: "8px",
-          }}
-        >
-          <div
-            style={{
-              padding: "14px 16px",
-              display: "flex",
-              alignItems: "center",
-              borderBottom: "1px solid #e1e3e5",
-            }}
-          >
+        <div className="filters-list-card">
+          <div className="filters-toolbar">
             {/* Left side: Filters heading */}
             <div style={{ width: "120px" }}>
               <span
                 style={{
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  color: "#202223",
+                  fontSize: "18px",
+                  fontWeight: "700",
+                  color: "#1E1B4B",
                 }}
               >
                 Filters
@@ -1170,19 +1677,7 @@ export default function FilterGroupDetail() {
               <div style={{ position: "relative" }} ref={dropdownRef}>
                 <button
                   onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                  style={{
-                    background: "#f1f8ff",
-                    border: "none",
-                    padding: "8px 16px",
-                    borderRadius: "20px",
-                    color: "#007bff",
-                    fontWeight: "600",
-                    fontSize: "14px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    cursor: "pointer",
-                  }}
+                  className="btn-view-filters"
                 >
                   {filterStatusView === "active"
                     ? "Active filters"
@@ -1277,52 +1772,22 @@ export default function FilterGroupDetail() {
 
               {/* Add Filter Split Button */}
               <div
+                className="add-filter-split-btn"
                 style={{
                   display: "flex",
-                  borderRadius: "20px",
+                  borderRadius: "10px",
                   overflow: "hidden",
                 }}
               >
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
-                  style={{
-                    background: "#007bff",
-                    color: "#fff",
-                    border: "none",
-                    padding: "8px 16px",
-                    fontWeight: "600",
-                    fontSize: "14px",
-                    cursor: "pointer",
-                  }}
+                  className="btn-add-filter-main"
                 >
                   Add filter
                 </button>
-                <div
-                  style={{
-                    width: "1px",
-                    background: "rgba(255,255,255,0.3)",
-                    backgroundColor: "#007bff",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: "1px",
-                      background: "rgba(255,255,255,0.3)",
-                    }}
-                  ></div>
-                </div>
                 <button
                   onClick={() => setIsCreateModalOpen(true)}
-                  style={{
-                    background: "#007bff",
-                    color: "#fff",
-                    border: "none",
-                    padding: "8px 10px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
+                  className="btn-add-filter-arrow"
                 >
                   <svg
                     viewBox="0 0 20 20"
@@ -1330,6 +1795,7 @@ export default function FilterGroupDetail() {
                       width: "16px",
                       height: "16px",
                       fill: "currentColor",
+                      display: "block",
                     }}
                   >
                     <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
@@ -1349,7 +1815,7 @@ export default function FilterGroupDetail() {
                   style={{
                     width: "16px",
                     height: "16px",
-                    fill: "#007bff",
+                    fill: "#5B21B6",
                     position: "absolute",
                     left: "12px",
                     top: "50%",
@@ -1363,51 +1829,30 @@ export default function FilterGroupDetail() {
                   placeholder="Search"
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
-                  style={{
-                    background: "#f1f8ff",
-                    border: "none",
-                    padding: "8px 16px 8px 36px",
-                    borderRadius: "20px",
-                    fontSize: "14px",
-                    color: "#007bff",
-                    width: "200px",
-                    outline: "none",
-                  }}
+                  className="search-filters-input"
                 />
               </div>
 
               {/* Icons */}
               <button
-                  onClick={() => setIsReorderModalOpen(true)}
-                  title="Reorder Filters"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    color: "#007bff",
-                    display: "flex",
-                    marginRight: "16px"
-                  }}
-                >
-                  <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "currentColor" }}><path d="M5.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm13 5.5a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10zm0-6a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10z"/></svg>
-                </button>
-                <button
+                onClick={() => setIsReorderModalOpen(true)}
+                title="Reorder Filters"
+                className="btn-icon-action"
+                style={{ marginRight: "8px" }}
+              >
+                <svg viewBox="0 0 20 20" style={{ width: "18px", height: "18px", fill: "currentColor" }}><path d="M5.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm13 5.5a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10zm0-6a1 1 0 0 0 0-2h-10a1 1 0 0 0 0 2h10z"/></svg>
+              </button>
+              <button
                 onClick={() => setIsCustomizeColumnsOpen(true)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
-                  color: "#007bff",
-                  display: "flex",
-                }}
+                title="Customize Columns"
+                className="btn-icon-action"
+                style={{ marginRight: "8px" }}
               >
                 <svg
                   viewBox="0 0 24 24"
                   style={{
-                    width: "20px",
-                    height: "20px",
+                    width: "18px",
+                    height: "18px",
                     fill: "currentColor",
                   }}
                 >
@@ -1416,23 +1861,17 @@ export default function FilterGroupDetail() {
               </button>
               <button
                 onClick={() => setIsAdvancedFilterOpen(true)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
-                  color: "#007bff",
-                  display: "flex",
-                }}
+                title="Advanced Filter"
+                className="btn-icon-action"
               >
                 <svg
                   viewBox="0 0 24 24"
                   style={{
-                    width: "20px",
-                    height: "20px",
+                    width: "18px",
+                    height: "18px",
                     fill: "none",
                     stroke: "currentColor",
-                    strokeWidth: "2",
+                    strokeWidth: "2.5",
                     strokeLinecap: "round",
                     strokeLinejoin: "round",
                   }}
@@ -1478,80 +1917,15 @@ export default function FilterGroupDetail() {
               </s-button>
             </div>
           ) : (
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                textAlign: "left",
-              }}
-            >
+            <table className="filters-table">
               <thead>
-                <tr
-                  style={{
-                    background: "#fafafa",
-                    borderBottom: "1px solid #e1e3e5",
-                  }}
-                >
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                      width: "32px",
-                    }}
-                  ></th>
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                    }}
-                  >
-                    Filter title
-                  </th>
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                    }}
-                  >
-                    Display mode
-                  </th>
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                    }}
-                  >
-                    Filter values
-                  </th>
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                    }}
-                  >
-                    Status
-                  </th>
-                  <th
-                    style={{
-                      padding: "10px 16px",
-                      fontWeight: "600",
-                      fontSize: "12px",
-                      color: "#6d7175",
-                      textAlign: "right",
-                    }}
-                  >
-                    Actions
-                  </th>
+                <tr>
+                  <th style={{ width: "32px" }}></th>
+                  <th>Filter title</th>
+                  <th>Display mode</th>
+                  <th>Filter values</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1599,18 +1973,8 @@ export default function FilterGroupDetail() {
                     }
                   })
                   .map((filter) => (
-                    <tr
-                      key={filter.id}
-                      style={{ borderBottom: "1px solid #f1f2f4" }}
-                    >
-                      <td
-                        style={{
-                          padding: "14px 16px",
-                          color: "#c9cccf",
-                          cursor: "grab",
-                          textAlign: "center",
-                        }}
-                      >
+                    <tr key={filter.id}>
+                      <td style={{ cursor: "grab", textAlign: "center" }}>
                         <svg
                           viewBox="0 0 20 20"
                           style={{
@@ -1622,15 +1986,15 @@ export default function FilterGroupDetail() {
                           <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
                         </svg>
                       </td>
-                      <td style={{ padding: "14px 16px" }}>
+                      <td>
                         <button
                           onClick={() => openConfigModal(filter)}
                           style={{
                             background: "none",
                             border: "none",
-                            color: "#000",
+                            color: "#1E1B4B",
                             fontSize: "14px",
-                            fontWeight: "400",
+                            fontWeight: "700",
                             cursor: "pointer",
                             padding: 0,
                             textAlign: "left",
@@ -1644,16 +2008,10 @@ export default function FilterGroupDetail() {
                           )}
                         </button>
                       </td>
-                      <td style={{ padding: "14px 16px" }}>
+                      <td>
                         <DisplayModeBadge mode={filter.displayMode} />
                       </td>
-                      <td
-                        style={{
-                          padding: "14px 16px",
-                          fontSize: "13px",
-                          color: "#6d7175",
-                        }}
-                      >
+                      <td>
                         {(() => {
                           let configObj = {};
                           try {
@@ -1661,22 +2019,16 @@ export default function FilterGroupDetail() {
                           } catch (e) {}
                           
                           if (configObj.useManualValues) {
-                            return <span>Manual values</span>;
+                            return <span className="badge-values-tag">Manual values</span>;
                           }
                           return (
-                            <span style={{ 
-                              background: "#e4e5e7", 
-                              padding: "4px 8px", 
-                              borderRadius: "4px", 
-                              color: "#202223",
-                              fontSize: "12px"
-                            }}>
+                            <span className="badge-values-tag">
                               All values
                             </span>
                           );
                         })()}
                       </td>
-                      <td style={{ padding: "14px 16px" }}>
+                      <td>
                         <label
                           style={{
                             position: "relative",
@@ -1698,12 +2050,13 @@ export default function FilterGroupDetail() {
                             style={{ opacity: 0, width: 0, height: 0 }}
                           />
                           <span
+                            className="toggle-switch-slider"
                             style={{
                               position: "absolute",
                               inset: 0,
                               backgroundColor: filter.isEnabled
-                                ? "#008060"
-                                : "#8c9196",
+                                ? "#10B981"
+                                : "#e2e8f0",
                               borderRadius: "34px",
                               transition: "0.2s",
                             }}
@@ -1723,33 +2076,25 @@ export default function FilterGroupDetail() {
                           </span>
                         </label>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                      <td style={{ textAlign: "right" }}>
                         <div
                           style={{
                             display: "flex",
-                            gap: "12px",
+                            gap: "8px",
                             justifyContent: "flex-end",
                             alignItems: "center",
                           }}
                         >
                           <button
                             onClick={() => openConfigModal(filter)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                            }}
+                            className="row-action-btn-small row-action-edit"
                             title="Configure"
                           >
                             <svg
                               viewBox="0 0 20 20"
                               style={{
-                                width: "16px",
-                                height: "16px",
-                                fill: "#5c5f62",
+                                width: "15px",
+                                height: "15px",
                               }}
                             >
                               <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828z" />
@@ -1766,22 +2111,14 @@ export default function FilterGroupDetail() {
                                 { method: "POST" },
                               )
                             }
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                            }}
+                            className="row-action-btn-small row-action-duplicate"
                             title="Duplicate"
                           >
                             <svg
                               viewBox="0 0 20 20"
                               style={{
-                                width: "16px",
-                                height: "16px",
-                                fill: "#5c5f62",
+                                width: "15px",
+                                height: "15px",
                               }}
                             >
                               <path d="M14 6h-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-8 6V4h6v2H8a2 2 0 0 0-2 2v4H6zm8 4H8V8h6v8z" />
@@ -1794,22 +2131,14 @@ export default function FilterGroupDetail() {
                                 { method: "POST" },
                               )
                             }
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                            }}
+                            className="row-action-btn-small row-action-delete"
                             title="Delete"
                           >
                             <svg
                               viewBox="0 0 20 20"
                               style={{
-                                width: "16px",
-                                height: "16px",
-                                fill: "#d82c0d",
+                                width: "15px",
+                                height: "15px",
                               }}
                             >
                               <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
@@ -2096,20 +2425,21 @@ export default function FilterGroupDetail() {
           onClose={() => setIsReorderModalOpen(false)}
           title="Reorder Filters"
           width="500px"
+          padding="26px"
           footer={
             <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
               <div style={{ display: "flex", gap: "8px" }}>
-                <Button variant="default" onClick={sortReorderAZ} style={{ borderRadius: "20px", border: "1px solid #e1e3e5" }}>Sort A-Z</Button>
-                <Button variant="default" onClick={sortReorderZA} style={{ borderRadius: "20px", border: "1px solid #e1e3e5" }}>Sort Z-A</Button>
+                <button onClick={sortReorderAZ} className="btn-reorder-action">Sort A-Z</button>
+                <button onClick={sortReorderZA} className="btn-reorder-action">Sort Z-A</button>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <Button variant="default" onClick={() => setIsReorderModalOpen(false)} style={{ borderRadius: "20px", padding: "8px 24px", border: "1px solid #e1e3e5" }}>Cancel</Button>
-                <Button variant="primary" onClick={saveReorder} style={{ borderRadius: "20px", padding: "8px 24px", background: "#51a2ff", border: "none" }}>Save Order</Button>
+                <button onClick={() => setIsReorderModalOpen(false)} className="btn-reorder-cancel">Cancel</button>
+                <button onClick={saveReorder} className="btn-reorder-save">Save Order</button>
               </div>
             </div>
           }
         >
-          <div style={{ padding: "0 20px 20px 20px", maxHeight: "60vh", overflowY: "auto" }}>
+          <div className="reorder-scroll-container" style={{ padding: "0", maxHeight: "60vh", overflowY: "auto" }}>
             <p style={{ color: "#6d7175", fontSize: "13px", marginBottom: "16px" }}>Drag and drop filters to reorder them on the storefront.</p>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={reorderItems} strategy={verticalListSortingStrategy}>
@@ -2126,49 +2456,31 @@ export default function FilterGroupDetail() {
         onClose={() => setIsCustomizeColumnsOpen(false)}
         title="Customize Columns"
         width="700px"
+        padding="26px"
         footer={
           <>
-            <Button
-              variant="default"
+            <button
               onClick={() => setIsCustomizeColumnsOpen(false)}
-              style={{
-                borderRadius: "20px",
-                padding: "8px 24px",
-                color: "#c4cdd5",
-                border: "1px solid #e1e3e5",
-              }}
+              className="btn-reorder-cancel"
             >
-              CANCEL
-            </Button>
-            <Button
-              variant="primary"
+              Cancel
+            </button>
+            <button
               onClick={() => {
                 setTableColumns(tempTableColumns);
                 setIsCustomizeColumnsOpen(false);
               }}
-              style={{
-                borderRadius: "20px",
-                padding: "8px 24px",
-                background: "#51a2ff",
-                border: "none",
-              }}
+              className="btn-reorder-save"
             >
-              OK
-            </Button>
+              Save Columns
+            </button>
           </>
         }
       >
-        <div style={{ display: "flex", gap: "40px" }}>
+        <div className="customize-col-container">
           {/* Left Side */}
-          <div style={{ flex: 1 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                marginBottom: "20px",
-              }}
-            >
+          <div className="customize-col-section">
+            <div className="customize-col-header">
               <SearchInput
                 value={columnsSearch}
                 onChange={(e) => setColumnsSearch(e.target.value)}
@@ -2178,34 +2490,18 @@ export default function FilterGroupDetail() {
                 onClick={() =>
                   setTempTableColumns(ALL_COLUMNS.map((c) => c.id))
                 }
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#007bff",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                }}
+                className="customize-col-btn-link"
               >
                 select all
               </button>
             </div>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
-            >
+            <div className="customize-col-list">
               {ALL_COLUMNS.filter((c) =>
                 c.label.toLowerCase().includes(columnsSearch.toLowerCase()),
               ).map((c) => (
                 <label
                   key={c.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    color: "#007bff",
-                    fontWeight: 500,
-                  }}
+                  className="customize-col-label"
                 >
                   <Checkbox
                     checked={tempTableColumns.includes(c.id)}
@@ -2226,34 +2522,19 @@ export default function FilterGroupDetail() {
           </div>
 
           {/* Right Side */}
-          <div style={{ flex: 1 }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "20px",
-              }}
-            >
-              <span style={{ fontSize: "14px", color: "#4a4c4e" }}>
+          <div className="customize-col-section">
+            <div className="customize-col-header">
+              <span style={{ fontSize: "14px", color: "#1E1B4B", fontWeight: "600" }}>
                 {tempTableColumns.length} columns selected
               </span>
               <button
                 onClick={() => setTempTableColumns([])}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#007bff",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                }}
+                className="customize-col-btn-link"
               >
                 clear all
               </button>
             </div>
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-            >
+            <div className="customize-col-list">
               {tempTableColumns.map((colId, index) => {
                 const col = ALL_COLUMNS.find((c) => c.id === colId);
                 return (
@@ -2273,32 +2554,21 @@ export default function FilterGroupDetail() {
                       setTempTableColumns(newCols);
                       setDraggedColumnIdx(null);
                     }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      fontSize: "14px",
-                      color: "#4a4c4e",
-                      cursor: "grab",
-                    }}
+                    className="customize-col-drag-card"
                   >
-                    <span
-                      style={{
-                        color: "#6d7175",
-                        fontSize: "18px",
-                        userSelect: "none",
-                      }}
-                    >
-                      =
-                    </span>
-                    <span style={{ flex: 1 }}>{col.label}</span>
+                    <div className="customize-col-drag-handle">
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
+                        <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                      </svg>
+                    </div>
+                    <span style={{ flex: 1, fontWeight: "600", color: "#1E1B4B" }}>{col.label}</span>
                     {col.locked ? (
                       <svg
                         viewBox="0 0 20 20"
                         style={{
                           width: "16px",
                           height: "16px",
-                          fill: "#2c2c2c",
+                          fill: "#10B981",
                         }}
                       >
                         <path
@@ -2314,20 +2584,14 @@ export default function FilterGroupDetail() {
                             tempTableColumns.filter((id) => id !== colId),
                           )
                         }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: 0,
-                          display: "flex",
-                        }}
+                        className="customize-col-remove-btn"
                       >
                         <svg
                           viewBox="0 0 20 20"
                           style={{
                             width: "16px",
                             height: "16px",
-                            fill: "#8c9196",
+                            fill: "currentColor",
                           }}
                         >
                           <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />

@@ -254,7 +254,6 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Build dynamic options combining predefined and actual optionNames
   const dynamicOptions = [...OPTION_TYPES];
   optionNames.forEach((name) => {
     const v = name.toLowerCase();
@@ -283,18 +282,23 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
         onClick={() => setIsOpen(!isOpen)}
         style={{
           width: "100%",
-          padding: "12px 20px",
-          borderRadius: "20px",
-          border: "none",
-          background: "#f4f8ff",
-          color: "#007bff",
-          fontSize: "13px",
+          padding: "10px 16px",
+          borderRadius: "10px",
+          border: "1px solid rgba(30, 27, 75, 0.12)",
+          background: "#ffffff",
+          color: "#1E1B4B",
+          fontSize: "13.5px",
           fontWeight: "600",
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
+          transition: "all 0.2s ease",
+          boxSizing: "border-box",
         }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = "#5B21B6"}
+        onMouseLeave={(e) => !isOpen && (e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)")}
       >
         {selectedLabel}
         <svg
@@ -302,7 +306,7 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
           style={{
             width: "12px",
             height: "12px",
-            fill: "currentColor",
+            fill: "#1e1b4b",
             transform: isOpen ? "rotate(180deg)" : "none",
             transition: "0.2s",
           }}
@@ -313,6 +317,7 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
 
       {isOpen && (
         <div
+          className="reorder-scroll-container"
           style={{
             position: "absolute",
             top: "100%",
@@ -320,12 +325,12 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
             right: 0,
             marginTop: "8px",
             background: "#fff",
-            borderRadius: "8px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-            border: "1px solid #e1e3e5",
+            borderRadius: "10px",
+            boxShadow: "0 10px 30px rgba(30, 27, 75, 0.08)",
+            border: "1px solid rgba(30, 27, 75, 0.08)",
             zIndex: 1000,
-            padding: "8px 0",
-            maxHeight: "300px",
+            padding: "6px 0",
+            maxHeight: "240px",
             overflowY: "auto",
           }}
         >
@@ -337,19 +342,22 @@ const OptionTypeDropdown = ({ value, onChange, optionNames = [] }) => {
                 setIsOpen(false);
               }}
               style={{
-                padding: "8px 20px",
+                padding: "10px 20px",
                 cursor: "pointer",
-                fontSize: "13px",
-                color: value === opt.value ? "#007bff" : "#202223",
-                background: value === opt.value ? "#f4f8ff" : "transparent",
+                fontSize: "13.5px",
+                fontWeight: "600",
+                color: value === opt.value ? "#5B21B6" : "#1e1b4b",
+                background: value === opt.value ? "rgba(91, 33, 182, 0.05)" : "transparent",
+                transition: "all 0.2s ease",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#f4f8ff")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background =
-                  value === opt.value ? "#f4f8ff" : "transparent")
-              }
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)";
+                e.currentTarget.style.color = "#5B21B6";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = value === opt.value ? "rgba(91, 33, 182, 0.05)" : "transparent";
+                e.currentTarget.style.color = value === opt.value ? "#5B21B6" : "#1e1b4b";
+              }}
             >
               {opt.label}
             </div>
@@ -430,47 +438,36 @@ const AutocompleteInput = ({
         onClick={() => setIsOpen(true)}
         style={{
           width: "100%",
-          padding: "12px 20px",
-          background: "#f4f8ff",
-          border: "none",
-          borderRadius: "20px",
-          fontSize: "13px",
-          color: "#007bff",
+          padding: "10px 16px",
+          background: "#ffffff",
+          border: "1px solid rgba(30, 27, 75, 0.12)",
+          borderRadius: "10px",
+          fontSize: "13.5px",
+          color: "#1E1B4B",
           outline: "none",
           boxSizing: "border-box",
+          boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
+          transition: "all 0.2s ease",
+        }}
+        onFocus={(e) => {
+          e.target.style.borderColor = "#5B21B6";
+          e.target.style.boxShadow = "0 0 0 3px rgba(91, 33, 182, 0.1)";
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = "rgba(30, 27, 75, 0.12)";
+          e.target.style.boxShadow = "none";
         }}
       />
 
       {selectedValues.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
           {selectedValues.map((val) => (
-            <div
-              key={val}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                padding: "4px 10px",
-                background: "#007bff",
-                color: "white",
-                borderRadius: "16px",
-                fontSize: "12px",
-              }}
-            >
+            <div key={val} className="autocomplete-tag">
               <span>{val}</span>
               <button
                 type="button"
                 onClick={() => handleRemove(val)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "white",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "0",
-                }}
+                className="autocomplete-tag-remove"
               >
                 &times;
               </button>
@@ -482,18 +479,19 @@ const AutocompleteInput = ({
       {isOpen &&
         (filteredSuggestions.length > 0 || suggestions.length === 0) && (
           <div
+            className="reorder-scroll-container"
             style={{
               position: "absolute",
-              top: "40px",
+              top: "42px",
               left: 0,
               right: 0,
               marginTop: "8px",
               background: "#fff",
-              borderRadius: "8px",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-              border: "1px solid #e1e3e5",
+              borderRadius: "10px",
+              boxShadow: "0 10px 30px rgba(30, 27, 75, 0.08)",
+              border: "1px solid rgba(30, 27, 75, 0.08)",
               zIndex: 1000,
-              padding: "8px 0",
+              padding: "6px 0",
               maxHeight: "200px",
               overflowY: "auto",
             }}
@@ -506,17 +504,23 @@ const AutocompleteInput = ({
                   style={{
                     padding: "10px 20px",
                     cursor: "pointer",
-                    fontSize: "13px",
-                    color: "#202223",
+                    fontSize: "13.5px",
+                    fontWeight: "600",
+                    color: "#1e1b4b",
                     borderBottom:
                       i < filteredSuggestions.length - 1
-                        ? "1px solid #f1f2f4"
+                        ? "1px solid rgba(30, 27, 75, 0.04)"
                         : "none",
+                    transition: "all 0.2s ease",
                   }}
-                  onMouseEnter={(e) => (e.target.style.background = "#f4f8ff")}
-                  onMouseLeave={(e) =>
-                    (e.target.style.background = "transparent")
-                  }
+                  onMouseEnter={(e) => {
+                    e.target.style.background = "rgba(91, 33, 182, 0.05)";
+                    e.target.style.color = "#5B21B6";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = "transparent";
+                    e.target.style.color = "#1e1b4b";
+                  }}
                 >
                   {s}
                 </div>
@@ -524,8 +528,8 @@ const AutocompleteInput = ({
             ) : (
               <div
                 style={{
-                  padding: "10px 20px",
-                  fontSize: "13px",
+                  padding: "12px 20px",
+                  fontSize: "13.5px",
                   color: "#8c9196",
                 }}
               >
@@ -590,6 +594,18 @@ export default function MergedValues() {
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState(null); // null = add, object = edit
   const [deletingId, setDeletingId] = useState(null); // For delete modal
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const sortRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) {
+        setIsSortOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const [filterTitle, setFilterTitle] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -704,16 +720,418 @@ export default function MergedValues() {
   }, {});
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        fontFamily:
-          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-      }}
-    >
+    <div className="merged-values-page">
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* General Premium Layout */
+        .merged-values-page {
+          background: #f8f9fc !important;
+          min-height: calc(100vh - 56px) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+        }
+        .merged-values-header {
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          padding: 20px 32px !important;
+          background: #ffffff !important;
+          border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
+          box-shadow: 0 2px 8px rgba(30, 27, 75, 0.02) !important;
+        }
+        .header-count-badge {
+          font-size: 15px !important;
+          color: #5B21B6 !important;
+          font-weight: 700 !important;
+          background: rgba(91, 33, 182, 0.06) !important;
+          padding: 12px 20px !important;
+          border-radius: 10px !important;
+          border: 1px solid rgba(91, 33, 182, 0.12) !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .btn-merge-action {
+          background: #5B21B6 !important;
+          color: #ffffff !important;
+          border: none !important;
+          border-radius: 10px !important;
+          padding: 12px 26px !important;
+          font-size: 15px !important;
+          font-weight: 700 !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          line-height: 1.2 !important;
+        }
+        .btn-merge-action:hover {
+          background: #1E1B4B !important;
+          box-shadow: 0 4px 12px rgba(30, 27, 75, 0.2) !important;
+          transform: translateY(-1px) !important;
+        }
+        .merged-values-page .btn-reorder-cancel {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          padding: 12px 24px !important;
+          font-size: 15px !important;
+          font-weight: 600 !important;
+          color: #4b5563 !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          line-height: 1.2 !important;
+        }
+        .merged-values-page .btn-reorder-cancel:hover {
+          background: #f9fafb !important;
+          color: #111827 !important;
+          border-color: #d1d5db !important;
+        }
+        .merged-values-page .btn-reorder-save {
+          background: #5B21B6 !important;
+          border: none !important;
+          border-radius: 10px !important;
+          padding: 12px 26px !important;
+          font-size: 15px !important;
+          font-weight: 700 !important;
+          color: #ffffff !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.15) !important;
+          line-height: 1.2 !important;
+        }
+        .merged-values-page .btn-reorder-save:hover {
+          background: #1E1B4B !important;
+          box-shadow: 0 4px 12px rgba(30, 27, 75, 0.2) !important;
+          transform: translateY(-1px) !important;
+        }
+        .search-select-dropdown {
+          padding: 9px 14px !important;
+          border-radius: 10px !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          background: #ffffff !important;
+          color: #1E1B4B !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          outline: none !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .search-select-dropdown:focus {
+          border-color: #5B21B6 !important;
+        }
+        .search-input-box {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 9px 16px 9px 40px !important;
+          border-radius: 10px !important;
+          font-size: 13.5px !important;
+          color: #1E1B4B !important;
+          width: 240px !important;
+          outline: none !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+          font-weight: 500 !important;
+        }
+        .search-input-box:focus {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.1) !important;
+        }
+        
+        /* Empty State */
+        .empty-state-container {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex: 1 !important;
+          padding: 100px 40px !important;
+          text-align: center !important;
+          background: #ffffff !important;
+        }
+        .empty-state-title {
+          font-size: 42px !important;
+          font-weight: 800 !important;
+          color: #1E1B4B !important;
+          margin-bottom: 16px !important;
+          letter-spacing: -0.5px !important;
+        }
+        .empty-state-subtitle {
+          font-size: 16px !important;
+          color: #6d7175 !important;
+          margin-bottom: 32px !important;
+          font-weight: 500 !important;
+        }
+
+        /* Group rules cards list */
+        .merge-group-card {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          border-radius: 16px !important;
+          box-shadow: 0 4px 20px rgba(30, 27, 75, 0.02) !important;
+          overflow: hidden !important;
+          margin-bottom: 28px !important;
+        }
+        .merge-group-header {
+          padding: 16px 24px !important;
+          background: linear-gradient(90deg, #f8faff 0%, #f4f3ff 100%) !important;
+          border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+        }
+        .merge-group-badge {
+          padding: 4px 10px !important;
+          border-radius: 20px !important;
+          background: rgba(91, 33, 182, 0.06) !important;
+          font-size: 11.5px !important;
+          color: #5B21B6 !important;
+          font-weight: 700 !important;
+          border: 1px solid rgba(91, 33, 182, 0.1) !important;
+        }
+
+        /* Merge table styling */
+        .merge-table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+        }
+        .merge-table th {
+          background: #1E1B4B !important;
+          border-bottom: 3px solid #5B21B6 !important;
+          padding: 16px 24px !important;
+          font-weight: 700 !important;
+          font-size: 12.5px !important;
+          color: #ffffff !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.8px !important;
+          text-align: left !important;
+        }
+        .merge-table td {
+          padding: 18px 24px !important;
+          font-size: 14px !important;
+        }
+        .merge-table tr {
+          border-bottom: 1px solid rgba(30, 27, 75, 0.06) !important;
+          transition: background-color 0.2s ease !important;
+        }
+        .merge-table tr:hover {
+          background-color: rgba(91, 33, 182, 0.02) !important;
+        }
+        
+        /* Badges */
+        .badge-target-val {
+          padding: 5px 12px !important;
+          border-radius: 8px !important;
+          background-color: rgba(16, 185, 129, 0.08) !important;
+          border: 1px solid rgba(16, 185, 129, 0.2) !important;
+          color: #10B981 !important;
+          font-size: 13px !important;
+          font-weight: 700 !important;
+          display: inline-flex !important;
+        }
+        .badge-source-pill {
+          padding: 4px 10px !important;
+          border-radius: 6px !important;
+          background-color: rgba(91, 33, 182, 0.05) !important;
+          border: 1px solid rgba(91, 33, 182, 0.12) !important;
+          font-size: 12px !important;
+          color: #5B21B6 !important;
+          font-weight: 600 !important;
+        }
+
+        /* Row action small icon buttons */
+        .row-action-btn-small {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+          cursor: pointer !important;
+          padding: 8px !important;
+          border-radius: 8px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-shadow: 0 1px 3px rgba(30, 27, 75, 0.02) !important;
+        }
+        .row-action-btn-small svg {
+          fill: #4b5563 !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .row-action-edit:hover {
+          background-color: #5B21B6 !important;
+          border-color: #5B21B6 !important;
+          transform: scale(1.15) !important;
+          box-shadow: 0 4px 12px rgba(91, 33, 182, 0.25) !important;
+        }
+        .row-action-edit:hover svg {
+          fill: #ffffff !important;
+        }
+        .row-action-delete:hover {
+          background-color: #DB3A5D !important;
+          border-color: #DB3A5D !important;
+          transform: scale(1.15) !important;
+          box-shadow: 0 4px 12px rgba(219, 58, 93, 0.25) !important;
+        }
+        .row-action-delete:hover svg {
+          fill: #ffffff !important;
+        }
+
+        /* Autocomplete tags */
+        .autocomplete-tag {
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          padding: 5px 12px !important;
+          background: #5B21B6 !important;
+          color: #ffffff !important;
+          border-radius: 20px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          box-shadow: 0 2px 6px rgba(91, 33, 182, 0.15) !important;
+        }
+        .autocomplete-tag-remove {
+          background: none !important;
+          border: none !important;
+          color: rgba(255, 255, 255, 0.8) !important;
+          cursor: pointer !important;
+          font-size: 14px !important;
+          display: flex !important;
+          align-items: center !important;
+          padding: 0 !important;
+          transition: color 0.2s ease !important;
+        }
+        .autocomplete-tag-remove:hover {
+          color: #ffffff !important;
+        }
+
+        /* Modals */
+        .merged-modal-overlay {
+          position: fixed !important;
+          inset: 0 !important;
+          background: rgba(15, 23, 42, 0.6) !important;
+          backdrop-filter: blur(4px) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          z-index: 99999 !important;
+        }
+        .merged-modal-card {
+          background: #ffffff !important;
+          border-radius: 16px !important;
+          padding: 26px !important;
+          width: 100% !important;
+          max-width: 800px !important;
+          max-height: 90vh !important;
+          overflow: visible !important;
+          box-shadow: 0 24px 64px rgba(30, 27, 75, 0.12) !important;
+          position: relative !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 24px !important;
+        }
+        .merged-modal-title {
+          margin: 0 !important;
+          font-size: 20px !important;
+          font-weight: 700 !important;
+          color: #1E1B4B !important;
+        }
+        .merged-modal-note {
+          background: rgba(91, 33, 182, 0.03) !important;
+          border-left: 3px solid #5B21B6 !important;
+          padding: 14px 20px !important;
+          border-radius: 10px !important;
+          font-size: 13.5px !important;
+          color: #4b5563 !important;
+          line-height: 1.6 !important;
+        }
+        .merged-modal-input-label {
+          display: block !important;
+          font-size: 11px !important;
+          color: #1E1B4B !important;
+          font-weight: 700 !important;
+          margin-bottom: 8px !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.5px !important;
+        }
+
+        /* Pagination Controls */
+        .pagination-container {
+          display: flex !important;
+          justify-content: center !important;
+          align-items: center !important;
+          gap: 16px !important;
+          padding: 24px 0 !important;
+        }
+        .pagination-btn {
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          padding: 8px 18px !important;
+          font-size: 13.5px !important;
+          font-weight: 600 !important;
+          color: #1E1B4B !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+        }
+        .pagination-btn:hover:not(:disabled) {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+        }
+        .pagination-btn:disabled {
+          opacity: 0.4 !important;
+          cursor: not-allowed !important;
+        }
+
+        /* Custom scrollbar */
+        .reorder-scroll-container::-webkit-scrollbar,
+        .merged-modal-card::-webkit-scrollbar {
+          width: 6px !important;
+          height: 6px !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-track,
+        .merged-modal-card::-webkit-scrollbar-track {
+          background: rgba(30, 27, 75, 0.02) !important;
+          border-radius: 10px !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-thumb,
+        .merged-modal-card::-webkit-scrollbar-thumb {
+          background: rgba(30, 27, 75, 0.15) !important;
+          border-radius: 10px !important;
+          transition: background 0.2s ease !important;
+        }
+        .reorder-scroll-container::-webkit-scrollbar-thumb:hover,
+        .merged-modal-card::-webkit-scrollbar-thumb:hover {
+          background: #5B21B6 !important;
+        }
+
+        /* Delete modal card */
+        .delete-modal-card {
+          background: #ffffff !important;
+          border-radius: 16px !important;
+          width: 440px !important;
+          padding: 26px !important;
+          box-shadow: 0 20px 50px rgba(30, 27, 75, 0.15) !important;
+          border: 1px solid rgba(30, 27, 75, 0.08) !important;
+        }
+        .delete-modal-title {
+          margin: 0 0 12px 0 !important;
+          font-size: 18px !important;
+          font-weight: 700 !important;
+          color: #1E1B4B !important;
+        }
+        .delete-modal-body {
+          margin: 0 0 26px 0 !important;
+          font-size: 14.5px !important;
+          color: #4b5563 !important;
+          line-height: 1.6 !important;
+        }
+      ` }} />
+
       {/* Global Spinner overlay for saving/loading */}
       {isLoading && (
         <div
@@ -735,7 +1153,7 @@ export default function MergedValues() {
               width: "48px",
               height: "48px",
               border: "4px solid #f3f3f3",
-              borderTop: "4px solid #007bff",
+              borderTop: "4px solid #5B21B6",
               borderRadius: "50%",
               animation: "spin 1s linear infinite",
             }}
@@ -747,74 +1165,163 @@ export default function MergedValues() {
       )}
 
       {/* Premium Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "20px 32px",
-          background: "#fff",
-          borderBottom: "1px solid #f1f2f4",
-        }}
-      >
+      <div className="merged-values-header">
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <span
-            style={{ fontSize: "13px", color: "#6d7175", fontWeight: "500" }}
+          <button
+            onClick={() => navigate("/app/filters")}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "8px",
+              borderRadius: "8px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(30, 27, 75, 0.05)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "none";
+            }}
+            title="Back to Filters"
           >
+            <svg
+              viewBox="0 0 20 20"
+              style={{ width: "20px", height: "20px", fill: "#1E1B4B" }}
+            >
+              <path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" />
+            </svg>
+          </button>
+          <span className="header-count-badge">
             Filter options ({rules.length})
           </span>
-          <button
-            onClick={openAdd}
-            style={{
-              background: "#007bff",
-              color: "#fff",
-              border: "none",
-              borderRadius: "20px",
-              padding: "8px 16px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor: "pointer",
-              boxShadow: "0 2px 4px rgba(0,123,255,0.2)",
-              transition: "0.2s",
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.transform = "translateY(-1px)")
-            }
-            onMouseOut={(e) => (e.currentTarget.style.transform = "none")}
-          >
+          <button onClick={openAdd} className="btn-merge-action">
             Merge values
           </button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <select
-            value={pagination?.sort || "newest"}
-            onChange={(e) => navigate(`?page=1&sort=${e.target.value}`)}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "20px",
-              border: "1px solid #c9cccf",
-              background: "#fff",
-              color: "#202223",
-              fontSize: "13px",
-              fontWeight: "500",
-              outline: "none",
-              cursor: "pointer",
-            }}
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
+          {/* Custom Sort Dropdown */}
+          <div style={{ position: "relative", width: "160px" }} ref={sortRef}>
+            <div
+              onClick={() => setIsSortOpen(!isSortOpen)}
+              style={{
+                width: "100%",
+                padding: "12px 16px",
+                borderRadius: "10px",
+                border: "1px solid rgba(30, 27, 75, 0.12)",
+                background: "#ffffff",
+                color: "#1E1B4B",
+                fontSize: "13.5px",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                boxShadow: "0 2px 4px rgba(30, 27, 75, 0.02)",
+                transition: "all 0.2s ease",
+                boxSizing: "border-box",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = "#5B21B6"}
+              onMouseLeave={(e) => !isSortOpen && (e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)")}
+            >
+              {pagination?.sort === "oldest" ? "Oldest first" : "Newest first"}
+              <svg
+                viewBox="0 0 20 20"
+                style={{
+                  width: "12px",
+                  height: "12px",
+                  fill: "#1e1b4b",
+                  transform: isSortOpen ? "rotate(180deg)" : "none",
+                  transition: "0.2s",
+                }}
+              >
+                <path d="M10 13a1 1 0 0 1-.707-.293l-4-4a1 1 0 1 1 1.414-1.414L10 10.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-4 4A1 1 0 0 1 10 13z" />
+              </svg>
+            </div>
+
+            {isSortOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: "8px",
+                  background: "#fff",
+                  borderRadius: "10px",
+                  boxShadow: "0 10px 30px rgba(30, 27, 75, 0.08)",
+                  border: "1px solid rgba(30, 27, 75, 0.08)",
+                  zIndex: 1000,
+                  padding: "6px 0",
+                }}
+              >
+                <div
+                  onClick={() => {
+                    navigate(`?page=1&sort=newest`);
+                    setIsSortOpen(false);
+                  }}
+                  style={{
+                    padding: "10px 20px",
+                    cursor: "pointer",
+                    fontSize: "13.5px",
+                    fontWeight: "600",
+                    color: pagination?.sort !== "oldest" ? "#5B21B6" : "#1e1b4b",
+                    background: pagination?.sort !== "oldest" ? "rgba(91, 33, 182, 0.05)" : "transparent",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)";
+                    e.currentTarget.style.color = "#5B21B6";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = pagination?.sort !== "oldest" ? "rgba(91, 33, 182, 0.05)" : "transparent";
+                    e.currentTarget.style.color = pagination?.sort !== "oldest" ? "#5B21B6" : "#1e1b4b";
+                  }}
+                >
+                  Newest first
+                </div>
+                <div
+                  onClick={() => {
+                    navigate(`?page=1&sort=oldest`);
+                    setIsSortOpen(false);
+                  }}
+                  style={{
+                    padding: "10px 20px",
+                    cursor: "pointer",
+                    fontSize: "13.5px",
+                    fontWeight: "600",
+                    color: pagination?.sort === "oldest" ? "#5B21B6" : "#1e1b4b",
+                    background: pagination?.sort === "oldest" ? "rgba(91, 33, 182, 0.05)" : "transparent",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)";
+                    e.currentTarget.style.color = "#5B21B6";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = pagination?.sort === "oldest" ? "rgba(91, 33, 182, 0.05)" : "transparent";
+                    e.currentTarget.style.color = pagination?.sort === "oldest" ? "#5B21B6" : "#1e1b4b";
+                  }}
+                >
+                  Oldest first
+                </div>
+              </div>
+            )}
+          </div>
           <div style={{ position: "relative" }}>
             <svg
               style={{
                 position: "absolute",
-                left: "12px",
+                left: "14px",
                 top: "50%",
                 transform: "translateY(-50%)",
                 width: "16px",
                 height: "16px",
-                fill: "#007bff",
+                fill: "#5B21B6",
               }}
               viewBox="0 0 20 20"
             >
@@ -825,17 +1332,7 @@ export default function MergedValues() {
               placeholder="Search"
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              style={{
-                background: "#f4f8ff",
-                border: "none",
-                borderRadius: "20px",
-                padding: "8px 16px 8px 36px",
-                fontSize: "13px",
-                color: "#007bff",
-                outline: "none",
-                width: "240px",
-                fontWeight: "500",
-              }}
+              className="search-input-box"
             />
           </div>
         </div>
@@ -851,201 +1348,61 @@ export default function MergedValues() {
       >
         {/* Empty State */}
         {rules.length === 0 ? (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: 1,
-              background: "#fff",
-              textAlign: "center",
-            }}
-          >
-            <h1
-              style={{
-                fontSize: "48px",
-                fontWeight: "900",
-                color: "#007bff",
-                margin: "0 0 16px 0",
-                letterSpacing: "-0.5px",
-              }}
-            >
-              Merge filter values
-            </h1>
-            <p
-              style={{
-                fontSize: "16px",
-                color: "#6d7175",
-                margin: "0 0 40px 0",
-                fontWeight: "500",
-              }}
-            >
+          <div className="empty-state-container">
+            <h1 className="empty-state-title">Merge filter values</h1>
+            <p className="empty-state-subtitle">
               Stack similar values under the same value category
             </p>
-            <button
-              onClick={openAdd}
-              style={{
-                background: "#007bff",
-                color: "#fff",
-                border: "none",
-                borderRadius: "24px",
-                padding: "12px 28px",
-                fontSize: "15px",
-                fontWeight: "700",
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(0,123,255,0.3)",
-                transition: "0.2s transform",
-              }}
-              onMouseOver={(e) =>
-                (e.currentTarget.style.transform = "translateY(-2px)")
-              }
-              onMouseOut={(e) => (e.currentTarget.style.transform = "none")}
-            >
+            <button onClick={openAdd} className="btn-merge-action" style={{ padding: "12px 26px", borderRadius: "10px" }}>
               Merge values
             </button>
           </div>
         ) : (
           Object.entries(grouped).map(([type, typeRules]) => (
-            <div
-              key={type}
-              style={{
-                background: "#fff",
-                border: "1px solid #e1e3e5",
-                borderRadius: "8px",
-                overflow: "hidden",
-              }}
-            >
+            <div key={type} className="merge-group-card">
               {/* Group header */}
-              <div
-                style={{
-                  padding: "12px 16px",
-                  background: "#fafafa",
-                  borderBottom: "1px solid #e1e3e5",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
+              <div className="merge-group-header">
                 <svg
                   viewBox="0 0 20 20"
-                  style={{ width: "14px", height: "14px", fill: "#5c5f62" }}
+                  style={{ width: "15px", height: "15px", fill: "#5B21B6" }}
                 >
                   <path d="M3 16h4v-2H3v2zm0-5h9V9H3v2zm0-5h14V4H3v2zm6 10h8v-2H9v2zm5-5h3V9h-3v2z" />
                 </svg>
-                <s-text variant="headingSm" fontWeight="bold">
+                <span style={{ fontSize: "14.5px", fontWeight: "700", color: "#1E1B4B" }}>
                   {type}
-                </s-text>
-                <span
-                  style={{
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    background: "#e4e5e7",
-                    fontSize: "11px",
-                    color: "#6d7175",
-                    fontWeight: "600",
-                  }}
-                >
+                </span>
+                <span className="merge-group-badge">
                   {typeRules.length} {typeRules.length === 1 ? "rule" : "rules"}
                 </span>
               </div>
 
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <table className="merge-table">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #f1f2f4" }}>
-                    <th
-                      style={{
-                        padding: "10px 16px",
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        color: "#6d7175",
-                        textAlign: "left",
-                      }}
-                    >
-                      Show as (Target Value)
-                    </th>
-                    <th
-                      style={{
-                        padding: "10px 16px",
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        color: "#6d7175",
-                        textAlign: "left",
-                      }}
-                    >
-                      Raw values to merge
-                    </th>
-                    <th
-                      style={{
-                        padding: "10px 16px",
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        color: "#6d7175",
-                        textAlign: "center",
-                      }}
-                    >
-                      Status
-                    </th>
-                    <th
-                      style={{
-                        padding: "10px 16px",
-                        fontWeight: "600",
-                        fontSize: "12px",
-                        color: "#6d7175",
-                        textAlign: "right",
-                      }}
-                    >
-                      Actions
-                    </th>
+                  <tr>
+                    <th>Show as (Target Value)</th>
+                    <th>Raw values to merge</th>
+                    <th style={{ textAlign: "center" }}>Status</th>
+                    <th style={{ textAlign: "right" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {typeRules.map((rule) => (
-                    <tr
-                      key={rule.id}
-                      style={{ borderBottom: "1px solid #f1f2f4" }}
-                    >
-                      <td style={{ padding: "14px 16px" }}>
-                        <span
-                          style={{
-                            padding: "4px 10px",
-                            borderRadius: "6px",
-                            backgroundColor: "#e6f5ef",
-                            border: "1px solid #b2dfcc",
-                            color: "#005c3e",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                          }}
-                        >
+                    <tr key={rule.id}>
+                      <td>
+                        <span className="badge-target-val">
                           {rule.targetValue}
                         </span>
                       </td>
-                      <td style={{ padding: "14px 16px" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "6px",
-                          }}
-                        >
+                      <td>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                           {rule.sourceValues.map((val) => (
-                            <span
-                              key={val}
-                              style={{
-                                padding: "2px 8px",
-                                borderRadius: "4px",
-                                backgroundColor: "#f1f2f4",
-                                border: "1px solid #e1e3e5",
-                                fontSize: "12px",
-                                color: "#4a4c4e",
-                              }}
-                            >
+                            <span key={val} className="badge-source-pill">
                               {val}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "center" }}>
+                      <td style={{ textAlign: "center" }}>
                         <div
                           onClick={() => {
                             submit(
@@ -1061,13 +1418,13 @@ export default function MergedValues() {
                             width: "36px",
                             height: "20px",
                             backgroundColor: rule.isActive
-                              ? "#007bff"
-                              : "#c9cccf",
+                              ? "#10B981"
+                              : "#e2e8f0",
                             borderRadius: "10px",
                             position: "relative",
                             cursor: isLoading ? "not-allowed" : "pointer",
                             display: "inline-block",
-                            transition: "background-color 0.2s",
+                            transition: "background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
                             opacity: isLoading ? 0.7 : 1,
                           }}
                         >
@@ -1080,17 +1437,17 @@ export default function MergedValues() {
                               position: "absolute",
                               top: "2px",
                               left: rule.isActive ? "18px" : "2px",
-                              transition: "left 0.2s",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                              transition: "left 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                              boxShadow: "0 1px 3px rgba(30,27,75,0.2)",
                             }}
                           />
                         </div>
                       </td>
-                      <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                      <td>
                         <div
                           style={{
                             display: "flex",
-                            gap: "12px",
+                            gap: "10px",
                             justifyContent: "flex-end",
                             alignItems: "center",
                           }}
@@ -1098,23 +1455,12 @@ export default function MergedValues() {
                           {/* Edit */}
                           <button
                             onClick={() => openEdit(rule)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                            }}
+                            className="row-action-btn-small row-action-edit"
                             title="Edit"
                           >
                             <svg
                               viewBox="0 0 20 20"
-                              style={{
-                                width: "16px",
-                                height: "16px",
-                                fill: "#5c5f62",
-                              }}
+                              style={{ width: "15px", height: "15px" }}
                             >
                               <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828z" />
                               <path d="M3 16h14v2H3v-2z" />
@@ -1123,23 +1469,12 @@ export default function MergedValues() {
                           {/* Delete */}
                           <button
                             onClick={() => handleDelete(rule.id)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              display: "flex",
-                              alignItems: "center",
-                            }}
+                            className="row-action-btn-small row-action-delete"
                             title="Delete"
                           >
                             <svg
                               viewBox="0 0 20 20"
-                              style={{
-                                width: "16px",
-                                height: "16px",
-                                fill: "#d82c0d",
-                              }}
+                              style={{ width: "15px", height: "15px" }}
                             >
                               <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
                             </svg>
@@ -1157,15 +1492,7 @@ export default function MergedValues() {
 
       {/* Pagination Controls */}
       {pagination && pagination.totalPages > 1 && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: "16px",
-            padding: "24px 0",
-          }}
-        >
+        <div className="pagination-container">
           <button
             disabled={pagination.currentPage <= 1 || isLoading}
             onClick={() => {
@@ -1173,52 +1500,21 @@ export default function MergedValues() {
               u.searchParams.set("page", pagination.currentPage - 1);
               navigate(u.pathname + u.search);
             }}
-            style={{
-              background: "#fff",
-              border: "1px solid #c9cccf",
-              borderRadius: "4px",
-              padding: "6px 16px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor:
-                pagination.currentPage <= 1 || isLoading
-                  ? "not-allowed"
-                  : "pointer",
-              opacity: pagination.currentPage <= 1 || isLoading ? 0.5 : 1,
-            }}
+            className="pagination-btn"
           >
             Previous
           </button>
-          <span
-            style={{ fontSize: "14px", fontWeight: "500", color: "#202223" }}
-          >
+          <span style={{ fontSize: "14px", fontWeight: "600", color: "#1E1B4B" }}>
             Page {pagination.currentPage} of {pagination.totalPages}
           </span>
           <button
-            disabled={
-              pagination.currentPage >= pagination.totalPages || isLoading
-            }
+            disabled={pagination.currentPage >= pagination.totalPages || isLoading}
             onClick={() => {
               const u = new URL(window.location.href);
               u.searchParams.set("page", pagination.currentPage + 1);
               navigate(u.pathname + u.search);
             }}
-            style={{
-              background: "#fff",
-              border: "1px solid #c9cccf",
-              borderRadius: "4px",
-              padding: "6px 16px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor:
-                pagination.currentPage >= pagination.totalPages || isLoading
-                  ? "not-allowed"
-                  : "pointer",
-              opacity:
-                pagination.currentPage >= pagination.totalPages || isLoading
-                  ? 0.5
-                  : 1,
-            }}
+            className="pagination-btn"
           >
             Next
           </button>
@@ -1227,39 +1523,8 @@ export default function MergedValues() {
 
       {/* ── Add / Edit Modal ─────────────────────────────────────── */}
       {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 99999,
-            fontFamily:
-              "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowModal(false);
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "16px",
-              padding: "40px 48px",
-              width: "100%",
-              maxWidth: "800px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.12)",
-              position: "relative",
-              display: "flex",
-              flexDirection: "column",
-              gap: "24px",
-            }}
-          >
+        <div className="merged-modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
+          <div className="merged-modal-card">
             <button
               onClick={() => setShowModal(false)}
               style={{
@@ -1272,43 +1537,15 @@ export default function MergedValues() {
                 padding: "4px",
               }}
             >
-              <svg
-                viewBox="0 0 20 20"
-                style={{ width: "20px", height: "20px", fill: "#c9cccf" }}
-              >
+              <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#c9cccf" }}>
                 <path d="M11.414 10l4.293-4.293a1 1 0 1 0-1.414-1.414L10 8.586 5.707 4.293a1 1 0 0 0-1.414 1.414L8.586 10l-4.293 4.293a1 1 0 1 0 1.414 1.414L10 11.414l4.293 4.293a1 1 0 0 0 1.414-1.414L11.414 10z" />
               </svg>
             </button>
 
-            <h2
-              style={{
-                margin: "0",
-                fontSize: "20px",
-                fontWeight: "700",
-                color: "#3f4246",
-              }}
-            >
-              Define merged values
-            </h2>
+            <h2 className="merged-modal-title">Define merged values</h2>
 
-            <div
-              style={{
-                background: "#f4f6f8",
-                borderLeft: "3px solid #007bff",
-                padding: "12px 16px",
-                borderRadius: "4px",
-                fontSize: "13px",
-                color: "#6d7175",
-                lineHeight: "1.5",
-              }}
-            >
-              <strong
-                style={{
-                  color: "#202223",
-                  display: "block",
-                  marginBottom: "4px",
-                }}
-              >
+            <div className="merged-modal-note">
+              <strong style={{ color: "#1E1B4B", display: "block", marginBottom: "4px" }}>
                 Note:
               </strong>
               Do not merge one value several times. For example, it's impossible
@@ -1318,16 +1555,7 @@ export default function MergedValues() {
 
             {/* Title */}
             <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#8c9196",
-                  marginBottom: "6px",
-                }}
-              >
-                Title
-              </label>
+              <label className="merged-modal-input-label">Title</label>
               <input
                 type="text"
                 placeholder="Title for this group"
@@ -1335,29 +1563,29 @@ export default function MergedValues() {
                 onChange={(e) => setFilterTitle(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "12px 20px",
-                  background: "#f4f8ff",
-                  border: "none",
-                  borderRadius: "20px",
-                  fontSize: "13px",
-                  color: "#007bff",
+                  padding: "10px 16px",
+                  background: "#ffffff",
+                  border: "1px solid rgba(30, 27, 75, 0.12)",
+                  borderRadius: "10px",
+                  fontSize: "13.5px",
+                  color: "#1E1B4B",
                   outline: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#5B21B6";
+                  e.target.style.boxShadow = "0 0 0 3px rgba(91, 33, 182, 0.1)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "rgba(30, 27, 75, 0.12)";
+                  e.target.style.boxShadow = "none";
                 }}
               />
             </div>
 
             {/* Option Type */}
             <div style={{ zIndex: 101 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#8c9196",
-                  marginBottom: "6px",
-                }}
-              >
-                Option type
-              </label>
+              <label className="merged-modal-input-label">Option type</label>
               <OptionTypeDropdown
                 value={filterType}
                 onChange={(newType) => {
@@ -1369,14 +1597,7 @@ export default function MergedValues() {
             </div>
 
             {/* Value Rows */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                zIndex: 100,
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", zIndex: 100 }}>
               {valueRows.map((row, index) => {
                 // Determine suggestions based on filterType
                 let suggestions = [];
@@ -1425,13 +1646,21 @@ export default function MergedValues() {
                       }
                       style={{
                         flex: "3",
-                        padding: "12px 20px",
-                        background: "#f4f8ff",
-                        border: "none",
-                        borderRadius: "20px",
-                        fontSize: "13px",
-                        color: "#007bff",
+                        padding: "10px 16px",
+                        background: "#ffffff",
+                        border: "1px solid rgba(30, 27, 75, 0.12)",
+                        borderRadius: "10px",
+                        fontSize: "13.5px",
+                        color: "#1E1B4B",
                         outline: "none",
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = "#5B21B6";
+                        e.target.style.boxShadow = "0 0 0 3px rgba(91, 33, 182, 0.1)";
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = "rgba(30, 27, 75, 0.12)";
+                        e.target.style.boxShadow = "none";
                       }}
                     />
                     {valueRows.length > 1 && !editingRule && (
@@ -1441,17 +1670,24 @@ export default function MergedValues() {
                           background: "none",
                           border: "none",
                           cursor: "pointer",
-                          padding: "4px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "8px",
+                          color: "#8c9196",
+                          transition: "all 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(219, 58, 93, 0.08)";
+                          e.currentTarget.style.color = "#DB3A5D";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "#8c9196";
                         }}
                       >
-                        <svg
-                          viewBox="0 0 20 20"
-                          style={{
-                            width: "16px",
-                            height: "16px",
-                            fill: "#d82c0d",
-                          }}
-                        >
+                        <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}>
                           <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM6 9v2h8V9H6z" />
                         </svg>
                       </button>
@@ -1462,26 +1698,8 @@ export default function MergedValues() {
 
               {!editingRule && (
                 <div style={{ marginTop: "4px" }}>
-                  <button
-                    onClick={handleAddRow}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      background: "#007bff",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "20px",
-                      padding: "8px 16px",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <svg
-                      viewBox="0 0 20 20"
-                      style={{ width: "14px", height: "14px", fill: "#fff" }}
-                    >
+                  <button onClick={handleAddRow} className="btn-merge-action" style={{ fontSize: "14.5px", padding: "12px 24px", borderRadius: "10px" }}>
+                    <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "#fff" }}>
                       <path d="M11 9H15V11H11V15H9V11H5V9H9V5H11V9Z" />
                     </svg>
                     Add merged value
@@ -1491,44 +1709,11 @@ export default function MergedValues() {
             </div>
 
             {/* Footer Buttons */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "16px",
-                marginTop: "16px",
-              }}
-            >
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  background: "#fff",
-                  color: "#a4a8ad",
-                  border: "1px solid #e1e3e5",
-                  borderRadius: "24px",
-                  padding: "10px 32px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                }}
-              >
-                CANCEL
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "16px", marginTop: "16px" }}>
+              <button onClick={() => setShowModal(false)} className="btn-reorder-cancel">
+                Cancel
               </button>
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading}
-                style={{
-                  background: "#007bff",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "24px",
-                  padding: "10px 48px",
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  opacity: isLoading ? 0.7 : 1,
-                }}
-              >
+              <button onClick={handleSubmit} disabled={isLoading} className="btn-reorder-save">
                 {isLoading ? "Saving..." : "OK"}
               </button>
             </div>
@@ -1538,86 +1723,23 @@ export default function MergedValues() {
 
       {/* Delete Confirmation Modal */}
       {deletingId && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "8px",
-              width: "400px",
-              padding: "24px",
-              boxShadow: "0 4px 24px rgba(0,0,0,0.15)",
-            }}
-          >
-            <h2
-              style={{
-                margin: "0 0 16px 0",
-                fontSize: "16px",
-                color: "#202223",
-              }}
-            >
-              Delete merged value?
-            </h2>
-            <p
-              style={{
-                margin: "0 0 24px 0",
-                fontSize: "14px",
-                color: "#6d7175",
-              }}
-            >
-              Are you sure you want to delete this merged value? This action
-              cannot be undone.
+        <div className="merged-modal-overlay" onClick={(e) => e.target === e.currentTarget && setDeletingId(null)}>
+          <div className="delete-modal-card">
+            <h2 className="delete-modal-title">Delete merged value?</h2>
+            <p className="delete-modal-body">
+              Are you sure you want to delete this merged value? This action cannot be undone.
             </p>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "12px",
-              }}
-            >
-              <button
-                onClick={() => setDeletingId(null)}
-                disabled={isLoading}
-                style={{
-                  background: "#fff",
-                  color: "#202223",
-                  border: "1px solid #c9cccf",
-                  borderRadius: "4px",
-                  padding: "8px 16px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  opacity: isLoading ? 0.7 : 1,
-                }}
-              >
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button onClick={() => setDeletingId(null)} disabled={isLoading} className="btn-reorder-cancel">
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={isLoading}
-                style={{
-                  background: "#d82c0d",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  padding: "8px 16px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  opacity: isLoading ? 0.7 : 1,
-                }}
+                className="btn-reorder-save"
+                style={{ background: "#DB3A5D", boxShadow: "0 4px 12px rgba(219, 58, 93, 0.15)" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "#b91c1c"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "#DB3A5D"}
               >
                 {isLoading ? "Deleting..." : "Delete"}
               </button>

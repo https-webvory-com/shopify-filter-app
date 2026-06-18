@@ -592,7 +592,6 @@ export default function PinningEditor() {
         style={{
           fontFamily: "Inter, sans-serif",
           background: "#f8f9fa",
-          minHeight: "100vh",
           padding: "20px",
         }}
       >
@@ -672,7 +671,7 @@ export default function PinningEditor() {
               onClick={handleSave}
               disabled={isSaving}
               style={{
-                background: "#007bff",
+                background: "#5B21B6",
                 color: "#fff",
                 border: "none",
                 padding: "8px 16px",
@@ -710,9 +709,9 @@ export default function PinningEditor() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
                 {searchQueries.map(q => (
                   <div key={q} style={{ 
-                    background: "#e0f2fe", 
-                    color: "#0369a1",
-                    border: "1px solid #bae6fd",
+                    background: "#ede9fe", 
+                    color: "#4C1D95",
+                    border: "1px solid #ddd6fe",
                     padding: "4px 10px", 
                     borderRadius: "16px",
                     fontSize: "13px",
@@ -728,7 +727,7 @@ export default function PinningEditor() {
                         border: "none",
                         cursor: "pointer",
                         padding: 0,
-                        color: "#0369a1",
+                        color: "#4C1D95",
                         display: "flex"
                       }}
                     >
@@ -801,7 +800,7 @@ export default function PinningEditor() {
                   alignItems: "center",
                   gap: "8px",
                   fontSize: "14px",
-                  color: "#007bff",
+                  color: "#5B21B6",
                   fontWeight: "500",
                   cursor: "pointer",
                 }}
@@ -811,7 +810,7 @@ export default function PinningEditor() {
                   checked={applyToInstantSearch}
                   onChange={(e) => setApplyToInstantSearch(e.target.checked)}
                   style={{
-                    accentColor: "#007bff",
+                    accentColor: "#5B21B6",
                     width: "16px",
                     height: "16px",
                     cursor: "pointer",
@@ -835,7 +834,7 @@ export default function PinningEditor() {
                   checked={applyToSearchResults}
                   onChange={(e) => setApplyToSearchResults(e.target.checked)}
                   style={{
-                    accentColor: "#007bff",
+                    accentColor: "#5B21B6",
                     width: "16px",
                     height: "16px",
                     cursor: "pointer",
@@ -899,7 +898,7 @@ export default function PinningEditor() {
               </div>
               <button
                 style={{
-                  background: "#007bff",
+                  background: "#5B21B6",
                   color: "#fff",
                   border: "none",
                   padding: "10px 24px",
@@ -970,7 +969,7 @@ export default function PinningEditor() {
                           <div className="pin-btn-overlay" style={{ position: "absolute", top: "8px", right: "8px" }}>
                             <button 
                               onClick={() => handlePin(prod)} 
-                              style={{ width: "32px", height: "32px", background: "#007bff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", color: "#fff", boxShadow: "0 2px 6px rgba(0,123,255,0.4)", transition: "transform 0.1s" }}
+                              style={{ width: "32px", height: "32px", background: "#5B21B6", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", color: "#fff", boxShadow: "0 2px 6px rgba(0,123,255,0.4)", transition: "transform 0.1s" }}
                               onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.1)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                               onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.9)"}
@@ -1126,8 +1125,8 @@ export default function PinningEditor() {
                   }}
                   style={{
                     background: "transparent",
-                    border: "1px solid #007bff",
-                    color: "#007bff",
+                    border: "1px solid #5B21B6",
+                    color: "#5B21B6",
                     padding: "8px 20px",
                     borderRadius: "24px",
                     fontSize: "14px",
@@ -1158,12 +1157,12 @@ export default function PinningEditor() {
                       alignItems: "center",
                       gap: "8px",
                       background:
-                        selectedPinnedIds.length > 0 ? "#eff6ff" : "#f8fafc",
+                        selectedPinnedIds.length > 0 ? "#f5f3ff" : "#f8fafc",
                       border: "none",
                       padding: "6px 16px",
                       borderRadius: "24px",
                       color:
-                        selectedPinnedIds.length > 0 ? "#007bff" : "#94a3b8",
+                        selectedPinnedIds.length > 0 ? "#5B21B6" : "#94a3b8",
                       fontSize: "13px",
                       fontWeight: "600",
                       cursor:
@@ -1176,7 +1175,7 @@ export default function PinningEditor() {
                     <div
                       style={{
                         background:
-                          selectedPinnedIds.length > 0 ? "#007bff" : "#cbd5e1",
+                          selectedPinnedIds.length > 0 ? "#5B21B6" : "#cbd5e1",
                         color: "#fff",
                         borderRadius: "50%",
                         width: "20px",
@@ -1210,12 +1209,12 @@ export default function PinningEditor() {
                       alignItems: "center",
                       gap: "8px",
                       background:
-                        selectedPinnedIds.length > 0 ? "#eff6ff" : "#f8fafc",
+                        selectedPinnedIds.length > 0 ? "#f5f3ff" : "#f8fafc",
                       border: "none",
                       padding: "6px 16px",
                       borderRadius: "24px",
                       color:
-                        selectedPinnedIds.length > 0 ? "#007bff" : "#94a3b8",
+                        selectedPinnedIds.length > 0 ? "#5B21B6" : "#94a3b8",
                       fontSize: "13px",
                       fontWeight: "600",
                       cursor:
@@ -1228,7 +1227,7 @@ export default function PinningEditor() {
                     <div
                       style={{
                         background:
-                          selectedPinnedIds.length > 0 ? "#007bff" : "#cbd5e1",
+                          selectedPinnedIds.length > 0 ? "#5B21B6" : "#cbd5e1",
                         color: "#fff",
                         borderRadius: "50%",
                         width: "20px",
@@ -1307,8 +1306,8 @@ export default function PinningEditor() {
                         style={{
                           display: "flex",
                           flexDirection: "column",
-                          background: selectedPinnedIds.includes(prod.id) ? "#f0f7ff" : "#fff",
-                          border: selectedPinnedIds.includes(prod.id) ? "2px solid #007bff" : "1px solid #e2e8f0",
+                          background: selectedPinnedIds.includes(prod.id) ? "#f5f3ff" : "#fff",
+                          border: selectedPinnedIds.includes(prod.id) ? "2px solid #5B21B6" : "1px solid #e2e8f0",
                           borderRadius: "8px",
                           overflow: "hidden",
                           cursor: "grab",
@@ -1322,7 +1321,7 @@ export default function PinningEditor() {
                             type="checkbox"
                             checked={selectedPinnedIds.includes(prod.id)}
                             onChange={() => toggleSelection(prod.id)}
-                            style={{ accentColor: "#007bff", width: "16px", height: "16px", cursor: "pointer", margin: 0 }}
+                            style={{ accentColor: "#5B21B6", width: "16px", height: "16px", cursor: "pointer", margin: 0 }}
                           />
                         </div>
                         <div style={{ position: "absolute", top: "6px", right: "6px", zIndex: 10 }}>

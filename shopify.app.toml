@@ -1,6 +1,6 @@
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-application_url = "https://aisearchfilter.webvory.com"
+application_url = "https://fees-landing-compression-rep.trycloudflare.com"
 embedded = true
 handle = "ai-smart-search-filter"
 
@@ -22,15 +22,29 @@ api_version = "2026-07"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+    
+ [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = ["customers/data_request"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = ["customers/redact"]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = ["shop/redact"]
+
+
 [access_scopes]
 scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
 redirect_urls = [
-  "https://aisearchfilter.webvory.com/api/auth"
+  "https://fees-landing-compression-rep.trycloudflare.com/api/auth"
 ]
 
 [app_proxy]
-url = "https://aisearchfilter.webvory.com"
+url = "https://fees-landing-compression-rep.trycloudflare.com"
 subpath = "collection-filter-pro"
 prefix = "apps"

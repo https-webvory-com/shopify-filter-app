@@ -21,7 +21,7 @@ export default function App() {
         <s-link href="/app/search">Search</s-link>
         <s-link href="/app/collections">Collections</s-link>
         <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/upgrade">Upgrade</s-link>
+        {/* <s-link href="/app/upgrade">Upgrade</s-link> */}
       </s-app-nav>
       <Outlet />
     </AppProvider>

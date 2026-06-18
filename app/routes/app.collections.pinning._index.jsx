@@ -26,7 +26,9 @@ export const action = async ({ request }) => {
 
   if (actionType === "duplicateRule") {
     const id = formData.get("id");
-    const originalRule = await prisma.pinnedProductRule.findFirst({ where: { id, shop } });
+    const originalRule = await prisma.pinnedProductRule.findFirst({
+      where: { id, shop },
+    });
     if (originalRule) {
       await prisma.pinnedProductRule.create({
         data: {
@@ -36,7 +38,7 @@ export const action = async ({ request }) => {
           applyToAll: originalRule.applyToAll,
           collections: originalRule.collections,
           products: originalRule.products,
-        }
+        },
       });
       return { success: true, action: "duplicateRule" };
     }
@@ -107,13 +109,13 @@ export default function PinningIndex() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.pin-dropdown-inside')) {
+      if (!e.target.closest(".pin-dropdown-inside")) {
         setIsStatusDropdownOpen(false);
         setIsSortDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleToggleStatus = (id, currentStatus) => {
@@ -223,13 +225,150 @@ export default function PinningIndex() {
         </button>
       </ui-title-bar>
 
+      <style>{`
+        .merch-toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: #ffffff !important;
+          padding: 16px 24px !important;
+          border-radius: 12px !important;
+          box-shadow: 0 0px 3px rgba(30, 27, 75, 0.05) !important;
+          border: 1px solid rgba(30, 27, 75, 0.05) !important;
+        }
+
+        .merch-back-link {
+          color: #5B21B6 !important;
+          text-decoration: none;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.2s ease;
+          width: fit-content;
+          font-size: 14px;
+        }
+        .merch-back-link:hover {
+          color: #1E1B4B !important;
+          transform: translateX(-2px);
+        }
+
+        .merch-btn-secondary {
+          display: flex;
+          align-items: center;
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          cursor: pointer !important;
+          color: #1E1B4B !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+        .merch-btn-secondary:hover {
+          background: rgba(91, 33, 182, 0.04) !important;
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+        }
+
+        .merch-btn-primary {
+          display: flex;
+          align-items: center;
+          background: #5B21B6 !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          cursor: pointer !important;
+          color: #ffffff !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          border: none !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 2px 4px rgba(91, 33, 182, 0.15) !important;
+        }
+        .merch-btn-primary:hover {
+          background: #1e1b4b !important;
+          box-shadow: 0 4px 8px rgba(30, 27, 75, 0.2) !important;
+        }
+
+        .merch-search-container {
+          display: flex;
+          align-items: center;
+          background: #ffffff !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          padding: 8px 16px !important;
+          border-radius: 10px !important;
+          width: 250px !important;
+          transition: all 0.2s ease !important;
+        }
+        .merch-search-container:focus-within {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 2px rgba(91, 33, 182, 0.1) !important;
+        }
+
+        .merch-icon-btn {
+          background: none !important;
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          border-radius: 10px !important;
+          width: 38px !important;
+          height: 38px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          cursor: pointer !important;
+          color: #64748b !important;
+          transition: all 0.2s ease !important;
+        }
+        .merch-icon-btn:hover {
+          border-color: #5B21B6 !important;
+          color: #5B21B6 !important;
+          background: rgba(91, 33, 182, 0.04) !important;
+        }
+
+        /* Empty State */
+        .merch-empty-heading {
+          font-size: 38px !important;
+          font-weight: 800 !important;
+          color: #1E1B4B !important;
+          margin-bottom: 16px !important;
+          letter-spacing: -0.5px !important;
+        }
+        .merch-empty-desc {
+          font-size: 15px !important;
+          color: #4b5563 !important;
+          line-height: 1.6 !important;
+          margin-bottom: 32px !important;
+          max-width: 650px !important;
+        }
+
+        /* Modal custom light scrollbar */
+        .pin-modal-card::-webkit-scrollbar {
+          width: 6px !important;
+          height: 6px !important;
+        }
+        .pin-modal-card::-webkit-scrollbar-track {
+          background: rgba(30, 27, 75, 0.02) !important;
+        }
+        .pin-modal-card::-webkit-scrollbar-thumb {
+          background: rgba(30, 27, 75, 0.15) !important;
+          border-radius: 6px !important;
+        }
+        .pin-modal-card::-webkit-scrollbar-thumb:hover {
+          background: rgba(30, 27, 75, 0.3) !important;
+        }
+        .pin-modal-card input:focus {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 2px rgba(91, 33, 182, 0.1) !important;
+        }
+      `}</style>
+
       <div
         style={{
           marginBottom: "20px",
           display: "flex",
           alignItems: "center",
           gap: "8px",
-          fontSize: "14px",
         }}
       >
         <a
@@ -238,14 +377,7 @@ export default function PinningIndex() {
             e.preventDefault();
             navigate("/app/collections");
           }}
-          style={{
-            color: "#006e52",
-            textDecoration: "none",
-            fontWeight: "500",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
+          className="merch-back-link"
         >
           <svg
             style={{ width: "16px", height: "16px" }}
@@ -256,7 +388,7 @@ export default function PinningIndex() {
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth="2"
+              strokeWidth="2.5"
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             ></path>
           </svg>
@@ -268,39 +400,20 @@ export default function PinningIndex() {
         style={{
           fontFamily: "Inter, sans-serif",
           background: "#f8f9fa",
-          minHeight: "100vh",
           padding: "20px",
         }}
       >
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: "#fff",
-            padding: "12px 24px",
-            borderRadius: "8px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            marginBottom: "20px",
-          }}
-        >
+        <div className="merch-toolbar">
           <div style={{ display: "flex", gap: "12px" }}>
             {/* All rules dropdown */}
-            <div style={{ position: "relative" }} className="pin-dropdown-inside">
+            <div
+              style={{ position: "relative" }}
+              className="pin-dropdown-inside"
+            >
               <div
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  background: "#f1f5f9",
-                  padding: "8px 16px",
-                  borderRadius: "20px",
-                  cursor: "pointer",
-                  color: "#007bff",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                }}
+                className="merch-btn-secondary"
               >
                 {statusFilter === "all"
                   ? "All pins"
@@ -344,7 +457,7 @@ export default function PinningIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "all" ? "#007bff" : "#334155",
+                      color: statusFilter === "all" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "all" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -359,7 +472,7 @@ export default function PinningIndex() {
                       style={{
                         width: "16px",
                         height: "16px",
-                        color: statusFilter === "all" ? "#007bff" : "#cbd5e1",
+                        color: statusFilter === "all" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={statusFilter === "all" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -385,7 +498,7 @@ export default function PinningIndex() {
                       alignItems: "center",
                       cursor: "pointer",
                       fontSize: "14px",
-                      color: statusFilter === "active" ? "#007bff" : "#334155",
+                      color: statusFilter === "active" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "active" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -401,7 +514,7 @@ export default function PinningIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "active" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "active" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={statusFilter === "active" ? "currentColor" : "none"}
                       stroke="currentColor"
@@ -428,7 +541,7 @@ export default function PinningIndex() {
                       cursor: "pointer",
                       fontSize: "14px",
                       color:
-                        statusFilter === "inactive" ? "#007bff" : "#334155",
+                        statusFilter === "inactive" ? "#5B21B6" : "#1E1B4B",
                       fontWeight: statusFilter === "inactive" ? "500" : "400",
                     }}
                     onMouseEnter={(e) =>
@@ -444,7 +557,7 @@ export default function PinningIndex() {
                         width: "16px",
                         height: "16px",
                         color:
-                          statusFilter === "inactive" ? "#007bff" : "#cbd5e1",
+                          statusFilter === "inactive" ? "#5B21B6" : "rgba(91, 33, 182, 0.2)",
                       }}
                       fill={
                         statusFilter === "inactive" ? "currentColor" : "none"
@@ -465,20 +578,7 @@ export default function PinningIndex() {
             </div>
 
             {/* Create rule button */}
-            <div
-              onClick={handleCreateNew}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "#007bff",
-                padding: "8px 16px",
-                borderRadius: "20px",
-                cursor: "pointer",
-                color: "#fff",
-                fontSize: "14px",
-                fontWeight: "600",
-              }}
-            >
+            <div onClick={handleCreateNew} className="merch-btn-primary">
               Create pin
               <div
                 style={{
@@ -501,17 +601,8 @@ export default function PinningIndex() {
           </div>
 
           {/* Right side search */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "#f1f5f9",
-                padding: "8px 16px",
-                borderRadius: "20px",
-                width: "250px",
-              }}
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div className="merch-search-container">
               <svg
                 style={{
                   width: "16px",
@@ -526,7 +617,7 @@ export default function PinningIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 ></path>
               </svg>
@@ -547,21 +638,27 @@ export default function PinningIndex() {
             </div>
 
             {/* Sort Dropdown */}
-            <div style={{ position: "relative" }} className="pin-dropdown-inside">
+            <div
+              style={{ position: "relative" }}
+              className="pin-dropdown-inside"
+            >
               <button
                 onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#64748b",
-                  display: "flex",
-                  alignItems: "center",
-                }}
+                className="merch-icon-btn"
                 title="Sort rules"
               >
-                <svg style={{ width: "20px", height: "20px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                <svg
+                  style={{ width: "20px", height: "20px" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.5"
+                    d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"
+                  />
                 </svg>
               </button>
               {isSortDropdownOpen && (
@@ -580,18 +677,44 @@ export default function PinningIndex() {
                   }}
                 >
                   <div
-                    onClick={() => { setSortOption("recent"); setIsSortDropdownOpen(false); }}
-                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "recent" ? "#007bff" : "#334155", fontWeight: sortOption === "recent" ? "500" : "400" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => {
+                      setSortOption("recent");
+                      setIsSortDropdownOpen(false);
+                    }}
+                    style={{
+                      padding: "12px 16px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      color: sortOption === "recent" ? "#5B21B6" : "#1E1B4B",
+                      fontWeight: sortOption === "recent" ? "500" : "400",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "#f8fafc")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
                   >
                     Newest first
                   </div>
                   <div
-                    onClick={() => { setSortOption("oldest"); setIsSortDropdownOpen(false); }}
-                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "oldest" ? "#007bff" : "#334155", fontWeight: sortOption === "oldest" ? "500" : "400" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => {
+                      setSortOption("oldest");
+                      setIsSortDropdownOpen(false);
+                    }}
+                    style={{
+                      padding: "12px 16px",
+                      cursor: "pointer",
+                      fontSize: "14px",
+                      color: sortOption === "oldest" ? "#5B21B6" : "#1E1B4B",
+                      fontWeight: sortOption === "oldest" ? "500" : "400",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "#f8fafc")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
                   >
                     Oldest first
                   </div>
@@ -601,12 +724,7 @@ export default function PinningIndex() {
 
             <button
               onClick={() => setIsFilterModalOpen(true)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-              }}
+              className="merch-icon-btn"
             >
               <svg
                 style={{ width: "20px", height: "20px" }}
@@ -617,19 +735,14 @@ export default function PinningIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 ></path>
               </svg>
             </button>
             <button
               onClick={() => setIsCustomizeColumnsOpen(true)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-              }}
+              className="merch-icon-btn"
             >
               <svg
                 style={{ width: "20px", height: "20px" }}
@@ -640,13 +753,13 @@ export default function PinningIndex() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
                 ></path>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                 ></path>
               </svg>
@@ -711,8 +824,8 @@ export default function PinningIndex() {
                     onClick={() => setDeleteRuleId(null)}
                     style={{
                       background: "#fff",
-                      border: "1px solid #cbd5e1",
-                      color: "#334155",
+                      border: "1px solid rgba(91, 33, 182, 0.2)",
+                      color: "#1E1B4B",
                       padding: "8px 16px",
                       borderRadius: "6px",
                       fontSize: "14px",
@@ -761,9 +874,10 @@ export default function PinningIndex() {
             >
               <div
                 onClick={(e) => e.stopPropagation()}
+                className="pin-modal-card"
                 style={{
                   background: "#fff",
-                  borderRadius: "12px",
+                  borderRadius: "16px",
                   width: "450px",
                   maxWidth: "90%",
                   boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)",
@@ -775,20 +889,20 @@ export default function PinningIndex() {
                 {/* Header */}
                 <div
                   style={{
-                    background: "#f0f7ff",
-                    padding: "16px 20px",
+                    background: "rgba(91, 33, 182, 0.04)",
+                    padding: "18px 24px",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    borderBottom: "1px solid #e0f2fe",
+                    borderBottom: "1px solid rgba(91, 33, 182, 0.08)",
                   }}
                 >
                   <h2
                     style={{
                       margin: 0,
                       fontSize: "16px",
-                      fontWeight: "600",
-                      color: "#007bff",
+                      fontWeight: "700",
+                      color: "#1E1B4B",
                     }}
                   >
                     Select collections to apply
@@ -796,18 +910,29 @@ export default function PinningIndex() {
                   <button
                     onClick={() => setIsCreateModalOpen(false)}
                     style={{
-                      background: "none",
+                      background: "rgba(30, 27, 75, 0.05)",
                       border: "none",
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      padding: "4px",
+                      width: "28px",
+                      height: "28px",
+                      borderRadius: "50%",
                       color: "#64748b",
+                      transition: "all 0.2s",
                     }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(239, 68, 68, 0.1)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(30, 27, 75, 0.05)")
+                    }
                   >
                     <svg
-                      style={{ width: "20px", height: "20px" }}
+                      style={{ width: "16px", height: "16px" }}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -815,7 +940,7 @@ export default function PinningIndex() {
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth="2"
+                        strokeWidth="2.5"
                         d="M6 18L18 6M6 6l12 12"
                       ></path>
                     </svg>
@@ -828,17 +953,28 @@ export default function PinningIndex() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      background: "#f8fafc",
-                      padding: "10px 16px",
-                      borderRadius: "24px",
-                      border: "1px solid #e2e8f0",
+                      background: "#ffffff",
+                      padding: "8px 16px",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(30, 27, 75, 0.12)",
+                      transition: "all 0.2s",
+                    }}
+                    onFocusWithin={(e) => {
+                      e.currentTarget.style.borderColor = "#5B21B6";
+                      e.currentTarget.style.boxShadow =
+                        "0 0 0 2px rgba(91, 33, 182, 0.1)";
+                    }}
+                    onBlurWithin={(e) => {
+                      e.currentTarget.style.borderColor =
+                        "rgba(30, 27, 75, 0.12)";
+                      e.currentTarget.style.boxShadow = "none";
                     }}
                   >
                     <svg
                       style={{
                         width: "18px",
                         height: "18px",
-                        color: "#007bff",
+                        color: "#64748b",
                         marginRight: "12px",
                       }}
                       fill="none"
@@ -848,7 +984,7 @@ export default function PinningIndex() {
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth="2"
+                        strokeWidth="2.5"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                       ></path>
                     </svg>
@@ -861,10 +997,9 @@ export default function PinningIndex() {
                         border: "none",
                         background: "transparent",
                         outline: "none",
-                        fontSize: "15px",
-                        color: "#334155",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
                         width: "100%",
-                        fontWeight: "500",
                       }}
                     />
                   </div>
@@ -901,16 +1036,16 @@ export default function PinningIndex() {
                           setCreateCollections([]);
                         }}
                         style={{
-                          width: "18px",
-                          height: "18px",
+                          width: "16px",
+                          height: "16px",
                           cursor: "pointer",
-                          accentColor: "#007bff",
+                          accentColor: "#5B21B6",
                         }}
                       />
                       <span
                         style={{
-                          fontSize: "15px",
-                          color: "#334155",
+                          fontSize: "14px",
+                          color: "#1E1B4B",
                           fontWeight: "600",
                         }}
                       >
@@ -974,16 +1109,16 @@ export default function PinningIndex() {
                             }
                           }}
                           style={{
-                            width: "18px",
-                            height: "18px",
+                            width: "16px",
+                            height: "16px",
                             cursor: "pointer",
-                            accentColor: "#007bff",
+                            accentColor: "#5B21B6",
                           }}
                         />
                         <span
                           style={{
-                            fontSize: "15px",
-                            color: "#334155",
+                            fontSize: "14px",
+                            color: "#1E1B4B",
                             fontWeight: "400",
                           }}
                         >
@@ -1024,14 +1159,22 @@ export default function PinningIndex() {
                     onClick={() => setIsCreateModalOpen(false)}
                     style={{
                       background: "#fff",
-                      border: "1px solid #cbd5e1",
-                      color: "#334155",
+                      border: "1px solid rgba(30, 27, 75, 0.12)",
+                      color: "#1E1B4B",
                       padding: "8px 20px",
-                      borderRadius: "20px",
+                      borderRadius: "10px",
                       fontSize: "14px",
-                      fontWeight: "500",
+                      fontWeight: "600",
                       cursor: "pointer",
+                      transition: "all 0.2s",
                     }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(91, 33, 182, 0.04)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "#fff")
+                    }
                   >
                     Cancel
                   </button>
@@ -1044,17 +1187,36 @@ export default function PinningIndex() {
                       background:
                         !createApplyToAll && createCollections.length === 0
                           ? "#94a3b8"
-                          : "#007bff",
+                          : "#5B21B6",
                       border: "none",
                       color: "#fff",
                       padding: "8px 20px",
-                      borderRadius: "20px",
+                      borderRadius: "10px",
                       fontSize: "14px",
-                      fontWeight: "500",
+                      fontWeight: "600",
                       cursor:
                         !createApplyToAll && createCollections.length === 0
                           ? "not-allowed"
                           : "pointer",
+                      boxShadow:
+                        !createApplyToAll && createCollections.length === 0
+                          ? "none"
+                          : "0 2px 4px rgba(91, 33, 182, 0.15)",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (
+                        !(!createApplyToAll && createCollections.length === 0)
+                      ) {
+                        e.currentTarget.style.background = "#1e1b4b";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (
+                        !(!createApplyToAll && createCollections.length === 0)
+                      ) {
+                        e.currentTarget.style.background = "#5B21B6";
+                      }
                     }}
                   >
                     Continue
@@ -1077,31 +1239,22 @@ export default function PinningIndex() {
           {pinningRules.length === 0 ? (
             <div style={{ padding: "60px 20px", textAlign: "center" }}>
               <h2
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "600",
-                  color: "#333",
-                  marginBottom: "8px",
-                }}
+                className="merch-empty-heading"
+                style={{ fontSize: "20px !important" }}
               >
                 No pinned products yet
               </h2>
-              <p style={{ color: "#666", marginBottom: "20px" }}>
+              <p
+                className="merch-empty-desc"
+                style={{ margin: "0 auto 24px auto" }}
+              >
                 Select specific products to always appear at the top of a
                 collection.
               </p>
               <button
                 onClick={handleCreateNew}
-                style={{
-                  background: "#007bff",
-                  color: "#fff",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: "20px",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                }}
+                className="merch-btn-primary"
+                style={{ margin: "0 auto", padding: "10px 24px !important" }}
               >
                 Add your pins
               </button>
@@ -1130,7 +1283,7 @@ export default function PinningIndex() {
                 style={{
                   fontSize: "16px",
                   fontWeight: "600",
-                  color: "#334155",
+                  color: "#1E1B4B",
                   marginBottom: "8px",
                 }}
               >
@@ -1153,8 +1306,8 @@ export default function PinningIndex() {
                 }}
                 style={{
                   background: "#f1f5f9",
-                  color: "#334155",
-                  border: "1px solid #cbd5e1",
+                  color: "#1E1B4B",
+                  border: "1px solid rgba(91, 33, 182, 0.2)",
                   padding: "8px 16px",
                   borderRadius: "6px",
                   fontSize: "14px",
@@ -1224,7 +1377,7 @@ export default function PinningIndex() {
                                   padding: "16px",
                                   fontSize: "14px",
                                   fontWeight: "500",
-                                  color: "#334155",
+                                  color: "#1E1B4B",
                                 }}
                               >
                                 <span
@@ -1234,7 +1387,7 @@ export default function PinningIndex() {
                                     )
                                   }
                                   style={{
-                                    color: "#007bff",
+                                    color: "#5B21B6",
                                     cursor: "pointer",
                                   }}
                                 >
@@ -1271,8 +1424,8 @@ export default function PinningIndex() {
                                     height: "24px",
                                     background:
                                       rule.status !== false
-                                        ? "#007bff"
-                                        : "#cbd5e1",
+                                        ? "#5B21B6"
+                                        : "rgba(91, 33, 182, 0.2)",
                                     borderRadius: "12px",
                                     position: "relative",
                                     cursor: "pointer",
@@ -1332,7 +1485,7 @@ export default function PinningIndex() {
                                 style={{
                                   padding: "16px",
                                   textAlign: "right",
-                                  color: "#cbd5e1",
+                                  color: "rgba(91, 33, 182, 0.2)",
                                 }}
                               >
                                 <div

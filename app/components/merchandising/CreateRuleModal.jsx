@@ -177,7 +177,25 @@ export default function CreateRuleModal({
 
   return (
     <div onClick={handleClose} style={{ boxSizing: "border-box", position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ boxSizing: "border-box", background: "#fff", width: "100%", maxWidth: "900px", maxHeight: "90vh", overflowY: "auto", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", position: "relative" }}>
+      <style>{`
+        /* Custom scrollbar for modal card */
+        .rule-modal-card::-webkit-scrollbar {
+          width: 6px !important;
+          height: 6px !important;
+        }
+        .rule-modal-card::-webkit-scrollbar-track {
+          background: transparent !important;
+          margin: 12px 0;
+        }
+        .rule-modal-card::-webkit-scrollbar-thumb {
+          background: rgba(30, 27, 75, 0.15) !important;
+          border-radius: 6px !important;
+        }
+        .rule-modal-card::-webkit-scrollbar-thumb:hover {
+          background: rgba(30, 27, 75, 0.3) !important;
+        }
+      `}</style>
+      <div onClick={(e) => e.stopPropagation()} className="rule-modal-card" style={{ boxSizing: "border-box", background: "#fff", width: "100%", maxWidth: "900px", maxHeight: "90vh", overflowY: "auto", overflowX: "hidden", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column", position: "relative" }}>
         
         {/* Modal Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "32px 32px 16px 32px" }}>
@@ -200,7 +218,7 @@ export default function CreateRuleModal({
               value={ruleName}
               onChange={(e) => setRuleName(e.target.value)}
               style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "10px 14px", borderRadius: "6px", fontSize: "14px", color: "#202223", outline: "none", transition: "border-color 0.2s" }}
-              onFocus={(e) => e.target.style.borderColor = "#007bff"}
+              onFocus={(e) => e.target.style.borderColor = "#5B21B6"}
               onBlur={(e) => e.target.style.borderColor = "#c9cccf"}
             />
           </div>
@@ -230,7 +248,7 @@ export default function CreateRuleModal({
                     <div 
                       key={val} 
                       onClick={(e) => e.stopPropagation()}
-                      style={{ display: "flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "6px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "500", cursor: "default" }}
+                      style={{ display: "flex", alignItems: "center", background: "#5B21B6", color: "#fff", padding: "6px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "500", cursor: "default" }}
                     >
                       {val}
                       <div 
@@ -254,13 +272,13 @@ export default function CreateRuleModal({
                   {/* Search Input */}
                   <div style={{ padding: "12px" }}>
                     <div style={{ display: "flex", alignItems: "center", background: "#f8fafc", borderRadius: "20px", padding: "8px 16px" }}>
-                      <svg style={{ width: "16px", height: "16px", color: "#60a5fa", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                      <svg style={{ width: "16px", height: "16px", color: "#5B21B6", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                       <input 
                         type="text" 
                         placeholder="Filter" 
                         value={collectionSearch}
                         onChange={e => setCollectionSearch(e.target.value)}
-                        style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#007bff", width: "100%" }}
+                        style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#5B21B6", width: "100%" }}
                         onClick={e => e.stopPropagation()}
                       />
                     </div>
@@ -272,7 +290,7 @@ export default function CreateRuleModal({
                       onClick={() => { setSelectedCollections([]); }}
                       style={{ padding: "8px 16px", display: "flex", alignItems: "center", cursor: "pointer", gap: "12px" }}
                     >
-                      <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #60a5fa", display: "flex", alignItems: "center", justifyContent: "center", background: selectedCollections.length === 0 ? "#007bff" : "transparent", borderColor: selectedCollections.length === 0 ? "#007bff" : "#cbd5e1" }}>
+                      <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #5B21B6", display: "flex", alignItems: "center", justifyContent: "center", background: selectedCollections.length === 0 ? "#5B21B6" : "transparent", borderColor: selectedCollections.length === 0 ? "#5B21B6" : "#cbd5e1" }}>
                         {selectedCollections.length === 0 && <svg style={{ width: "10px", height: "10px", color: "#fff" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>}
                       </div>
                       <span style={{ fontSize: "14px", color: "#334155" }}>All collections</span>
@@ -294,7 +312,7 @@ export default function CreateRuleModal({
                           onMouseEnter={(e) => e.currentTarget.style.background = "#f8fafc"}
                           onMouseLeave={(e) => e.currentTarget.style.background = "none"}
                         >
-                          <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #60a5fa", display: "flex", alignItems: "center", justifyContent: "center", background: isChecked ? "#007bff" : "transparent", borderColor: isChecked ? "#007bff" : "#cbd5e1" }}>
+                          <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #5B21B6", display: "flex", alignItems: "center", justifyContent: "center", background: isChecked ? "#5B21B6" : "transparent", borderColor: isChecked ? "#5B21B6" : "#cbd5e1" }}>
                             {isChecked && <svg style={{ width: "10px", height: "10px", color: "#fff" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>}
                           </div>
                           <span style={{ fontSize: "14px", color: "#334155" }}>{c.title}</span>
@@ -321,7 +339,7 @@ export default function CreateRuleModal({
             <div 
               style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "6px 10px", borderRadius: "6px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", transition: "border-color 0.2s" }}
               tabIndex={-1}
-              onFocus={(e) => e.currentTarget.style.borderColor = "#007bff"}
+              onFocus={(e) => e.currentTarget.style.borderColor = "#5B21B6"}
               onBlur={(e) => e.currentTarget.style.borderColor = "#c9cccf"}
             >
               {customerTags.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
@@ -391,7 +409,7 @@ export default function CreateRuleModal({
                 value={locales}
                 onChange={(e) => setLocales(e.target.value)}
                 style={{ boxSizing: "border-box", width: "100%", background: "#fff", border: "1px solid #c9cccf", padding: "10px 14px", borderRadius: "6px", fontSize: "14px", color: "#202223", outline: "none" }}
-                onFocus={(e) => e.target.style.borderColor = "#007bff"}
+                onFocus={(e) => e.target.style.borderColor = "#5B21B6"}
                 onBlur={(e) => e.target.style.borderColor = "#c9cccf"}
               />
               <svg style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", color: "#8c9196", pointerEvents: "none" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -407,7 +425,7 @@ export default function CreateRuleModal({
                     type="checkbox" 
                     checked={isDateRangeChecked}
                     onChange={(e) => setIsDateRangeChecked(e.target.checked)}
-                    style={{ appearance: "none", width: "16px", height: "16px", borderRadius: "4px", background: isDateRangeChecked ? "#007bff" : "#fff", border: isDateRangeChecked ? "none" : "1px solid #cbd5e1", cursor: "pointer", margin: 0 }} 
+                    style={{ appearance: "none", width: "16px", height: "16px", borderRadius: "4px", background: isDateRangeChecked ? "#5B21B6" : "#fff", border: isDateRangeChecked ? "none" : "1px solid #cbd5e1", cursor: "pointer", margin: 0 }} 
                   />
                   {isDateRangeChecked && (
                     <svg style={{ position: "absolute", width: "10px", height: "10px", color: "#fff", pointerEvents: "none" }} viewBox="0 0 20 20" fill="currentColor">
@@ -415,7 +433,7 @@ export default function CreateRuleModal({
                     </svg>
                   )}
                 </div>
-                <span style={{ fontSize: "14px", color: "#007bff", fontWeight: "600" }}>Date range</span>
+                <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "600" }}>Date range</span>
                 <TooltipIcon text="Apply this Merchandising rule within a certain time-period." />
               </label>
             </div>
@@ -426,7 +444,7 @@ export default function CreateRuleModal({
                   onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
                   style={{ width: "100%", background: "#f8fafc", color: "#334155", border: "none", padding: "12px 16px", borderRadius: "16px", fontSize: "14px", display: "flex", alignItems: "center", cursor: "pointer" }}
                 >
-                  <svg style={{ width: "16px", height: "16px", color: "#60a5fa", marginRight: "12px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  <svg style={{ width: "16px", height: "16px", color: "#5B21B6", marginRight: "12px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                   {startDate} - {endDate}
                 </div>
 
@@ -442,9 +460,9 @@ export default function CreateRuleModal({
                           Start date <TooltipIcon />
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
                           <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
                         </div>
                         
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
@@ -457,7 +475,7 @@ export default function CreateRuleModal({
                           <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
                           <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
                           <div style={{ padding: "6px" }}>24</div>
-                          <div style={{ padding: "6px", background: "#007bff", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
+                          <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
                           <div style={{ padding: "6px", color: "#94a3b8" }}>26</div><div style={{ padding: "6px", color: "#94a3b8" }}>27</div><div style={{ padding: "6px", color: "#94a3b8" }}>28</div><div style={{ padding: "6px", color: "#94a3b8" }}>29</div><div style={{ padding: "6px", color: "#94a3b8" }}>30</div>
                           <div style={{ padding: "6px", color: "#94a3b8" }}>31</div>
                         </div>
@@ -469,9 +487,9 @@ export default function CreateRuleModal({
                           End date <TooltipIcon />
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
                           <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
+                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
                         </div>
                         
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
@@ -484,7 +502,7 @@ export default function CreateRuleModal({
                           <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
                           <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
                           <div style={{ padding: "6px" }}>24</div>
-                          <div style={{ padding: "6px", background: "#007bff", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
+                          <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
                           <div style={{ padding: "6px", fontWeight: "600" }}>26</div><div style={{ padding: "6px", fontWeight: "600" }}>27</div><div style={{ padding: "6px", fontWeight: "600" }}>28</div><div style={{ padding: "6px", fontWeight: "600" }}>29</div><div style={{ padding: "6px", fontWeight: "600" }}>30</div>
                           <div style={{ padding: "6px", fontWeight: "600" }}>31</div>
                         </div>
@@ -501,13 +519,13 @@ export default function CreateRuleModal({
                       <div style={{ display: "flex", gap: "12px" }}>
                         <button 
                           onClick={() => setIsDatePickerOpen(false)}
-                          style={{ background: "#fff", color: "#007bff", border: "1px solid #007bff", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+                          style={{ background: "#fff", color: "#5B21B6", border: "1px solid #5B21B6", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
                         >
                           Cancel
                         </button>
                         <button 
                           onClick={() => setIsDatePickerOpen(false)}
-                          style={{ background: "#007bff", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+                          style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
                         >
                           Select
                         </button>
@@ -522,14 +540,15 @@ export default function CreateRuleModal({
 
           {/* Rules section */}
           <div>
-            <div style={{ position: "relative", display: "inline-block" }}>
-              <label 
-                style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "#64748b", marginBottom: "8px" }}
-                onMouseEnter={() => setShowRulesTooltip(true)}
-                onMouseLeave={() => setShowRulesTooltip(false)}
-              >
-                Rules <TooltipIcon />
-              </label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <label 
+                  style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "#64748b", marginBottom: "0" }}
+                  onMouseEnter={() => setShowRulesTooltip(true)}
+                  onMouseLeave={() => setShowRulesTooltip(false)}
+                >
+                  Rules <TooltipIcon />
+                </label>
               
               {/* Rules Tooltip */}
               {showRulesTooltip && (
@@ -550,17 +569,28 @@ export default function CreateRuleModal({
                 </div>
               )}
             </div>
+              
+              <button 
+                onClick={addRuleRule}
+                style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", transition: "all 0.2s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#1e1b4b"}
+                onMouseLeave={e => e.currentTarget.style.background = "#5B21B6"}
+              >
+                <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                Add rule
+              </button>
+            </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               {ruleRules.map((r, i) => (
                 <div key={i} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
                     
                     {/* Action Custom Dropdown */}
                     <div style={{ position: "relative", width: "120px" }} className="dropdown-inside">
                       <div 
                         onClick={() => setOpenActionDropdownIndex(openActionDropdownIndex === i ? null : i)}
-                        style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                        style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", fontWeight: "500", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
                       >
                         <span>{r.action}</span>
                         <svg style={{ width: "16px", height: "16px", color: "#8c9196" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -596,7 +626,7 @@ export default function CreateRuleModal({
                             setFieldSearch("");
                           }
                         }}
-                        style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: r.field ? "#202223" : "#8c9196", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                        style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: r.field ? "#202223" : "#8c9196", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
                       >
                         <span>{r.field || "Select a field"}</span>
                         <svg style={{ width: "16px", height: "16px", color: "#8c9196", flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -605,13 +635,13 @@ export default function CreateRuleModal({
                         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", zIndex: 10 }}>
                           <div style={{ padding: "12px" }}>
                             <div style={{ display: "flex", alignItems: "center", background: "#f8fafc", borderRadius: "6px", padding: "8px 12px" }}>
-                              <svg style={{ width: "16px", height: "16px", color: "#60a5fa", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                              <svg style={{ width: "16px", height: "16px", color: "#5B21B6", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                               <input 
                                 type="text" 
                                 placeholder="Filter" 
                                 value={fieldSearch}
                                 onChange={e => setFieldSearch(e.target.value)}
-                                style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#007bff", width: "100%" }}
+                                style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#5B21B6", width: "100%" }}
                                 onClick={e => e.stopPropagation()}
                               />
                             </div>
@@ -630,7 +660,7 @@ export default function CreateRuleModal({
                                   setRuleRules(newRules);
                                   setOpenFieldDropdownIndex(null);
                                 }}
-                                style={{ padding: "10px 16px", cursor: "pointer", fontSize: "14px", color: r.field === field ? "#007bff" : "#334155" }}
+                                style={{ padding: "10px 16px", cursor: "pointer", fontSize: "14px", color: r.field === field ? "#5B21B6" : "#334155" }}
                                 onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                               >
@@ -665,9 +695,9 @@ export default function CreateRuleModal({
                                   {/* Left Calendar (Start Date) */}
                                   <div style={{ flex: 1 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
                                       <div style={{ fontSize: "16px", fontWeight: "500", color: "#1e293b" }}>May 2026</div>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
+                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
                                     </div>
                                     
                                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
@@ -680,8 +710,8 @@ export default function CreateRuleModal({
                                       <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
                                       <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
                                       <div style={{ padding: "6px" }}>24</div>
-                                      <div style={{ padding: "6px", background: "#007bff", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                                      <div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>26</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>27</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>28</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>29</div><div style={{ padding: "6px", background: "#60a5fa", color: "#fff", borderRadius: "50%" }}>30</div>
+                                      <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
+                                      <div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>26</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>27</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>28</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>29</div><div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%" }}>30</div>
                                       <div style={{ padding: "6px", color: "#94a3b8" }}>31</div>
                                     </div>
                                   </div>
@@ -689,9 +719,9 @@ export default function CreateRuleModal({
                                   {/* Right Calendar (End Date) */}
                                   <div style={{ flex: 1 }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>
                                       <div style={{ fontSize: "16px", fontWeight: "500", color: "#1e293b" }}>May 2026</div>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#60a5fa" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
+                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></button>
                                     </div>
                                     
                                     <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
@@ -704,8 +734,8 @@ export default function CreateRuleModal({
                                       <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
                                       <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
                                       <div style={{ padding: "6px" }}>24</div>
-                                      <div style={{ padding: "6px", background: "#60a5fa", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                                      <div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>26</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>27</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>28</div><div style={{ padding: "6px", background: "#bfdbfe", color: "#fff" }}>29</div><div style={{ padding: "6px", background: "#007bff", color: "#fff", borderRadius: "50%" }}>30</div>
+                                      <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
+                                      <div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>26</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>27</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>28</div><div style={{ padding: "6px", background: "#c4b5fd", color: "#fff" }}>29</div><div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%" }}>30</div>
                                       <div style={{ padding: "6px", fontWeight: "600" }}>31</div>
                                     </div>
                                   </div>
@@ -720,13 +750,13 @@ export default function CreateRuleModal({
                                   </div>
                                   <div style={{ display: "flex", gap: "12px" }}>
                                     <button 
-                                      style={{ background: "#fff", color: "#007bff", border: "1px solid #007bff", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+                                      style={{ background: "#fff", color: "#5B21B6", border: "1px solid #5B21B6", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
                                     >
                                       Clear
                                     </button>
                                     <button 
                                       onClick={() => setOpenRuleDatePickerIndex(null)}
-                                      style={{ background: "#fff", color: "#007bff", border: "1px solid #007bff", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+                                      style={{ background: "#fff", color: "#5B21B6", border: "1px solid #5B21B6", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
                                     >
                                       Cancel
                                     </button>
@@ -737,7 +767,7 @@ export default function CreateRuleModal({
                                         setRuleRules(newRules);
                                         setOpenRuleDatePickerIndex(null);
                                       }}
-                                      style={{ background: "#007bff", color: "#fff", border: "none", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+                                      style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "8px 20px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
                                     >
                                       Select
                                     </button>
@@ -789,59 +819,41 @@ export default function CreateRuleModal({
                             const selectedValues = r.value ? r.value.split(',').map(s=>s.trim()).filter(Boolean) : [];
                             return (
                               <>
-                                <div 
-                                  onClick={() => {
-                                    if (openVendorDropdownIndex === i) {
-                                      setOpenVendorDropdownIndex(null);
-                                    } else {
-                                      setOpenVendorDropdownIndex(i);
-                                      setDropdownSearch("");
-                                    }
-                                  }}
-                                  style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "6px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: selectedValues.length > 0 ? "#202223" : "#8c9196", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                                >
-                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                    {selectedValues.length > 0 ? selectedValues.join(', ') : "Enter values"}
-                                  </span>
-                                  <svg style={{ width: "16px", height: "16px", color: "#8c9196", flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                </div>
+                                <div style={{ position: "relative" }}>
+                                  <div 
+                                    onClick={() => {
+                                      if (openVendorDropdownIndex === i) {
+                                        setOpenVendorDropdownIndex(null);
+                                      } else {
+                                        setOpenVendorDropdownIndex(i);
+                                        setDropdownSearch("");
+                                      }
+                                    }}
+                                    style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: selectedValues.length > 0 ? "#202223" : "#8c9196", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+                                    onMouseEnter={e => e.currentTarget.style.borderColor = "#5B21B6"}
+                                    onMouseLeave={e => e.currentTarget.style.borderColor = openVendorDropdownIndex === i ? "#5B21B6" : "#c9cccf"}
+                                  >
+                                    <span style={{ display: "block", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: "8px" }}>
+                                      {selectedValues.length > 0 ? `${selectedValues.length} selected` : "Select option"}
+                                    </span>
+                                    <svg style={{ width: "16px", height: "16px", color: "#8c9196", flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                  </div>
 
-                                {selectedValues.length > 0 && (
-                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "12px" }}>
-                                    {selectedValues.map(val => (
-                                      <div key={val} style={{ display: "flex", alignItems: "center", background: "#007bff", color: "#fff", padding: "6px 12px", borderRadius: "16px", fontSize: "12px", fontWeight: "500" }}>
-                                        {val}
-                                        <div 
-                                          onClick={() => {
-                                            const newRules = [...ruleRules];
-                                            newRules[i].value = selectedValues.filter(v => v !== val).join(', ');
-                                            setRuleRules(newRules);
-                                          }}
-                                          style={{ marginLeft: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(255,255,255,0.2)" }}
-                                        >
-                                          <svg style={{ width: "10px", height: "10px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                  {openVendorDropdownIndex === i && (
+                                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: "8px", background: "#fff", borderRadius: "10px", boxShadow: "0 10px 25px -5px rgba(30, 27, 75, 0.15)", border: "1px solid rgba(30, 27, 75, 0.08)", zIndex: 30 }}>
+                                      <div style={{ padding: "12px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", background: "#f8fafc", borderRadius: "8px", padding: "8px 12px", border: "1px solid rgba(30, 27, 75, 0.08)" }}>
+                                          <svg style={{ width: "16px", height: "16px", color: "#5B21B6", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                          <input 
+                                            type="text" 
+                                            placeholder="Filter" 
+                                            value={dropdownSearch}
+                                            onChange={e => setDropdownSearch(e.target.value)}
+                                            style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#1E1B4B", width: "100%" }}
+                                            onClick={e => e.stopPropagation()}
+                                          />
                                         </div>
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {openVendorDropdownIndex === i && (
-                                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)", border: "1px solid #e2e8f0", zIndex: 30, width: "100%" }}>
-                                    <div style={{ padding: "12px" }}>
-                                      <div style={{ display: "flex", alignItems: "center", background: "#f8fafc", borderRadius: "6px", padding: "8px 12px" }}>
-                                        <svg style={{ width: "16px", height: "16px", color: "#8c9196", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                                        <input 
-                                          type="text" 
-                                          placeholder="Filter" 
-                                          value={dropdownSearch}
-                                          onChange={e => setDropdownSearch(e.target.value)}
-                                          style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#202223", width: "100%" }}
-                                          onClick={e => e.stopPropagation()}
-                                          autoFocus
-                                        />
-                                      </div>
-                                    </div>
                                     <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
                                       {(() => {
                                         let currentOptions = [];
@@ -886,7 +898,20 @@ export default function CreateRuleModal({
                                                   onMouseEnter={(e) => e.currentTarget.style.background = "#f8fafc"}
                                                   onMouseLeave={(e) => e.currentTarget.style.background = "none"}
                                                 >
-                                                  <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #60a5fa", display: "flex", alignItems: "center", justifyContent: "center", background: isChecked ? "#007bff" : "transparent", borderColor: isChecked ? "#007bff" : "#cbd5e1" }}>
+                                                  <div
+                                                    style={{
+                                                      width: "16px",
+                                                      height: "16px",
+                                                      flexShrink: 0,
+                                                      borderRadius: "4px",
+                                                      border: "2px solid #5B21B6",
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      justifyContent: "center",
+                                                      background: isChecked ? "#5B21B6" : "transparent",
+                                                      borderColor: isChecked ? "#5B21B6" : "#cbd5e1"
+                                                    }}
+                                                  >
                                                     {isChecked && <svg style={{ width: "10px", height: "10px", color: "#fff" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>}
                                                   </div>
                                                   {image ? (
@@ -910,7 +935,30 @@ export default function CreateRuleModal({
                                           </>
                                         );
                                       })()}
+                                      </div>
                                     </div>
+                                  )}
+                                </div>
+                                
+                                {selectedValues.length > 0 && (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px", width: "100%" }}>
+                                    {selectedValues.map(val => (
+                                      <div key={val} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#5B21B6", color: "#fff", padding: "8px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "500", width: "100%", boxSizing: "border-box" }}>
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, paddingRight: "12px" }}>
+                                          {val}
+                                        </span>
+                                        <div 
+                                          onClick={() => {
+                                            const newRules = [...ruleRules];
+                                            newRules[i].value = selectedValues.filter(v => v !== val).join(', ');
+                                            setRuleRules(newRules);
+                                          }}
+                                          style={{ marginLeft: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(255,255,255,0.2)" }}
+                                        >
+                                          <svg style={{ width: "10px", height: "10px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
                               </>
@@ -971,7 +1019,7 @@ export default function CreateRuleModal({
                                   setRuleRules(newRules);
                                   setOpenOperatorDropdownIndex(null);
                                 }}
-                                style={{ padding: "8px 16px", cursor: "pointer", fontSize: "14px", color: r.operator === op ? "#007bff" : "#334155" }}
+                                style={{ padding: "8px 16px", cursor: "pointer", fontSize: "14px", color: r.operator === op ? "#5B21B6" : "#334155" }}
                                 onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
                                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                               >
@@ -993,7 +1041,7 @@ export default function CreateRuleModal({
                             newRules[i].operand = e.target.value;
                             setRuleRules(newRules);
                           }}
-                          style={{ width: "100%", background: "#f0f7ff", border: "none", padding: "12px 16px", borderRadius: "24px", fontSize: "14px", color: "#60a5fa", outline: "none" }}
+                          style={{ width: "100%", background: "#f0f7ff", border: "none", padding: "12px 16px", borderRadius: "24px", fontSize: "14px", color: "#5B21B6", outline: "none" }}
                         />
                       </div>
 
@@ -1004,16 +1052,6 @@ export default function CreateRuleModal({
 
                 </div>
               ))}
-            </div>
-
-            <div style={{ marginTop: "16px" }}>
-              <button 
-                onClick={addRuleRule}
-                style={{ background: "#007bff", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px" }}
-              >
-                <svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                Add rule
-              </button>
             </div>
           </div>
         </div>
@@ -1026,7 +1064,7 @@ export default function CreateRuleModal({
           <button 
             onClick={handleCreate}
             disabled={fetcher.state !== "idle" || !ruleName.trim()}
-            style={{ padding: "10px 24px", background: (fetcher.state !== "idle" || !ruleName.trim()) ? "#94a3b8" : "#007bff", border: "none", borderRadius: "6px", color: "#fff", fontWeight: "600", fontSize: "14px", cursor: (fetcher.state !== "idle" || !ruleName.trim()) ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", opacity: !ruleName.trim() ? 0.7 : 1 }}
+            style={{ padding: "10px 24px", background: (fetcher.state !== "idle" || !ruleName.trim()) ? "#94a3b8" : "#5B21B6", border: "none", borderRadius: "6px", color: "#fff", fontWeight: "600", fontSize: "14px", cursor: (fetcher.state !== "idle" || !ruleName.trim()) ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", opacity: !ruleName.trim() ? 0.7 : 1 }}
           >
             {fetcher.state !== "idle" ? (ruleToEdit ? "UPDATING..." : "CREATING...") : (ruleToEdit ? "UPDATE" : "CREATE")}
           </button>

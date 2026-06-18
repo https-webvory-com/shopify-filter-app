@@ -1,7 +1,11 @@
 import React from "react";
 
-export function Modal({ isOpen, onClose, title, children, footer, width = "600px" }) {
+export function Modal({ isOpen, onClose, title, children, footer, width = "600px", padding }) {
   if (!isOpen) return null;
+
+  const headerPadding = padding ? `${padding} ${padding} 12px` : "24px 32px 16px";
+  const bodyPadding = padding ? `12px ${padding}` : "16px 32px";
+  const footerPadding = padding ? `12px ${padding} ${padding}` : "16px 32px 24px";
 
   return (
     <div
@@ -32,7 +36,7 @@ export function Modal({ isOpen, onClose, title, children, footer, width = "600px
         }}
       >
         {/* Header */}
-        <div style={{ padding: "24px 32px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ padding: headerPadding, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600, color: "#202223" }}>{title}</h2>
           <button
             onClick={onClose}
@@ -45,13 +49,13 @@ export function Modal({ isOpen, onClose, title, children, footer, width = "600px
         </div>
 
         {/* Body */}
-        <div style={{ padding: "16px 32px", overflowY: "auto", flex: 1 }}>
+        <div style={{ padding: bodyPadding, overflowY: "auto", flex: 1 }}>
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div style={{ padding: "16px 32px 24px", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+          <div style={{ padding: footerPadding, display: "flex", justifyContent: "flex-end", gap: "12px" }}>
             {footer}
           </div>
         )}

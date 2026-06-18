@@ -63,12 +63,53 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
 
   return (
     <div onClick={onClose} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", width: "700px", borderRadius: "8px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", display: "flex", flexDirection: "column" }}>
+      <style>{`
+        .filter-modal-card select:focus,
+        .filter-modal-card input:focus {
+          border-color: #5B21B6 !important;
+          box-shadow: 0 0 0 2px rgba(62, 58, 177, 0.1) !important;
+        }
+        .filter-modal-card select {
+          border: 1px solid rgba(30, 27, 75, 0.12) !important;
+          background: #ffffff !important;
+          color: #1E1B4B !important;
+        }
+      `}</style>
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        className="filter-modal-card" 
+        style={{ 
+          background: "#fff", 
+          width: "700px", 
+          borderRadius: "16px", 
+          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", 
+          display: "flex", 
+          flexDirection: "column" 
+        }}
+      >
         
         {/* Modal Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px", borderBottom: "1px solid transparent" }}>
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#334155" }}>Filter</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: "20px" }}>
+          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#1E1B4B" }}>Filter</h2>
+          <button 
+            onClick={onClose} 
+            style={{ 
+              background: "rgba(30, 27, 75, 0.05)", 
+              border: "none", 
+              cursor: "pointer", 
+              color: "#94a3b8", 
+              fontSize: "18px",
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(30, 27, 75, 0.05)"}
+          >
             ×
           </button>
         </div>
@@ -81,16 +122,31 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
               <select 
                 value={matchType}
                 onChange={e => setMatchType(e.target.value)}
-                style={{ appearance: "none", background: "#eff6ff", color: "#007bff", border: "none", padding: "4px 24px 4px 12px", borderRadius: "16px", fontSize: "14px", fontWeight: "500", outline: "none", cursor: "pointer" }}
+                style={{ appearance: "none", background: "rgba(62, 58, 177, 0.06)", color: "#5B21B6", border: "none", padding: "6px 28px 6px 16px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", outline: "none", cursor: "pointer", transition: "all 0.2s" }}
               >
                 <option value="all">all</option>
                 <option value="any">any</option>
               </select>
               of the following conditions
             </div>
-
+ 
             {filters.length > 0 && (
-              <button onClick={() => setFilters([])} style={{ background: "#fff", border: "1px solid #007bff", color: "#007bff", padding: "6px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>
+              <button 
+                onClick={() => setFilters([])} 
+                style={{ 
+                  background: "#fff", 
+                  border: "1px solid rgba(62, 58, 177, 0.2)", 
+                  color: "#5B21B6", 
+                  padding: "6px 16px", 
+                  borderRadius: "10px", 
+                  fontSize: "13px", 
+                  fontWeight: "600", 
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(62, 58, 177, 0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "#fff"}
+              >
                 CLEAR ALL
               </button>
             )}
@@ -105,20 +161,20 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
                   <select 
                     value={filter.field}
                     onChange={e => updateFilter(index, "field", e.target.value)}
-                    style={{ width: "100%", appearance: "none", background: "#f8fafc", color: "#007bff", border: "none", padding: "10px 16px", borderRadius: "20px", fontSize: "14px", fontWeight: "500", outline: "none", cursor: "pointer" }}
+                    style={{ width: "100%", appearance: "none", padding: "10px 16px", borderRadius: "10px", fontSize: "14px", fontWeight: "500", outline: "none", cursor: "pointer", transition: "all 0.2s" }}
                   >
                     {fieldOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                 </div>
-
+ 
                 {/* Operator Dropdown */}
                 <div style={{ position: "relative", flex: 1 }}>
                   <select 
                     value={filter.operator}
                     onChange={e => updateFilter(index, "operator", e.target.value)}
-                    style={{ width: "100%", appearance: "none", background: "#f8fafc", color: "#007bff", border: "none", padding: "10px 16px", borderRadius: "20px", fontSize: "14px", fontWeight: "500", outline: "none", cursor: "pointer" }}
+                    style={{ width: "100%", appearance: "none", padding: "10px 16px", borderRadius: "10px", fontSize: "14px", fontWeight: "500", outline: "none", cursor: "pointer", transition: "all 0.2s" }}
                   >
                     {getOperatorOptions(filter.field).map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -138,7 +194,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
                             onChange={e => updateFilter(index, "value", e.target.checked)} 
                             style={{ srOnly: true, opacity: 0, position: "absolute" }} 
                           />
-                          <div style={{ width: "36px", height: "20px", background: filter.value ? "#007bff" : "#cbd5e1", borderRadius: "10px", transition: "all 0.3s" }}>
+                          <div style={{ width: "36px", height: "20px", background: filter.value ? "#5B21B6" : "#cbd5e1", borderRadius: "10px", transition: "all 0.3s" }}>
                             <div style={{ position: "absolute", top: "2px", left: filter.value ? "18px" : "2px", width: "16px", height: "16px", background: "#fff", borderRadius: "50%", transition: "all 0.3s" }}></div>
                           </div>
                         </div>
@@ -150,7 +206,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
                       value={filter.value}
                       onChange={e => updateFilter(index, "value", e.target.value)}
                       placeholder="Enter value"
-                      style={{ width: "100%", background: "#f8fafc", color: "#007bff", border: "none", padding: "10px 16px", borderRadius: "20px", fontSize: "14px", outline: "none" }}
+                      style={{ width: "100%", background: "#fff", color: "#1E1B4B", border: "1px solid rgba(30, 27, 75, 0.12)", padding: "10px 16px", borderRadius: "10px", fontSize: "14px", outline: "none", transition: "all 0.2s" }}
                     />
                   )}
                 </div>
@@ -167,23 +223,58 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
             <button 
               onClick={addFilter}
-              style={{ background: "#007bff", color: "#fff", border: "none", padding: "10px 32px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: filters.length === 0 ? "50%" : "100%", justifyContent: "center" }}
+              className="merch-btn-primary"
+              style={{ padding: "10px 32px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: filters.length === 0 ? "50%" : "100%", justifyContent: "center", height: "42px" }}
             >
               <span style={{ fontSize: "18px", lineHeight: 1 }}>+</span> Add filter
             </button>
           </div>
-
+ 
           {/* Action Buttons */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "32px" }}>
             <button 
               onClick={onClose}
-              style={{ background: "#fff", color: "#94a3b8", border: "1px solid #cbd5e1", padding: "10px 24px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
+              style={{ 
+                background: "#fff", 
+                color: "#1E1B4B", 
+                border: "1px solid rgba(30, 27, 75, 0.12)", 
+                padding: "10px 24px", 
+                borderRadius: "10px", 
+                fontSize: "14px", 
+                fontWeight: "600", 
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(62, 58, 177, 0.04)"}
+              onMouseLeave={e => e.currentTarget.style.background = "#fff"}
             >
               CANCEL
             </button>
             <button 
               onClick={() => onApply(matchType, filters)}
-              style={{ background: "#007bff", color: "#fff", border: "none", padding: "10px 32px", borderRadius: "24px", fontSize: "14px", fontWeight: "600", cursor: "pointer", opacity: filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "") ? 0.7 : 1 }}
+              style={{ 
+                background: filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "") ? "#94a3b8" : "#5B21B6", 
+                color: "#fff", 
+                border: "none", 
+                padding: "10px 32px", 
+                borderRadius: "10px", 
+                fontSize: "14px", 
+                fontWeight: "600", 
+                cursor: filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "") ? "not-allowed" : "pointer", 
+                opacity: filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "") ? 0.7 : 1,
+                boxShadow: "0 2px 4px rgba(62, 58, 177, 0.15)",
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => {
+                if (!(filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === ""))) {
+                  e.currentTarget.style.background = "#1e1b4b";
+                }
+              }}
+              onMouseLeave={e => {
+                if (!(filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === ""))) {
+                  e.currentTarget.style.background = "#5B21B6";
+                }
+              }}
               disabled={filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "")}
             >
               OK
