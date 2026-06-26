@@ -171,6 +171,11 @@ async function autoSeedOptionFilters(shop) {
 export async function syncProducts(shop, admin) {
   console.log(`CFP: Initializing background product sync for ${shop}...`);
 
+  // Delete previous sync jobs for this shop to keep the database clean
+  await prisma.syncJob.deleteMany({
+    where: { shop },
+  });
+
   // Create a pending sync job
   const job = await prisma.syncJob.create({
     data: {

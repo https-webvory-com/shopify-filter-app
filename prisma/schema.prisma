@@ -272,10 +272,10 @@ model SyncJob {
 model Synonym {
   id        String   @id @default(uuid())
   shop      String
-  word      String   // The target word, e.g., "dress"
-  synonyms  String   // Comma-separated list, e.g., "gown, frock"
+  word      String // The target word, e.g., "dress"
+  synonyms  String // Comma-separated list, e.g., "gown, frock"
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-  
+
   @@unique([shop, word])
 }
