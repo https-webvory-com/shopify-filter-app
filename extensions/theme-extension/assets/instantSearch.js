@@ -302,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let searches = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
     searches = searches.filter(q => q.toLowerCase() !== query.toLowerCase()); // Remove duplicates
     searches.unshift(query); // Add to beginning
-    if (searches.length > 5) searches = searches.slice(0, 5); // Keep only 5
+    if (searches.length > 4) searches = searches.slice(0, 4); // Keep only 4
     localStorage.setItem('cfp_recent_searches', JSON.stringify(searches));
   }
 

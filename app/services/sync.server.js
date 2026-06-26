@@ -56,6 +56,69 @@ export async function formatAndPushToMeili(products) {
 }
 
 /**
+ * Extract dynamic keys from Prisma and update Meilisearch index settings.
+ */
+async function updateMeiliSettings(shop) {
+  try {
+    const index = meiliClient.index("products");
+    const dynamicKeys = new Set();
+    
+    // Get all options
+    const products = await prisma.product.findMany({
+      where: { shop },
+      select: { options: true },
+    });
+    for (const p of products) {
+      for (const opt of p.options || []) {
+        if (opt.name) dynamicKeys.add(`option_${opt.name}`);
+      }
+    }
+
+    // Get all metafields
+    const metafields = await prisma.productMetafield.findMany({
+      where: { product: { shop } },
+      select: { namespace: true, key: true },
+    });
+    for (const m of metafields) {
+      if (m.namespace && m.key) {
+        dynamicKeys.add(`metafield_${m.namespace}.${m.key}`);
+      }
+    }
+
+    const filterableAttributes = [
+      "shop",
+      "vendor",
+      "productType",
+      "tags",
+      "collections",
+      "available",
+      "priceMin",
+      ...Array.from(dynamicKeys)
+    ];
+
+    const searchableAttributes = [
+      "title",
+      "productType",
+      "vendor",
+      "collections",
+      ...Array.from(dynamicKeys),
+      "tags"
+    ];
+
+    const sortableAttributes = ["priceMin", "createdAt", "title"];
+
+    await index.updateFilterableAttributes(filterableAttributes);
+    await index.updateSearchableAttributes(searchableAttributes);
+    await index.updateSortableAttributes(sortableAttributes);
+    await index.updateFaceting({ maxValuesPerFacet: 100000 });
+    
+    console.log(`CFP: Meilisearch settings updated successfully for ${shop}`);
+  } catch (error) {
+    console.error(`CFP: Failed to update Meilisearch settings for ${shop}`, error);
+  }
+}
+
+/**
  * Auto-seed FilterSetting records for every unique product option name found in the shop.
  * Called after every sync so new options (Color, Size, etc.) appear in admin automatically.
  */
@@ -276,6 +339,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   if (!hasNextPage) {
     await autoSeedOptionFilters(shop);
+    await updateMeiliSettings(shop);
     console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
   }
 }

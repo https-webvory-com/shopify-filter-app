@@ -303,11 +303,32 @@ export const loader = async ({ request }) => {
 
     // 🚚 4. Establish Order By 🚚
     let orderBy = {};
+    let meiliSort = null;
     switch (sortBy) {
-      case "title-ascending": orderBy = { title: "asc" }; break;
-      case "title-descending": orderBy = { title: "desc" }; break;
-      case "price-ascending": orderBy = { priceMin: "asc" }; break;
-      case "price-descending": orderBy = { priceMin: "desc" };
+      case "title-ascending": 
+        orderBy = { title: "asc" }; 
+        meiliSort = ["title:asc"];
+        break;
+      case "title-descending": 
+        orderBy = { title: "desc" }; 
+        meiliSort = ["title:desc"];
+        break;
+      case "price-ascending": 
+        orderBy = { priceMin: "asc" }; 
+        meiliSort = ["priceMin:asc"];
+        break;
+      case "price-descending": 
+        orderBy = { priceMin: "desc" };
+        meiliSort = ["priceMin:desc"];
+        break;
+      case "created-descending":
+        orderBy = { createdAt: "desc" };
+        meiliSort = ["createdAt:desc"];
+        break;
+      case "created-ascending":
+        orderBy = { createdAt: "asc" };
+        meiliSort = ["createdAt:asc"];
+        break;
     }
     
     const meiliFilters = [`shop = '${shop}'`];
@@ -342,12 +363,16 @@ export const loader = async ({ request }) => {
     }
 
     const meiliStart = Date.now();
-    const meiliRes = await meiliClient.index("products").search(searchQuery, {
+    const meiliSearchParams = {
        filter: meiliFilters,
        facets: ["*"],
        limit: 1000,
        attributesToHighlight: ["title", "tags", "productType", "vendor"]
-    });
+    };
+    if (meiliSort) {
+       meiliSearchParams.sort = meiliSort;
+    }
+    const meiliRes = await meiliClient.index("products").search(searchQuery, meiliSearchParams);
 
     let didYouMean = null;
     if (searchQuery && searchQuery.length > 2 && meiliRes.hits.length > 0) {
@@ -410,11 +435,19 @@ export const loader = async ({ request }) => {
     const prismaTime = Date.now() - prismaStart;
 
     // Merge variants and collections into allMatchedProducts for merchandising logic
+    const collectionIdToTitle = {};
     allMatchedProducts.forEach(mp => {
        const dbp = dbProducts.find(p => p.id === mp.id);
        if (dbp) {
           mp.variants = dbp.variants;
           mp.collections = dbp.collections;
+          if (dbp.collections) {
+             dbp.collections.forEach(c => {
+                if (c.collection && c.collection.title) {
+                   collectionIdToTitle[c.collectionId] = c.collection.title;
+                }
+             });
+          }
        }
     });
 
@@ -553,6 +586,7 @@ export const loader = async ({ request }) => {
         pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: activePinningRule?.products ? (typeof activePinningRule.products === "string" ? JSON.parse(activePinningRule.products).length : activePinningRule.products.length) : 0,
         hasMerchandisingRule: !!activeRule,
+        activeGroupFiltersLength: activeGroupFilters ? activeGroupFilters.length : null,
         timing: {
            meiliMs: meiliTime,
            prismaMs: prismaTime,
@@ -579,10 +613,10 @@ export const loader = async ({ request }) => {
           return acc;
         }, {}),
         collections: Object.entries(collectionCounts)
-          .map(([value, item]) => ({
+          .map(([value, count]) => ({
             value,
-            label: item.title,
-            count: item.count,
+            label: collectionIdToTitle[value] || value,
+            count: count,
           }))
           .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""))),
         metafields: Object.entries(metafieldCounts).reduce(
