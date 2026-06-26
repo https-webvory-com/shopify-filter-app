@@ -92,7 +92,6 @@ const cards = [
     description:
       "Link similar search terms so customers can find products using different keywords.",
     path: "/app/search/synonyms",
-    comingSoon: true,
     icon: (
       <svg
         width="26"

@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
     minChars: 2,
     debounceTime: 300,
     productLimit: 4,
-    apiUrl: "/apps/collection-filter-pro/api/filter",
+    apiUrl: "/apps/collection-filter-pro/api/search",
   };
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";
@@ -182,6 +182,9 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
       </div>
       
+      <div id="cfp-did-you-mean-container" style="display: none; padding: 12px 24px; background: #fff; border-bottom: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 14px;">
+      </div>
+
       <div class="cfp-search-loading-container" id="cfp-search-loading">
         <div class="cfp-search-spinner"></div>
       </div>
@@ -523,6 +526,39 @@ document.addEventListener("DOMContentLoaded", function () {
     renderRecentSearches("");
   }
 
+  function renderSuggestions(suggestions, query) {
+    const container = document.getElementById("cfp-recent-searches-container");
+    const list = document.getElementById("cfp-recent-searches-list");
+    const collectionsTitle = document.getElementById("cfp-collections-title");
+    
+    if (container) container.style.display = "block";
+    if (collectionsTitle) collectionsTitle.style.display = "none";
+
+    let html = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div class="cfp-search-section-title" style="margin-bottom: 0;">Suggestions</div>
+      </div>
+    `;
+    suggestions.forEach((s) => {
+      // Highlight matching query
+      let displayTitle = s;
+      if (query && query.trim().length > 0) {
+        const regex = new RegExp(`(${query})`, 'gi');
+        displayTitle = displayTitle.replace(regex, '<strong>$1</strong>');
+      }
+      
+      html += `
+        <li class="cfp-recent-search-item">
+          <a href="/search?q=${encodeURIComponent(s)}" class="cfp-recent-search-link">
+            <svg class="cfp-history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            ${displayTitle}
+          </a>
+        </li>
+      `;
+    });
+    if(list) list.innerHTML = html;
+  }
+
   async function performSearch(query) {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const trimmedQuery = query.trim().toLowerCase();
@@ -574,8 +610,36 @@ document.addEventListener("DOMContentLoaded", function () {
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value.trim().toLowerCase() : "";
       if (currentQuery === trimmedQuery) {
+        
+        // Did You Mean logic
+        const dymContainer = document.getElementById("cfp-did-you-mean-container");
+        if (dymContainer) {
+          if (productsData && productsData.didYouMean) {
+            dymContainer.innerHTML = `Sorry, nothing found for '<strong>${query}</strong>'. Did you mean '<a href="#" id="cfp-dym-link" style="font-weight: 700; text-decoration: underline; color: #0f172a;">${productsData.didYouMean}</a>'?`;
+            dymContainer.style.display = "block";
+            
+            document.getElementById("cfp-dym-link").addEventListener("click", (e) => {
+              e.preventDefault();
+              if (inputEl) {
+                 inputEl.value = productsData.didYouMean;
+                 inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                 inputEl.focus();
+              }
+            });
+          } else {
+            dymContainer.style.display = "none";
+          }
+        }
+
         renderCollections(collectionsData, query);
         renderProducts(productsData, query);
+        if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
+           renderSuggestions(productsData.suggestions, query);
+        } else if (currentQuery.length > 0) {
+           // Hide suggestions container if no suggestions
+           const container = document.getElementById("cfp-recent-searches-container");
+           if (container) container.style.display = "none";
+        }
       }
 
     } catch (error) {
@@ -653,9 +717,17 @@ document.addEventListener("DOMContentLoaded", function () {
     const products = data.products || [];
 
     if (products.length === 0) {
+      const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
+      
       grid.innerHTML = query 
-        ? `<div class="cfp-search-no-results">No products found for "${query}"</div>`
-        : `<div class="cfp-search-no-results">No trending products found.</div>`;
+        ? `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
+             ${emptyStateSvg}
+             <p style="margin: 0;">No matches found for <strong>'${query}'</strong>. Please try again with a different term.</p>
+           </div>`
+        : `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
+             ${emptyStateSvg}
+             <p style="margin: 0;">No trending products found.</p>
+           </div>`;
       return;
     }
 
@@ -740,11 +812,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // 3. Extract main image
       let imageUrl = "";
-      if (hasMatchedColor && defaultImageUrl) {
-        // If search matched a color swatch, force use that color's image!
-        imageUrl = defaultImageUrl;
-      } else if (p.merchandisingImage) {
+      if (p.merchandisingImage) {
         imageUrl = p.merchandisingImage;
+      } else if (defaultImageUrl) {
+        // Always use the swatch image corresponding to the activeIndex
+        imageUrl = defaultImageUrl;
       } else if (p.images) {
         try {
           const imgs = typeof p.images === "string" ? JSON.parse(p.images) : p.images;
@@ -752,11 +824,6 @@ document.addEventListener("DOMContentLoaded", function () {
             imageUrl = typeof imgs[0] === "string" ? imgs[0] : imgs[0].url || imgs[0].src;
           }
         } catch (e) {}
-      }
-      
-      // If we still don't have an image, but we have a swatch image, use it
-      if (!imageUrl && defaultImageUrl) {
-         imageUrl = defaultImageUrl;
       }
 
       if (!imageUrl) {

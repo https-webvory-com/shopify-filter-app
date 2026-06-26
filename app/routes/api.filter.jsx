@@ -9,6 +9,7 @@ import {
   buildIncludeWhereClause,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
+import meiliClient from "../services/meiliClient.server";
 
 /**
  * Storefront Filtering API
@@ -16,6 +17,8 @@ import { getFilterGlobalSettings } from "../services/filterSettings.server";
  * Supports groupId to serve filter config for a specific FilterGroup.
  */
 export const loader = async ({ request }) => {
+  const startTime = Date.now();
+  console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
     const shop = url.searchParams.get("shop");
@@ -304,107 +307,118 @@ export const loader = async ({ request }) => {
       case "title-ascending": orderBy = { title: "asc" }; break;
       case "title-descending": orderBy = { title: "desc" }; break;
       case "price-ascending": orderBy = { priceMin: "asc" }; break;
-      case "price-descending": orderBy = { priceMin: "desc" }; break;
-      case "created-ascending": orderBy = { createdAt: "asc" }; break;
-      case "created-descending": default: orderBy = { createdAt: "desc" }; break;
+      case "price-descending": orderBy = { priceMin: "desc" };
+    }
+    
+    const meiliFilters = [`shop = '${shop}'`];
+    if (resolvedCollectionId) {
+       meiliFilters.push(`collections = '${resolvedCollectionId}'`);
+    }
+    if (minPrice > 0 || maxPrice < 9999999) {
+       meiliFilters.push(`priceMin >= ${minPrice} AND priceMin <= ${maxPrice}`);
+    }
+    if (availability.length > 0) {
+       if (availability.includes("in_stock") && !availability.includes("out_of_stock")) meiliFilters.push(`available = true`);
+       else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) meiliFilters.push(`available = false`);
+    }
+    if (vendors.length > 0) {
+       meiliFilters.push(`vendor IN [${vendors.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+    }
+    if (types.length > 0) {
+       meiliFilters.push(`productType IN [${types.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`);
+    }
+    if (tags.length > 0) {
+       meiliFilters.push(`tags IN [${tags.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`);
+    }
+    for (const [key, values] of Object.entries(optionsFilters)) {
+       if (values.length > 0) {
+          meiliFilters.push(`option_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+       }
+    }
+    for (const [key, values] of Object.entries(metafieldsFilters)) {
+       if (values.length > 0) {
+          meiliFilters.push(`metafield_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+       }
     }
 
-    // 🚚 5. Execute Base Database Query & Smart In-Memory Filtering 🚚
-    const baseProducts = await prisma.product.findMany({
-      where: baseWhere,
-      select: {
-        id: true,
-        createdAt: true,
-        priceMin: true,
-        priceMax: true,
-        vendor: true,
-        productType: true,
-        tags: true,
-        title: true,
-        collections: {
-          select: { collectionId: true, collection: { select: { title: true } } },
-        },
-        options: true,
-        variants: {
-          select: {
-            id: true, available: true, price: true, compareAtPrice: true, inventory: true,
-            option1: true, option2: true, option3: true, imageUrl: true,
-          },
-        },
-        metafields: { select: { namespace: true, key: true, value: true } },
-      },
+    const meiliStart = Date.now();
+    const meiliRes = await meiliClient.index("products").search(searchQuery, {
+       filter: meiliFilters,
+       facets: ["*"],
+       limit: 1000,
+       attributesToHighlight: ["title", "tags", "productType", "vendor"]
     });
 
-    const matchesFilters = (product, excludeFacetGroup = null) => {
-      if (excludeFacetGroup !== 'vendor' && vendors.length > 0) {
-         if (!vendors.includes(product.vendor)) return false;
-      }
-      if (excludeFacetGroup !== 'productType' && types.length > 0) {
-         if (!types.includes(product.productType)) return false;
-      }
-      if (excludeFacetGroup !== 'tag' && tags.length > 0) {
-         if (!tags.some(t => product.tags && (product.tags.includes(t) || product.tags.some(pt => pt.endsWith('_' + t))))) return false;
-      }
-      if (excludeFacetGroup !== 'title' && titles.length > 0) {
-         if (!titles.includes(product.title)) return false;
-      }
-      
-      let matchingVariants = product.variants || [];
-      if (excludeFacetGroup !== 'price') {
-          matchingVariants = matchingVariants.filter(v => {
-              const p = parseFloat(v.price || 0);
-              return p >= minPrice && p <= maxPrice;
-          });
-      }
-      if (excludeFacetGroup !== 'availability' && availability.length > 0) {
-          if (availability.includes("in_stock") && !availability.includes("out_of_stock")) {
-              matchingVariants = matchingVariants.filter(v => v.available);
-          } else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) {
-              matchingVariants = matchingVariants.filter(v => !v.available);
-          }
-      } else if (excludeFacetGroup !== 'availability') {
-          const hasAnyFilterSelected = vendors.length > 0 || types.length > 0 || collections.length > 0 || tags.length > 0 || titles.length > 0 || Object.values(optionsFilters).some(v => v.length > 0) || Object.values(metafieldsFilters).some(v => v.length > 0) || (minPrice > 0 || maxPrice < 9999);
-          if (globalSettings && globalSettings.hideUnavailableVariantsWhenSelected && hasAnyFilterSelected) {
-              matchingVariants = matchingVariants.filter(v => v.available);
-          }
-      }
-      
-      for (const [optionName, values] of Object.entries(optionsFilters)) {
-          if (excludeFacetGroup === `option:${optionName}`) continue;
-          if (values.length > 0) {
-              matchingVariants = matchingVariants.filter(v => 
-                  values.includes(v.option1) || values.includes(v.option2) || values.includes(v.option3)
-              );
-          }
-      }
-      
-      if (matchingVariants.length === 0) return false;
-      
-      for (const [metafieldKey, values] of Object.entries(metafieldsFilters)) {
-          if (excludeFacetGroup === `metafield:${metafieldKey}`) continue;
-          if (values.length > 0 && metafieldKey.includes(".")) {
-              const [namespace, key] = metafieldKey.split(".");
-              const hasMetafield = product.metafields && product.metafields.some(m => m.namespace === namespace && m.key === key && values.includes(m.value));
-              if (!hasMetafield) return false;
-          }
-      }
-      return true;
-    };
+    let didYouMean = null;
+    if (searchQuery && searchQuery.length > 2 && meiliRes.hits.length > 0) {
+      const sq = searchQuery.toLowerCase();
+      const exactMatchFound = meiliRes.hits.some(hit => 
+        (hit.title && hit.title.toLowerCase().includes(sq)) ||
+        (hit.tags && hit.tags.some(t => t.toLowerCase().includes(sq))) ||
+        (hit.vendor && hit.vendor.toLowerCase().includes(sq)) ||
+        (hit.productType && hit.productType.toLowerCase().includes(sq))
+      );
 
-    const allMatchedProducts = baseProducts.filter(p => matchesFilters(p, null));
-    const totalCount = allMatchedProducts.length;
+      if (!exactMatchFound) {
+        const firstHit = meiliRes.hits[0];
+        if (firstHit._formatted) {
+          const match = JSON.stringify(firstHit._formatted).match(/<em>(.*?)<\/em>/i);
+          if (match && match[1]) {
+             const suggestion = match[1].toLowerCase().trim();
+             if (suggestion !== sq && /^[a-z0-9\s]+$/.test(suggestion)) {
+                didYouMean = suggestion;
+             }
+          }
+        }
+      }
+    }
+    const meiliTime = Date.now() - meiliStart;
 
-    // ── 5. Compute Smart Facets in Memory ────────────────────────────────────
-    const vendorCounts = {};
-    const typeCounts = {};
-    const tagCounts = {};
-    const titleCounts = {};
-    const optionCounts = {};
-    const metafieldCounts = {};
-    const collectionCounts = {};
-    let inStockCount = 0;
-    let outOfStockCount = 0;
+    const totalCount = meiliRes.estimatedTotalHits;
+    const facetDistribution = meiliRes.facetDistribution || {};
+    const allMatchedProducts = meiliRes.hits.map(h => ({
+        ...h,
+        id: `gid://shopify/Product/${h.id}`
+    }));
 
+    // Fetch full variants for the 1000 products to compute merchandising and price ranges
+    const meiliIds = allMatchedProducts.map(h => h.id);
+    
+    if (pinnedIds && pinnedIds.length > 0) {
+        pinnedIds.forEach(id => {
+            if (!meiliIds.includes(id)) meiliIds.push(id);
+        });
+    }
+
+    const prismaStart = Date.now();
+    const dbProducts = await prisma.product.findMany({
+        where: { id: { in: meiliIds } },
+        select: {
+          id: true,
+          priceMin: true,
+          priceMax: true,
+          vendor: true,
+          productType: true,
+          tags: true,
+          title: true,
+          collections: { select: { collectionId: true, collection: { select: { title: true } } } },
+          variants: {
+            select: { available: true, price: true, compareAtPrice: true, inventory: true, option1: true, option2: true, option3: true },
+          }
+        },
+    });
+    const prismaTime = Date.now() - prismaStart;
+
+    // Merge variants and collections into allMatchedProducts for merchandising logic
+    allMatchedProducts.forEach(mp => {
+       const dbp = dbProducts.find(p => p.id === mp.id);
+       if (dbp) {
+          mp.variants = dbp.variants;
+          mp.collections = dbp.collections;
+       }
+    });
+
+    // Compute Price Range Counts from the top 1000 items
     const priceFilter = activeGroupFilters ? activeGroupFilters.find((f) => f.filterType === "price" || f.type === "price") : null;
     let priceRangesConfig = [];
     if (priceFilter && priceFilter.config) {
@@ -414,12 +428,24 @@ export const loader = async ({ request }) => {
       } catch (e) {}
     }
     const priceRangeCounts = priceRangesConfig.map((r) => ({ ...r, count: 0 }));
+    
+    let absoluteMinPrice = Infinity;
+    let absoluteMaxPrice = -Infinity;
 
-    // Helper to process facets safely
-    const processFacetsForGroup = (excludeGroup, processor) => {
-       const filteredProducts = excludeGroup === null ? allMatchedProducts : baseProducts.filter(p => matchesFilters(p, excludeGroup));
-       filteredProducts.forEach(processor);
-    };
+    if (allMatchedProducts.length > 0) {
+       allMatchedProducts.forEach(p => {
+          if (priceRangeCounts.length > 0) {
+             priceRangeCounts.forEach(r => {
+                const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
+                const rMaxVal = r.max !== undefined ? r.max : r.to;
+                const rMax = (rMaxVal === "" || rMaxVal === null || rMaxVal === undefined) ? Infinity : parseFloat(rMaxVal);
+                if (p.priceMin >= rMin && p.priceMin <= rMax) r.count += 1;
+             });
+          }
+          if (p.priceMin < absoluteMinPrice) absoluteMinPrice = p.priceMin;
+          if (p.priceMax > absoluteMaxPrice) absoluteMaxPrice = p.priceMax;
+       });
+    }
 
     const getTargetValue = (type, rawValue) => {
         const rule = mergedValues.find(
@@ -428,133 +454,52 @@ export const loader = async ({ request }) => {
         );
         return rule ? rule.targetValue : rawValue;
     };
+    const vendorCounts = {};
+    const typeCounts = {};
+    const tagCounts = {};
+    const titleCounts = {};
+    const optionCounts = {};
+    const metafieldCounts = {};
+    const collectionCounts = facetDistribution.collections || {};
+    let inStockCount = facetDistribution.available?.true || 0;
+    let outOfStockCount = facetDistribution.available?.false || 0;
 
-    // 1. Collections
-    processFacetsForGroup(null, (p) => {
-       if (p.collections) {
-         p.collections.forEach((pc) => {
-           const id = pc.collectionId;
-           const title = pc.collection?.title || id;
-           if (!collectionCounts[id]) collectionCounts[id] = { title, count: 0 };
-           collectionCounts[id].count += 1;
-         });
-       }
-    });
+    if (facetDistribution.vendor) {
+        for (const [v, count] of Object.entries(facetDistribution.vendor)) {
+            const tv = getTargetValue("vendor", v);
+            vendorCounts[tv] = (vendorCounts[tv] || 0) + count;
+        }
+    }
+    if (facetDistribution.productType) {
+        for (const [t, count] of Object.entries(facetDistribution.productType)) {
+            const tv = getTargetValue("product_type", t);
+            typeCounts[tv] = (typeCounts[tv] || 0) + count;
+        }
+    }
+    if (facetDistribution.tags) {
+        for (const [t, count] of Object.entries(facetDistribution.tags)) {
+            const tv = getTargetValue("tags", t);
+            tagCounts[tv] = (tagCounts[tv] || 0) + count;
+        }
+    }
 
-    // 2. Vendors
-    processFacetsForGroup('vendor', (p) => {
-       if (p.vendor) {
-           const tv = getTargetValue("vendor", p.vendor);
-           vendorCounts[tv] = (vendorCounts[tv] || 0) + 1;
-       }
-    });
-
-    // 3. Product Types
-    processFacetsForGroup('productType', (p) => {
-       if (p.productType) {
-           const tv = getTargetValue("product_type", p.productType);
-           typeCounts[tv] = (typeCounts[tv] || 0) + 1;
-       }
-    });
-
-    // 4. Tags
-    processFacetsForGroup('tag', (p) => {
-       if (p.tags) {
-         p.tags.forEach((tag) => {
-             const tv = getTargetValue("tags", tag);
-             tagCounts[tv] = (tagCounts[tv] || 0) + 1;
-         });
-       }
-    });
-
-    // 5. Titles
-    processFacetsForGroup('title', (p) => {
-       if (p.title) titleCounts[p.title] = (titleCounts[p.title] || 0) + 1;
-    });
-
-    // 6. Availability
-    processFacetsForGroup('availability', (p) => {
-       const hasInStock = p.variants.some((v) => v.available);
-       if (hasInStock) inStockCount++; else outOfStockCount++;
-    });
-
-    // 7. Price Ranges
-    let absoluteMinPrice = Infinity;
-    let absoluteMaxPrice = -Infinity;
-    
-    processFacetsForGroup('price', (p) => {
-       if (p.variants.length > 0) {
-         let minProductPrice = Infinity;
-         let maxProductPrice = -Infinity;
-         
-         p.variants.forEach((v) => {
-           const vPrice = parseFloat(v.price || 0);
-           if (vPrice < minProductPrice) minProductPrice = vPrice;
-           if (vPrice > maxProductPrice) maxProductPrice = vPrice;
-         });
-         
-         if (minProductPrice !== Infinity) {
-           if (minProductPrice < absoluteMinPrice) absoluteMinPrice = minProductPrice;
-           if (maxProductPrice > absoluteMaxPrice) absoluteMaxPrice = maxProductPrice;
-           
-           if (priceRangeCounts.length > 0) {
-             priceRangeCounts.forEach((r) => {
-               const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
-               const rMaxVal = r.max !== undefined ? r.max : r.to;
-               const rMax = (rMaxVal === "" || rMaxVal === null || rMaxVal === undefined) ? Infinity : parseFloat(rMaxVal);
-               if (minProductPrice >= rMin && minProductPrice <= rMax) r.count += 1;
-             });
-           }
-         }
-       }
-    });
-
-    // 8. Options
-    const activeOptionNames = activeGroupFilters ? activeGroupFilters.filter(f => f.filterType === 'option' || f.type === 'option').map(f => f.filterKey || f.key) : [];
-    Object.keys(optionsFilters).forEach(k => { if(!activeOptionNames.includes(k)) activeOptionNames.push(k); });
-    
-    activeOptionNames.forEach(optName => {
-        if (!optionCounts[optName]) optionCounts[optName] = {};
-        processFacetsForGroup(`option:${optName}`, (p) => {
-            let optionsList = [];
-            if (typeof p.options === "string") {
-              try { optionsList = JSON.parse(p.options) || []; } catch (e) {}
-            } else { optionsList = p.options || []; }
-            
-            p.variants.forEach((v) => {
-              if (v.option1 && optionsList[0] && optionsList[0].name === optName) {
-                  const tv = getTargetValue(optName, v.option1);
-                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
-              }
-              if (v.option2 && optionsList[1] && optionsList[1].name === optName) {
-                  const tv = getTargetValue(optName, v.option2);
-                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
-              }
-              if (v.option3 && optionsList[2] && optionsList[2].name === optName) {
-                  const tv = getTargetValue(optName, v.option3);
-                  optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + 1;
-              }
-            });
-        });
-    });
-
-    // 9. Metafields
-    const activeMetafieldNames = activeGroupFilters ? activeGroupFilters.filter(f => f.filterType === 'metafield' || f.type === 'metafield').map(f => f.filterKey || f.key) : [];
-    Object.keys(metafieldsFilters).forEach(k => { if(!activeMetafieldNames.includes(k)) activeMetafieldNames.push(k); });
-
-    activeMetafieldNames.forEach(metaKey => {
-        if (!metafieldCounts[metaKey]) metafieldCounts[metaKey] = {};
-        processFacetsForGroup(`metafield:${metaKey}`, (p) => {
-            if (p.metafields) {
-               p.metafields.forEach((m) => {
-                 const facetKey = `${m.namespace}.${m.key}`;
-                 if (facetKey === metaKey) {
-                    metafieldCounts[facetKey][m.value] = (metafieldCounts[facetKey][m.value] || 0) + 1;
-                 }
-               });
+    for (const [facetKey, counts] of Object.entries(facetDistribution)) {
+        if (facetKey.startsWith("option_")) {
+            const optName = facetKey.replace("option_", "");
+            if (!optionCounts[optName]) optionCounts[optName] = {};
+            for (const [val, count] of Object.entries(counts)) {
+                const tv = getTargetValue(optName, val);
+                optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + count;
             }
-        });
-    });
+        }
+        if (facetKey.startsWith("metafield_")) {
+            const metaKey = facetKey.replace("metafield_", ""); // "namespace.key"
+            if (!metafieldCounts[metaKey]) metafieldCounts[metaKey] = {};
+            for (const [val, count] of Object.entries(counts)) {
+                metafieldCounts[metaKey][val] = (metafieldCounts[metaKey][val] || 0) + count;
+            }
+        }
+    }
 
     // ── 6. Apply Merchandising Scores and Sort ─────────────────────────
     const finalProducts = applyMerchandisingRules(
@@ -592,6 +537,8 @@ export const loader = async ({ request }) => {
         .filter(Boolean);
     }
 
+    const totalMs = Date.now() - startTime;
+
     return data({
       products,
       totalCount,
@@ -606,24 +553,29 @@ export const loader = async ({ request }) => {
         pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: activePinningRule?.products ? (typeof activePinningRule.products === "string" ? JSON.parse(activePinningRule.products).length : activePinningRule.products.length) : 0,
         hasMerchandisingRule: !!activeRule,
+        timing: {
+           meiliMs: meiliTime,
+           prismaMs: prismaTime,
+           totalMs: totalMs
+        }
       },
       facets: {
         vendors: Object.entries(vendorCounts)
           .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => a.value.localeCompare(b.value)),
+          .sort((a, b) => String(a.value || "").localeCompare(String(b.value || ""))),
         productTypes: Object.entries(typeCounts)
           .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => a.value.localeCompare(b.value)),
+          .sort((a, b) => String(a.value || "").localeCompare(String(b.value || ""))),
         tags: Object.entries(tagCounts)
           .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => a.value.localeCompare(b.value)),
+          .sort((a, b) => String(a.value || "").localeCompare(String(b.value || ""))),
         titles: Object.entries(titleCounts)
           .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => a.value.localeCompare(b.value)),
+          .sort((a, b) => String(a.value || "").localeCompare(String(b.value || ""))),
         options: Object.entries(optionCounts).reduce((acc, [name, valuesMap]) => {
           acc[name] = Object.entries(valuesMap)
             .map(([value, count]) => ({ value, count }))
-            .sort((a, b) => a.value.localeCompare(b.value));
+            .sort((a, b) => String(a.value || "").localeCompare(String(b.value || "")));
           return acc;
         }, {}),
         collections: Object.entries(collectionCounts)
@@ -632,12 +584,12 @@ export const loader = async ({ request }) => {
             label: item.title,
             count: item.count,
           }))
-          .sort((a, b) => a.label.localeCompare(b.label)),
+          .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""))),
         metafields: Object.entries(metafieldCounts).reduce(
           (acc, [key, valuesMap]) => {
             acc[key] = Object.entries(valuesMap)
               .map(([value, count]) => ({ value, count }))
-              .sort((a, b) => a.value.localeCompare(b.value));
+              .sort((a, b) => String(a.value || "").localeCompare(String(b.value || "")));
             return acc;
           },
           {},

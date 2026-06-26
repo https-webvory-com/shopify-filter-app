@@ -434,7 +434,6 @@ const AutocompleteInput = ({
         placeholder={placeholder}
         value={inputValue}
         onChange={handleChange}
-        onFocus={() => setIsOpen(true)}
         onClick={() => setIsOpen(true)}
         style={{
           width: "100%",

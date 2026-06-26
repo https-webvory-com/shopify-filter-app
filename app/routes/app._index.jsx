@@ -22,8 +22,8 @@ export const action = async ({ request }) => {
 
   if (actionType === "sync") {
     try {
-      const count = await syncProducts(session.shop, admin);
-      return { success: true, count, type: "sync" };
+      const result = await syncProducts(session.shop, admin);
+      return { success: true, message: result.message, type: "sync" };
     } catch (e) {
       console.error("Sync error:", e);
       return { error: e.message, type: "sync" };
@@ -44,10 +44,8 @@ export default function Index() {
     syncFetcher.formData?.get("actionType") === "sync";
 
   useEffect(() => {
-    if (syncFetcher.data?.success) {
-      shopify.toast.show(
-        `Successfully synced ${syncFetcher.data.count} products!`,
-      );
+    if (syncFetcher.data?.success && syncFetcher.data?.type === "sync") {
+      shopify.toast.show(syncFetcher.data.message || "Sync started in background!");
     } else if (syncFetcher.data?.error) {
       shopify.toast.show(`Sync failed: ${syncFetcher.data.error}`, {
         isError: true,
@@ -58,9 +56,8 @@ export default function Index() {
   const triggerSync = () =>
     syncFetcher.submit({ actionType: "sync" }, { method: "POST" });
 
-  const currentCount = syncFetcher.data?.success
-    ? syncFetcher.data.count
-    : syncedProductsCount;
+  // Since sync is now background, we just show the initial loader count
+  const currentCount = syncedProductsCount;
 
   return (
     <s-page heading="Collection Filter Pro Dashboard">
@@ -597,7 +594,7 @@ export default function Index() {
           </div>
 
           {/* Box 3: Search Synonym */}
-          <div className="sov-card-soon">
+          <div className="sov-card">
             <div className="sov-card-body">
               <div className="sov-card-header">
                 <div className="sov-card-icon">
@@ -622,9 +619,14 @@ export default function Index() {
                 Create synonyms to help users find matching products with
                 alternative search terms.
               </p>
-              <div className="sov-soon-bar">
+              <button
+                className="sov-link-btn"
+                onClick={() => navigate("/app/search/synonyms")}
+              >
+                Manage synonyms
                 <svg
-                  className="sov-soon-icon"
+                  width="14"
+                  height="14"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -633,13 +635,11 @@ export default function Index() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+                    d="M17 8l4 4m0 0l-4 4m4-4H3"
+                  ></path>
                 </svg>
-                Coming Soon
-              </div>
+              </button>
             </div>
-            <div className="sov-soon-ribbon">UPCOMING</div>
           </div>
         </div>
       </div>
