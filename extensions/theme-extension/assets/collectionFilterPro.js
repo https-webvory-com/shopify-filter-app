@@ -359,19 +359,27 @@
 
 
   function renderProducts(products, totalCount, isLoadMore, mergedValues) {
+    console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
+    console.log('[CFP] First product data:', products[0]);
+
+    // Always ensure native grid is hidden, even if productContainer already exists
+    const nativeGrid = findGrid();
+    if (nativeGrid) {
+      console.log('[CFP] Hiding native grid:', nativeGrid);
+      nativeGrid.style.setProperty('display', 'none', 'important');
+    }
+
     // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
       productContainer = document.createElement('div');
       productContainer.id = 'cfp-products-container';
       productContainer.className = 'cfp-products-grid';
-      const nativeGrid = findGrid();
       if (nativeGrid) {
-        // Permanently hide Dawn's native ul grid
-        nativeGrid.style.setProperty('display', 'none', 'important');
         nativeGrid.parentElement.insertBefore(productContainer, nativeGrid.nextSibling);
       } else {
-        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        console.log('[CFP] Native grid not found, appending to fallback.');
+        const main = document.querySelector('.template-search') || document.getElementById('MainContent') || document.querySelector('main') || document.body;
         main.appendChild(productContainer);
       }
     }
@@ -569,6 +577,11 @@
       `;
     }).join('');
     
+    console.log('[CFP] Generated HTML length:', productsHtml.length);
+    if (productsHtml.length < 100 && products.length > 0) {
+      console.error('[CFP] HTML generation failed or returned empty!', productsHtml);
+    }
+
     if (isLoadMore) {
       // Remove old pagination if it exists inside grid
       const oldPagination = grid.querySelector('.cfp-load-more-container');
@@ -1722,21 +1735,31 @@
 
   // ── 8. Find grid elements on Dawn and other standard themes ──────────
   const gridSelectors = customSettings.gridSelectors || [
-    '#product-grid', '#CollectionProductGrid', '.product-grid', '.collection-grid',
-    '.main-collection-grid', 'ul.grid', '.grid--view-items', '.boost-pfs-filter-products',
-    '#js-product-grid', '.products-grid', '.collection-products', '.product-list', '[data-product-grid]'
+    'product-list', 'product-grid', '.ProductList', '#product-grid', '#CollectionProductGrid', 
+    '.product-grid', '.collection-grid', '.main-collection-grid', 'ul.grid', '.grid--view-items', 
+    '.boost-pfs-filter-products', '#js-product-grid', '.products-grid', '.collection-products', 
+    '.product-list', '[data-product-grid]', '.collection-list'
   ];
 
   let isAttached = false;
 
   function findGrid() {
     const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+    
+    // Prioritize main section to avoid hitting 'Recently Viewed' or other carousels
+    const mainSection = main.querySelector('.shopify-section--main-collection, .shopify-section--main-search, [id*="__main"], [id*="main-collection"], [id*="collection-template"]');
+    const searchArea = mainSection || main;
+
     for (let i = 0; i < gridSelectors.length; i++) {
-      const found = main.querySelector(gridSelectors[i]);
-      if (found && !found.closest('.cfp-sidebar')) {
-        return found;
+      const foundList = searchArea.querySelectorAll(gridSelectors[i]);
+      for (const found of foundList) {
+        if (found && !found.closest('.cfp-sidebar') && !found.closest('.carousel') && !found.closest('.slider') && !found.closest('swiper-container')) {
+          console.log('[CFP] Found native grid using selector:', gridSelectors[i], found);
+          return found;
+        }
       }
     }
+
     
     let fallback = document.getElementById('cfp-fallback-grid');
     if (!fallback) {
