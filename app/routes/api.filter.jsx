@@ -331,48 +331,87 @@ export const loader = async ({ request }) => {
         break;
     }
     
-    const meiliFilters = [`shop = '${shop}'`];
+    const baseFilters = [`shop = '${shop}'`];
     if (resolvedCollectionId) {
-       meiliFilters.push(`collections = '${resolvedCollectionId}'`);
+       baseFilters.push(`collections = '${resolvedCollectionId}'`);
     }
     if (minPrice > 0 || maxPrice < 9999999) {
-       meiliFilters.push(`priceMin >= ${minPrice} AND priceMin <= ${maxPrice}`);
+       baseFilters.push(`priceMin >= ${minPrice} AND priceMin <= ${maxPrice}`);
     }
+
+    const categoryFilters = {};
     if (availability.length > 0) {
-       if (availability.includes("in_stock") && !availability.includes("out_of_stock")) meiliFilters.push(`available = true`);
-       else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) meiliFilters.push(`available = false`);
+       if (availability.includes("in_stock") && !availability.includes("out_of_stock")) categoryFilters["available"] = `available = true`;
+       else if (availability.includes("out_of_stock") && !availability.includes("in_stock")) categoryFilters["available"] = `available = false`;
     }
     if (vendors.length > 0) {
-       meiliFilters.push(`vendor IN [${vendors.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+       categoryFilters["vendor"] = `vendor IN [${vendors.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`;
     }
     if (types.length > 0) {
-       meiliFilters.push(`productType IN [${types.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`);
+       categoryFilters["productType"] = `productType IN [${types.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`;
     }
     if (tags.length > 0) {
-       meiliFilters.push(`tags IN [${tags.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`);
+       categoryFilters["tags"] = `tags IN [${tags.map(t => `'${t.replace(/'/g, "\\'")}'`).join(',')}]`;
     }
     for (const [key, values] of Object.entries(optionsFilters)) {
        if (values.length > 0) {
-          meiliFilters.push(`option_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+          categoryFilters[`option_${key}`] = `option_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`;
        }
     }
     for (const [key, values] of Object.entries(metafieldsFilters)) {
        if (values.length > 0) {
-          meiliFilters.push(`metafield_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`);
+          categoryFilters[`metafield_${key}`] = `metafield_${key} IN [${values.map(v => `'${v.replace(/'/g, "\\'")}'`).join(',')}]`;
        }
     }
 
-    const meiliStart = Date.now();
-    const meiliSearchParams = {
-       filter: meiliFilters,
+    const allFiltersList = [...baseFilters, ...Object.values(categoryFilters)];
+    
+    const queries = [];
+    const mainQuery = {
+       indexUid: "products",
+       q: searchQuery,
+       filter: allFiltersList,
        facets: ["*"],
        limit: 1000,
        attributesToHighlight: ["title", "tags", "productType", "vendor"]
     };
-    if (meiliSort) {
-       meiliSearchParams.sort = meiliSort;
+    if (meiliSort) mainQuery.sort = meiliSort;
+    queries.push(mainQuery);
+    
+    const activeCategories = Object.keys(categoryFilters);
+    for (const cat of activeCategories) {
+        const filterForThisCat = [
+           ...baseFilters,
+           ...activeCategories.filter(c => c !== cat).map(c => categoryFilters[c])
+        ];
+        queries.push({
+           indexUid: "products",
+           q: searchQuery,
+           filter: filterForThisCat,
+           facets: [cat],
+           limit: 0, 
+        });
     }
-    const meiliRes = await meiliClient.index("products").search(searchQuery, meiliSearchParams);
+
+    const meiliStart = Date.now();
+    let meiliRes = { hits: [], estimatedTotalHits: 0 };
+    let facetDistribution = {};
+    
+    try {
+        const multiSearchRes = await meiliClient.multiSearch({ queries });
+        meiliRes = multiSearchRes.results[0];
+        facetDistribution = { ...(meiliRes.facetDistribution || {}) };
+        
+        for (let i = 0; i < activeCategories.length; i++) {
+           const cat = activeCategories[i];
+           const catRes = multiSearchRes.results[i + 1];
+           if (catRes && catRes.facetDistribution && catRes.facetDistribution[cat]) {
+               facetDistribution[cat] = catRes.facetDistribution[cat];
+           }
+        }
+    } catch (e) {
+        console.error("CFP: Meilisearch MultiSearch failed:", e);
+    }
 
     let didYouMean = null;
     if (searchQuery && searchQuery.length > 2 && meiliRes.hits.length > 0) {
@@ -386,7 +425,7 @@ export const loader = async ({ request }) => {
 
       if (!exactMatchFound) {
         const firstHit = meiliRes.hits[0];
-        if (firstHit._formatted) {
+        if (firstHit && firstHit._formatted) {
           const match = JSON.stringify(firstHit._formatted).match(/<em>(.*?)<\/em>/i);
           if (match && match[1]) {
              const suggestion = match[1].toLowerCase().trim();
@@ -399,9 +438,8 @@ export const loader = async ({ request }) => {
     }
     const meiliTime = Date.now() - meiliStart;
 
-    const totalCount = meiliRes.estimatedTotalHits;
-    const facetDistribution = meiliRes.facetDistribution || {};
-    const allMatchedProducts = meiliRes.hits.map(h => ({
+    const totalCount = meiliRes.estimatedTotalHits || 0;
+    const allMatchedProducts = (meiliRes.hits || []).map(h => ({
         ...h,
         id: `gid://shopify/Product/${h.id}`
     }));

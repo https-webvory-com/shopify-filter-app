@@ -144,6 +144,30 @@ facet-filters-form,
   min-width: 0 !important;
 }
 
+/* Full Width Breakout Mode via JS (CSS part) */
+.cfp-full-width-mode {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Aggressively target parent theme containers to expand them if Full Width is enabled */
+.page-width:has(.cfp-full-width-mode),
+.container:has(.cfp-full-width-mode),
+.wrapper:has(.cfp-full-width-mode),
+.site-wrapper:has(.cfp-full-width-mode) {
+  max-width: 100% !important;
+  padding: 0 40px !important;
+}
+
+@media (max-width: 768px) {
+  .page-width:has(.cfp-full-width-mode),
+  .container:has(.cfp-full-width-mode),
+  .wrapper:has(.cfp-full-width-mode),
+  .site-wrapper:has(.cfp-full-width-mode) {
+    padding: 0 15px !important;
+  }
+}
+
 /* ─── Sidebar base (desktop: inline panel) ───────────────────────────── */
 .cfp-sidebar {
   width: var(--cfp-sidebar-w);

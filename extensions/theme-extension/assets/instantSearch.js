@@ -768,7 +768,7 @@ document.addEventListener("DOMContentLoaded", function () {
           let activeIndex = 0;
           if (query) {
              const q = query.toLowerCase();
-             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(q));
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(q) || q.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
                 hasMatchedColor = true;

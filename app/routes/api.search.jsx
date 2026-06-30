@@ -3,6 +3,8 @@ import prisma from "../db.server";
 import { getActivePinningRuleForSearch } from "../services/merchandising.server";
 import meiliClient from "../services/meiliClient.server";
 
+import { extractFiltersFromQuery } from "../services/ai.server";
+
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -13,6 +15,7 @@ export const loader = async ({ request }) => {
   const shop = url.searchParams.get("shop");
   let query = url.searchParams.get("q") || "";
   const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+  const sortBy = url.searchParams.get("sortBy");
 
   if (!shop) {
     return data({ error: "Missing shop parameter" }, { status: 400 });
@@ -21,20 +24,75 @@ export const loader = async ({ request }) => {
   try {
     let organicProducts = [];
     
-    // 1. Fetch Organic Search Results from Meilisearch
-    // If query is empty, Meilisearch returns all documents (up to limit) which acts as a default/trending view.
     const searchQuery = query ? query.trim() : "";
-    const meiliRes = await meiliClient.index("products").search(searchQuery, {
-      filter: [`shop = '${shop}'`, `available = true`],
-      limit: limit,
-      facets: ["tags", "productType"],
-      attributesToHighlight: ["title", "tags", "productType", "vendor"]
-    });
+    
+    // -- TIER 1: NLP Intent Extraction (DISABLED) --
+    // const aiExtracted = await extractFiltersFromQuery(searchQuery);
+    const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
+    const cleanSearchQuery = typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
+    
+    let meiliFilters = [`shop = '${shop}'`];
+    
+    if (aiExtracted.min_price !== undefined && aiExtracted.min_price !== null) {
+        meiliFilters.push(`priceMin >= ${aiExtracted.min_price}`);
+    }
+    if (aiExtracted.max_price !== undefined && aiExtracted.max_price !== null) {
+        meiliFilters.push(`priceMin <= ${aiExtracted.max_price}`);
+    }
+    
+    // Dynamically apply any extra attributes (size, color, material etc)
+    if (aiExtracted.attributes && typeof aiExtracted.attributes === 'object') {
+        for (const [key, value] of Object.entries(aiExtracted.attributes)) {
+            if (!value) continue;
+            // Map keys like "size" to Meilisearch attribute "option_Size" (capitalized)
+            const facetName = `option_${key.charAt(0).toUpperCase() + key.slice(1).toLowerCase()}`;
+            // Add to meilisearch filter with case-insensitive match assumption
+            meiliFilters.push(`${facetName} = '${value}'`);
+        }
+    }
+
+    let meiliSearchParams = {
+        filter: meiliFilters,
+        limit: limit,
+        facets: ["tags", "productType"],
+        attributesToHighlight: ["title", "tags", "productType", "vendor"]
+        // hybrid: {
+        //     semanticRatio: 0.1,
+        //     embedder: "default"
+        // }
+    };
+
+    if (sortBy) {
+        if (sortBy === 'price-ascending') {
+            meiliSearchParams.sort = ['priceMin:asc'];
+        } else if (sortBy === 'price-descending') {
+            meiliSearchParams.sort = ['priceMin:desc'];
+        } else if (sortBy === 'title-ascending') {
+            meiliSearchParams.sort = ['title:asc'];
+        } else if (sortBy === 'title-descending') {
+            meiliSearchParams.sort = ['title:desc'];
+        } else if (sortBy === 'created-ascending') {
+            meiliSearchParams.sort = ['createdAt:asc'];
+        } else if (sortBy === 'created-descending') {
+            meiliSearchParams.sort = ['createdAt:desc'];
+        }
+    }
+
+    let meiliRes;
+    try {
+        // -- TIER 2: Hybrid Semantic Vector Search --
+        meiliRes = await meiliClient.index("products").search(cleanSearchQuery, meiliSearchParams);
+    } catch (vectorError) {
+        // GRACEFUL FALLBACK: If API Key expires or Meilisearch is not configured for vectors
+        console.error("CFP: Semantic Search failed, falling back to Keyword Search. Error:", vectorError.message);
+        delete meiliSearchParams.hybrid;
+        meiliRes = await meiliClient.index("products").search(searchQuery, meiliSearchParams);
+    }
 
     let didYouMean = null;
-    if (searchQuery.length > 2 && meiliRes.hits.length > 0) {
-      const sq = searchQuery.toLowerCase();
-      // Check if original query is found exactly in any of the results
+    if (cleanSearchQuery.length > 2 && meiliRes.hits.length > 0) {
+      const sq = cleanSearchQuery.toLowerCase();
+      // Check if clean query is found exactly in any of the results
       const exactMatchFound = meiliRes.hits.some(hit => 
         (hit.title && hit.title.toLowerCase().includes(sq)) ||
         (hit.tags && hit.tags.some(t => t.toLowerCase().includes(sq))) ||
@@ -66,17 +124,17 @@ export const loader = async ({ request }) => {
           meiliClient.index("products").searchForFacetValues({
              facetName: "tags",
              facetQuery: searchQuery,
-             filter: [`shop = '${shop}'`, `available = true`]
+             filter: [`shop = '${shop}'`]
           }),
           meiliClient.index("products").searchForFacetValues({
              facetName: "productType",
              facetQuery: searchQuery,
-             filter: [`shop = '${shop}'`, `available = true`]
+             filter: [`shop = '${shop}'`]
           }),
           meiliClient.index("products").searchForFacetValues({
              facetName: "option_Color",
              facetQuery: searchQuery,
-             filter: [`shop = '${shop}'`, `available = true`]
+             filter: [`shop = '${shop}'`]
           }).catch(() => ({ facetHits: [] })) // catch in case option_Color doesn't exist
         ]);
         

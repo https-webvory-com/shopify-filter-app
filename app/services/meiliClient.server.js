@@ -4,8 +4,8 @@ let meiliClient;
 
 if (!global.meiliClient) {
   global.meiliClient = new Meilisearch({
-    host: "http://127.0.0.1:7700",
-    apiKey: "masterKey",
+    host: process.env.MEILI_HOST || "http://127.0.0.1:7700",
+    apiKey: process.env.MEILI_MASTER_KEY || "masterKey",
   });
 }
 

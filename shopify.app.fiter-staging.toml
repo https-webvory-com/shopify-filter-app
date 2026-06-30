@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f0784c29e822aa5959ef9f0417095b8c"
-application_url = "https://tongue-slots-atlas-electron.trycloudflare.com"
+application_url = "https://way-above-represent-salvation.trycloudflare.com"
 embedded = true
 name = "fiter-staging"
 
@@ -45,10 +45,10 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://tongue-slots-atlas-electron.trycloudflare.com/api/auth"
+  "https://way-above-represent-salvation.trycloudflare.com/api/auth"
 ]
 
 [app_proxy]
-url = "https://tongue-slots-atlas-electron.trycloudflare.com"
+url = "https://way-above-represent-salvation.trycloudflare.com"
 subpath = "collection-filter-pro"
 prefix = "apps"

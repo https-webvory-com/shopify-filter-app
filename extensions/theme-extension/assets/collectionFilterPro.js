@@ -511,7 +511,7 @@
           // 1. Check if there's a search query matching a color
           if (activeFilters.q && activeFilters.q.trim() !== "") {
              const qLower = activeFilters.q.toLowerCase().trim();
-             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower));
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower) || qLower.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
              }
@@ -1463,7 +1463,7 @@
         let arr = [];
         if (name === 'availability') arr = activeFilters.availability;
         else if (name === 'vendor') arr = activeFilters.vendors;
-        else if (name === 'type') arr = activeFilters.types;
+        else if (name === 'product_type') arr = activeFilters.types;
         else if (name === 'collection') arr = activeFilters.collections;
         else if (name === 'tag' || name === 'tags') arr = activeFilters.tags;
         else if (name === 'title') arr = activeFilters.titles;
@@ -1502,7 +1502,7 @@
               const cbVal = cb.value;
               if (name === 'availability') updateFilterArray(activeFilters.availability, cbVal, false);
               else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
-              else if (name === 'type') updateFilterArray(activeFilters.types, cbVal, false);
+              else if (name === 'product_type') updateFilterArray(activeFilters.types, cbVal, false);
               else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
               else if (name === 'tag' || name === 'tags') updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
               else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
@@ -1525,7 +1525,7 @@
           updateFilterArray(activeFilters.availability, val, checked);
         } else if (name === 'vendor') {
           updateFilterArray(activeFilters.vendors, val, checked);
-        } else if (name === 'type') {
+        } else if (name === 'product_type') {
           updateFilterArray(activeFilters.types, val, checked);
         } else if (name === 'collection') {
           updateFilterArray(activeFilters.collections, val, checked);
@@ -1836,7 +1836,19 @@
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
+        if (window.cfpFullWidth) {
+          wrapper.classList.add('cfp-full-width-mode');
+        }
         grid.parentElement.insertBefore(wrapper, grid);
+        
+        // Expand the theme's native container if Full Width is enabled
+        if (window.cfpFullWidth) {
+           const themeContainer = wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');
+           if (themeContainer) {
+              themeContainer.style.maxWidth = '100%';
+              themeContainer.style.padding = window.innerWidth <= 768 ? '0 15px' : '0 40px';
+           }
+        }
       }
 
       // Automatically move the Search Header above the wrapper

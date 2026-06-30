@@ -32,9 +32,9 @@ export async function formatAndPushToMeili(products) {
     return {
       id: p.id.split("/").pop(),
       shop: p.shop,
-      title: p.title,
-      vendor: p.vendor,
-      productType: p.productType,
+      title: p.title || "",
+      vendor: p.vendor || "",
+      productType: p.productType || "",
       priceMin: parseFloat(p.priceMin),
       priceMax: parseFloat(p.priceMax),
       tags: p.tags || [],
@@ -111,6 +111,28 @@ async function updateMeiliSettings(shop) {
     await index.updateSearchableAttributes(searchableAttributes);
     await index.updateSortableAttributes(sortableAttributes);
     await index.updateFaceting({ maxValuesPerFacet: 100000 });
+
+    if (process.env.GEMINI_API_KEY) {
+      await index.updateEmbedders({
+        default: {
+          source: 'rest',
+          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY}`,
+          request: {
+            "model": "models/gemini-embedding-2",
+            "content": {
+              "parts": [{ "text": "{{text}}" }]
+            }
+          },
+          response: {
+            "embedding": {
+              "values": "{{embedding}}"
+            }
+          },
+          documentTemplate: "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}"
+        }
+      });
+      console.log(`CFP: AI Vector embedder (Gemini) settings configured for ${shop}`);
+    }
     
     console.log(`CFP: Meilisearch settings updated successfully for ${shop}`);
   } catch (error) {
