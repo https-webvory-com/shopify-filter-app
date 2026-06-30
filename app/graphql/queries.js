@@ -1,6 +1,6 @@
 export const GET_THEME = `#graphql
   query ThemeList {
-    themes(first: 10) {
+    themes(first: 250) {
       edges {
         node {
           id
@@ -26,7 +26,7 @@ export const GET_THEME_SETTINGS = `#graphql
       id
       name
       role
-      files(filenames: ["config/settings_data.json"], first: 1) {
+      files(filenames: ["config/settings_data.json"], first: 100) {
         nodes {
           body {
             ... on OnlineStoreThemeFileBodyText {
