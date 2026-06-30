@@ -4,28 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { GET_THEME, GET_THEME_SETTINGS } from "../graphql/queries";
 import { useLoaderData, useNavigate } from "react-router";
 
-const hasDisabledFalse = (value) => {
-  if (value === null || value === undefined) {
-    return false;
-  }
 
-  if (typeof value === "string") {
-    return /"disabled"\s*:\s*false/.test(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.some(hasDisabledFalse);
-  }
-
-  if (typeof value === "object") {
-    if (Object.prototype.hasOwnProperty.call(value, "disabled")) {
-      return value.disabled === false;
-    }
-    return Object.values(value).some(hasDisabledFalse);
-  }
-
-  return false;
-};
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -41,13 +20,46 @@ export const loader = async ({ request }) => {
       const settingsJson = await settingsResponse.json();
       const assetContent =
         settingsJson?.data?.theme?.files?.nodes?.[0]?.body?.content || "";
-      const rawHasDisabledFalse = /"disabled"\s*:\s*false/.test(assetContent);
-      let canPreview = rawHasDisabledFalse;
+      let canPreview = false;
+      const EXT_UID = "65b30aae-2fc0-9b48-3e28-e6bf3e801b92f9c75ad7";
+
+      const findAppEmbeds = (obj) => {
+        if (!obj || typeof obj !== "object") return false;
+        
+        if (obj.type && typeof obj.type === "string" && obj.type.includes("shopify://apps/")) {
+          console.log("FOUND APP EMBED:", obj.type, "DISABLED:", obj.disabled);
+          
+          const isOurBlock = obj.type.includes("collection_filter_pro") || 
+                             obj.type.includes("collection-filter-pro") || 
+                             obj.type.includes("instant_search") ||
+                             obj.type.includes("instant-search") ||
+                             obj.type.includes("al-smart-search-filter") ||
+                             obj.type.includes(EXT_UID);
+                             
+          if (isOurBlock) {
+             if (obj.disabled === false || obj.disabled === undefined) {
+               return true;
+             }
+          }
+        }
+        
+        for (const key of Object.keys(obj)) {
+          if (findAppEmbeds(obj[key])) {
+            return true;
+          }
+        }
+        
+        return false;
+      };
+
       try {
-        const parsed = JSON.parse(assetContent);
-        canPreview = hasDisabledFalse(parsed) || rawHasDisabledFalse;
+        if (assetContent) {
+          const cleanJson = assetContent.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+          const parsed = JSON.parse(cleanJson);
+          canPreview = findAppEmbeds(parsed);
+        }
       } catch (error) {
-        canPreview = rawHasDisabledFalse;
+        console.error("Error parsing settings_data.json", error);
       }
 
       const themeId = node.id
@@ -62,6 +74,7 @@ export const loader = async ({ request }) => {
         role: node.role,
         updatedAt: node.updatedAt,
         canPreview,
+        rawAssetContent: assetContent,
       };
     }),
   );
@@ -74,7 +87,8 @@ export const loader = async ({ request }) => {
 export default function ThemeSetup() {
   const { themes, shop } = useLoaderData();
   const navigate = useNavigate();
-  console.log("Fetched themes:", themes);
+  // console.log("Fetched themes from loader (Check rawAssetContent inside):", themes);
+  
   // Normalize Shopify data → UI format
   const mappedThemes = themes.map((theme) => ({
     id: theme.id,
