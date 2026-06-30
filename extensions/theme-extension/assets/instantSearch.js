@@ -408,7 +408,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const parsed = JSON.parse(cached);
         renderRecentSearches("");
         renderCollections(parsed.collectionsData, "", true);
-        renderProducts(parsed.productsData, "", true);
+        renderProducts(parsed.productsData, "", true, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -418,9 +418,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     try {
+      let countryParam = "";
+      if (window.Shopify && window.Shopify.country) {
+         countryParam = `&country=${window.Shopify.country}`;
+      }
+      
       // 1. Fetch 4 popular products in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=4&sortBy=best-selling`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=4&sortBy=best-selling${countryParam}`
       ).then((res) => res.json());
 
       // 2. Fetch all/popular collections in background
@@ -449,7 +454,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!currentQuery) {
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
-        renderProducts(productsData, "", true);
+        renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
       }
 
     } catch (error) {
@@ -573,7 +578,7 @@ document.addEventListener("DOMContentLoaded", function () {
       try {
         const parsed = JSON.parse(cached);
         renderCollections(parsed.collectionsData, query);
-        renderProducts(parsed.productsData, query);
+        renderProducts(parsed.productsData, query, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -583,9 +588,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     try {
+      let countryParam = "";
+      if (window.Shopify && window.Shopify.country) {
+         countryParam = `&country=${window.Shopify.country}`;
+      }
+
       // 1. Fetch products from OUR API in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}${countryParam}`
       ).then((res) => res.json());
 
       // 2. Fetch collections from Shopify Predictive Search API in background
@@ -632,7 +642,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         renderCollections(collectionsData, query);
-        renderProducts(productsData, query);
+        renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
         if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
            renderSuggestions(productsData.suggestions, query);
         } else if (currentQuery.length > 0) {
@@ -711,7 +721,7 @@ document.addEventListener("DOMContentLoaded", function () {
     list.innerHTML = html;
   }
 
-  function renderProducts(data, query) {
+  function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
     console.log("CFP: renderProducts called with", data.products ? data.products.length : 0, "products");
     const grid = document.getElementById("cfp-search-products");
     const products = data.products || [];
@@ -746,6 +756,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // 2. Extract Color Swatches from Variants
       let swatchesHtml = "";
       let defaultImageUrl = "";
+      let defaultVariantId = "";
       let hasMatchedColor = false;
       
       if (colorOptionIndex !== -1 && p.variants && p.variants.length > 0) {
@@ -776,6 +787,9 @@ document.addEventListener("DOMContentLoaded", function () {
           }
 
           defaultImageUrl = colorsArray[activeIndex][1].imgUrl;
+          if (colorsArray[activeIndex][1].variantId) {
+             defaultVariantId = colorsArray[activeIndex][1].variantId;
+          }
           
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
@@ -830,10 +844,35 @@ document.addEventListener("DOMContentLoaded", function () {
          imageUrl = "https://cdn.shopify.com/s/images/admin/no-image-large.gif";
       }
 
-      const price = p.priceMin !== undefined ? `$${p.priceMin}` : ""; 
+      let rate = 1;
+      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
+        rate = parseFloat(window.Shopify.currency.rate) || 1;
+      }
+      let symbol = '$';
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+         try {
+            const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
+            const sym = parts.find(p => p.type === 'currency');
+            if (sym) symbol = sym.value;
+         } catch(e) {
+            symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+         }
+      } else {
+         symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+      }
       
+      let price = "";
+      if (p.priceMin !== undefined) {
+         const priceVal = parseFloat(p.priceMin) * rate;
+         price = `${symbol}${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      let productUrl = `/products/${p.handle}`;
+      if (defaultVariantId) {
+         productUrl += `?variant=${defaultVariantId}`;
+      }
+
       html += `
-        <a href="/products/${p.handle}" class="cfp-search-product-card">
+        <a href="${productUrl}" class="cfp-search-product-card">
           <div class="cfp-search-product-image-wrap">
             <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
           </div>

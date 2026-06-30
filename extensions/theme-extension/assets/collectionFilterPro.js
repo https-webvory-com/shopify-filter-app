@@ -204,6 +204,10 @@
       const queryParams = new URLSearchParams();
       queryParams.append('shop', shop);
       
+      if (window.Shopify && window.Shopify.country) {
+         queryParams.append('country', window.Shopify.country);
+      }
+      
       if (window.cfpCustomerTags) {
         queryParams.append('customer_tags', window.cfpCustomerTags);
       }
@@ -283,7 +287,7 @@
       }
 
       if (data.products) {
-        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues);
+        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied);
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
@@ -378,7 +382,7 @@
   }
 
 
-  function renderProducts(products, totalCount, isLoadMore, mergedValues) {
+  function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
@@ -440,6 +444,8 @@
     const productsHtml = products.map(product => {
 
       let variantImg = null;
+      let matchedVariantId = null;
+      let matchedVariant = null;
         if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
           const selectedValues = [];
           Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
@@ -457,26 +463,84 @@
 
           if (selectedValues.length > 0 && product.variants && product.variants.length > 0) {
             // Lowercase all for case-insensitive matching
-            const expandedLower = expandedSelectedValues.map(x => x.toLowerCase());
-            // Find a variant that matches one of the expanded selected option values
-            const matchedVariant = product.variants.find(v => 
-              (v.option1 && expandedLower.includes(v.option1.toLowerCase())) ||
-              (v.option2 && expandedLower.includes(v.option2.toLowerCase())) ||
-              (v.option3 && expandedLower.includes(v.option3.toLowerCase()))
-            );
-            if (matchedVariant && matchedVariant.imageUrl) {
-              variantImg = matchedVariant.imageUrl;
+            const expandedLower = expandedSelectedValues.map(x => x.trim().toLowerCase());
+            
+            let bestScore = -1;
+            
+            product.variants.forEach(v => {
+               let score = 0;
+               const vOpts = [v.option1, v.option2, v.option3]
+                  .filter(Boolean)
+                  .map(x => x.trim().toLowerCase());
+                  
+               expandedLower.forEach(val => {
+                   if (vOpts.includes(val)) score++;
+               });
+               
+               if (score > bestScore) {
+                   bestScore = score;
+                   matchedVariant = v;
+               }
+            });
+            
+            if (bestScore === 0) matchedVariant = null;
+            if (matchedVariant) {
+              if (matchedVariant.imageUrl) {
+                variantImg = matchedVariant.imageUrl;
+              }
+              matchedVariantId = matchedVariant.id ? matchedVariant.id.replace('gid://shopify/ProductVariant/', '') : null;
             }
           }
         }
   
         let primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
-      const price = parseFloat(product.priceMin).toFixed(2);
-      const comparePrice = product.variants?.[0]?.compareAtPrice 
-        ? parseFloat(product.variants[0].compareAtPrice).toFixed(2) 
-        : null;
+        
+        let productUrl = `/products/${product.handle}`;
+        if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
+           productUrl += `?variant=${matchedVariantId}`;
+        }
+      let rate = 1;
+      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
+        rate = parseFloat(window.Shopify.currency.rate) || 1;
+      }
+      
+      let symbol = '$';
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+         try {
+            const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
+            const sym = parts.find(p => p.type === 'currency');
+            if (sym) symbol = sym.value;
+         } catch(e) {
+            symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+         }
+      } else {
+         symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+      }
+      
+      let basePrice = product.priceMin;
+      let baseComparePrice = product.variants?.[0]?.compareAtPrice;
 
-      const onSale = comparePrice && parseFloat(comparePrice) > parseFloat(price);
+      if (matchedVariant) {
+         if (matchedVariant.price !== undefined && matchedVariant.price !== null) {
+            basePrice = matchedVariant.price;
+         }
+         if (matchedVariant.compareAtPrice !== undefined && matchedVariant.compareAtPrice !== null) {
+            baseComparePrice = matchedVariant.compareAtPrice;
+         } else {
+            baseComparePrice = null;
+         }
+      }
+
+      const priceVal = parseFloat(basePrice) * rate;
+      const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      
+      let comparePrice = null;
+      let onSale = false;
+      if (baseComparePrice) {
+        const compareVal = parseFloat(baseComparePrice) * rate;
+        comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        onSale = compareVal > priceVal;
+      }
 
       // Extract Color Swatches from Variants
       let colorOptionIndex = -1;
@@ -535,8 +599,18 @@
                 activeIndex = foundIndex;
              }
           }
+           
+           if (activeIndex === 0 && matchedVariant && typeof optionKey !== 'undefined') {
+              const matchedVariantColor = matchedVariant[optionKey];
+              if (matchedVariantColor) {
+                 const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase() === matchedVariantColor.toLowerCase());
+                 if (foundIndex !== -1) {
+                    activeIndex = foundIndex;
+                 }
+              }
+           }
 
-          matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
+           matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
 
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
@@ -570,13 +644,16 @@
           
           if (matchedColorUrl) {
              primaryImg = matchedColorUrl;
+             if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
+                 productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
+             }
           }
         }
       }
 
       return `
         <div class="cfp-product-card">
-          <a href="/products/${product.handle}" class="cfp-product-card__link">
+          <a href="${productUrl}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
               ${onSale ? '<span class="cfp-product-card__badge">Sale</span>' : ''}
@@ -586,8 +663,8 @@
               <h3 class="cfp-product-card__title">${product.title}</h3>
               ${swatchesHtml}
               <div class="cfp-product-card__price-row">
-                <span class="cfp-product-card__price">$${price}</span>
-                ${onSale ? `<span class="cfp-product-card__compare-price">$${comparePrice}</span>` : ''}
+                <span class="cfp-product-card__price">${symbol}${price}</span>
+                ${onSale ? `<span class="cfp-product-card__compare-price">${symbol}${comparePrice}</span>` : ''}
               </div>
             </div>
           </a>

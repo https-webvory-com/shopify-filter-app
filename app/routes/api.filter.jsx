@@ -10,6 +10,7 @@ import {
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
+import { unauthenticated } from "../shopify.server";
 
 /**
  * Storefront Filtering API
@@ -610,9 +611,70 @@ export const loader = async ({ request }) => {
 
     const totalMs = Date.now() - startTime;
 
+    let contextualPricingApplied = false;
+    const country = url.searchParams.get("country");
+    if (country && products.length > 0) {
+      try {
+        const { admin } = await unauthenticated.admin(shop);
+        if (admin) {
+           const productGids = products.map(p => p.id);
+           const query = `
+             query getPrices($ids: [ID!]!, $country: CountryCode!) {
+               nodes(ids: $ids) {
+                 ... on Product {
+                   id
+                   variants(first: 100) {
+                     nodes {
+                       id
+                       contextualPricing(context: {country: $country}) {
+                         price { amount }
+                         compareAtPrice { amount }
+                       }
+                     }
+                   }
+                 }
+               }
+             }
+           `;
+           const response = await admin.graphql(query, { variables: { ids: productGids, country } });
+           const json = await response.json();
+           if (json.data && json.data.nodes) {
+              json.data.nodes.forEach(node => {
+                 if (!node) return;
+                 const product = products.find(p => p.id === node.id);
+                 if (product) {
+                    let minPrice = Infinity;
+                    let maxPrice = -Infinity;
+                    node.variants.nodes.forEach(vNode => {
+                       const v = product.variants.find(pv => pv.id === vNode.id);
+                       if (v && vNode.contextualPricing) {
+                          const amt = parseFloat(vNode.contextualPricing.price.amount);
+                          v.price = amt;
+                          if (vNode.contextualPricing.compareAtPrice) {
+                             v.compareAtPrice = parseFloat(vNode.contextualPricing.compareAtPrice.amount);
+                          }
+                          if (amt < minPrice) minPrice = amt;
+                          if (amt > maxPrice) maxPrice = amt;
+                       }
+                    });
+                    if (minPrice !== Infinity) {
+                       product.priceMin = minPrice;
+                       product.priceMax = maxPrice;
+                    }
+                 }
+              });
+              contextualPricingApplied = true;
+           }
+        }
+      } catch (e) {
+        console.error("Failed to fetch contextual pricing:", e);
+      }
+    }
+
     return data({
       products,
       totalCount,
+      contextualPricingApplied,
       // Return group filters (FilterGroupItem[]) if available, else empty
       settings: activeGroupFilters || [],
       globalSettings,

@@ -40,6 +40,7 @@ export async function formatAndPushToMeili(products) {
       tags: p.tags || [],
       collections: p.collections ? p.collections.map((c) => c.collectionId) : [],
       available,
+      status: p.status ? p.status.toUpperCase() : 'ACTIVE',
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
       ...formattedOptions,
       ...formattedMetafields,
@@ -92,6 +93,7 @@ async function updateMeiliSettings(shop) {
       "tags",
       "collections",
       "available",
+      "status",
       "priceMin",
       ...Array.from(dynamicKeys)
     ];

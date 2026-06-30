@@ -64,6 +64,10 @@
 
 <script>
   window.cfpFullWidth = {{ full_width | default: true | json }};
+  window.cfpCurrency = {
+    isoCode: {{ cart.currency.iso_code | json }},
+    symbol: {{ cart.currency.symbol | json }}
+  };
 </script>
 <style>
   /* Force full width natively from liquid to bypass CDN caching */

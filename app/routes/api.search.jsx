@@ -53,7 +53,7 @@ export const loader = async ({ request }) => {
 
     let meiliSearchParams = {
         filter: meiliFilters,
-        limit: limit,
+        limit: limit + 20, // Request extra to compensate for post-filtering
         facets: ["tags", "productType"],
         attributesToHighlight: ["title", "tags", "productType", "vendor"]
         // hybrid: {
@@ -209,9 +209,7 @@ export const loader = async ({ request }) => {
     // Combine them (Pinned items first)
     const mergedResults = [...pinnedProducts, ...filteredOrganicProducts];
 
-    // Truncate to limit if needed (in case pinning made it exceed the requested limit)
-    // Actually, usually we just return the requested limit exactly.
-    const finalResults = mergedResults.slice(0, limit).map(p => ({
+    const finalResults = mergedResults.slice(0, limit + 20).map(p => ({
       ...p,
       isPinned: pinnedIds.includes(p.id)
     }));
@@ -229,6 +227,7 @@ export const loader = async ({ request }) => {
         handle: true,
         images: true,
         options: true,
+        status: true,
         variants: { 
           select: { 
             id: true,
@@ -253,13 +252,86 @@ export const loader = async ({ request }) => {
       }
     });
 
+    // Filter out inactive products and enforce the requested limit
+    let activeResults = finalResults.filter(p => {
+       const dbp = dbFinalProducts.find(db => db.id === p.id);
+       return dbp && dbp.status && dbp.status.toLowerCase() === 'active';
+    }).slice(0, limit);
+
+    // Contextual Pricing
+    let contextualPricingApplied = false;
+    const country = url.searchParams.get("country");
+    if (country && activeResults.length > 0) {
+      try {
+        const { unauthenticated } = await import("../shopify.server");
+        const { admin } = await unauthenticated.admin(shop);
+        if (admin) {
+           const productGids = activeResults.map(p => p.id);
+           const query = `
+             query getPrices($ids: [ID!]!, $country: CountryCode!) {
+               nodes(ids: $ids) {
+                 ... on Product {
+                   id
+                   variants(first: 100) {
+                     nodes {
+                       id
+                       contextualPricing(context: {country: $country}) {
+                         price { amount }
+                         compareAtPrice { amount }
+                       }
+                     }
+                   }
+                 }
+               }
+             }
+           `;
+           const response = await admin.graphql(query, { variables: { ids: productGids, country } });
+           const json = await response.json();
+           if (json.data && json.data.nodes) {
+              json.data.nodes.forEach(node => {
+                 if (!node) return;
+                 const product = activeResults.find(p => p.id === node.id);
+                 if (product) {
+                    let minPrice = Infinity;
+                    let maxPrice = -Infinity;
+                    if (node.variants && node.variants.nodes) {
+                        node.variants.nodes.forEach(vNode => {
+                           const v = (product.variants || []).find(pv => pv.id === vNode.id);
+                           if (v && vNode.contextualPricing) {
+                              const amt = parseFloat(vNode.contextualPricing.price.amount);
+                              v.price = amt;
+                              if (vNode.contextualPricing.compareAtPrice) {
+                                 v.compareAtPrice = parseFloat(vNode.contextualPricing.compareAtPrice.amount);
+                              }
+                              if (amt < minPrice) minPrice = amt;
+                              if (amt > maxPrice) maxPrice = amt;
+                           }
+                        });
+                    }
+                    if (minPrice !== Infinity) {
+                       product.priceMin = minPrice;
+                    }
+                    if (maxPrice !== -Infinity) {
+                       product.priceMax = maxPrice;
+                    }
+                 }
+              });
+              contextualPricingApplied = true;
+           }
+        }
+      } catch (e) {
+         console.error("Contextual pricing error in search:", e);
+      }
+    }
+
     return data({
       query: query,
-      totalCount: finalResults.length,
+      totalCount: activeResults.length,
       pinnedCount: pinnedProducts.length,
-      products: finalResults,
+      products: activeResults,
       suggestions: suggestions,
-      didYouMean: didYouMean
+      didYouMean: didYouMean,
+      contextualPricingApplied: contextualPricingApplied
     });
 
   } catch (error) {
