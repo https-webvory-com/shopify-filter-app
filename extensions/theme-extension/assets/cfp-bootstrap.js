@@ -24,9 +24,11 @@
         entries.forEach(function(entry) {
           if (entry.isIntersecting) {
             const img = entry.target;
-            img.src = img.dataset.src;
-            img.removeAttribute('data-src');
-            img.classList.remove('cfp-lazy');
+            if (img.dataset.src) {
+               img.src = img.dataset.src;
+               img.removeAttribute('data-src');
+               img.classList.remove('cfp-lazy');
+            }
             obs.unobserve(img);
           }
         });
@@ -36,8 +38,10 @@
     } else {
       // Fallback for old browsers: load all immediately
       images.forEach(function(img) {
-        img.src = img.dataset.src;
-        img.removeAttribute('data-src');
+        if (img.dataset.src) {
+           img.src = img.dataset.src;
+           img.removeAttribute('data-src');
+        }
       });
     }
   };

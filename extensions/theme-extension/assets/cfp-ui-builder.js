@@ -206,7 +206,7 @@ window.CFP_V2.UIBuilder = (function() {
         
         if (firstImg === 'undefined' || firstImg === undefined) firstImg = null;
         
-        let primaryImg = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWVlIi8+CiAgPHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2FhYSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pgo8L3N2Zz4=';
         if (product.merchandisingImage && product.merchandisingImage !== 'undefined') {
             primaryImg = product.merchandisingImage;
         } else if (firstImg) {
@@ -334,7 +334,7 @@ window.CFP_V2.UIBuilder = (function() {
         }
 
         if (!primaryImg || primaryImg === 'undefined' || primaryImg === 'null') {
-            primaryImg = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+            primaryImg = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWVlIi8+CiAgPHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMCIgZmlsbD0iI2FhYSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pgo8L3N2Zz4=';
         }
 
         return `
