@@ -296,6 +296,8 @@
     .CollectionInner__Sidebar { display: none !important; }
     .CollectionInner__Products { width: 100% !important; margin: 0 !important; padding: 0 !important; }
     .ProductListWrapper > header { display: none !important; }
+    .PageHeader__Right, .PageHeader .Segment__Content { display: none !important; }
+    #collection-sort-popover { display: none !important; }
   `;
   document.head.appendChild(hideStyles);
 
@@ -355,6 +357,10 @@
   }
 
   bindUIEvents();
+  
+  if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
+    window.CFP_V2.initLazyImages();
+  }
   console.log("[CFP V2] Swap complete. Zero white flash!");
 
 })();

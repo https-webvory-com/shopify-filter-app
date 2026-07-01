@@ -283,11 +283,14 @@
   // Hide common native toolbars and layout wrappers aggressively
   const hideStyles = document.createElement('style');
   hideStyles.innerHTML = `
-    .CollectionToolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar { display: none !important; }
+    /* Hide native toolbars and filters */
+    .CollectionToolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar, .shopify-section-group-header-group, .facets-vertical-sort { display: none !important; }
     .CollectionInner__Sidebar { display: none !important; }
     .CollectionInner__Products { width: 100% !important; margin: 0 !important; padding: 0 !important; }
-    .PageHeader__Right { display: none !important; } /* Prestige native sort on search page */
+    .ProductListWrapper > header { display: none !important; }
+    .PageHeader__Right, .PageHeader .Segment__Content { display: none !important; } /* Prestige native sort on search page */
     .Search__Sort { display: none !important; }
+    #collection-sort-popover { display: none !important; }
   `;
   document.head.appendChild(hideStyles);
 
@@ -347,7 +350,9 @@
   bindUIEvents();
   
   // Activate lazy image loading for the initial render
-  requestAnimationFrame(() => window.CFP_V2.initLazyImages && window.CFP_V2.initLazyImages());
+  if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
+    window.CFP_V2.initLazyImages();
+  }
   
   console.log("[CFP V2] Search Page Injection complete.");
 
