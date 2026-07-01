@@ -1790,3 +1790,70 @@ facet-filters-form,
   font-family: 'Montserrat', 'Poppins', 'Inter', sans-serif !important;
   font-size: 14px !important;
 }
+
+/* --- UI Customization Settings --- */
+
+/* Text Alignment */
+.cfp-text-left .cfp-product-card__info { align-items: flex-start !important; text-align: left !important; }
+.cfp-text-center .cfp-product-card__info { align-items: center !important; text-align: center !important; }
+.cfp-text-right .cfp-product-card__info { align-items: flex-end !important; text-align: right !important; }
+
+.cfp-text-left .cfp-product-card__price-row { justify-content: flex-start !important; }
+.cfp-text-center .cfp-product-card__price-row { justify-content: center !important; }
+.cfp-text-right .cfp-product-card__price-row { justify-content: flex-end !important; }
+
+.cfp-text-left .cfp-product-card__vendor { align-self: flex-start; }
+.cfp-text-center .cfp-product-card__vendor { align-self: center; }
+.cfp-text-right .cfp-product-card__vendor { align-self: flex-end; }
+
+/* Grid Borders */
+.cfp-grid-bordered .cfp-product-card {
+  border: 1px solid var(--cfp-border, #e1e3e5);
+  border-radius: 8px;
+  background-color: var(--cfp-surface, #ffffff);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  height: 100%;
+}
+.cfp-grid-bordered .cfp-product-card__image-container {
+  border-radius: 8px 8px 0 0;
+}
+.cfp-grid-bordered .cfp-product-card__info {
+  padding: 16px !important;
+}
+
+/* Aspect Ratio */
+.cfp-aspect-natural .cfp-product-card__image-container {
+  padding-top: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cfp-aspect-natural .cfp-product-card__image {
+  position: static !important;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+}
+
+/* Image Size */
+.cfp-img-contain {
+  object-fit: contain !important;
+}
+
+/* Badge Positioning */
+.cfp-product-card__badge {
+  position: absolute;
+  z-index: 2;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+.cfp-badge--top-left { top: 12px !important; left: 12px !important; bottom: auto !important; right: auto !important; }
+.cfp-badge--top-right { top: 12px !important; right: 12px !important; bottom: auto !important; left: auto !important; }
+.cfp-badge--bottom-left { bottom: 12px !important; left: 12px !important; top: auto !important; right: auto !important; }
+.cfp-badge--bottom-right { bottom: 12px !important; right: 12px !important; top: auto !important; left: auto !important; }
