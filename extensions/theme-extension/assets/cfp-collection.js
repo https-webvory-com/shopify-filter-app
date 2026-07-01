@@ -294,7 +294,7 @@
   const hideStyles = document.createElement('style');
   hideStyles.innerHTML = `
     /* Hide native toolbars and filters */
-    .CollectionToolbar, .collection-toolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar, .shopify-section-group-header-group, .facets-vertical-sort { display: none !important; }
+    .CollectionToolbar, .collection-toolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar, .facets-vertical-sort { display: none !important; }
     .CollectionInner__Sidebar { display: none !important; }
     .CollectionInner__Products { width: 100% !important; margin: 0 !important; padding: 0 !important; }
     .ProductListWrapper > header { display: none !important; }
