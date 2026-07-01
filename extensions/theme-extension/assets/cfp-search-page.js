@@ -22,28 +22,7 @@
       return;
   }
 
-  // 1. Wait until native grid exists
-  const waitForElement = (selectorFn, timeout = 5000) => {
-    return new Promise((resolve) => {
-      const el = selectorFn();
-      if (el) return resolve(el);
-
-      const observer = new MutationObserver(() => {
-        const el = selectorFn();
-        if (el) {
-          resolve(el);
-          observer.disconnect();
-        }
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-      
-      setTimeout(() => {
-        observer.disconnect();
-        resolve(null);
-      }, timeout);
-    });
-  };
+  // Removed waitForElement logic
 
   const bindUIEvents = () => {
     const trigger = document.getElementById('cfp-drawer-trigger-btn');
@@ -317,16 +296,7 @@
     }
   };
 
-  let nativeGrid = await waitForElement(Adapter.findGrid, 3000);
-  
-  if (!nativeGrid) {
-    console.warn("[CFP V2] Could not find the native product grid on Search page. Will use fallback container.");
-  } else {
-    // 2.5 Advanced UI Polish: Layout Preserving Hide (Opacity)
-    nativeGrid.style.opacity = '0';
-    nativeGrid.style.pointerEvents = 'none';
-    nativeGrid.style.transition = 'opacity 0.2s ease';
-  }
+  // Removed native grid wait logic
 
   // 2. Build clean initial params — only extract q from the URL (not all URL params like pb=0)
   const searchParams = new URLSearchParams(window.location.search);
@@ -339,34 +309,21 @@
     sortBy: initialSortBy
   };
 
-  const nativeFilters = Adapter.findFilters();
-  if (nativeFilters) {
-     nativeFilters.style.opacity = '0';
-     nativeFilters.style.pointerEvents = 'none';
+  const appContainer = document.querySelector('.cfp-v2-app-container');
+  if (!appContainer) {
+    console.error("[CFP V2] App container (.cfp-v2-app-container) not found on Search. Aborting.");
+    return;
   }
-
-  // Hide common native toolbars and layout wrappers aggressively
-  const hideStyles = document.createElement('style');
-  hideStyles.innerHTML = `
-    /* Hide native toolbars and filters */
-    .CollectionToolbar, .collection-toolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar, .facets-vertical-sort { display: none !important; }
-    .CollectionInner__Sidebar { display: none !important; }
-    .CollectionInner__Products { width: 100% !important; margin: 0 !important; padding: 0 !important; }
-    .ProductListWrapper > header { display: none !important; }
-    .PageHeader__Right, .PageHeader .Segment__Content { display: none !important; } /* Prestige native sort on search page */
-    .Search__Sort { display: none !important; }
-    #collection-sort-popover { display: none !important; }
-  `;
-  document.head.appendChild(hideStyles);
 
   console.log("[CFP V2] Fetching data for Search term:", searchTerms);
 
-  // Use fetchSearchData (sends isSearch=true + q + sortBy + page + limit — exactly like V1)
+  // Use fetchSearchData (sends isSearch=true + q + sortBy + page + limit)
   const data = await API.fetchSearchData({ ...queryParams, page: 1 });
 
   if (!data || !data.products) {
-    console.error("[CFP V2] Failed to fetch data from API for Search. Falling back to native theme.");
-    return; // Leave the native grid intact!
+    console.error("[CFP V2] Failed to fetch data from API for Search.");
+    appContainer.innerHTML = '<p>Error loading products.</p>';
+    return;
   }
 
   const UIBuilder = window.CFP_V2.UIBuilder;
@@ -375,43 +332,13 @@
     return;
   }
 
-  // 3. Render HTML using UIBuilder
+  // Render HTML using UIBuilder
   const settings = window.CFP_V2.settings || {};
-  // For Search, we may use search_settings instead of collection_settings if defined, but we fallback to collection settings for grid layout
   const newHtml = UIBuilder.renderLayout(data, queryParams, settings);
 
-  // 4. Hot-swap the native grid with our generated HTML
-  const nativePagination = Adapter.findPagination();
-  
-  if (nativeFilters) nativeFilters.remove();
-  if (nativePagination) nativePagination.remove();
+  // Mount directly into the app block container
+  appContainer.innerHTML = newHtml;
 
-  if (nativeGrid) {
-    Adapter.swapElement(nativeGrid, newHtml);
-  } else {
-    // Fallback injection
-    const fallbackContainer = document.querySelector('#MainContent') || document.querySelector('main') || document.body;
-    const wrapper = document.createElement('div');
-    wrapper.className = "cfp-injected-container";
-    wrapper.style.padding = "40px 20px";
-    
-    // Create the "SEARCH" title and input for the fallback injection
-    const headerHtml = `
-      <div class="cfp-page-header" style="text-align: center; margin: 40px auto; max-width: 600px;">
-        <h1 style="margin-bottom: 20px; font-size: 28px;">Search</h1>
-        <form action="/search" method="get" role="search" style="position: relative; display: flex; align-items: center; max-width: 400px; margin: 0 auto 30px;">
-          <input type="text" name="q" value="${searchTerms}" placeholder="Search for..." style="width: 100%; padding: 12px 40px 12px 15px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 16px; outline: none;" />
-          <button type="submit" style="position: absolute; right: 10px; background: none; border: none; cursor: pointer; padding: 5px;">
-             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          </button>
-        </form>
-      </div>
-    `;
-    
-    wrapper.innerHTML = headerHtml + newHtml;
-    fallbackContainer.prepend(wrapper);
-  }
-  
   bindUIEvents();
   
   // Activate lazy image loading for the initial render
@@ -421,6 +348,6 @@
     }, 50);
   }
   
-  console.log("[CFP V2] Search Page Injection complete.");
+  console.log("[CFP V2] Search Page Rendering complete.");
 
 })();

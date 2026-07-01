@@ -22,28 +22,7 @@
       return;
   }
 
-  // 1. Wait until native grid exists
-  const waitForElement = (selectorFn, timeout = 5000) => {
-    return new Promise((resolve) => {
-      const el = selectorFn();
-      if (el) return resolve(el);
-
-      const observer = new MutationObserver(() => {
-        const el = selectorFn();
-        if (el) {
-          resolve(el);
-          observer.disconnect();
-        }
-      });
-
-      observer.observe(document.body, { childList: true, subtree: true });
-      
-      setTimeout(() => {
-        observer.disconnect();
-        resolve(null);
-      }, timeout);
-    });
-  };
+  // Removed waitForElement logic
 
   const bindUIEvents = () => {
     const trigger = document.getElementById('cfp-drawer-trigger-btn');
@@ -337,15 +316,7 @@
     }
   };
 
-  const nativeGrid = await waitForElement(Adapter.findGrid);
-  
-  if (!nativeGrid) {
-    console.error("[CFP V2] Could not find the native product grid. Aborting.");
-    return;
-  }
-
-  // 2. Fetch data in the background (before touching the DOM)
-  // Determine collection handle from URL
+  // Removed native grid wait logic
   const pathParts = window.location.pathname.split('/');
   let collectionHandle = 'all';
   if (pathParts.includes('collections')) {
@@ -361,42 +332,10 @@
     queryParams[key] = value;
   }
 
-  // 2.5 Advanced UI Polish: Aggressively hide native toolbars and layout wrappers
-  // We do this unconditionally because our app provides its own filters and sorting UI.
-  const hideStyles = document.createElement('style');
-  hideStyles.innerHTML = `
-    /* Hide native toolbars and filters */
-    .CollectionToolbar, .collection-toolbar, .facets, .collection-filters, #FacetFiltersForm, .filters-toolbar, .facets-vertical-sort { display: none !important; }
-    .CollectionInner__Sidebar { display: none !important; }
-    .CollectionInner__Products { width: 100% !important; margin: 0 !important; padding: 0 !important; }
-    .ProductListWrapper > header { display: none !important; }
-    .PageHeader__Right, .PageHeader .Segment__Content { display: none !important; }
-    #collection-sort-popover { display: none !important; }
-  `;
-  document.head.appendChild(hideStyles);
-
-  // If there are filters in the URL, visually hide the native grid while we fetch data
-  // to prevent it from flashing before the swap.
-  const hasFilters = Array.from(searchParams.keys()).some(k => k !== 'page' && k !== 'sort_by');
-  if (hasFilters) {
-    nativeGrid.style.opacity = '0';
-    nativeGrid.style.pointerEvents = 'none';
-    nativeGrid.style.transition = 'opacity 0.2s ease';
-    
-    const nativeFilters = Adapter.findFilters();
-    if (nativeFilters) {
-       nativeFilters.style.opacity = '0';
-       nativeFilters.style.pointerEvents = 'none';
-    }
-  }
-
-  // Hide the App Block container if it was added just for settings, so it doesn't leave an empty white space
-  const settingsBlock = document.getElementById('cfp-collection-settings');
-  if (settingsBlock) {
-    const parentSection = settingsBlock.closest('.shopify-section');
-    if (parentSection) {
-      parentSection.style.display = 'none';
-    }
+  const appContainer = document.querySelector('.cfp-v2-app-container');
+  if (!appContainer) {
+    console.error("[CFP V2] App container (.cfp-v2-app-container) not found. Aborting.");
+    return;
   }
 
   console.log("[CFP V2] Fetching data for collection:", collectionHandle);
@@ -404,8 +343,9 @@
   const data = await API.fetchCollectionData(collectionHandle, queryParams);
 
   if (!data || !data.products) {
-    console.error("[CFP V2] Failed to fetch data from API. Falling back to native theme.");
-    return; // Leave the native grid intact!
+    console.error("[CFP V2] Failed to fetch data from API.");
+    appContainer.innerHTML = '<p>Error loading products.</p>';
+    return;
   }
 
   const UIBuilder = window.CFP_V2.UIBuilder;
@@ -414,21 +354,12 @@
     return;
   }
 
-  // 3. Render HTML using UIBuilder
+  // Render HTML using UIBuilder
   const settings = window.CFP_V2.settings || {};
   const newHtml = UIBuilder.renderLayout(data, queryParams, settings);
 
-  // 4. Hot-swap the native grid with our generated HTML
-  // We completely remove native filters and pagination if they exist separately
-  const nativeFilters = Adapter.findFilters();
-  const nativePagination = Adapter.findPagination();
-  
-  if (nativeFilters) nativeFilters.remove();
-  if (nativePagination) nativePagination.remove();
-
-  if (nativeGrid) {
-    Adapter.swapElement(nativeGrid, newHtml);
-  }
+  // Mount directly into the app block container
+  appContainer.innerHTML = newHtml;
 
   bindUIEvents();
   
@@ -437,6 +368,6 @@
         window.CFP_V2.initLazyImages();
     }, 50);
   }
-  console.log("[CFP V2] Swap complete. Zero white flash!");
+  console.log("[CFP V2] Rendering complete!");
 
 })();
