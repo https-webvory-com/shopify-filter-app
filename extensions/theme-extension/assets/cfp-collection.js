@@ -169,6 +169,60 @@
       if (countEl) countEl.innerHTML = `Showing <b>${data.totalCount || data.totalProducts}</b> products`;
     };
 
+    const loadNextPage = async (btn) => {
+      const nextPage = parseInt(btn.getAttribute('data-next-page')) || 2;
+      btn.textContent = 'LOADING...';
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '0.7';
+
+      const activeState = gatherFilters();
+      if (window.CFP_V2.currentSortBy) {
+         activeState.sortBy = window.CFP_V2.currentSortBy;
+      }
+      
+      const mergedParams = { ...queryParams, ...activeState, page: nextPage };
+      
+      const pathParts = window.location.pathname.split('/');
+      let collectionHandle = 'all';
+      if (pathParts.includes('collections')) {
+        const idx = pathParts.indexOf('collections');
+        if (pathParts[idx + 1]) collectionHandle = pathParts[idx + 1];
+      }
+      
+      let data;
+      if (mergedParams.q || mergedParams.isSearch) {
+         data = await window.CFP_V2.API.fetchSearchData(mergedParams);
+      } else {
+         data = await window.CFP_V2.API.fetchCollectionData(collectionHandle, mergedParams);
+      }
+      
+      const UIBuilder = window.CFP_V2.UIBuilder;
+      const settings = window.CFP_V2.settings || {};
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = UIBuilder.renderGrid(data.products, mergedParams, settings, data.mergedValues);
+      
+      const newGridWrapper = tempDiv.querySelector('.cfp-product-grid');
+      const existingGrid = document.querySelector('.cfp-product-grid');
+      
+      if (existingGrid && newGridWrapper) {
+          existingGrid.insertAdjacentHTML('beforeend', newGridWrapper.innerHTML);
+      }
+      
+      const paginationHtml = UIBuilder.renderPagination(data.totalCount || data.totalProducts, mergedParams, settings);
+      const existingPagination = document.querySelector('.cfp-load-more-container');
+      if (existingPagination) {
+          existingPagination.outerHTML = paginationHtml;
+      } else if (existingGrid) {
+          existingGrid.insertAdjacentHTML('afterend', paginationHtml);
+      }
+
+      if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
+        setTimeout(() => {
+            window.CFP_V2.initLazyImages();
+        }, 50);
+      }
+    };
+
     const setupDynamicFieldListeners = () => {
       const sidebar = document.getElementById('cfp-sidebar');
       if (!sidebar) return;
@@ -263,6 +317,17 @@
     };
 
     setupDynamicFieldListeners();
+
+    const mainContent = document.querySelector('.cfp-main-content');
+    if (mainContent && !mainContent.dataset.loadMoreBound) {
+        mainContent.addEventListener('click', (e) => {
+            const btn = e.target.closest('#cfp-load-more-btn');
+            if (btn) {
+                loadNextPage(btn);
+            }
+        });
+        mainContent.dataset.loadMoreBound = 'true';
+    }
   };
 
   const nativeGrid = await waitForElement(Adapter.findGrid);
