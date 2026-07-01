@@ -1,0 +1,32 @@
+<div id="cfp-bootstrap" style="display:none;"></div>
+
+<script>
+  window.CFP_V2 = window.CFP_V2 || {};
+  window.CFP_V2.shop = "{{ shop.permanent_domain }}";
+  window.CFP_V2.locale = "{{ request.locale.iso_code }}";
+  window.CFP_V2.appUrl = "https://shopify.app.fiter-staging.com"; // Replace with dynamic env var later
+  window.CFP_V2.assetUrlBase = "{{ 'cfp-bootstrap.js' | asset_url | split: 'cfp-bootstrap.js' | first }}";
+  window.CFP_V2.currencySymbol = "{{ cart.currency.symbol }}";
+  
+  // Expose Shopify Theme context for the Theme Adapter
+  window.Shopify = window.Shopify || {};
+  window.Shopify.theme = window.Shopify.theme || {
+    name: "{{ theme.name | escape }}",
+    id: "{{ theme.id }}"
+  };
+
+  // Custom DOM selectors from Theme Editor block settings
+  window.CFP_V2.selectors = {
+    grid: "{{ custom_grid_selector | escape }}",
+    filters: "{{ custom_filters_selector | escape }}",
+    pagination: "{{ custom_pagination_selector | escape }}"
+  };
+</script>
+
+<script src="{{ 'cfp-bootstrap.js' | asset_url }}" defer="defer"></script>
+
+<!-- We will dynamically load API, Adapter and Module logic via bootstrap -->
+<script src="{{ 'cfp-dom-cache.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'cfp-theme-adapter.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'cfp-api.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'cfp-ui-builder.js' | asset_url }}" defer="defer"></script>
