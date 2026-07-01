@@ -250,7 +250,7 @@ window.CFP_V2.UIBuilder = (function() {
                 const optionKey = `option${colorOptionIndex + 1}`;
                 const uniqueColors = new Map();
                 product.variants.forEach(v => {
-                  if (v[optionKey] && !uniqueColors.has(v[optionKey]) && v.imageUrl && v.imageUrl !== "undefined") {
+                  if (v[optionKey] && !uniqueColors.has(v[optionKey]) && v.imageUrl && v.imageUrl !== "undefined" && v.imageUrl !== "null") {
                     const numericId = v.id ? v.id.replace('gid://shopify/ProductVariant/', '') : '';
                     uniqueColors.set(v[optionKey], { imgUrl: v.imageUrl, variantId: numericId });
                   }

@@ -159,7 +159,9 @@
          mainContent.innerHTML = gridHtml + paginationHtml;
          mainContent.style.opacity = '1';
          if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
-           window.CFP_V2.initLazyImages();
+           setTimeout(() => {
+               window.CFP_V2.initLazyImages();
+           }, 50);
          }
       }
       
@@ -359,7 +361,9 @@
   bindUIEvents();
   
   if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
-    window.CFP_V2.initLazyImages();
+    setTimeout(() => {
+        window.CFP_V2.initLazyImages();
+    }, 50);
   }
   console.log("[CFP V2] Swap complete. Zero white flash!");
 

@@ -351,7 +351,9 @@
   
   // Activate lazy image loading for the initial render
   if (window.CFP_V2 && window.CFP_V2.initLazyImages) {
-    window.CFP_V2.initLazyImages();
+    setTimeout(() => {
+        window.CFP_V2.initLazyImages();
+    }, 50);
   }
   
   console.log("[CFP V2] Search Page Injection complete.");
