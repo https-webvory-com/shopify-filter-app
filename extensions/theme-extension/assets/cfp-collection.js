@@ -15,6 +15,13 @@
     return;
   }
 
+  // Very important: Abort if the merchant removed the Collection App Block from the template!
+  // If #cfp-collection-settings doesn't exist, it means they don't want the filter on this page.
+  if (!document.getElementById('cfp-collection-settings')) {
+      console.warn("[CFP V2] App Block not found on this collection page. Aborting initialization to preserve native layout.");
+      return;
+  }
+
   // 1. Wait until native grid exists
   const waitForElement = (selectorFn, timeout = 5000) => {
     return new Promise((resolve) => {
