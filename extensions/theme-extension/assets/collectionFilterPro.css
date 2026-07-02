@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:wght@400;500;600;700&display=swap');
 
 /* ===================================================
-   Collection Filter Pro — Storefront Styles
+   Collection Filter Pro â€” Storefront Styles
    =================================================== */
 
 :root {
@@ -20,7 +20,7 @@
   --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ─── Theme Filter Kill Switch ───────────────────────────────────────── */
+/* â”€â”€â”€ Theme Filter Kill Switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /* This hides default Shopify theme filters automatically */
 .facets-container, 
 .facets-wrapper, 
@@ -44,7 +44,7 @@ facet-filters-form,
   pointer-events: none !important;
 }
 
-/* ─── Breadcrumbs ──────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Breadcrumbs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-breadcrumbs {
   display: flex;
   flex-wrap: wrap;
@@ -89,7 +89,7 @@ facet-filters-form,
   color: var(--cfp-text);
 }
 
-/* ─── Top Bar (Horizontal above products) ─────────────────────────────── */
+/* â”€â”€â”€ Top Bar (Horizontal above products) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-top-bar {
   display: flex !important;
   align-items: center !important;
@@ -131,7 +131,7 @@ facet-filters-form,
   background-size: 13px;
 }
 
-/* ─── Layout wrapper injected by JS ──────────────────────────────────── */
+/* â”€â”€â”€ Layout wrapper injected by JS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-layout-wrapper {
   display: flex !important;
   flex-wrap: wrap !important; /* Allow top bar to wrap to 100% width */
@@ -168,27 +168,35 @@ facet-filters-form,
   }
 }
 
-/* ─── Sidebar base (desktop: inline panel) ───────────────────────────── */
+/* ─── Sidebar base (desktop: hidden drawer) ───────────────────────────── */
 .cfp-sidebar {
   width: var(--cfp-sidebar-w);
   flex-shrink: 0;
-  background: transparent;
+  background: var(--cfp-bg);
   border: none;
   border-radius: 0;
   box-shadow: none;
-  display: flex;
+  display: none !important;
   flex-direction: column !important;
   font-family: 'Poppins', sans-serif;
-  /* Desktop: sticky so it scrolls with the viewport */
-  position: sticky;
-  top: 20px;
-  max-height: calc(100vh - 40px);
+  position: fixed !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 360px !important;
+  max-width: min(var(--cfp-sidebar-w), 90vw) !important;
+  height: 100vh !important;
+  z-index: 2147483647 !important;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   overflow: hidden;
 }
+.cfp-sidebar.cfp-sidebar--open {
+  display: flex !important;
+  left: 0 !important;
+}
 
-/* ─── Overlay (mobile only) ─────────────────────────────────────────── */
+/* â”€â”€â”€ Overlay (mobile and desktop drawer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-overlay {
-  display: none;
+  display: none !important;
 }
 @media (max-width: 991px) {
   .cfp-overlay {
@@ -202,13 +210,13 @@ facet-filters-form,
     transition: opacity var(--cfp-transition);
   }
   .cfp-overlay.cfp-overlay--visible {
-    display: block;
-    opacity: 1;
-    pointer-events: all;
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: all !important;
   }
 }
 
-/* ─── Mobile: sidebar becomes a slide-in drawer ─────────────────────── */
+/* â”€â”€â”€ Mobile: sidebar becomes a slide-in drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 991px) {
   .cfp-layout-wrapper {
     display: block !important;
@@ -233,9 +241,9 @@ facet-filters-form,
   }
 }
 
-/* ─── Sidebar Header ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sidebar Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__header {
-  display: none; /* Hidden on desktop */
+  display: flex !important;
   align-items: center !important;
   justify-content: space-between;
   padding: 18px 18px 14px;
@@ -245,11 +253,6 @@ facet-filters-form,
   background: var(--cfp-bg);
   z-index: 1;
   flex-shrink: 0;
-}
-@media (max-width: 991px) {
-  .cfp-sidebar__header {
-    display: flex;
-  }
 }
 .cfp-sidebar__header-info {
   display: flex;
@@ -289,7 +292,7 @@ facet-filters-form,
   .cfp-close-btn { display: flex; }
 }
 
-/* ─── Sidebar Body ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sidebar Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__body {
   flex: 1;
   overflow-y: auto;
@@ -301,7 +304,7 @@ facet-filters-form,
 .cfp-sidebar__body::-webkit-scrollbar-track { background: transparent; }
 .cfp-sidebar__body::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
 
-/* ─── Filter Group ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Filter Group â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-group { border-bottom: 1px solid var(--cfp-border); padding:8px 0}
 .cfp-group:last-child { border-bottom: none; }
 
@@ -315,11 +318,23 @@ facet-filters-form,
   border: none;
   cursor: pointer;
   font-family: 'Poppins', sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
   color: #111111 !important;
-  letter-spacing: 0.05em !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
+}
+.cfp-group__toggle svg.cfp-chevron {
+  transition: transform var(--cfp-transition);
+  width: 16px;
+  height: 16px;
+  color: #6b7280;
+}
+.cfp-group__toggle[aria-expanded="false"] svg.cfp-chevron {
+  transform: rotate(0deg);
+}
+.cfp-group__toggle[aria-expanded="true"] svg.cfp-chevron {
+  transform: rotate(180deg);
 }
 
 .cfp-tooltip-icon {
@@ -407,7 +422,7 @@ facet-filters-form,
 .cfp-scroll-area::-webkit-scrollbar-track { background: transparent; }
 .cfp-scroll-area::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
 
-/* ─── Select Dropdown ────────────────────────────────────────────────── */
+/* â”€â”€â”€ Select Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-select {
   width: 100%;
   padding: 10px 12px;
@@ -431,7 +446,7 @@ facet-filters-form,
   box-shadow: 0 0 0 3px var(--cfp-accent-light);
 }
 
-/* ─── Checkbox ───────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Checkbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-checkbox {
   display: flex;
   align-items: center !important;
@@ -484,7 +499,7 @@ facet-filters-form,
   padding: 1px 7px;
 }
 
-/* ─── Price Range ────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Price Range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-price-inputs {
   display: flex;
   align-items: center !important;
@@ -565,7 +580,7 @@ facet-filters-form,
   color: var(--cfp-accent);
 }
 
-/* ─── Brand Search ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Brand Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-search-input-wrap {
   display: flex; align-items: center !important; gap: 8px;
   border: 1.5px solid #e2e8f0 !important;
@@ -595,7 +610,7 @@ facet-filters-form,
   display: none !important;
 }
 
-/* ─── Color Swatches ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Color Swatches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-color-grid {
   display: grid !important;
   grid-template-columns: repeat(2, 1fr) !important;
@@ -626,7 +641,7 @@ facet-filters-form,
   box-shadow: 0 0 0 1px var(--cfp-accent) !important;
 }
 
-/* ─── Product Card Swatches (On images) ────────────────────────── */
+/* â”€â”€â”€ Product Card Swatches (On images) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-product-swatches {
   display: flex !important;
   gap: 6px !important;
@@ -699,7 +714,7 @@ facet-filters-form,
   display: inline-block !important;
 }
 
-/* ─── Size Chips ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Size Chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-size-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -733,7 +748,7 @@ facet-filters-form,
   font-weight: 600 !important;
 }
 
-/* ─── Button Boxes ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Button Boxes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-button-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -767,7 +782,7 @@ facet-filters-form,
   font-weight: 600 !important;
 }
 
-/* ─── Footer Buttons ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Footer Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__footer {
   display: flex !important;
   gap: 8px;
@@ -818,7 +833,7 @@ facet-filters-form,
 .cfp-btn--apply-all:active,
 .cfp-btn--primary:active { transform: none; box-shadow: none; }
 
-/* ─── Mobile Trigger Button ──────────────────────────────────────────── */
+/* â”€â”€â”€ Mobile Trigger Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-trigger-btn {
   display: none;
 }
@@ -855,10 +870,12 @@ facet-filters-form,
   border-radius: 99px; font-size: 11px; font-weight: 700;
 }
 
-/* ─── Premium Product Cards ─────────────────────────────────────────── */
-.cfp-products-grid {
+/* â”€â”€â”€ Premium Product Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.cfp-products-grid,
+.cfp-product-grid {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(220px, 1fr)) !important;
+  grid-template-columns: repeat(var(--cfp-cols-desktop, 4), minmax(0, 1fr)) !important;
+  grid-auto-flow: row !important;
   gap: 10px !important;
   width: 100% !important;
   margin: 0 !important;
@@ -867,14 +884,15 @@ facet-filters-form,
 }
 
 @media (max-width: 1200px) {
-  .cfp-products-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  .cfp-products-grid,
+  .cfp-product-grid {
+    grid-template-columns: repeat(min(3, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)) !important;
   }
 }
 
 @media (max-width: 900px) {
   .cfp-products-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(var(--cfp-cols-mobile, 2), minmax(0, 1fr)) !important;
     gap: 16px !important;
   }
 }
@@ -985,66 +1003,72 @@ facet-filters-form,
 
 .cfp-product-card__badge {
     position: absolute;
-    bottom: 10px;
-    left: 10px;
-    background: #000;
+    top: 8px;
+    left: 8px;
+    background: #ff3333;
     color: white;
-    padding: 4px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 99px;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 0px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     z-index: 2;
   }
 
 .cfp-product-card__info {
-    padding: 12px 0 0 0;
+    padding: 16px 0 0 0;
     display: flex;
     flex-direction: column !important;
-    align-items: flex-start !important;
-    text-align: left;
+    align-items: center !important;
+    text-align: center;
     flex-grow: 1;
   }
 
 .cfp-product-card__vendor {
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--cfp-text-muted);
+  color: #969696;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
   margin-bottom: 6px;
 }
 
 .cfp-product-card__title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--cfp-text);
-  margin: 0 0 8px 0;
-  line-height: 1.4;
+  margin: 0;
+  line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  height: 2.8em; /* fixed height for alignment */
+  height: 3.1em;
 }
 
 .cfp-product-card__price-row {
     display: flex;
     align-items: center !important;
-    justify-content: flex-start !important;
+    justify-content: center !important;
     gap: 8px;
-    margin-top: auto;
+    margin-top: 10px;
   }
 
 .cfp-product-card__price {
   font-size: 15px;
   font-weight: 700;
-  color: var(--cfp-text);
+  color: #000;
 }
 
 .cfp-product-card__compare-price {
   font-size: 13px;
   text-decoration: line-through;
-  color: var(--cfp-text-light);
+  color: #9ca3af;
   font-weight: 500;
 }
 
@@ -1221,45 +1245,6 @@ facet-filters-form,
   display: flex !important;
 }
 
-  .cfp-product-card__badge {
-    position: absolute;
-    top: 12px;
-    bottom: auto !important;
-    left: 4px;
-    background: #ff3333;
-    color: white;
-    padding: 4px 8px;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    border-radius: 0px;
-    letter-spacing: 0.05em;
-    z-index: 2;
-  }
-
-.cfp-product-card__info {
-  padding: 16px 10px;
-  display: flex;
-  flex-direction: column !important;
-  align-items: center !important;
-  text-align: center;
-  flex-grow: 1;
-}
-
-.cfp-product-card__title {
-  font-size: 13px;
-  font-weight: 400;
-  color: #111;
-  margin: 0 0 6px 0;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-
-
 .cfp-product-card__reviews {
   display: flex;
   gap: 2px;
@@ -1281,12 +1266,12 @@ facet-filters-form,
 }
 
 .cfp-product-card__vendor {
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
-  color: #888;
+  color: #969696;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
 }
 
 .cfp-product-card__price-row {
@@ -1294,20 +1279,21 @@ facet-filters-form,
   align-items: center !important;
   justify-content: center !important;
   gap: 8px;
-  margin-top: auto;
+  margin-top: 10px;
 }
 
 .cfp-product-card__price {
-  font-size: 13px;
-  font-weight: 800;
-  color: #111;
+  font-size: 15px;
+  font-weight: 700;
+  color: #000;
 }
 
 .cfp-product-card__compare-price {
-  font-size: 12px;
+  font-size: 13px;
   text-decoration: line-through;
-  color: #999;
+  color: #9ca3af;
   font-weight: 500;
+
 }
 
 /* --- NEW TOOLBAR STYLES (Responsive) --- */
@@ -1408,13 +1394,16 @@ facet-filters-form,
     background: rgba(0,0,0,.45) !important;
     backdrop-filter: none !important;
     z-index: 2147483646 !important;
-    opacity: 0;
-    pointer-events: none;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
     transition: opacity var(--cfp-transition) !important;
-    display: block !important;
+    display: none !important;
   }
   .cfp-overlay--visible {
+    display: block !important;
     opacity: 1 !important;
+    visibility: visible !important;
     pointer-events: auto !important;
   }
   .cfp-sidebar {
@@ -1430,57 +1419,76 @@ facet-filters-form,
     background: #fff !important;
     z-index: 2147483647 !important;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    border-right: 1px solid #eee;
-    display: flex !important;
+    border-right: 1px solid #eee !important;
+    display: none !important;
+    visibility: hidden !important;
     flex-direction: column !important;
     padding: 0 !important;
     margin: 0 !important;
   }
-.cfp-sidebar.cfp-sidebar--open {
-  left: 0 !important;
-}
-.cfp-sidebar__header {
-  padding: 14px 20px;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+  .cfp-sidebar.cfp-sidebar--open {
+    left: 0 !important;
+    display: flex !important;
+    visibility: visible !important;
+  }
+  .cfp-sidebar__header {
+    padding: 18px 20px;
+    border-bottom: 1px solid #e1e3e5;
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+  }
 .cfp-sidebar__title {
   font-size: 18px;
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  letter-spacing: 0.04em;
+  color: #111111;
 }
 .cfp-sidebar__title svg {
-  display: none; /* Hide icon in header as per screenshot */
+  display: none;
+}
+.cfp-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #e1e3e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #111111;
+}
+.cfp-close-btn:hover {
+  background: #f5f5f5;
 }
 .cfp-sidebar__body {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 6px 20px;
+  padding: 16px 20px 20px;
 }
 .cfp-sidebar__footer {
-  padding: 0;
+  padding: 0 20px 20px;
   background: #fff;
   display: flex;
   justify-content: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
 }
 .cfp-btn--apply-all {
   background: #000 !important;
   color: #fff !important;
   width: 100% !important;
   border: none !important;
-  padding: 16px !important;
+  padding: 16px 0 !important;
   font-weight: 700 !important;
-  letter-spacing: 0.05em !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
   border-radius: 0 !important;
   cursor: pointer;
 }
 .cfp-btn--apply-all:hover {
-  background: #222 !important;
+  background: #111 !important;
 }
 .cfp-filter-group-header {
   border-top: 1px solid #eee;
@@ -1552,24 +1560,35 @@ facet-filters-form,
 .cfp-close-btn { display: flex !important; }
 .cfp-sidebar__header { display: flex !important; }
 
-.cfp-custom-sort { position: relative; font-family: inherit; font-size: 14px; color: #333; }
-.cfp-custom-sort__trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e1e3e5; padding: 8px 12px; background: #ffffff; cursor: pointer; height: 38px; min-width: 140px; font-weight: 400; font-size: 14px; text-transform: none; letter-spacing: normal; color: #202223; transition: all 0.2s ease; border-radius: 2px; }
-.cfp-custom-sort__trigger:hover { background: #f4f6f8; border-color: #babfc3; }
-.cfp-custom-sort.is-open .cfp-custom-sort__trigger { border-color: #000; box-shadow: 0 0 0 1px #000; background: #fff; }
-.cfp-custom-sort { width: auto; }
+.cfp-custom-sort__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1.5px solid #000;
+  background: #fff;
+  padding: 10px 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #000;
+  min-width: 160px;
+}
+.cfp-custom-sort__trigger:hover { background: #fafafa; }
+.cfp-custom-sort.is-open .cfp-custom-sort__trigger { border-color: #000; box-shadow: inset 0 0 0 1px #000; }
+.cfp-custom-sort { width: auto; position: relative; }
 
 @media (max-width: 900px) {
-  .cfp-custom-sort__trigger { justify-content: center; gap: 10px; border: none; padding: 0; background: transparent; width: 100%; height: 50px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0; min-width: 0; }
-  .cfp-custom-sort__trigger:hover { background: #f9fafb; border-color: transparent; }
-  .cfp-custom-sort.is-open .cfp-custom-sort__trigger { border-color: transparent; box-shadow: none; background: #f0f2f4; }
   .cfp-custom-sort { width: 100%; }
+  .cfp-custom-sort__trigger { width: 100%; min-width: 0; }
 }
 .cfp-custom-sort.is-open .cfp-custom-sort__trigger svg { transform: rotate(180deg); }
-.cfp-custom-sort__dropdown { position: absolute; top: calc(100% + 4px); right: 0; min-width: 180px; background: #ffffff; border: 1px solid #e1e3e5; border-radius: 4px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: none; flex-direction: column; padding: 8px 0; }
+.cfp-custom-sort__dropdown { position: absolute; top: calc(100% + 4px); right: 0; min-width: 100%; background: #ffffff; border: 1px solid #e1e3e5; border-radius: 2px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: none; flex-direction: column; padding: 6px 0; }
 .cfp-custom-sort.is-open .cfp-custom-sort__dropdown { display: flex; }
-.cfp-custom-sort__option { padding: 4px 12px; cursor: pointer; color: #4a4a4a; transition: background 0.1s; }
-.cfp-custom-sort__option:hover { background: #f4f6f8; color: #202223; }
-.cfp-custom-sort__option.is-selected { color: #202223; font-weight: 500; }
+.cfp-custom-sort__option { padding: 10px 14px; cursor: pointer; color: #555; font-size: 14px; transition: background 0.1s ease; }
+.cfp-custom-sort__option:hover { background: #f4f6f8; color: #000; }
+.cfp-custom-sort__option.is-selected { color: #000; font-weight: 500; }
 
 /* Skeleton Loader */
 @keyframes cfpSkeletonGlassShimmer {
@@ -1612,8 +1631,8 @@ facet-filters-form,
    ========================================================== */
 
 /* 1. Prevent native checkboxes from appearing and override theme checkbox styles */
-.cfp-sidebar input[type=""checkbox""],
-.cfp-sidebar input[type=""radio""] {
+.cfp-sidebar input[type="checkbox"],
+.cfp-sidebar input[type="radio"] {
   position: absolute !important;
   opacity: 0 !important;
   width: 0 !important;
@@ -1705,7 +1724,7 @@ facet-filters-form,
   margin-bottom: 15px !important;
 }
 
-.cfp-slider-inputs input[type=""number""] {
+.cfp-slider-inputs input[type="number"] {
   width: 48% !important;
   height: 40px !important;
   text-align: center !important;
@@ -1722,8 +1741,8 @@ facet-filters-form,
   box-shadow: none !important;
 }
 
-.cfp-slider-inputs input[type=""number""]::-webkit-outer-spin-button,
-.cfp-slider-inputs input[type=""number""]::-webkit-inner-spin-button {
+.cfp-slider-inputs input[type="number"]::-webkit-outer-spin-button,
+.cfp-slider-inputs input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none !important;
   margin: 0 !important;
 }
@@ -1752,8 +1771,7 @@ facet-filters-form,
 }
 
 .cfp-checkbox input:checked ~ .cfp-checkbox__box::after {
-  content: """" !important;
-  width: 4px !important;
+    content: '' !important;
   height: 8px !important;
   border: solid #fff !important;
   border-width: 0 2px 2px 0 !important;
@@ -1869,15 +1887,28 @@ facet-filters-form,
 .cfp-product-card__badge {
   position: absolute;
   z-index: 2;
-  border-radius: 4px !important;
+  width: 38px !important;
+  height: 38px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #ff3333 !important;
+  color: #ffffff !important;
   font-size: 11px !important;
-  padding: 4px 10px !important;
   font-weight: 700;
+  border-radius: 0 !important;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
+  letter-spacing: 0.08em !important;
+  line-height: 1 !important;
+  padding: 0 !important;
 }
-.cfp-badge--top-left { top: 12px !important; left: 12px !important; bottom: auto !important; right: auto !important; }
-.cfp-badge--top-right { top: 12px !important; right: 12px !important; bottom: auto !important; left: auto !important; }
-.cfp-badge--bottom-left { bottom: 12px !important; left: 12px !important; top: auto !important; right: auto !important; }
-.cfp-badge--bottom-right { bottom: 12px !important; right: 12px !important; top: auto !important; left: auto !important; }
+.cfp-badge--top-left { top: 0 !important; left: 0 !important; bottom: auto !important; right: auto !important; }
+.cfp-badge--top-right { top: 0 !important; right: 0 !important; bottom: auto !important; left: auto !important; }
+.cfp-badge--bottom-left { bottom: 0 !important; left: 0 !important; top: auto !important; right: auto !important; }
+.cfp-badge--bottom-right { bottom: 0 !important; right: 0 !important; top: auto !important; left: auto !important; }
+.cfp-aspect-square .cfp-product-card__image-container {
+  padding-top: 100% !important;
+}
+.cfp-aspect-portrait .cfp-product-card__image-container {
+  padding-top: 150% !important;
+}

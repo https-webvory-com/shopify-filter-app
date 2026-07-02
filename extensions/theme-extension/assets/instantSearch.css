@@ -1,4 +1,4 @@
-/* Instant Search UI - Full Screen Modal Overlay */
+﻿/* Instant Search UI - Full Screen Modal Overlay */
 
 .cfp-search-modal-overlay {
   position: fixed;
@@ -47,7 +47,7 @@
 /* Header with the big input */
 .cfp-search-header {
   border-bottom: 1px solid #e2e8f0;
-  padding: 20px 40px;
+  padding: 15px 30px;
   background: #fff;
   display: flex;
   justify-content: center;
@@ -74,8 +74,8 @@
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
-  font-size: 24px !important; /* Larger text */
-  padding: 10px 0 !important;
+  font-size: 20px !important; /* Larger text */
+  padding: 5px 0 !important;
   margin: 0 !important;
   background: transparent !important;
   color: #000 !important;
@@ -381,4 +381,18 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 15px;
   }
+}
+
+
+/* Prevent theme default search modals from showing */
+body.cfp-search-active details[open] > .search-modal,
+body.cfp-search-active details[open] > summary + div[class*="search"],
+body.cfp-search-active #SearchDrawer,
+body.cfp-search-active .search-drawer,
+body.cfp-search-active .search-modal,
+body.cfp-search-active dialog[id*="search"] {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }

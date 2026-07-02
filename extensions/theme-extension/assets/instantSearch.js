@@ -5,10 +5,12 @@
 
 document.addEventListener("DOMContentLoaded", function () {
   // Config
+  const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
     minChars: 2,
     debounceTime: 300,
-    productLimit: 4,
+    productLimit: userSettings.productLimit || 6,
+    customSelector: userSettings.customTriggerSelector || "",
     apiUrl: "/apps/collection-filter-pro/api/search",
   };
 
@@ -215,51 +217,49 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function attachListeners() {
-    // 1. Hijack all theme search inputs/icons
-    // We target common selectors for search buttons/inputs in Shopify themes
-    const searchTriggers = document.querySelectorAll(
-      'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]'
-    );
-
-    searchTriggers.forEach((trigger) => {
-      // Only hijack search elements that are inside the header
-      const isHeaderElement = trigger.closest('header') || 
-                              trigger.closest('sticky-header') || 
-                              trigger.closest('.header') || 
-                              trigger.closest('[id*="header"]');
-                              
-      if (!isHeaderElement && trigger.tagName !== 'SUMMARY') {
-        return; // Ignore inputs that are not in the header (e.g. main search page input)
+      // 1. Hijack all theme search inputs/icons using a global delegated listener (capture phase)
+      // This ensures we catch clicks even if the theme dynamically re-renders the header (e.g. sticky header)
+      let defaultSelector = 'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]';
+      if (CONFIG.customSelector) {
+          defaultSelector += ', ' + CONFIG.customSelector;
       }
+      
+      const handleEvent = (e) => {
+         // Find if the event target is inside our defaultSelector
+         const trigger = e.target.closest ? e.target.closest(defaultSelector) : null;
+         if (!trigger) return;
+         
+         // Ignore clicks inside our own modal to prevent self-closing issues
+         if (e.target.closest('#cfp-search-overlay') || e.target.closest('#cfp-instant-search-styles')) return;
 
-      // If it's an input, hijack focus/click
-      if (trigger.tagName === 'INPUT') {
-        // Prevent default behavior
-        trigger.addEventListener("focus", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-        trigger.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-      } else {
-        // If it's a button or link
-        trigger.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-      }
-    });
+         // Only hijack search elements that are inside the header, unless they match the custom selector
+         const isHeaderElement = trigger.closest('header') || 
+                                 trigger.closest('sticky-header') || 
+                                 trigger.closest('.header') || 
+                                 trigger.closest('[id*="header"]');
+                                 
+         const isCustomSelector = CONFIG.customSelector && trigger.matches(CONFIG.customSelector);
+
+         if (!isHeaderElement && trigger.tagName !== 'SUMMARY' && !isCustomSelector) {
+           return; // Ignore inputs that are not in the header (e.g. main search page input)
+         }
+
+         // Only intercept left clicks for mouse events
+         if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
+         
+         if (e.type === 'keydown' && e.key !== 'Enter') return;
+
+         e.preventDefault();
+         e.stopPropagation();
+         e.stopImmediatePropagation();
+         closeThemeSearch(trigger);
+         openModal(trigger);
+      };
+
+      ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus', 'keydown'].forEach(eventType => {
+          document.addEventListener(eventType, handleEvent, true);
+      });
+
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
     overlay.addEventListener("click", closeModal);
@@ -319,11 +319,12 @@ document.addEventListener("DOMContentLoaded", function () {
       topPos = rect.bottom;
     }
 
-    modal.style.top = `${topPos}px`;
+    modal.style.top = `0px`;
 
     overlay.classList.add("cfp-open");
     modal.classList.add("cfp-open");
     document.body.style.overflow = "hidden"; // Prevent background scrolling
+    document.body.classList.add("cfp-search-active");
     
     // Check if input is empty, if so, load default view
     if (mainInput.value.trim().length === 0) {
@@ -340,23 +341,54 @@ document.addEventListener("DOMContentLoaded", function () {
     overlay.classList.remove("cfp-open");
     modal.classList.remove("cfp-open");
     document.body.style.overflow = "";
+    document.body.classList.remove("cfp-search-active");
     closeThemeSearch();
   }
 
   function closeThemeSearch() {
-    // For Dawn theme and similar details-based modals
-    document.querySelectorAll('details[open]').forEach(details => {
-      if (details.querySelector('.search-modal') || details.classList.contains('search-modal-details') || details.querySelector('summary.header__icon--search')) {
-        details.removeAttribute('open');
-      }
-    });
-    
-    // Attempt to close other common theme modals by removing focus or hiding
-    const themeModal = document.querySelector('.search-modal, #SearchDrawer, .search-drawer');
-    if (themeModal && themeModal.classList.contains('active')) {
-       themeModal.classList.remove('active');
+      // 1. details-based modals
+      document.querySelectorAll('details[open]').forEach(details => {
+        if (
+          details.querySelector('[class*="search" i]') || 
+          details.className.toLowerCase().includes('search') ||
+          details.id.toLowerCase().includes('search') ||
+          details.querySelector('summary[class*="search" i]')
+        ) {
+          details.removeAttribute('open');
+        }
+      });
+      
+      // 2. dialog-based modals
+      document.querySelectorAll('dialog[open]').forEach(dialog => {
+        if (dialog.className.toLowerCase().includes('search') || dialog.id.toLowerCase().includes('search')) {
+          dialog.close();
+        }
+      });
+      
+      // 3. active class based modals
+      document.querySelectorAll('[class*="search" i].active, [class*="search" i].is-active, [class*="search" i].open, [class*="search" i].is-open, [id*="search" i].active, [id*="search" i].is-active, [id*="search" i].open, [id*="search" i].is-open').forEach(el => {
+        if (!el.id.includes('cfp-search')) {
+          el.classList.remove('active', 'is-active', 'open', 'is-open');
+        }
+      });
+
+      // 4. body classes
+      document.body.classList.forEach(cls => {
+         if (cls.toLowerCase().includes('search') && !cls.includes('cfp-search')) {
+            document.body.classList.remove(cls);
+         }
+      });
+      
+      // 5. Inline styles (e.g., display: block or opacity: 1) on common search wrappers
+      const commonWrappers = document.querySelectorAll('.search-modal, #SearchDrawer, .search-drawer, .header__search, .search-popup, #search-modal, #search-popup');
+      commonWrappers.forEach(el => {
+          if (!el.id.includes('cfp-search')) {
+             if (el.style.display === 'block') el.style.display = '';
+             if (el.style.opacity === '1') el.style.opacity = '';
+             if (el.style.visibility === 'visible') el.style.visibility = '';
+          }
+      });
     }
-  }
 
   function renderLoading(isLoading) {
     const loader = document.getElementById("cfp-search-loading");
@@ -372,7 +404,7 @@ document.addEventListener("DOMContentLoaded", function () {
       body.classList.add("cfp-has-results"); // Keep body visible for skeletons
       
       let skeletonProducts = '';
-      for(let i=0; i<4; i++) {
+      for(let i=0; i<CONFIG.productLimit; i++) {
         skeletonProducts += `
           <div class="cfp-skeleton-card" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div class="cfp-skeleton cfp-skeleton-img" style="width: 100%; aspect-ratio: 3/4; min-height: 200px; background: #e2e8f0; border-radius: 4px;">&nbsp;</div>
@@ -425,7 +457,7 @@ document.addEventListener("DOMContentLoaded", function () {
       
       // 1. Fetch 4 popular products in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=4&sortBy=best-selling${countryParam}`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling${countryParam}`
       ).then((res) => res.json());
 
       // 2. Fetch all/popular collections in background
@@ -886,3 +918,7 @@ document.addEventListener("DOMContentLoaded", function () {
     grid.innerHTML = html;
   }
 });
+
+
+
+

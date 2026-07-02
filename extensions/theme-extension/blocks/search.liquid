@@ -1,12 +1,160 @@
 {% if template.name == 'search' %}
-  {% render 'collectionFilterPro' %}
+  <div id="cfp-v1-app-container" class="cfp-v1-app-container">
+    {% render 'collectionFilterPro',
+      show_price_filter: block.settings.show_price_filter,
+      show_brand_filter: block.settings.show_brand_filter,
+      show_color_filter: block.settings.show_color_filter,
+      show_size_filter: block.settings.show_size_filter,
+      show_availability_filter: block.settings.show_availability_filter,
+      accent_color: block.settings.accent_color,
+      filter_heading: block.settings.filter_heading,
+      
+      show_grid_border: block.settings.show_grid_border,
+      columns_desktop: block.settings.columns_desktop,
+      columns_mobile: block.settings.columns_mobile,
+      text_alignment: block.settings.text_alignment,
+      media_aspect_ratio: block.settings.media_aspect_ratio,
+      image_size: block.settings.image_size,
+      
+      sale_label_position: block.settings.sale_label_position,
+      sale_bg_color: block.settings.sale_bg_color,
+      sale_text_color: block.settings.sale_text_color,
+      
+      sold_out_label_position: block.settings.sold_out_label_position,
+      sold_out_bg_color: block.settings.sold_out_bg_color,
+      sold_out_text_color: block.settings.sold_out_text_color
+    %}
+  </div>
 {% endif %}
 
 {% schema %}
 {
-  "name": "Filter Pro Search",
+  "name": "AI Search and Filter",
   "target": "section",
   "templates": ["search"],
-  "settings": []
+  "settings": [
+    {
+      "type": "header",
+      "content": "Grid Layout"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_grid_border",
+      "label": "Show grid border",
+      "default": false
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "label": "Columns desktop",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "select",
+      "id": "columns_mobile",
+      "label": "Columns mobile",
+      "options": [
+        { "value": "1", "label": "1" },
+        { "value": "2", "label": "2" }
+      ],
+      "default": "2"
+    },
+    {
+      "type": "select",
+      "id": "text_alignment",
+      "label": "Text alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "left"
+    },
+    {
+      "type": "header",
+      "content": "Image Settings"
+    },
+    {
+      "type": "select",
+      "id": "media_aspect_ratio",
+      "label": "Media aspect ratio",
+      "options": [
+        { "value": "natural", "label": "Natural" },
+        { "value": "square", "label": "Square (1:1)" },
+        { "value": "portrait", "label": "Portrait (2:3)" }
+      ],
+      "default": "natural"
+    },
+    {
+      "type": "select",
+      "id": "image_size",
+      "label": "Image size (Object fit)",
+      "options": [
+        { "value": "cover", "label": "Cover" },
+        { "value": "contain", "label": "Contain" }
+      ],
+      "default": "cover"
+    },
+    {
+      "type": "header",
+      "content": "Sale Badges"
+    },
+    {
+      "type": "select",
+      "id": "sale_label_position",
+      "label": "Sale label position",
+      "options": [
+        { "value": "none", "label": "None (Hidden)" },
+        { "value": "top-left", "label": "Top - left" },
+        { "value": "top-right", "label": "Top - right" },
+        { "value": "bottom-left", "label": "Bottom - left" },
+        { "value": "bottom-right", "label": "Bottom - right" }
+      ],
+      "default": "top-right"
+    },
+    {
+      "type": "color",
+      "id": "sale_bg_color",
+      "label": "Sale background color",
+      "default": "#FF4E4E"
+    },
+    {
+      "type": "color",
+      "id": "sale_text_color",
+      "label": "Sale text color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "header",
+      "content": "Sold Out Badges"
+    },
+    {
+      "type": "select",
+      "id": "sold_out_label_position",
+      "label": "Sold out label position",
+      "options": [
+        { "value": "top-left", "label": "Top - left" },
+        { "value": "top-right", "label": "Top - right" },
+        { "value": "bottom-left", "label": "Bottom - left" },
+        { "value": "bottom-right", "label": "Bottom - right" }
+      ],
+      "default": "top-right"
+    },
+    {
+      "type": "color",
+      "id": "sold_out_bg_color",
+      "label": "Sold out background color",
+      "default": "#000000"
+    },
+    {
+      "type": "color",
+      "id": "sold_out_text_color",
+      "label": "Sold out text color",
+      "default": "#FFFFFF"
+    }
+  ]
 }
 {% endschema %}

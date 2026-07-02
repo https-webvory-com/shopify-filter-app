@@ -32,13 +32,11 @@
   @media (max-width: 900px) { .cfp-products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 16px !important; } }
   @media (max-width: 480px) { .cfp-products-grid { gap: 12px !important; } }
 
-  /* Hide the native theme product grid — we replace it with our own */
-  #product-grid,
-  #CollectionProductGrid,
-  ul.product-grid,
-  ul.grid.product-grid {
-    display: none !important;
-  }
+  /* 
+   * Independent Architecture:
+   * We no longer hide the native grid globally. 
+   * The app will only mount inside the specific app block container. 
+   */
 
   /* Skeleton overlay: visible by default, hidden when done */
   #cfp-skeleton-overlay {
@@ -94,66 +92,78 @@
     document.title = "Search - {{ shop.name | escape }}";
   </script>
   <style>
-    /* Aggressively hide Dawn theme's default search header to prevent duplicate inputs & predictive search clash */
-    .template-search__header, 
-    .template-search__search,
-    .search-modal__content {
-      display: none !important;
-    }
-    
-    /* Exclude header elements from being hidden */
-    header .search-modal__content,
-    sticky-header .search-modal__content,
-    .header .search-modal__content {
-      display: block !important;
-    }
+    /* 
+     * Independent Architecture:
+     * We no longer hide the native search header globally.
+     */
   </style>
 
   <div class="cfp-page-header" style="text-align: center; margin: 40px auto; max-width: 600px;">
     <h1 style="margin-bottom: 20px; font-size: 28px;">Search</h1>
     
     <style>
-      /* Force thin grey border and override Dawn's thick black borders */
-      .cfp-inline-search-form .field:after,
-      .cfp-inline-search-form .field:before {
-        box-shadow: none !important;
-        border: none !important;
-      }
-      .cfp-inline-search-form .field {
-        border: 1px solid rgba(0, 0, 0, 0.2) !important;
-        border-radius: 2px !important;
-        background: #fff;
-      }
-      .cfp-inline-search-form .field__input {
-        border: none !important;
-        box-shadow: none !important;
-        outline: none !important;
-      }
-      .cfp-inline-search-form .field__input:focus {
-        box-shadow: none !important;
-        outline: none !important;
-      }
-      .cfp-inline-search-form .field__label {
-        background-color: #ffffff;
-        padding: 0 4px;
-        margin-left: -4px;
-        color: rgba(0, 0, 0, 0.6);
-        font-size: 13px;
-      }
-    </style>
-
-    <form action="{{ routes.search_url }}" method="get" class="cfp-inline-search-form" style="margin-bottom: 20px;">
-      <div class="field">
-        <input 
-          class="search__input field__input" 
-          id="Cfp-Search-In-Template" 
-          type="search" 
-          name="q" 
-          value="{{ search.terms | escape }}" 
-          placeholder=" "
-        >
-        <label class="field__label" for="Cfp-Search-In-Template">Search for...</label>
-        <button type="submit" class="search__button field__button" aria-label="Search" style="color: rgba(0,0,0,0.6);">
+        /* Force thin grey border and override Dawn's thick black borders */
+        .cfp-inline-search-form .field:after,
+        .cfp-inline-search-form .field:before {
+          box-shadow: none !important;
+          border: none !important;
+        }
+        .cfp-inline-search-form .field {
+          border: 1px solid rgba(0, 0, 0, 0.2) !important;
+          border-radius: 4px !important;
+          background: #fff;
+          display: flex !important;
+          align-items: center !important;
+          position: relative;
+          height: 44px;
+          overflow: hidden;
+        }
+        .cfp-inline-search-form .field__input {
+          border: none !important;
+          box-shadow: none !important;
+          outline: none !important;
+          width: 100% !important;
+          height: 100% !important;
+          padding: 0 40px 0 16px !important;
+          margin: 0 !important;
+          font-size: 16px !important;
+          text-align: left !important;
+          background: transparent !important;
+        }
+        .cfp-inline-search-form .field__input:focus {
+          box-shadow: none !important;
+          outline: none !important;
+        }
+        .cfp-inline-search-form .field__label {
+          display: none !important; /* Hide floating label, we will use standard placeholder */
+        }
+        .cfp-inline-search-form .field__button {
+          position: absolute;
+          right: 0;
+          top: 0;
+          height: 100%;
+          width: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          color: rgba(0,0,0,0.6);
+        }
+      </style>
+  
+      <form action="{{ routes.search_url }}" method="get" class="cfp-inline-search-form" style="margin-bottom: 20px;">
+        <div class="field">
+          <input 
+            class="field__input" 
+            id="Cfp-Search-In-Template" 
+            type="search" 
+            name="q" 
+            value="{{ search.terms | escape }}" 
+            placeholder="Search for..."
+          >
+          <button type="submit" class="field__button" aria-label="Search">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         </button>
       </div>
@@ -225,6 +235,45 @@
   window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
   window.cfpCurrencySymbol = "{{ cart.currency.symbol }}";
   window.cfpCurrencyCode = "{{ cart.currency.iso_code }}";
+
+  window.collectionFilterProSettings = {
+    show_price_filter: {{ show_price_filter | default: true | json }},
+    show_brand_filter: {{ show_brand_filter | default: true | json }},
+    show_color_filter: {{ show_color_filter | default: true | json }},
+    show_size_filter: {{ show_size_filter | default: true | json }},
+    show_availability_filter: {{ show_availability_filter | default: true | json }},
+    accent_color: {{ accent_color | default: '#000000' | json }},
+    filter_heading: {{ filter_heading | default: 'Filters' | json }},
+    
+    show_grid_border: {{ show_grid_border | default: false | json }},
+    columns_desktop: {{ columns_desktop | default: 3 | json }},
+    columns_mobile: {{ columns_mobile | default: "2" | json }},
+    text_alignment: {{ text_alignment | default: "left" | json }},
+    media_aspect_ratio: {{ media_aspect_ratio | default: "natural" | json }},
+    image_size: {{ image_size | default: "cover" | json }},
+    
+    sale_label_position: {{ sale_label_position | default: "top-right" | json }},
+    sale_bg_color: {{ sale_bg_color | default: "#FF4E4E" | json }},
+    sale_text_color: {{ sale_text_color | default: "#FFFFFF" | json }},
+    
+    sold_out_label_position: {{ sold_out_label_position | default: "top-right" | json }},
+    sold_out_bg_color: {{ sold_out_bg_color | default: "#000000" | json }},
+    sold_out_text_color: {{ sold_out_text_color | default: "#FFFFFF" | json }}
+  };
 </script>
+
+<style>
+  :root {
+    --cfp-cols-desktop: {{ columns_desktop | default: 3 }};
+    --cfp-cols-mobile: {{ columns_mobile | default: 2 }};
+    --cfp-text-align: {{ text_alignment | default: 'left' }};
+    --cfp-aspect-ratio: {% if media_aspect_ratio == 'square' %}1/1{% elsif media_aspect_ratio == 'portrait' %}2/3{% else %}auto{% endif %};
+    --cfp-image-fit: {{ image_size | default: 'cover' }};
+    --cfp-sale-bg: {{ sale_bg_color | default: '#FF4E4E' }};
+    --cfp-sale-text: {{ sale_text_color | default: '#FFFFFF' }};
+    --cfp-sold-out-bg: {{ sold_out_bg_color | default: '#000000' }};
+    --cfp-sold-out-text: {{ sold_out_text_color | default: '#FFFFFF' }};
+  }
+</style>
 
 <script src="{{ 'collectionFilterPro.js' | asset_url }}" defer="defer"></script>

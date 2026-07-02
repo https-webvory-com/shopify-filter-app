@@ -1,5 +1,5 @@
 /**
- * Collection Filter Pro — Storefront JavaScript
+ * Collection Filter Pro â€” Storefront JavaScript
  * Dynamic UI Injection and Relative App Proxy Querying
  */ 
 
@@ -7,26 +7,50 @@
   'use strict';
   const customSettings = window.collectionFilterProSettings || {};
  
-  const sidebar = document.getElementById('cfp-sidebar');
-  const topBar = document.getElementById('cfp-top-bar');
-  const overlay = document.getElementById('cfp-overlay');
-  const triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
-  const closeBtn = document.getElementById('cfp-close-btn');
-  const applyBtn = document.getElementById('cfp-apply-btn');
-  const clearBtn = document.getElementById('cfp-clear-btn');
-  const activeCount = document.getElementById('cfp-active-count');
+  let sidebar = null;
+  let topBar = null;
+  let overlay = null;
+  let triggerBtn = null;
+  let closeBtn = null;
+  let applyBtn = null;
+  let clearBtn = null;
+  let activeCount = null;
 
-  if (!sidebar) return;
+  function queryElements() {
+    sidebar = document.getElementById('cfp-sidebar');
+    topBar = document.getElementById('cfp-top-bar');
+    overlay = document.getElementById('cfp-overlay');
+    triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
+    closeBtn = document.getElementById('cfp-close-btn');
+    applyBtn = document.getElementById('cfp-apply-btn');
+    clearBtn = document.getElementById('cfp-clear-btn');
+    activeCount = document.getElementById('cfp-active-count');
+  }
 
-  const shop = sidebar.dataset.shop;
-  const collectionId = sidebar.dataset.collectionId || '';
-  const collectionHandle = sidebar.dataset.collectionHandle || '';
-  const templateName = sidebar.dataset.templateName || '';
-  const searchTerms = sidebar.dataset.searchTerms || '';
+  function ensureSidebarReady() {
+    queryElements();
+    return Boolean(sidebar);
+  }
+
+  let shop = '';
+  let collectionId = '';
+  let collectionHandle = '';
+  let templateName = '';
+  let searchTerms = '';
+
+  function initDataVariables() {
+    if (sidebar) {
+      shop = sidebar.dataset.shop || '';
+      collectionId = sidebar.dataset.collectionId || '';
+      collectionHandle = sidebar.dataset.collectionHandle || '';
+      templateName = sidebar.dataset.templateName || '';
+      searchTerms = sidebar.dataset.searchTerms || '';
+    }
+  }
 
   console.log("check againg 6")
 
-  // ── 1. Global Filter State ──────────────────────────────────────────
+  // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const PAGE_SIZE = 28;
 
   let activeFilters = {
@@ -157,18 +181,36 @@
     };
 
 
-  // ── 2. Initialization ───────────────────────────────────────────────
+  // â”€â”€ 2. Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let activeMerchandisingRule = null;
 
     async function init() {
+    if (!ensureSidebarReady()) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+        return;
+      }
+      console.warn('[CFP] Sidebar not found, aborting initialization');
+      return;
+    }
+    
+    initDataVariables();
+    parseURLState();
+    
+    // Make sure we inject the UI into the correct container now that sidebar is ready
+    findAndInject();
+
+    if (triggerBtn) {
+      triggerBtn.addEventListener('click', openSidebar);
+    }
+
     setupStaticEventListeners();
     renderSkeleton();
     await fetchMerchandisingRule();
-    
     await fetchAndRenderData();
   }
 
-  // ── 2.5 Fetch Merchandising Rule ──────────────────────────────────
+  // â”€â”€ 2.5 Fetch Merchandising Rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function fetchMerchandisingRule() {
     // try {
     //   const queryParams = new URLSearchParams();
@@ -191,7 +233,7 @@
     // }
   }
 
-  // ── 3. Fetch data from Shopify App Proxy ──────────────────────────────
+  // â”€â”€ 3. Fetch data from Shopify App Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   
   async function fetchAndRenderData(isLoadMore = false) {
       syncStateToURL(); // Sync URL
@@ -332,7 +374,7 @@
     }
   }
 
-  // ── 4. Render Products Grid ────────────────────────────────────────
+  // â”€â”€ 4. Render Products Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function renderSkeleton() {
     // Hide pagination during loading
@@ -348,15 +390,9 @@
       
       const wrapper = document.querySelector('.cfp-layout-wrapper');
       if (wrapper) {
-        // Insert before native grid if it exists, otherwise just append
-        const grid = findGrid();
-        if (grid && wrapper.contains(grid)) {
-          wrapper.insertBefore(productContainer, grid);
-        } else {
-          wrapper.appendChild(productContainer);
-        }
+        wrapper.appendChild(productContainer);
       } else {
-        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        const main = document.querySelector('.cfp-v1-app-container') || document.body;
         main.appendChild(productContainer);
       }
     }
@@ -383,19 +419,19 @@
 
 
   function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
+    console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
+    console.log('[CFP] First product data:', products[0]);
     // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
       productContainer = document.createElement('div');
       productContainer.id = 'cfp-products-container';
       productContainer.className = 'cfp-products-grid';
-      const nativeGrid = findGrid();
-      if (nativeGrid) {
-        // Permanently hide Dawn's native ul grid
-        nativeGrid.style.setProperty('display', 'none', 'important');
-        nativeGrid.parentElement.insertBefore(productContainer, nativeGrid.nextSibling);
+      const wrapper = document.querySelector('.cfp-layout-wrapper');
+      if (wrapper) {
+        wrapper.appendChild(productContainer);
       } else {
-        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        const main = document.querySelector('.cfp-v1-app-container') || document.body;
         main.appendChild(productContainer);
       }
     }
@@ -650,13 +686,28 @@
           }
         }
       }
+      
+      let badgesHtml = '';
+      const s = window.collectionFilterProSettings || {};
+      // If product available status is false, or we assume it's true unless specified
+      if (product.available === false) {
+         const pos = s.sold_out_label_position || 'top-right';
+           if (pos !== 'none') {
+             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text);">Sold out</span>`;
+           }
+      } else if (onSale) {
+         const pos = s.sale_label_position || 'top-right';
+           if (pos !== 'none') {
+             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg); color: var(--cfp-sale-text);">Sale</span>`;
+           }
+      }
 
       return `
         <div class="cfp-product-card">
           <a href="${productUrl}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
-              ${onSale ? '<span class="cfp-product-card__badge">Sale</span>' : ''}
+              ${badgesHtml}
             </div>
             <div class="cfp-product-card__info">
               <span class="cfp-product-card__vendor">${product.vendor}</span>
@@ -672,6 +723,11 @@
       `;
     }).join('');
     
+    console.log('[CFP] Generated HTML length:', productsHtml.length);
+    if (productsHtml.length < 100 && products.length > 0) {
+      console.error('[CFP] HTML generation failed or returned empty!', productsHtml);
+    }
+
     if (isLoadMore) {
       // Remove old pagination if it exists inside grid
       const oldPagination = grid.querySelector('.cfp-load-more-container');
@@ -720,7 +776,7 @@
     grid.appendChild(pagination);
   }
 
-  // ── 5. Render Filters Sidebar dynamically ──────────────────────────────
+  // â”€â”€ 5. Render Filters Sidebar dynamically â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function renderFilterSidebar(settings, facets, totalCount) {
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
@@ -1279,7 +1335,7 @@
     setupDynamicFieldListeners();
   }
 
-  // ── 6. Utility: CSS Color mapper ────────────────────────────────────
+  // â”€â”€ 6. Utility: CSS Color mapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function getColorHex(colorName) {
     const colors = {
       black: '#1a1a1a',
@@ -1298,7 +1354,7 @@
     return colors[colorName.toLowerCase()] || colorName;
   }
 
-  // ── 7. Setup Interactivity Listeners ─────────────────────────────────
+  // â”€â”€ 7. Setup Interactivity Listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupStaticEventListeners() {
     document.body.addEventListener('click', function(e) {
       if (e.target.closest('#cfp-drawer-trigger-btn')) {
@@ -1841,74 +1897,29 @@
   function openSidebar() {
     sidebar.classList.add('cfp-sidebar--open');
     if (overlay) overlay.classList.add('cfp-overlay--visible');
+    if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
   }
 
   function closeSidebar() {
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
+    if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
-  // ── 8. Find grid elements on Dawn and other standard themes ──────────
-  const gridSelectors = customSettings.gridSelectors || [
-    '#product-grid', '#CollectionProductGrid', '.product-grid', '.collection-grid',
-    '.main-collection-grid', 'ul.grid', '.grid--view-items', '.boost-pfs-filter-products',
-    '#js-product-grid', '.products-grid', '.collection-products', '.product-list', '[data-product-grid]'
-  ];
-
+  // â”€â”€ 8. Independent App Block Injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let isAttached = false;
 
-  function findGrid() {
-    const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
-    for (let i = 0; i < gridSelectors.length; i++) {
-      const found = main.querySelector(gridSelectors[i]);
-      if (found && !found.closest('.cfp-sidebar')) {
-        return found;
-      }
-    }
-    
-    let fallback = document.getElementById('cfp-fallback-grid');
-    if (!fallback) {
-      fallback = document.createElement('div');
-      fallback.id = 'cfp-fallback-grid';
-      fallback.className = 'cfp-products-grid cfp-fallback';
-      
-      const sidebarEl = document.getElementById('cfp-sidebar');
-      if (sidebarEl && sidebarEl.parentElement) {
-        sidebarEl.parentElement.insertBefore(fallback, sidebarEl.nextSibling);
-      } else {
-        const main = document.querySelector('.template-search') || document.querySelector('#MainContent') || document.querySelector('.main-content') || document.body;
-        main.appendChild(fallback);
-      }
-    }
-    return fallback;
-  }
-
   function findAndInject() {
+    if (!sidebar) return; // Wait until UI is rendered
     if (isAttached && document.contains(sidebar.parentElement)) return;
 
-    const grid = findGrid();
-    if (grid) {
-      // Do NOT show the native grid — it's permanently hidden by CSS
-      // We render products into cfp-products-container instead
-
-      const hideSelectors = customSettings.hideSelectors || ['.facets', '.facets-container', '.facets-wrapper', '.collection-filters', 
-'facet-filters-form', '.product-count', '.pagination', 'nav.pagination', '.page-list', '.page-links', 
-'.pagination-wrapper', '.pagination__nav'];
-      hideSelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
-      });
-
-      const universalEmptySelectors = [
-        '[role="status"]', '.empty-state', '[data-empty-state]', '.search--empty', 
-        '.template-search__empty-results', '.template-search__results--empty', 
-        '.collection--empty', '#EmptyState', '.search-results__empty'
-      ];
-      universalEmptySelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
-      });
-
+    // Look ONLY for our designated app container placed via Theme Editor
+    const container = document.querySelector('.cfp-v1-app-container');
+    if (container) {
       // Insert layout wrapper
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
@@ -1916,7 +1927,7 @@
         if (window.cfpFullWidth) {
           wrapper.classList.add('cfp-full-width-mode');
         }
-        grid.parentElement.insertBefore(wrapper, grid);
+        container.appendChild(wrapper);
         
         // Expand the theme's native container if Full Width is enabled
         if (window.cfpFullWidth) {
@@ -1928,7 +1939,7 @@
         }
       }
 
-      // Automatically move the Search Header above the wrapper
+      // Move the Search Header above the wrapper if it exists in the container
       const pageHeader = document.querySelector('.cfp-page-header');
       if (pageHeader && wrapper.parentElement && pageHeader.parentElement !== wrapper.parentElement) {
         wrapper.parentElement.insertBefore(pageHeader, wrapper);
@@ -1940,33 +1951,34 @@
         wrapper.appendChild(topBar);
         topBar.style.display = 'flex';
       }
-        if (breadcrumbs) {
-          sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
-          breadcrumbs.style.padding = '15px 20px 0';
-          breadcrumbs.style.marginBottom = '0';
-        }
-        wrapper.appendChild(sidebar);
+      if (breadcrumbs) {
+        sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
+        breadcrumbs.style.padding = '15px 20px 0';
+        breadcrumbs.style.marginBottom = '0';
+      }
+      wrapper.appendChild(sidebar);
 
       // Move products container into wrapper if it already exists
       const productsContainer = document.getElementById('cfp-products-container');
       if (productsContainer) {
         wrapper.appendChild(productsContainer);
       }
-
-      // Append native grid last (it's hidden by CSS, but needs to be in wrapper for findGrid())
-      wrapper.appendChild(grid);
       
       sidebar.style.display = 'flex';
       isAttached = true;
     }
   }
 
-
   const observer = new MutationObserver(findAndInject);
   observer.observe(document.body, { childList: true, subtree: true });
   findAndInject();
 
   // Run initial loading
-  init();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
 })();
+
