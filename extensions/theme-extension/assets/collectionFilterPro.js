@@ -768,7 +768,13 @@
       </button>
     `;
 
-    pagination.querySelector('#cfp-load-more-btn').addEventListener('click', () => {
+    pagination.querySelector('#cfp-load-more-btn').addEventListener('click', (e) => {
+      const btn = e.target;
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+      btn.style.cursor = 'not-allowed';
+      btn.innerHTML = '<span class="cfp-spinner" style="display:inline-block; width:16px; height:16px; border:2px solid #fff; border-radius:50%; border-top-color:transparent; animation: cfp-spin 1s linear infinite; margin-right: 8px; vertical-align: -3px;"></span> LOADING...';
+      
       activeFilters.page += 1;
       fetchAndRenderData(true);
     });
