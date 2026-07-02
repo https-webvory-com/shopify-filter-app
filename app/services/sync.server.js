@@ -33,6 +33,7 @@ export async function formatAndPushToMeili(products) {
       id: p.id.split("/").pop(),
       shop: p.shop,
       title: p.title || "",
+      handle: p.handle || "",
       vendor: p.vendor || "",
       productType: p.productType || "",
       priceMin: parseFloat(p.priceMin),
@@ -42,6 +43,22 @@ export async function formatAndPushToMeili(products) {
       available,
       status: p.status ? p.status.toUpperCase() : 'ACTIVE',
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
+      // ✅ Images — first 3 are enough for display
+      images: Array.isArray(p.images) ? p.images.slice(0, 3) : [],
+      // ✅ Variant prices + options for price display and swatch rendering
+      // This eliminates the need for a second Postgres query on every filter/search request
+      variantPrices: p.variants
+        ? p.variants.map((v) => ({
+            id: v.id ? v.id.split("/").pop() : "",
+            price: parseFloat(v.price),
+            compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : null,
+            available: v.available !== undefined ? v.available : true,
+            option1: v.option1 || null,
+            option2: v.option2 || null,
+            option3: v.option3 || null,
+            imageUrl: v.imageUrl || null,
+          }))
+        : [],
       ...formattedOptions,
       ...formattedMetafields,
     };
@@ -100,11 +117,11 @@ async function updateMeiliSettings(shop) {
 
     const searchableAttributes = [
       "title",
+      "handle",
       "productType",
       "vendor",
-      "collections",
+      "tags",
       ...Array.from(dynamicKeys),
-      "tags"
     ];
 
     const sortableAttributes = ["priceMin", "createdAt", "title"];
@@ -321,25 +338,77 @@ async function processSyncChunk(jobId, shop, admin) {
       hasNextPage = productsData.pageInfo.hasNextPage;
       cursor = productsData.pageInfo.endCursor;
 
-      // Smart Upsert for each product
-      for (const product of products) {
-        await smartUpsertProduct(shop, product, prisma);
-      }
+      // ✅ OPTIMIZED: Build Meilisearch docs directly from Shopify data (no re-read from DB)
+      // and parallelize DB upserts + Meili push for speed
+      const meiliDocs = products.map((p) => {
+        const available = p.variants.nodes.some((v) => v.availableForSale);
+        const prices = p.variants.nodes.map((v) => parseFloat(v.price));
+        const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
+        const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
 
-      // Fetch the newly updated products from DB and push to Meilisearch
-      const productIds = products.map((p) => p.id.split("/").pop());
-      const dbProducts = await prisma.product.findMany({
-        where: { id: { in: productIds.map(id => `gid://shopify/Product/${id}`) } },
-        include: {
-          variants: true,
-          collections: { select: { collectionId: true } },
-          metafields: true,
-        },
+        const formattedOptions = {};
+        p.options.forEach((opt) => {
+          formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values) ? opt.values : [opt.values];
+        });
+
+        const formattedMetafields = {};
+        if (p.metafields) {
+          p.metafields.forEach((m) => {
+            if (m && m.value) formattedMetafields[`metafield_${m.namespace}.${m.key}`] = m.value;
+          });
+        }
+
+        return {
+          id: p.id.split("/").pop(),
+          shop,
+          title: p.title || "",
+          handle: p.handle || "",
+          vendor: p.vendor || "",
+          productType: p.productType || "",
+          priceMin,
+          priceMax,
+          tags: p.tags || [],
+          collections: p.collections.nodes.map((c) => c.id),
+          available,
+          status: (p.status || "ACTIVE").toUpperCase(),
+          createdAt: Date.now(),
+          images: p.images.nodes.map((img) => img.url).slice(0, 3),
+          variantPrices: p.variants.nodes.map((v) => {
+            const optionsList = p.options || [];
+            let option1 = null, option2 = null, option3 = null;
+            (v.selectedOptions || []).forEach((selOpt) => {
+              const idx = optionsList.findIndex((o) => o.name === selOpt.name);
+              if (idx === 0) option1 = selOpt.value;
+              else if (idx === 1) option2 = selOpt.value;
+              else if (idx === 2) option3 = selOpt.value;
+            });
+            return {
+              id: v.id.split("/").pop(),
+              price: parseFloat(v.price),
+              compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : null,
+              available: v.availableForSale === true,
+              option1,
+              option2,
+              option3,
+              imageUrl: v.image?.url || null,
+            };
+          }),
+          ...formattedOptions,
+          ...formattedMetafields,
+        };
       });
 
-      if (dbProducts.length > 0) {
-        await formatAndPushToMeili(dbProducts);
-      }
+      // ✅ Run DB upserts and Meilisearch push in PARALLEL (not serial)
+      await Promise.all([
+        // DB upserts in parallel
+        Promise.all(products.map((product) => smartUpsertProduct(shop, product, prisma))),
+        // Meili push (no DB re-read needed anymore!)
+        meiliClient.index("products").addDocuments(meiliDocs).then((task) => {
+          console.log(`CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`);
+        }).catch((e) => {
+          console.error("CFP: Meilisearch push failed", e);
+        }),
+      ]);
 
       // Update Job State
       job = await prisma.syncJob.update({
@@ -353,7 +422,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
       console.log(`CFP: SyncJob ${jobId} processed ${job.productsProcessed} products so far.`);
       
-      // Small delay to yield event loop
+      // Small delay to yield event loop and avoid Shopify rate limits
       await new Promise(resolve => setTimeout(resolve, 100));
 
     } catch (err) {

@@ -440,55 +440,32 @@ export const loader = async ({ request }) => {
     const meiliTime = Date.now() - meiliStart;
 
     const totalCount = meiliRes.estimatedTotalHits || 0;
+    // ✅ Use Meilisearch hits directly — they now contain handle, images, variantPrices
     const allMatchedProducts = (meiliRes.hits || []).map(h => ({
         ...h,
-        id: `gid://shopify/Product/${h.id}`
+        id: `gid://shopify/Product/${h.id}`,
+        // Normalize variantPrices → variants shape for merchandising logic
+        variants: (h.variantPrices || []).map(v => ({
+          available: v.available,
+          price: v.price,
+          compareAtPrice: v.compareAtPrice,
+          option1: v.option1,
+          option2: v.option2,
+          option3: v.option3,
+        })),
     }));
 
-    // Fetch full variants for the 1000 products to compute merchandising and price ranges
-    const meiliIds = allMatchedProducts.map(h => h.id);
-    
     if (pinnedIds && pinnedIds.length > 0) {
         pinnedIds.forEach(id => {
-            if (!meiliIds.includes(id)) meiliIds.push(id);
+            if (!allMatchedProducts.some(p => p.id === id)) {
+                allMatchedProducts.push({ id, variants: [] });
+            }
         });
     }
 
-    const prismaStart = Date.now();
-    const dbProducts = await prisma.product.findMany({
-        where: { id: { in: meiliIds } },
-        select: {
-          id: true,
-          priceMin: true,
-          priceMax: true,
-          vendor: true,
-          productType: true,
-          tags: true,
-          title: true,
-          collections: { select: { collectionId: true, collection: { select: { title: true } } } },
-          variants: {
-            select: { available: true, price: true, compareAtPrice: true, inventory: true, option1: true, option2: true, option3: true },
-          }
-        },
-    });
-    const prismaTime = Date.now() - prismaStart;
-
-    // Merge variants and collections into allMatchedProducts for merchandising logic
+    // ✅ Build collectionIdToTitle from Meili facets (no extra Prisma query needed)
     const collectionIdToTitle = {};
-    allMatchedProducts.forEach(mp => {
-       const dbp = dbProducts.find(p => p.id === mp.id);
-       if (dbp) {
-          mp.variants = dbp.variants;
-          mp.collections = dbp.collections;
-          if (dbp.collections) {
-             dbp.collections.forEach(c => {
-                if (c.collection && c.collection.title) {
-                   collectionIdToTitle[c.collectionId] = c.collection.title;
-                }
-             });
-          }
-       }
-    });
+    const prismaTime = 0;
 
     // Compute Price Range Counts from the top 1000 items
     const priceFilter = activeGroupFilters ? activeGroupFilters.find((f) => f.filterType === "price" || f.type === "price") : null;
@@ -581,33 +558,39 @@ export const loader = async ({ request }) => {
       activePinningRule,
     );
 
-    // ── 7. Fetch Full Details for Paginated Products ───────────────────
+    // ── 7. Build paginated products from Meilisearch data directly ───────
+    // ✅ No extra Prisma query needed — Meili doc now has handle, images, variantPrices
     const startIndex = (page - 1) * limit;
-    const paginatedIds = finalProducts
-      .slice(startIndex, startIndex + limit)
-      .map((p) => p.id);
+    const paginatedSlice = finalProducts.slice(startIndex, startIndex + limit);
 
-    let products = [];
-    if (paginatedIds.length > 0) {
-      const fetchedProducts = await prisma.product.findMany({
-        where: { id: { in: paginatedIds } },
-        include: { variants: true },
-      });
-
-      // Restore exact sort order and attach merchandisingImage
-      products = paginatedIds
-        .map((id) => {
-          const p = fetchedProducts.find((fp) => fp.id === id);
-          if (p) {
-            const matched = finalProducts.find((mp) => mp.id === id);
-            if (matched && matched.merchandisingImage) {
-              p.merchandisingImage = matched.merchandisingImage;
-            }
-          }
-          return p;
-        })
-        .filter(Boolean);
-    }
+    let products = paginatedSlice.map((p) => {
+      // Shape the product to match the frontend's expected format
+      const variantPrices = p.variantPrices || [];
+      return {
+        id: p.id,
+        title: p.title,
+        handle: p.handle,
+        vendor: p.vendor,
+        productType: p.productType,
+        priceMin: p.priceMin,
+        priceMax: p.priceMax,
+        tags: p.tags || [],
+        images: p.images || [],
+        status: (p.status || 'ACTIVE').toLowerCase(),
+        options: p.options || [],
+        merchandisingImage: p.merchandisingImage || null,
+        variants: variantPrices.map(v => ({
+          id: `gid://shopify/ProductVariant/${v.id}`,
+          price: v.price,
+          compareAtPrice: v.compareAtPrice,
+          available: v.available,
+          option1: v.option1,
+          option2: v.option2,
+          option3: v.option3,
+          imageUrl: v.imageUrl,
+        })),
+      };
+    });
 
     const totalMs = Date.now() - startTime;
 

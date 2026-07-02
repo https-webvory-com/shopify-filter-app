@@ -157,10 +157,22 @@ export const loader = async ({ request }) => {
       }
     }
     
-    // Map Meilisearch hits to match frontend expectations
+    // ✅ Map Meilisearch hits to match frontend expectations
+    // Meili now contains handle, images, variantPrices — no extra Prisma query needed
     organicProducts = meiliRes.hits.map(h => ({
       ...h,
       id: `gid://shopify/Product/${h.id}`,
+      // Normalize variantPrices → variants shape for frontend
+      variants: (h.variantPrices || []).map(v => ({
+        id: `gid://shopify/ProductVariant/${v.id}`,
+        price: v.price,
+        compareAtPrice: v.compareAtPrice,
+        available: v.available,
+        option1: v.option1,
+        option2: v.option2,
+        option3: v.option3,
+        imageUrl: v.imageUrl,
+      })),
     }));
 
     // 2. Fetch Active Pinning Rule
@@ -179,7 +191,7 @@ export const loader = async ({ request }) => {
         if (Array.isArray(parsedPins)) {
           pinnedIds = parsedPins.map(p => p.id);
           
-          // For pinned products, we fetch from Prisma to ensure we have all details
+          // For pinned products, fetch from Prisma (they may not be in Meili results)
           const dbPinnedProducts = await prisma.product.findMany({
             where: { 
               shop, 
@@ -209,54 +221,15 @@ export const loader = async ({ request }) => {
     // Combine them (Pinned items first)
     const mergedResults = [...pinnedProducts, ...filteredOrganicProducts];
 
-    const finalResults = mergedResults.slice(0, limit + 20).map(p => ({
-      ...p,
-      isPinned: pinnedIds.includes(p.id)
-    }));
-
-    // If organic results from Meilisearch didn't include full variant details that instantSearch.js needs,
-    // we can fetch the missing Prisma data here, or just rely on Meilisearch's indexed fields.
-    // Since Meilisearch has priceMin, title, handle, image, it's usually enough for Instant Search.
-    
-    // To ensure price ranges work perfectly, we will quickly fetch the minimal variant info for the final results
-    const finalIds = finalResults.map(p => p.id);
-    const dbFinalProducts = await prisma.product.findMany({
-      where: { id: { in: finalIds } },
-      select: { 
-        id: true, 
-        handle: true,
-        images: true,
-        options: true,
-        status: true,
-        variants: { 
-          select: { 
-            id: true,
-            price: true, 
-            compareAtPrice: true,
-            option1: true,
-            option2: true,
-            option3: true,
-            imageUrl: true
-          } 
-        } 
-      }
-    });
-
-    finalResults.forEach(p => {
-      const dbp = dbFinalProducts.find(db => db.id === p.id);
-      if (dbp) {
-        if (dbp.variants) p.variants = dbp.variants;
-        if (dbp.handle) p.handle = dbp.handle;
-        if (dbp.images) p.images = dbp.images;
-        if (dbp.options) p.options = dbp.options;
-      }
-    });
-
-    // Filter out inactive products and enforce the requested limit
-    let activeResults = finalResults.filter(p => {
-       const dbp = dbFinalProducts.find(db => db.id === p.id);
-       return dbp && dbp.status && dbp.status.toLowerCase() === 'active';
-    }).slice(0, limit);
+    // ✅ No extra Prisma query for handles/images/variants — Meili has it all
+    let activeResults = mergedResults
+      .filter(p => {
+        // Filter inactive: check Meili status field
+        const status = (p.status || 'ACTIVE').toLowerCase();
+        return status === 'active';
+      })
+      .slice(0, limit)
+      .map(p => ({ ...p, isPinned: pinnedIds.includes(p.id) }));
 
     // Contextual Pricing
     let contextualPricingApplied = false;
