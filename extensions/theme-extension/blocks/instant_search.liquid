@@ -1,10 +1,45 @@
+﻿<script>
+  window.CFP_InstantSearchSettings = {
+    customTriggerSelector: {{ block.settings.custom_trigger_selector | json }},
+    primaryColor: {{ block.settings.primary_color | default: '#000000' | json }},
+    productLimit: {{ block.settings.product_limit | default: 6 | json }}
+  };
+</script>
 <script src="{{ 'instantSearch.js' | asset_url }}" defer="defer"></script>
 {{ 'instantSearch.css' | asset_url | stylesheet_tag }}
 
+<style>
+  :root {
+    --cfp-is-primary: {{ block.settings.primary_color | default: '#000000' }};
+  }
+</style>
+
 {% schema %}
 {
-  "name": "Instant Search Bar",
+  "name": "Instant Search Embed",
   "target": "body",
-  "settings": []
+  "settings": [
+    {
+      "type": "text",
+      "id": "custom_trigger_selector",
+      "label": "Custom Search Selector",
+      "info": "Leave blank unless your theme's search is not opening automatically. E.g. '.my-custom-search-btn'"
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "product_limit",
+      "min": 2,
+      "max": 12,
+      "step": 1,
+      "label": "Products to show",
+      "default": 6
+    }
+  ]
 }
 {% endschema %}

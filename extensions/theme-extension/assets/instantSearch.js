@@ -5,10 +5,12 @@
 
 document.addEventListener("DOMContentLoaded", function () {
   // Config
+  const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
     minChars: 2,
     debounceTime: 300,
-    productLimit: 4,
+    productLimit: userSettings.productLimit || 6,
+    customSelector: userSettings.customTriggerSelector || "",
     apiUrl: "/apps/collection-filter-pro/api/filter",
   };
 
@@ -214,18 +216,23 @@ document.addEventListener("DOMContentLoaded", function () {
   function attachListeners() {
     // 1. Hijack all theme search inputs/icons
     // We target common selectors for search buttons/inputs in Shopify themes
-    const searchTriggers = document.querySelectorAll(
-      'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]'
-    );
+    let defaultSelector = 'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]';
+    if (CONFIG.customSelector) {
+        defaultSelector += ', ' + CONFIG.customSelector;
+    }
+    
+    const searchTriggers = document.querySelectorAll(defaultSelector);
 
     searchTriggers.forEach((trigger) => {
-      // Only hijack search elements that are inside the header
+      // Only hijack search elements that are inside the header, unless they match the custom selector
       const isHeaderElement = trigger.closest('header') || 
                               trigger.closest('sticky-header') || 
                               trigger.closest('.header') || 
                               trigger.closest('[id*="header"]');
                               
-      if (!isHeaderElement && trigger.tagName !== 'SUMMARY') {
+      const isCustomSelector = CONFIG.customSelector && trigger.matches(CONFIG.customSelector);
+
+      if (!isHeaderElement && trigger.tagName !== 'SUMMARY' && !isCustomSelector) {
         return; // Ignore inputs that are not in the header (e.g. main search page input)
       }
 
