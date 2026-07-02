@@ -58,6 +58,7 @@ export const action = async ({ request }) => {
               variants: true,
               collections: { select: { collectionId: true } },
               metafields: true,
+              // handle and images are top-level columns on Product model, auto-included
             },
           });
           if (dbProducts.length > 0) {

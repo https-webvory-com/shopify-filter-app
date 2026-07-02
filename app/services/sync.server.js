@@ -684,28 +684,89 @@ export async function syncSingleProduct(shop, admin, productId) {
 
   const product = responseJson.data?.product;
   if (!product) {
-    console.warn(`CFP: Product ${productId} not found on Shopify. Deleting from DB.`);
+    console.warn(`CFP: Product ${productId} not found on Shopify. Deleting from DB and Meilisearch.`);
     await prisma.product.deleteMany({ where: { id: productId } });
+    // Also remove from Meilisearch
+    try {
+      const numericId = productId.split("/").pop();
+      await meiliClient.index("products").deleteDocument(numericId);
+      console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
+    } catch (e) {
+      console.error("CFP: Failed to delete document from Meilisearch", e);
+    }
     return null;
   }
 
-  await smartUpsertProduct(shop, product, prisma);
-  
-  await autoSeedOptionFilters(shop);
+  // ✅ Run DB upsert and build Meilisearch doc in parallel from Shopify data
+  // No need to re-read from Postgres — we have all the data from the API response
+  const available = product.variants.nodes.some((v) => v.availableForSale);
+  const prices = product.variants.nodes.map((v) => parseFloat(v.price));
+  const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
+  const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
 
-  const dbProduct = await prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      variants: true,
-      collections: { select: { collectionId: true } },
-      metafields: true,
-    },
+  const formattedOptions = {};
+  product.options.forEach((opt) => {
+    formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values) ? opt.values : [opt.values];
   });
 
-  if (dbProduct) {
-    await formatAndPushToMeili([dbProduct]);
+  const formattedMetafields = {};
+  if (product.metafields) {
+    product.metafields.forEach((m) => {
+      if (m && m.value) formattedMetafields[`metafield_${m.namespace}.${m.key}`] = m.value;
+    });
   }
 
-  console.log(`CFP: Sync complete for single product ${productId}.`);
-  return dbProduct.id;
+  const meiliDoc = {
+    id: product.id.split("/").pop(),
+    shop,
+    title: product.title || "",
+    handle: product.handle || "",
+    vendor: product.vendor || "",
+    productType: product.productType || "",
+    priceMin,
+    priceMax,
+    tags: product.tags || [],
+    collections: product.collections.nodes.map((c) => c.id),
+    available,
+    status: (product.status || "ACTIVE").toUpperCase(),
+    createdAt: Date.now(),
+    images: product.images.nodes.map((img) => img.url), // all images, no limit
+    variantPrices: product.variants.nodes.map((v) => {
+      const optionsList = product.options || [];
+      let option1 = null, option2 = null, option3 = null;
+      (v.selectedOptions || []).forEach((selOpt) => {
+        const idx = optionsList.findIndex((o) => o.name === selOpt.name);
+        if (idx === 0) option1 = selOpt.value;
+        else if (idx === 1) option2 = selOpt.value;
+        else if (idx === 2) option3 = selOpt.value;
+      });
+      return {
+        id: v.id.split("/").pop(),
+        price: parseFloat(v.price),
+        compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : null,
+        available: v.availableForSale === true,
+        option1,
+        option2,
+        option3,
+        imageUrl: v.image?.url || null,
+      };
+    }),
+    ...formattedOptions,
+    ...formattedMetafields,
+  };
+
+  // ✅ Parallel: DB upsert + Meilisearch push at the same time
+  await Promise.all([
+    smartUpsertProduct(shop, product, prisma),
+    meiliClient.index("products").addDocuments([meiliDoc]).then((task) => {
+      console.log(`CFP: Pushed product ${meiliDoc.id} to Meilisearch (Task ID: ${task.taskUid})`);
+    }).catch((e) => {
+      console.error("CFP: Failed to push product to Meilisearch", e);
+    }),
+  ]);
+
+  await autoSeedOptionFilters(shop);
+
+  console.log(`CFP: Webhook sync complete for product ${productId}.`);
+  return productId;
 }
