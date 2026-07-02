@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:wght@400;500;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:wght@400;500;600;700&display=swap');
 
 /* ===================================================
-   Collection Filter Pro — Storefront Styles
+   Collection Filter Pro â€” Storefront Styles
    =================================================== */
 
 :root {
@@ -20,7 +20,7 @@
   --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ─── Theme Filter Kill Switch ───────────────────────────────────────── */
+/* â”€â”€â”€ Theme Filter Kill Switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /* This hides default Shopify theme filters automatically */
 .facets-container, 
 .facets-wrapper, 
@@ -44,7 +44,7 @@ facet-filters-form,
   pointer-events: none !important;
 }
 
-/* ─── Breadcrumbs ──────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Breadcrumbs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-breadcrumbs {
   display: flex;
   flex-wrap: wrap;
@@ -89,7 +89,7 @@ facet-filters-form,
   color: var(--cfp-text);
 }
 
-/* ─── Top Bar (Horizontal above products) ─────────────────────────────── */
+/* â”€â”€â”€ Top Bar (Horizontal above products) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-top-bar {
   display: flex !important;
   align-items: center !important;
@@ -131,7 +131,7 @@ facet-filters-form,
   background-size: 13px;
 }
 
-/* ─── Layout wrapper injected by JS ──────────────────────────────────── */
+/* â”€â”€â”€ Layout wrapper injected by JS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-layout-wrapper {
   display: flex !important;
   flex-wrap: wrap !important; /* Allow top bar to wrap to 100% width */
@@ -144,7 +144,7 @@ facet-filters-form,
   min-width: 0 !important;
 }
 
-/* ─── Sidebar base (desktop: hidden drawer) ───────────────────────── */
+/* â”€â”€â”€ Sidebar base (desktop: hidden drawer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar {
   width: var(--cfp-sidebar-w);
   flex-shrink: 0;
@@ -170,7 +170,7 @@ facet-filters-form,
   left: 0 !important;
 }
 
-/* ─── Overlay (mobile and desktop drawer) ─────────────────────────── */
+/* â”€â”€â”€ Overlay (mobile and desktop drawer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-overlay {
   display: none !important;
 }
@@ -192,7 +192,7 @@ facet-filters-form,
   }
 }
 
-/* ─── Mobile: sidebar becomes a slide-in drawer ─────────────────────── */
+/* â”€â”€â”€ Mobile: sidebar becomes a slide-in drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 991px) {
   .cfp-layout-wrapper {
     display: block !important;
@@ -217,7 +217,7 @@ facet-filters-form,
   }
 }
 
-/* ─── Sidebar Header ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sidebar Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__header {
   display: flex !important;
   align-items: center !important;
@@ -268,7 +268,7 @@ facet-filters-form,
   .cfp-close-btn { display: flex; }
 }
 
-/* ─── Sidebar Body ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sidebar Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__body {
   flex: 1;
   overflow-y: auto;
@@ -280,7 +280,7 @@ facet-filters-form,
 .cfp-sidebar__body::-webkit-scrollbar-track { background: transparent; }
 .cfp-sidebar__body::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
 
-/* ─── Filter Group ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Filter Group â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-group { border-bottom: 1px solid var(--cfp-border); padding:8px 0}
 .cfp-group:last-child { border-bottom: none; }
 
@@ -398,7 +398,7 @@ facet-filters-form,
 .cfp-scroll-area::-webkit-scrollbar-track { background: transparent; }
 .cfp-scroll-area::-webkit-scrollbar-thumb { background: var(--cfp-border); border-radius: 4px; }
 
-/* ─── Select Dropdown ────────────────────────────────────────────────── */
+/* â”€â”€â”€ Select Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-select {
   width: 100%;
   padding: 10px 12px;
@@ -422,7 +422,7 @@ facet-filters-form,
   box-shadow: 0 0 0 3px var(--cfp-accent-light);
 }
 
-/* ─── Checkbox ───────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Checkbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-checkbox {
   display: flex;
   align-items: center !important;
@@ -475,7 +475,7 @@ facet-filters-form,
   padding: 1px 7px;
 }
 
-/* ─── Price Range ────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Price Range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-price-inputs {
   display: flex;
   align-items: center !important;
@@ -556,7 +556,7 @@ facet-filters-form,
   color: var(--cfp-accent);
 }
 
-/* ─── Brand Search ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Brand Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-search-input-wrap {
   display: flex; align-items: center !important; gap: 8px;
   border: 1.5px solid #e2e8f0 !important;
@@ -586,7 +586,7 @@ facet-filters-form,
   display: none !important;
 }
 
-/* ─── Color Swatches ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Color Swatches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-color-grid {
   display: grid !important;
   grid-template-columns: repeat(2, 1fr) !important;
@@ -617,7 +617,7 @@ facet-filters-form,
   box-shadow: 0 0 0 1px var(--cfp-accent) !important;
 }
 
-/* ─── Product Card Swatches (On images) ────────────────────────── */
+/* â”€â”€â”€ Product Card Swatches (On images) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-product-swatches {
   display: flex !important;
   gap: 6px !important;
@@ -690,7 +690,7 @@ facet-filters-form,
   display: inline-block !important;
 }
 
-/* ─── Size Chips ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Size Chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-size-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -724,7 +724,7 @@ facet-filters-form,
   font-weight: 600 !important;
 }
 
-/* ─── Button Boxes ───────────────────────────────────────────────────── */
+/* â”€â”€â”€ Button Boxes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-button-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -758,7 +758,7 @@ facet-filters-form,
   font-weight: 600 !important;
 }
 
-/* ─── Footer Buttons ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Footer Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-sidebar__footer {
   display: flex !important;
   gap: 8px;
@@ -809,7 +809,7 @@ facet-filters-form,
 .cfp-btn--apply-all:active,
 .cfp-btn--primary:active { transform: none; box-shadow: none; }
 
-/* ─── Mobile Trigger Button ──────────────────────────────────────────── */
+/* â”€â”€â”€ Mobile Trigger Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-trigger-btn {
   display: none;
 }
@@ -846,11 +846,11 @@ facet-filters-form,
   border-radius: 99px; font-size: 11px; font-weight: 700;
 }
 
-/* ─── Premium Product Cards ─────────────────────────────────────────── */
+/* â”€â”€â”€ Premium Product Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-products-grid,
 .cfp-product-grid {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(220px, 1fr)) !important;
+  grid-template-columns: repeat(var(--cfp-cols-desktop, 4), minmax(0, 1fr)) !important;
   grid-auto-flow: row !important;
   gap: 10px !important;
   width: 100% !important;
@@ -862,13 +862,13 @@ facet-filters-form,
 @media (max-width: 1200px) {
   .cfp-products-grid,
   .cfp-product-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(min(3, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)) !important;
   }
 }
 
 @media (max-width: 900px) {
   .cfp-products-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(var(--cfp-cols-mobile, 2), minmax(0, 1fr)) !important;
     gap: 16px !important;
   }
 }
@@ -1888,3 +1888,6 @@ facet-filters-form,
 .cfp-aspect-portrait .cfp-product-card__image-container {
   padding-top: 150% !important;
 }
+
+
+
