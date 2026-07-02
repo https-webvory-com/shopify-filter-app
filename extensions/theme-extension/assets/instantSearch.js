@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Instant Search Implementation - Full Screen Modal
  * Hijacks the theme's default search input and displays a full-screen search modal.
  */
@@ -323,7 +323,7 @@ document.addEventListener("DOMContentLoaded", function () {
       topPos = rect.bottom;
     }
 
-    modal.style.top = `${topPos}px`;
+    modal.style.top = `0px`;
 
     overlay.classList.add("cfp-open");
     modal.classList.add("cfp-open");
@@ -787,3 +787,4 @@ document.addEventListener("DOMContentLoaded", function () {
     grid.innerHTML = html;
   }
 });
+
