@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Instant Search Implementation - Full Screen Modal
  * Hijacks the theme's default search input and displays a full-screen search modal.
  */
@@ -345,19 +345,32 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function closeThemeSearch() {
-    // For Dawn theme and similar details-based modals
-    document.querySelectorAll('details[open]').forEach(details => {
-      if (details.querySelector('.search-modal') || details.classList.contains('search-modal-details') || details.querySelector('summary.header__icon--search')) {
-        details.removeAttribute('open');
-      }
-    });
-    
-    // Attempt to close other common theme modals by removing focus or hiding
-    const themeModal = document.querySelector('.search-modal, #SearchDrawer, .search-drawer');
-    if (themeModal && themeModal.classList.contains('active')) {
-       themeModal.classList.remove('active');
+      // 1. details-based modals
+      document.querySelectorAll('details[open]').forEach(details => {
+        if (
+          details.querySelector('[class*="search" i]') || 
+          details.className.toLowerCase().includes('search') ||
+          details.id.toLowerCase().includes('search') ||
+          details.querySelector('summary[class*="search" i]')
+        ) {
+          details.removeAttribute('open');
+        }
+      });
+      
+      // 2. dialog-based modals
+      document.querySelectorAll('dialog[open]').forEach(dialog => {
+        if (dialog.className.toLowerCase().includes('search') || dialog.id.toLowerCase().includes('search')) {
+          dialog.close();
+        }
+      });
+      
+      // 3. active class based modals
+      document.querySelectorAll('[class*="search" i].active, [class*="search" i].is-active, [class*="search" i].open, [class*="search" i].is-open, [id*="search" i].active, [id*="search" i].is-active, [id*="search" i].open, [id*="search" i].is-open').forEach(el => {
+        if (!el.id.includes('cfp-search')) {
+          el.classList.remove('active', 'is-active', 'open', 'is-open');
+        }
+      });
     }
-  }
 
   function renderLoading(isLoading) {
     const loader = document.getElementById("cfp-search-loading");
