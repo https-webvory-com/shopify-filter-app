@@ -43,8 +43,8 @@ export async function formatAndPushToMeili(products) {
       available,
       status: p.status ? p.status.toUpperCase() : 'ACTIVE',
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
-      // ✅ Images — first 3 are enough for display
-      images: Array.isArray(p.images) ? p.images.slice(0, 3) : [],
+      // ✅ All product images — no limit, full gallery
+      images: Array.isArray(p.images) ? p.images : [],
       // ✅ Variant prices + options for price display and swatch rendering
       // This eliminates the need for a second Postgres query on every filter/search request
       variantPrices: p.variants
@@ -372,7 +372,7 @@ async function processSyncChunk(jobId, shop, admin) {
           available,
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: Date.now(),
-          images: p.images.nodes.map((img) => img.url).slice(0, 3),
+          images: p.images.nodes.map((img) => img.url), // all images, no limit
           variantPrices: p.variants.nodes.map((v) => {
             const optionsList = p.options || [];
             let option1 = null, option2 = null, option3 = null;
