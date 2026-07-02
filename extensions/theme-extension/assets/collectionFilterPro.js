@@ -196,6 +196,9 @@
     
     initDataVariables();
     parseURLState();
+    
+    // Make sure we inject the UI into the correct container now that sidebar is ready
+    findAndInject();
 
     if (triggerBtn) {
       triggerBtn.addEventListener('click', openSidebar);
@@ -363,15 +366,9 @@
       
       const wrapper = document.querySelector('.cfp-layout-wrapper');
       if (wrapper) {
-        // Insert before native grid if it exists, otherwise just append
-        const grid = findGrid();
-        if (grid && wrapper.contains(grid)) {
-          wrapper.insertBefore(productContainer, grid);
-        } else {
-          wrapper.appendChild(productContainer);
-        }
+        wrapper.appendChild(productContainer);
       } else {
-        const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        const main = document.querySelector('.cfp-v1-app-container') || document.body;
         main.appendChild(productContainer);
       }
     }
@@ -401,24 +398,16 @@
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     console.log('[CFP] First product data:', products[0]);
 
-    // Always ensure native grid is hidden, even if productContainer already exists
-    const nativeGrid = findGrid();
-    if (nativeGrid) {
-      console.log('[CFP] Hiding native grid:', nativeGrid);
-      nativeGrid.style.setProperty('display', 'none', 'important');
-    }
-
-    // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
       productContainer = document.createElement('div');
       productContainer.id = 'cfp-products-container';
       productContainer.className = 'cfp-products-grid';
-      if (nativeGrid) {
-        nativeGrid.parentElement.insertBefore(productContainer, nativeGrid.nextSibling);
+      const wrapper = document.querySelector('.cfp-layout-wrapper');
+      if (wrapper) {
+        wrapper.appendChild(productContainer);
       } else {
-        console.log('[CFP] Native grid not found, appending to fallback.');
-        const main = document.querySelector('.template-search') || document.getElementById('MainContent') || document.querySelector('main') || document.body;
+        const main = document.querySelector('.cfp-v1-app-container') || document.body;
         main.appendChild(productContainer);
       }
     }
@@ -1780,6 +1769,7 @@
   let isAttached = false;
 
   function findAndInject() {
+    if (!sidebar) return; // Wait until UI is rendered
     if (isAttached && document.contains(sidebar.parentElement)) return;
 
     // Look ONLY for our designated app container placed via Theme Editor
