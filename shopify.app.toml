@@ -2,7 +2,7 @@
 
 client_id = "f02601eed3e06bd0922c614d7f4084b9"
 name = "AI Search & Filter"
-application_url = "https://canvas-caribbean-timely-make.trycloudflare.com"
+application_url = "https://aisearchfilter.webvory.com"
 embedded = true
 handle = "ai-smart-search-filter"
 
@@ -41,9 +41,9 @@ api_version = "2026-07"
 scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
-redirect_urls = [ "https://canvas-caribbean-timely-make.trycloudflare.com/api/auth" ]
+redirect_urls = [ "https://aisearchfilter.webvory.com/api/auth" ]
 
 [app_proxy]
-url = "https://canvas-caribbean-timely-make.trycloudflare.com"
+url = "https://aisearchfilter.webvory.com"
 subpath = "collection-filter-pro"
 prefix = "apps"
