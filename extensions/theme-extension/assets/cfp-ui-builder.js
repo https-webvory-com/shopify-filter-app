@@ -78,16 +78,10 @@ window.CFP_V2.UIBuilder = (function() {
         <div id="cfp-top-bar" class="cfp-top-bar" style="display: flex;">
           <div class="cfp-top-bar__left">
             <button id="cfp-drawer-trigger-btn" class="cfp-drawer-trigger-btn" aria-label="Open filters" aria-expanded="false" aria-controls="cfp-sidebar">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="21" y1="6" x2="14" y2="6"></line>
-                <line x1="10" y1="6" x2="3" y2="6"></line>
-                <line x1="21" y1="12" x2="12" y2="12"></line>
-                <line x1="8" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="18" x2="16" y2="18"></line>
-                <line x1="12" y1="18" x2="3" y2="18"></line>
-                <circle cx="12" cy="6" r="2"></circle>
-                <circle cx="10" cy="12" r="2"></circle>
-                <circle cx="14" cy="18" r="2"></circle>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="7" x2="19" y2="7"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <line x1="5" y1="17" x2="19" y2="17"></line>
               </svg>
               <span>Filters</span>
               <span class="cfp-active-badge" id="cfp-active-count" style="display:none;">0</span>
@@ -97,7 +91,7 @@ window.CFP_V2.UIBuilder = (function() {
             <div class="cfp-custom-sort" id="cfp-custom-sort">
               <div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger">
                 <span id="cfp-custom-sort-label">Best selling</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </div>
               <div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown">
                 <div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div>
@@ -179,7 +173,7 @@ window.CFP_V2.UIBuilder = (function() {
       const soldoutBg = conf.soldoutBg || '#000000';
       const soldoutText = conf.soldoutText || '#FFFFFF';
 
-      let html = `<div class="cfp-products-grid ${showBorder} ${textAlign} ${mediaAspect}" style="--cfp-desktop-cols: ${desktopCols}; --cfp-mobile-cols: ${mobileCols};">`;
+      let html = `<div class="cfp-products-grid ${showBorder} ${textAlign} ${mediaAspect}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; --cfp-desktop-cols: ${desktopCols}; --cfp-mobile-cols: ${mobileCols};">`;
       
       html += products.map(product => {
         let displayTitle = product.title && product.title !== "undefined" ? product.title : 'Product';
@@ -381,7 +375,7 @@ window.CFP_V2.UIBuilder = (function() {
       if (activeFilters.vendors) activeArray.push(...activeFilters.vendors);
       if (activeFilters.productTypes) activeArray.push(...activeFilters.productTypes);
 
-      let html = `<div id="cfp-sidebar" class="cfp-sidebar" role="complementary" aria-label="Product Filters">`;
+      let html = `<div id="cfp-sidebar" class="cfp-sidebar" role="complementary" aria-label="Product Filters" aria-hidden="true">`;
       html += `
         <div class="cfp-sidebar__header">
           <div class="cfp-sidebar__header-info">
@@ -585,7 +579,7 @@ window.CFP_V2.UIBuilder = (function() {
           <div class="cfp-group cfp-group-${type}" style="margin-bottom: 20px;">
             <button class="cfp-group__toggle" aria-expanded="true" aria-controls="cfp-content-${index}" style="width: 100%; display: flex; justify-content: space-between; background: none; border: none; padding: 10px 0; font-weight: 600; cursor: pointer;">
               <span>${setting.label}</span>
-              <svg width="12" height="12" viewBox="0 0 20 20" style="fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
+              <svg class="cfp-chevron" width="12" height="12" viewBox="0 0 20 20" style="fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
             </button>
             <div id="cfp-content-${index}" class="cfp-group__content" style="padding-top: 10px;">
               ${groupContent}
