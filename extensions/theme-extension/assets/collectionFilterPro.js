@@ -670,7 +670,7 @@
       btn.disabled = true;
       btn.style.opacity = '0.7';
       btn.style.cursor = 'not-allowed';
-      btn.innerHTML = '<span class="cfp-spinner" style="display:inline-block; width:16px; height:16px; border:2px solid #fff; border-radius:50%; border-top-color:transparent; animation: cfp-spin 1s linear infinite; margin-right: 8px; vertical-align: -3px;"></span> LOADING...';
+      btn.innerHTML = '<span class="cfp-spinner" style="display:inline-block; width:16px; height:16px; border:2px solid #fff; border-radius:50%; border-top-color:transparent; animation: cfp-spin 1s linear infinite; vertical-align: middle;"></span>';
       
       activeFilters.page += 1;
       fetchAndRenderData(true);
