@@ -32,13 +32,11 @@
   @media (max-width: 900px) { .cfp-products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 16px !important; } }
   @media (max-width: 480px) { .cfp-products-grid { gap: 12px !important; } }
 
-  /* Hide the native theme product grid — we replace it with our own */
-  #product-grid,
-  #CollectionProductGrid,
-  ul.product-grid,
-  ul.grid.product-grid {
-    display: none !important;
-  }
+  /* 
+   * Independent Architecture:
+   * We no longer hide the native grid globally. 
+   * The app will only mount inside the specific app block container. 
+   */
 
   /* Skeleton overlay: visible by default, hidden when done */
   #cfp-skeleton-overlay {
@@ -70,19 +68,10 @@
     document.title = "Search - {{ shop.name | escape }}";
   </script>
   <style>
-    /* Aggressively hide Dawn theme's default search header to prevent duplicate inputs & predictive search clash */
-    .template-search__header, 
-    .template-search__search,
-    .search-modal__content {
-      display: none !important;
-    }
-    
-    /* Exclude header elements from being hidden */
-    header .search-modal__content,
-    sticky-header .search-modal__content,
-    .header .search-modal__content {
-      display: block !important;
-    }
+    /* 
+     * Independent Architecture:
+     * We no longer hide the native search header globally.
+     */
   </style>
 
   <div class="cfp-page-header" style="text-align: center; margin: 40px auto; max-width: 600px;">

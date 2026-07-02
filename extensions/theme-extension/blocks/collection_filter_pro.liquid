@@ -1,19 +1,21 @@
 {% if template.name == 'collection' %}
-  {% render 'collectionFilterPro',
-    show_price_filter: block.settings.show_price_filter,
-    show_brand_filter: block.settings.show_brand_filter,
-    show_color_filter: block.settings.show_color_filter,
-    show_size_filter: block.settings.show_size_filter,
-    show_availability_filter: block.settings.show_availability_filter,
-    accent_color: block.settings.accent_color,
-    filter_heading: block.settings.filter_heading
-  %}
+  <div id="cfp-v1-app-container" class="cfp-v1-app-container">
+    {% render 'collectionFilterPro',
+      show_price_filter: block.settings.show_price_filter,
+      show_brand_filter: block.settings.show_brand_filter,
+      show_color_filter: block.settings.show_color_filter,
+      show_size_filter: block.settings.show_size_filter,
+      show_availability_filter: block.settings.show_availability_filter,
+      accent_color: block.settings.accent_color,
+      filter_heading: block.settings.filter_heading
+    %}
+  </div>
 {% endif %}
 
 {% schema %}
 {
   "name": "Collection Filter Pro",
-  "target": "body",
+  "target": "section",
   "settings": []
 }
 {% endschema %}

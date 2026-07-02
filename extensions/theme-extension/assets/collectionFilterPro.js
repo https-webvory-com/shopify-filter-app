@@ -7,16 +7,30 @@
   'use strict';
   const customSettings = window.collectionFilterProSettings || {};
  
-  const sidebar = document.getElementById('cfp-sidebar');
-  const topBar = document.getElementById('cfp-top-bar');
-  const overlay = document.getElementById('cfp-overlay');
-  const triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
-  const closeBtn = document.getElementById('cfp-close-btn');
-  const applyBtn = document.getElementById('cfp-apply-btn');
-  const clearBtn = document.getElementById('cfp-clear-btn');
-  const activeCount = document.getElementById('cfp-active-count');
+  let sidebar = null;
+  let topBar = null;
+  let overlay = null;
+  let triggerBtn = null;
+  let closeBtn = null;
+  let applyBtn = null;
+  let clearBtn = null;
+  let activeCount = null;
 
-  if (!sidebar) return;
+  function queryElements() {
+    sidebar = document.getElementById('cfp-sidebar');
+    topBar = document.getElementById('cfp-top-bar');
+    overlay = document.getElementById('cfp-overlay');
+    triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
+    closeBtn = document.getElementById('cfp-close-btn');
+    applyBtn = document.getElementById('cfp-apply-btn');
+    clearBtn = document.getElementById('cfp-clear-btn');
+    activeCount = document.getElementById('cfp-active-count');
+  }
+
+  function ensureSidebarReady() {
+    queryElements();
+    return Boolean(sidebar);
+  }
 
   const shop = sidebar.dataset.shop;
   const collectionId = sidebar.dataset.collectionId || '';
@@ -161,10 +175,18 @@
   let activeMerchandisingRule = null;
 
     async function init() {
+    if (!ensureSidebarReady()) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
+        return;
+      }
+      console.warn('CFP: sidebar not found during initialization');
+      return;
+    }
+
     setupStaticEventListeners();
     renderSkeleton();
     await fetchMerchandisingRule();
-    
     await fetchAndRenderData();
   }
 
@@ -1724,92 +1746,36 @@
   function openSidebar() {
     sidebar.classList.add('cfp-sidebar--open');
     if (overlay) overlay.classList.add('cfp-overlay--visible');
+    if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
   }
 
   function closeSidebar() {
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
+    if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
   }
 
-  // ── 8. Find grid elements on Dawn and other standard themes ──────────
-  const gridSelectors = customSettings.gridSelectors || [
-    'product-list', 'product-grid', '.ProductList', '#product-grid', '#CollectionProductGrid', 
-    '.product-grid', '.collection-grid', '.main-collection-grid', 'ul.grid', '.grid--view-items', 
-    '.boost-pfs-filter-products', '#js-product-grid', '.products-grid', '.collection-products', 
-    '.product-list', '[data-product-grid]', '.collection-list'
-  ];
-
+  // ── 8. Independent App Block Injection ──────────
   let isAttached = false;
-
-  function findGrid() {
-    const main = document.getElementById('MainContent') || document.querySelector('main') || document.body;
-    
-    // Prioritize main section to avoid hitting 'Recently Viewed' or other carousels
-    const mainSection = main.querySelector('.shopify-section--main-collection, .shopify-section--main-search, [id*="__main"], [id*="main-collection"], [id*="collection-template"]');
-    const searchArea = mainSection || main;
-
-    for (let i = 0; i < gridSelectors.length; i++) {
-      const foundList = searchArea.querySelectorAll(gridSelectors[i]);
-      for (const found of foundList) {
-        if (found && !found.closest('.cfp-sidebar') && !found.closest('.carousel') && !found.closest('.slider') && !found.closest('swiper-container')) {
-          console.log('[CFP] Found native grid using selector:', gridSelectors[i], found);
-          return found;
-        }
-      }
-    }
-
-    
-    let fallback = document.getElementById('cfp-fallback-grid');
-    if (!fallback) {
-      fallback = document.createElement('div');
-      fallback.id = 'cfp-fallback-grid';
-      fallback.className = 'cfp-products-grid cfp-fallback';
-      
-      const sidebarEl = document.getElementById('cfp-sidebar');
-      if (sidebarEl && sidebarEl.parentElement) {
-        sidebarEl.parentElement.insertBefore(fallback, sidebarEl.nextSibling);
-      } else {
-        const main = document.querySelector('.template-search') || document.querySelector('#MainContent') || document.querySelector('.main-content') || document.body;
-        main.appendChild(fallback);
-      }
-    }
-    return fallback;
-  }
 
   function findAndInject() {
     if (isAttached && document.contains(sidebar.parentElement)) return;
 
-    const grid = findGrid();
-    if (grid) {
-      // Do NOT show the native grid — it's permanently hidden by CSS
-      // We render products into cfp-products-container instead
-
-      const hideSelectors = customSettings.hideSelectors || ['.facets', '.facets-container', '.facets-wrapper', '.collection-filters', 
-'facet-filters-form', '.product-count', '.pagination', 'nav.pagination', '.page-list', '.page-links', 
-'.pagination-wrapper', '.pagination__nav'];
-      hideSelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
-      });
-
-      const universalEmptySelectors = [
-        '[role="status"]', '.empty-state', '[data-empty-state]', '.search--empty', 
-        '.template-search__empty-results', '.template-search__results--empty', 
-        '.collection--empty', '#EmptyState', '.search-results__empty'
-      ];
-      universalEmptySelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.style.setProperty('display', 'none', 'important'));
-      });
-
+    // Look ONLY for our designated app container placed via Theme Editor
+    const container = document.querySelector('.cfp-v1-app-container');
+    if (container) {
       // Insert layout wrapper
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
-        grid.parentElement.insertBefore(wrapper, grid);
+        container.appendChild(wrapper);
       }
 
-      // Automatically move the Search Header above the wrapper
+      // Move the Search Header above the wrapper if it exists in the container
       const pageHeader = document.querySelector('.cfp-page-header');
       if (pageHeader && wrapper.parentElement && pageHeader.parentElement !== wrapper.parentElement) {
         wrapper.parentElement.insertBefore(pageHeader, wrapper);
@@ -1821,33 +1787,33 @@
         wrapper.appendChild(topBar);
         topBar.style.display = 'flex';
       }
-        if (breadcrumbs) {
-          sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
-          breadcrumbs.style.padding = '15px 20px 0';
-          breadcrumbs.style.marginBottom = '0';
-        }
-        wrapper.appendChild(sidebar);
+      if (breadcrumbs) {
+        sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
+        breadcrumbs.style.padding = '15px 20px 0';
+        breadcrumbs.style.marginBottom = '0';
+      }
+      wrapper.appendChild(sidebar);
 
       // Move products container into wrapper if it already exists
       const productsContainer = document.getElementById('cfp-products-container');
       if (productsContainer) {
         wrapper.appendChild(productsContainer);
       }
-
-      // Append native grid last (it's hidden by CSS, but needs to be in wrapper for findGrid())
-      wrapper.appendChild(grid);
       
       sidebar.style.display = 'flex';
       isAttached = true;
     }
   }
 
-
   const observer = new MutationObserver(findAndInject);
   observer.observe(document.body, { childList: true, subtree: true });
   findAndInject();
 
   // Run initial loading
-  init();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
 })();
