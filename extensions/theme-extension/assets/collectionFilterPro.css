@@ -1039,16 +1039,18 @@ facet-filters-form,
 }
 
 .cfp-product-card__title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--cfp-text);
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  height: 2.6em;
+  height: 2.8em;
+  width: 100%;
+  text-align: center;
 }
 
 .cfp-product-card__price-row {
