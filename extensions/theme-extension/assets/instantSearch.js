@@ -376,7 +376,7 @@ document.addEventListener("DOMContentLoaded", function () {
       body.classList.add("cfp-has-results"); // Keep body visible for skeletons
       
       let skeletonProducts = '';
-      for(let i=0; i<4; i++) {
+      for(let i=0; i<CONFIG.productLimit; i++) {
         skeletonProducts += `
           <div class="cfp-skeleton-card" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
             <div class="cfp-skeleton cfp-skeleton-img" style="width: 100%; aspect-ratio: 3/4; min-height: 200px; background: #e2e8f0; border-radius: 4px;">&nbsp;</div>
@@ -424,7 +424,7 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       // 1. Fetch 4 popular products in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=4&sortBy=best-selling`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling`
       ).then((res) => res.json());
 
       // 2. Fetch all/popular collections in background
@@ -787,4 +787,6 @@ document.addEventListener("DOMContentLoaded", function () {
     grid.innerHTML = html;
   }
 });
+
+
 
