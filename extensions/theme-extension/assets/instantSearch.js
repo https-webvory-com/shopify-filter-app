@@ -214,50 +214,48 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function attachListeners() {
-    // 1. Hijack all theme search inputs/icons
-    // We target common selectors for search buttons/inputs in Shopify themes
-    let defaultSelector = 'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]';
-    if (CONFIG.customSelector) {
-        defaultSelector += ', ' + CONFIG.customSelector;
-    }
-    
-    const searchTriggers = document.querySelectorAll(defaultSelector);
-
-    searchTriggers.forEach((trigger) => {
-      // Only hijack search elements that are inside the header, unless they match the custom selector
-      const isHeaderElement = trigger.closest('header') || 
-                              trigger.closest('sticky-header') || 
-                              trigger.closest('.header') || 
-                              trigger.closest('[id*="header"]');
-                              
-      const isCustomSelector = CONFIG.customSelector && trigger.matches(CONFIG.customSelector);
-
-      if (!isHeaderElement && trigger.tagName !== 'SUMMARY' && !isCustomSelector) {
-        return; // Ignore inputs that are not in the header (e.g. main search page input)
+      // 1. Hijack all theme search inputs/icons using a global delegated listener (capture phase)
+      // This ensures we catch clicks even if the theme dynamically re-renders the header (e.g. sticky header)
+      let defaultSelector = 'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]';
+      if (CONFIG.customSelector) {
+          defaultSelector += ', ' + CONFIG.customSelector;
       }
+      
+      const handleEvent = (e) => {
+         // Find if the event target is inside our defaultSelector
+         const trigger = e.target.closest ? e.target.closest(defaultSelector) : null;
+         if (!trigger) return;
+         
+         // Ignore clicks inside our own modal to prevent self-closing issues
+         if (e.target.closest('#cfp-search-overlay') || e.target.closest('#cfp-instant-search-styles')) return;
 
-      const interceptEvent = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        closeThemeSearch(trigger);
-        openModal(trigger);
+         // Only hijack search elements that are inside the header, unless they match the custom selector
+         const isHeaderElement = trigger.closest('header') || 
+                                 trigger.closest('sticky-header') || 
+                                 trigger.closest('.header') || 
+                                 trigger.closest('[id*="header"]');
+                                 
+         const isCustomSelector = CONFIG.customSelector && trigger.matches(CONFIG.customSelector);
+
+         if (!isHeaderElement && trigger.tagName !== 'SUMMARY' && !isCustomSelector) {
+           return; // Ignore inputs that are not in the header (e.g. main search page input)
+         }
+
+         // Only intercept left clicks for mouse events
+         if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
+         
+         if (e.type === 'keydown' && e.key !== 'Enter') return;
+
+         e.preventDefault();
+         e.stopPropagation();
+         e.stopImmediatePropagation();
+         closeThemeSearch(trigger);
+         openModal(trigger);
       };
 
-      // Intercept all ways the theme might try to open the search modal
-      ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus'].forEach(eventType => {
-          trigger.addEventListener(eventType, (e) => {
-             // Only intercept left clicks for mouse events
-             if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
-             interceptEvent(e);
-          }, true);
+      ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus', 'keydown'].forEach(eventType => {
+          document.addEventListener(eventType, handleEvent, true);
       });
-      
-      // Also intercept Enter key on the trigger
-      trigger.addEventListener('keydown', (e) => {
-         if (e.key === 'Enter') interceptEvent(e);
-      }, true);
-    });
 
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
@@ -369,6 +367,23 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!el.id.includes('cfp-search')) {
           el.classList.remove('active', 'is-active', 'open', 'is-open');
         }
+      });
+
+      // 4. body classes
+      document.body.classList.forEach(cls => {
+         if (cls.toLowerCase().includes('search') && !cls.includes('cfp-search')) {
+            document.body.classList.remove(cls);
+         }
+      });
+      
+      // 5. Inline styles (e.g., display: block or opacity: 1) on common search wrappers
+      const commonWrappers = document.querySelectorAll('.search-modal, #SearchDrawer, .search-drawer, .header__search, .search-popup, #search-modal, #search-popup');
+      commonWrappers.forEach(el => {
+          if (!el.id.includes('cfp-search')) {
+             if (el.style.display === 'block') el.style.display = '';
+             if (el.style.opacity === '1') el.style.opacity = '';
+             if (el.style.visibility === 'visible') el.style.visibility = '';
+          }
       });
     }
 
