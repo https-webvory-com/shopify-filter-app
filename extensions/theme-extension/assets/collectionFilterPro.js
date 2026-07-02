@@ -1,5 +1,5 @@
-/**
- * Collection Filter Pro — Storefront JavaScript
+﻿/**
+ * Collection Filter Pro â€” Storefront JavaScript
  * Dynamic UI Injection and Relative App Proxy Querying
  */ 
 
@@ -50,7 +50,7 @@
 
   console.log("check againg 1")
 
-  // ── 1. Global Filter State ──────────────────────────────────────────
+  // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const PAGE_SIZE = 28;
 
   let activeFilters = {
@@ -181,7 +181,7 @@
     };
 
 
-  // ── 2. Initialization ───────────────────────────────────────────────
+  // â”€â”€ 2. Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let activeMerchandisingRule = null;
 
     async function init() {
@@ -210,7 +210,7 @@
     await fetchAndRenderData();
   }
 
-  // ── 2.5 Fetch Merchandising Rule ──────────────────────────────────
+  // â”€â”€ 2.5 Fetch Merchandising Rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function fetchMerchandisingRule() {
     // try {
     //   const queryParams = new URLSearchParams();
@@ -233,7 +233,7 @@
     // }
   }
 
-  // ── 3. Fetch data from Shopify App Proxy ──────────────────────────────
+  // â”€â”€ 3. Fetch data from Shopify App Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   
   async function fetchAndRenderData(isLoadMore = false) {
       syncStateToURL(); // Sync URL
@@ -350,7 +350,7 @@
     }
   }
 
-  // ── 4. Render Products Grid ────────────────────────────────────────
+  // â”€â”€ 4. Render Products Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function renderSkeleton() {
     // Hide pagination during loading
@@ -589,10 +589,14 @@
       // If product available status is false, or we assume it's true unless specified
       if (product.available === false) {
          const pos = s.sold_out_label_position || 'top-right';
-         badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text);">Sold out</span>`;
+           if (pos !== 'none') {
+             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text);">Sold out</span>`;
+           }
       } else if (onSale) {
          const pos = s.sale_label_position || 'top-right';
-         badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg); color: var(--cfp-sale-text);">Sale</span>`;
+           if (pos !== 'none') {
+             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg); color: var(--cfp-sale-text);">Sale</span>`;
+           }
       }
 
       return `
@@ -669,7 +673,7 @@
     grid.appendChild(pagination);
   }
 
-  // ── 5. Render Filters Sidebar dynamically ──────────────────────────────
+  // â”€â”€ 5. Render Filters Sidebar dynamically â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function renderFilterSidebar(settings, facets, totalCount) {
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
@@ -1201,7 +1205,7 @@
     setupDynamicFieldListeners();
   }
 
-  // ── 6. Utility: CSS Color mapper ────────────────────────────────────
+  // â”€â”€ 6. Utility: CSS Color mapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function getColorHex(colorName) {
     const colors = {
       black: '#1a1a1a',
@@ -1220,7 +1224,7 @@
     return colors[colorName.toLowerCase()] || colorName;
   }
 
-  // ── 7. Setup Interactivity Listeners ─────────────────────────────────
+  // â”€â”€ 7. Setup Interactivity Listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupStaticEventListeners() {
     document.body.addEventListener('click', function(e) {
       if (e.target.closest('#cfp-drawer-trigger-btn')) {
@@ -1776,7 +1780,7 @@
     document.body.style.overflow = '';
   }
 
-  // ── 8. Independent App Block Injection ──────────
+  // â”€â”€ 8. Independent App Block Injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let isAttached = false;
 
   function findAndInject() {
@@ -1835,3 +1839,4 @@
   }
 
 })();
+
