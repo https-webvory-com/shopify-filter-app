@@ -1912,3 +1912,8 @@ facet-filters-form,
 .cfp-aspect-portrait .cfp-product-card__image-container {
   padding-top: 150% !important;
 }
+
+@keyframes cfp-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
