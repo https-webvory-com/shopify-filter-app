@@ -21,6 +21,10 @@ api_version = "2026-07"
   topics = [ "products/create", "products/update", "products/delete" ]
 
   [[webhooks.subscriptions]]
+  uri = "/webhooks/collections"
+  topics = [ "collections/create", "collections/update", "collections/delete" ]
+
+  [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
