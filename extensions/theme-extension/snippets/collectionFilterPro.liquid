@@ -211,6 +211,45 @@
   window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
   window.cfpCurrencySymbol = "{{ cart.currency.symbol }}";
   window.cfpCurrencyCode = "{{ cart.currency.iso_code }}";
+
+  window.collectionFilterProSettings = {
+    show_price_filter: {{ show_price_filter | default: true | json }},
+    show_brand_filter: {{ show_brand_filter | default: true | json }},
+    show_color_filter: {{ show_color_filter | default: true | json }},
+    show_size_filter: {{ show_size_filter | default: true | json }},
+    show_availability_filter: {{ show_availability_filter | default: true | json }},
+    accent_color: {{ accent_color | default: '#000000' | json }},
+    filter_heading: {{ filter_heading | default: 'Filters' | json }},
+    
+    show_grid_border: {{ show_grid_border | default: false | json }},
+    columns_desktop: {{ columns_desktop | default: 3 | json }},
+    columns_mobile: {{ columns_mobile | default: "2" | json }},
+    text_alignment: {{ text_alignment | default: "left" | json }},
+    media_aspect_ratio: {{ media_aspect_ratio | default: "natural" | json }},
+    image_size: {{ image_size | default: "cover" | json }},
+    
+    sale_label_position: {{ sale_label_position | default: "top-right" | json }},
+    sale_bg_color: {{ sale_bg_color | default: "#FF4E4E" | json }},
+    sale_text_color: {{ sale_text_color | default: "#FFFFFF" | json }},
+    
+    sold_out_label_position: {{ sold_out_label_position | default: "top-right" | json }},
+    sold_out_bg_color: {{ sold_out_bg_color | default: "#000000" | json }},
+    sold_out_text_color: {{ sold_out_text_color | default: "#FFFFFF" | json }}
+  };
 </script>
+
+<style>
+  :root {
+    --cfp-cols-desktop: {{ columns_desktop | default: 3 }};
+    --cfp-cols-mobile: {{ columns_mobile | default: 2 }};
+    --cfp-text-align: {{ text_alignment | default: 'left' }};
+    --cfp-aspect-ratio: {% if media_aspect_ratio == 'square' %}1/1{% elsif media_aspect_ratio == 'portrait' %}2/3{% else %}auto{% endif %};
+    --cfp-image-fit: {{ image_size | default: 'cover' }};
+    --cfp-sale-bg: {{ sale_bg_color | default: '#FF4E4E' }};
+    --cfp-sale-text: {{ sale_text_color | default: '#FFFFFF' }};
+    --cfp-sold-out-bg: {{ sold_out_bg_color | default: '#000000' }};
+    --cfp-sold-out-text: {{ sold_out_text_color | default: '#FFFFFF' }};
+  }
+</style>
 
 <script src="{{ 'collectionFilterPro.js' | asset_url }}" defer="defer"></script>

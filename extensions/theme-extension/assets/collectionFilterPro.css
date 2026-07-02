@@ -1882,3 +1882,9 @@ facet-filters-form,
 .cfp-badge--top-right { top: 0 !important; right: 0 !important; bottom: auto !important; left: auto !important; }
 .cfp-badge--bottom-left { bottom: 0 !important; left: 0 !important; top: auto !important; right: auto !important; }
 .cfp-badge--bottom-right { bottom: 0 !important; right: 0 !important; top: auto !important; left: auto !important; }
+.cfp-aspect-square .cfp-product-card__image-container {
+  padding-top: 100% !important;
+}
+.cfp-aspect-portrait .cfp-product-card__image-container {
+  padding-top: 150% !important;
+}

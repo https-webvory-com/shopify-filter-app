@@ -583,13 +583,24 @@
           }
         }
       }
+      
+      let badgesHtml = '';
+      const s = window.collectionFilterProSettings || {};
+      // If product available status is false, or we assume it's true unless specified
+      if (product.available === false) {
+         const pos = s.sold_out_label_position || 'top-right';
+         badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text);">Sold out</span>`;
+      } else if (onSale) {
+         const pos = s.sale_label_position || 'top-right';
+         badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg); color: var(--cfp-sale-text);">Sale</span>`;
+      }
 
       return `
         <div class="cfp-product-card">
           <a href="/products/${product.handle}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
-              ${onSale ? '<span class="cfp-product-card__badge">Sale</span>' : ''}
+              ${badgesHtml}
             </div>
             <div class="cfp-product-card__info">
               <span class="cfp-product-card__vendor">${product.vendor}</span>
