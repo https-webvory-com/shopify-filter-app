@@ -236,34 +236,29 @@ document.addEventListener("DOMContentLoaded", function () {
         return; // Ignore inputs that are not in the header (e.g. main search page input)
       }
 
-      // If it's an input, hijack focus/click
-      if (trigger.tagName === 'INPUT') {
-        // Prevent default behavior
-        trigger.addEventListener("focus", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-        trigger.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-      } else {
-        // If it's a button or link
-        trigger.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          closeThemeSearch(trigger);
-          openModal(trigger);
-        }, true);
-      }
+      const interceptEvent = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        closeThemeSearch(trigger);
+        openModal(trigger);
+      };
+
+      // Intercept all ways the theme might try to open the search modal
+      ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus'].forEach(eventType => {
+          trigger.addEventListener(eventType, (e) => {
+             // Only intercept left clicks for mouse events
+             if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
+             interceptEvent(e);
+          }, true);
+      });
+      
+      // Also intercept Enter key on the trigger
+      trigger.addEventListener('keydown', (e) => {
+         if (e.key === 'Enter') interceptEvent(e);
+      }, true);
     });
+
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
     overlay.addEventListener("click", closeModal);
@@ -328,6 +323,7 @@ document.addEventListener("DOMContentLoaded", function () {
     overlay.classList.add("cfp-open");
     modal.classList.add("cfp-open");
     document.body.style.overflow = "hidden"; // Prevent background scrolling
+    document.body.classList.add("cfp-search-active");
     
     // Check if input is empty, if so, load default view
     if (mainInput.value.trim().length === 0) {
@@ -344,6 +340,7 @@ document.addEventListener("DOMContentLoaded", function () {
     overlay.classList.remove("cfp-open");
     modal.classList.remove("cfp-open");
     document.body.style.overflow = "";
+    document.body.classList.remove("cfp-search-active");
     closeThemeSearch();
   }
 
@@ -787,6 +784,7 @@ document.addEventListener("DOMContentLoaded", function () {
     grid.innerHTML = html;
   }
 });
+
 
 
 

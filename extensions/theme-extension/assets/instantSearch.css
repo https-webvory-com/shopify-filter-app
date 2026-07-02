@@ -383,3 +383,16 @@
   }
 }
 
+
+/* Prevent theme default search modals from showing */
+body.cfp-search-active details[open] > .search-modal,
+body.cfp-search-active details[open] > summary + div[class*="search"],
+body.cfp-search-active #SearchDrawer,
+body.cfp-search-active .search-drawer,
+body.cfp-search-active .search-modal,
+body.cfp-search-active dialog[id*="search"] {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
