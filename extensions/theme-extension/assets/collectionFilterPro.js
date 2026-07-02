@@ -32,11 +32,21 @@
     return Boolean(sidebar);
   }
 
-  const shop = sidebar.dataset.shop;
-  const collectionId = sidebar.dataset.collectionId || '';
-  const collectionHandle = sidebar.dataset.collectionHandle || '';
-  const templateName = sidebar.dataset.templateName || '';
-  const searchTerms = sidebar.dataset.searchTerms || '';
+  let shop = '';
+  let collectionId = '';
+  let collectionHandle = '';
+  let templateName = '';
+  let searchTerms = '';
+
+  function initDataVariables() {
+    if (sidebar) {
+      shop = sidebar.dataset.shop || '';
+      collectionId = sidebar.dataset.collectionId || '';
+      collectionHandle = sidebar.dataset.collectionHandle || '';
+      templateName = sidebar.dataset.templateName || '';
+      searchTerms = sidebar.dataset.searchTerms || '';
+    }
+  }
 
   console.log("check againg 1")
 
@@ -180,8 +190,15 @@
         document.addEventListener('DOMContentLoaded', init, { once: true });
         return;
       }
-      console.warn('CFP: sidebar not found during initialization');
+      console.warn('[CFP] Sidebar not found, aborting initialization');
       return;
+    }
+    
+    initDataVariables();
+    parseURLState();
+
+    if (triggerBtn) {
+      triggerBtn.addEventListener('click', openSidebar);
     }
 
     setupStaticEventListeners();
