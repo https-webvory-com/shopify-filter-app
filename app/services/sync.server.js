@@ -438,6 +438,10 @@ async function processSyncChunk(jobId, shop, admin) {
   if (!hasNextPage) {
     await autoSeedOptionFilters(shop);
     await updateMeiliSettings(shop);
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: { status: "COMPLETED" },
+    });
     console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
   }
 }

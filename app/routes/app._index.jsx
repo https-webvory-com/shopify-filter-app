@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -12,7 +12,14 @@ export const loader = async ({ request }) => {
     where: { shop: session.shop },
   });
 
-  return { syncedProductsCount };
+  const activeSyncJob = await prisma.syncJob.findFirst({
+    where: { shop: session.shop, status: "IN_PROGRESS" },
+  });
+
+  return { 
+    syncedProductsCount, 
+    isSyncingBackground: !!activeSyncJob 
+  };
 };
 
 export const action = async ({ request }) => {
@@ -34,14 +41,16 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount } = useLoaderData();
+  const { syncedProductsCount, isSyncingBackground } = useLoaderData();
   const syncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
+  const { revalidate } = useRevalidator();
 
   const isSyncing =
-    ["loading", "submitting"].includes(syncFetcher.state) &&
-    syncFetcher.formData?.get("actionType") === "sync";
+    (["loading", "submitting"].includes(syncFetcher.state) &&
+      syncFetcher.formData?.get("actionType") === "sync") ||
+    isSyncingBackground;
 
   useEffect(() => {
     if (syncFetcher.data?.success && syncFetcher.data?.type === "sync") {
@@ -52,6 +61,16 @@ export default function Index() {
       });
     }
   }, [syncFetcher.data, shopify]);
+
+  // Poll for sync completion if running in background
+  useEffect(() => {
+    if (isSyncingBackground) {
+      const interval = setInterval(() => {
+        revalidate();
+      }, 3000); // Check every 3 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isSyncingBackground, revalidate]);
 
   const triggerSync = () =>
     syncFetcher.submit({ actionType: "sync" }, { method: "POST" });
