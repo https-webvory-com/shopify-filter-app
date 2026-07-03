@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncSingleProduct } from "../services/sync.server";
+import meiliClient from "../services/meiliClient.server";
 
 export const action = async ({ request }) => {
   const { shop, payload, topic, admin } = await authenticate.webhook(request);
@@ -30,12 +31,17 @@ export const action = async ({ request }) => {
         const productId = `gid://shopify/Product/${payload.id}`;
         console.log(`CFP: Deleting product ${productId} from DB...`);
 
-        await prisma.$transaction(async (tx) => {
-          await tx.variant.deleteMany({ where: { productId } });
-          await tx.productCollection.deleteMany({ where: { productId } });
-          await tx.productMetafield.deleteMany({ where: { productId } });
-          await tx.product.deleteMany({ where: { id: productId } });
-        });
+        // Because we set onDelete: Cascade on relations in Prisma, deleting the product
+        // will automatically clean up Variants, Collections, and Metafields!
+        await prisma.product.deleteMany({ where: { id: productId } });
+
+        try {
+          const numericId = payload.id.toString();
+          await meiliClient.index("products").deleteDocument(numericId);
+          console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
+        } catch (e) {
+          console.error("CFP: Failed to delete document from Meilisearch", e);
+        }
 
         console.log(`CFP: Product ${productId} successfully deleted.`);
         break;

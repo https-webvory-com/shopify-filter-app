@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useNavigate, useLoaderData, useSubmit, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
+import { invalidateShop } from "../services/shopCache.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -28,6 +29,8 @@ export const action = async ({ request }) => {
   };
 
   await updateFilterGlobalSettings(session.shop, payload);
+  // Clear cache so storefront gets fresh settings immediately
+  invalidateShop(session.shop);
   return { success: true };
 };
 

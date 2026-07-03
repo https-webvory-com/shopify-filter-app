@@ -1,6 +1,7 @@
 {% if template.name == 'collection' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
+      full_width: block.settings.full_width,
       show_price_filter: block.settings.show_price_filter,
       show_brand_filter: block.settings.show_brand_filter,
       show_color_filter: block.settings.show_color_filter,
@@ -32,6 +33,13 @@
   "name": "AI Collection Filter",
   "target": "section",
   "settings": [
+    {
+      "type": "checkbox",
+      "id": "full_width",
+      "label": "Enable Full Width Layout",
+      "default": true
+    },
+
     {
       "type": "header",
       "content": "Grid Layout"
@@ -153,6 +161,7 @@
       "id": "sold_out_text_color",
       "label": "Sold out text color",
       "default": "#FFFFFF"
+
     }
   ]
 }

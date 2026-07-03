@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,129 +8,126 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
 
-// ── Product Models for Filtering Engine ──────────────────────────────
-
 model Product {
-  id           String   @id // Shopify Product GID
-  shop         String
-  title        String
-  handle       String
-  vendor       String
-  productType  String
-  priceMin     Decimal  @db.Decimal(10, 2)
-  priceMax     Decimal  @db.Decimal(10, 2)
-  tags         String[]
-  images       Json?    // Store image URLs for quick storefront rendering
-  options      Json?    // Store product options list, e.g. [{"name":"Size","values":["S","M"]}]
-  status       String   @default("active")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  variants     Variant[]
-  collections  ProductCollection[]
-  metafields   ProductMetafield[]
+  id          String              @id
+  shop        String
+  title       String
+  handle      String
+  vendor      String
+  productType String
+  priceMin    Decimal             @db.Decimal(10, 2)
+  priceMax    Decimal             @db.Decimal(10, 2)
+  tags        String[]
+  images      Json?
+  status      String              @default("active")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  options     Json?
+  collections ProductCollection[]
+  metafields  ProductMetafield[]
+  variants    Variant[]
 
   @@index([shop, vendor])
   @@index([shop, productType])
   @@index([shop, priceMin, priceMax])
+  @@index([options], type: Gin)
+  @@index([productType(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([tags], type: Gin)
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([vendor(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Variant {
   id             String   @id
   productId      String
-  sku            String?
   price          Decimal  @db.Decimal(10, 2)
   compareAtPrice Decimal? @db.Decimal(10, 2)
   available      Boolean  @default(true)
   inventory      Int      @default(0)
-  imageUrl       String?
-  
   option1        String?
   option2        String?
   option3        String?
-  
+  imageUrl       String?
+  sku            String?
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([option1(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([option2(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([option3(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 model Collection {
-  id      String   @id
-  shop    String
-  title   String
-  handle  String
-  
+  id       String              @id
+  shop     String
+  title    String
+  handle   String
   products ProductCollection[]
 }
 
 model ProductCollection {
   productId    String
   collectionId String
-  
-  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([productId, collectionId])
 }
 
 model ProductMetafield {
-  id          String   @id // Shopify Metafield GID
-  productId   String
-  namespace   String
-  key         String
-  value       String
-  type        String   // e.g. 'single_line_text_field'
-  
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id
+  productId String
+  namespace String
+  key       String
+  value     String
+  type      String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, namespace, key])
   @@index([namespace, key])
 }
 
-// ── Admin Configuration Models ───────────────────────────────────────
-
 model FilterSetting {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   shop        String
-  type        String   // 'availability', 'price', 'vendor', 'product_type', 'tag'
-  label       String   // Custom label like "Brand" instead of "Vendor"
-  key         String?  // Optional: Tag prefix or specific key
-  displayType String   @default("list") // 'list', 'swatch', 'chips', 'range'
-  isEnabled   Boolean  @default(true)
-  order       Int      @default(0)
+  type        String
+  label       String
+  key         String?
+  displayType String  @default("list")
+  isEnabled   Boolean @default(true)
+  order       Int     @default(0)
 
   @@unique([shop, type, key])
 }
 
-// ── Filter Groups Models ─────────────────────────────────────────────
-
 model FilterGroup {
-  id        String   @id @default(cuid())
-  shop      String
-  name      String
-  isDefault Boolean  @default(false)
-  status    Boolean  @default(true)
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id          String                  @id @default(cuid())
+  shop        String
+  name        String
+  isDefault   Boolean                 @default(false)
+  status      Boolean                 @default(true)
+  order       Int                     @default(0)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
   collections FilterGroupCollection[]
   filters     FilterGroupItem[]
   savedViews  SavedFilterView[]
@@ -144,10 +138,9 @@ model FilterGroup {
 model FilterGroupCollection {
   id              String      @id @default(cuid())
   filterGroupId   String
-  collectionId    String      // Shopify Collection GID or "search" keyword
+  collectionId    String
   collectionTitle String
-  pageType        String      @default("collection") // "collection" | "search"
-
+  pageType        String      @default("collection")
   filterGroup     FilterGroup @relation(fields: [filterGroupId], references: [id], onDelete: Cascade)
 
   @@index([filterGroupId])
@@ -156,14 +149,13 @@ model FilterGroupCollection {
 model FilterGroupItem {
   id            String      @id @default(cuid())
   filterGroupId String
-  filterType    String      // 'vendor','tag','option','metafield','price','availability','product_type','collection'
-  filterKey     String?     // For 'option' → "Size", for 'metafield' → "custom.material"
-  label         String      // Display label shown on storefront
-  displayMode   String      @default("list") // 'list' | 'range' | 'swatch' | 'button' | 'dropdown'
+  filterType    String
+  filterKey     String?
+  label         String
+  displayMode   String      @default("list")
   isEnabled     Boolean     @default(true)
   order         Int         @default(0)
-  config        Json?       // { sortBy, limit, showSearch, collapsed, valueMode }
-
+  config        Json?
   filterGroup   FilterGroup @relation(fields: [filterGroupId], references: [id], onDelete: Cascade)
 
   @@index([filterGroupId])
@@ -173,84 +165,77 @@ model SavedFilterView {
   id            String      @id @default(cuid())
   filterGroupId String
   name          String      @default("Custom Filter")
-  matchType     String      @default("all") // 'all' or 'any'
-  conditions    Json        // Array of conditions [{ field: "label", operator: "contains", value: "x" }]
+  matchType     String      @default("all")
+  conditions    Json
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-
   filterGroup   FilterGroup @relation(fields: [filterGroupId], references: [id], onDelete: Cascade)
 
   @@index([filterGroupId])
 }
 
-// ── Merged Values (Global across all groups) ─────────────────────────
-
 model MergedValue {
   id           String   @id @default(cuid())
   shop         String
-  filterType   String   // The option/filter name e.g. "Color"
-  filterKey    String?  // For metafield-based filters
-  targetValue  String   // The clean merged value shown e.g. "Red"
-  sourceValues String[] // Raw values that map to targetValue e.g. ["Crimson","Wine","Ruby"]
-  isActive     Boolean  @default(true) // Whether the merged value is active
+  filterType   String
+  filterKey    String?
+  targetValue  String
+  sourceValues String[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  isActive     Boolean  @default(true)
 
   @@index([shop, filterType])
 }
 
-// ── Merchandising Rules ─────────────────────────────────────────────
-
 model MerchandisingRule {
-  id              String   @id @default(cuid())
-  shop            String
-  name            String
-  ruleType        String   @default("collection") // "collection" or "search"
-  searchQueries   String[] // Target search queries for search merchandising
-  collections     String[] // Array of selected collections like ["Formal", "Prom"]
-  customerTags    String?
-  locales         String?
-  startDate       DateTime?
-  endDate         DateTime?
-  status          Boolean  @default(true) // For the ON/OFF toggle switch
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  conditions      MerchandisingRuleCondition[]
+  id            String                       @id @default(cuid())
+  shop          String
+  name          String
+  collections   String[]
+  customerTags  String?
+  locales       String?
+  startDate     DateTime?
+  endDate       DateTime?
+  status        Boolean                      @default(true)
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  ruleType      String                       @default("collection")
+  searchQueries String[]
+  conditions    MerchandisingRuleCondition[]
 
   @@index([shop])
 }
 
 model MerchandisingRuleCondition {
-  id              String   @id @default(cuid())
-  ruleId          String
-  action          String   // e.g. Boost, Bury, Pin, Dynamic
-  field           String   // e.g. Price, Collections, Tags, Product, etc.
-  value           String?  // The selected values
-  operator        String?  // e.g. Add, Subtract, Set (for Dynamic)
-  operand         String?  // The score value (for Dynamic)
-  minValue        String?  // Min value for range fields
-  maxValue        String?  // Max value for range fields
-  dateValue       String?  // Selected dates
-
-  rule            MerchandisingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  id        String            @id @default(cuid())
+  ruleId    String
+  action    String
+  field     String
+  value     String?
+  operator  String?
+  operand   String?
+  minValue  String?
+  maxValue  String?
+  dateValue String?
+  rule      MerchandisingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
   @@index([ruleId])
 }
 
 model PinnedProductRule {
-  id            String   @id @default(cuid())
-  shop          String
+  id                String   @id @default(cuid())
+  shop              String
+  products          Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  status            Boolean  @default(true)
+  applyToAll        Boolean  @default(false)
+  collections       String[]
   name              String   @default("Pinning Rule")
-  ruleType          String   @default("collection") // "collection" or "search"
-  searchQueries     String[] // Target search terms
-  applyToSearchType String   @default("both") // "instant", "page", or "both"
-  collections       String[] // Array of collection IDs, or empty if applyToAll is true
-  applyToAll    Boolean  @default(false)
-  products      Json
-  status        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  applyToSearchType String   @default("both")
+  ruleType          String   @default("collection")
+  searchQueries     String[]
 
   @@index([shop])
 }
@@ -267,8 +252,30 @@ model FilterGlobalSetting {
   hideUnavailableVariantsWhenSelected Boolean  @default(false)
   desktopLikeOnMobile                 Boolean  @default(false)
   darkMode                            Boolean  @default(false)
-
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
 }
 
+model SyncJob {
+  id                String   @id @default(uuid())
+  shop              String
+  status            String   @default("IN_PROGRESS")
+  cursor            String?
+  productsProcessed Int      @default(0)
+  totalProducts     Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([shop, status])
+}
+
+model Synonym {
+  id        String   @id @default(uuid())
+  shop      String
+  word      String // The target word, e.g., "dress"
+  synonyms  String // Comma-separated list, e.g., "gown, frock"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([shop, word])
+}

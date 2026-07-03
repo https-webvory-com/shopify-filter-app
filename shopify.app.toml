@@ -17,6 +17,10 @@ api_version = "2026-07"
   topics = [ "products/delete", "products/create", "products/update" ]
 
   [[webhooks.subscriptions]]
+  uri = "/webhooks/collections"
+  topics = [ "collections/create", "collections/update", "collections/delete" ]
+
+  [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
   compliance_topics = [ "customers/data_request" ]
 
@@ -38,7 +42,7 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products"
+scopes = "read_inventory,read_locations,read_themes,write_themes,write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
 redirect_urls = [ "https://aisearchfilter.webvory.com/api/auth" ]

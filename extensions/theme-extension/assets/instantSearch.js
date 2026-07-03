@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
     debounceTime: 300,
     productLimit: userSettings.productLimit || 6,
     customSelector: userSettings.customTriggerSelector || "",
-    apiUrl: "/apps/collection-filter-pro/api/filter",
+    apiUrl: "/apps/collection-filter-pro/api/search",
   };
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";
@@ -184,6 +184,9 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
       </div>
       
+      <div id="cfp-did-you-mean-container" style="display: none; padding: 12px 24px; background: #fff; border-bottom: 1px solid #e2e8f0; text-align: center; color: #64748b; font-size: 14px;">
+      </div>
+
       <div class="cfp-search-loading-container" id="cfp-search-loading">
         <div class="cfp-search-spinner"></div>
       </div>
@@ -299,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let searches = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
     searches = searches.filter(q => q.toLowerCase() !== query.toLowerCase()); // Remove duplicates
     searches.unshift(query); // Add to beginning
-    if (searches.length > 5) searches = searches.slice(0, 5); // Keep only 5
+    if (searches.length > 4) searches = searches.slice(0, 4); // Keep only 4
     localStorage.setItem('cfp_recent_searches', JSON.stringify(searches));
   }
 
@@ -437,7 +440,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const parsed = JSON.parse(cached);
         renderRecentSearches("");
         renderCollections(parsed.collectionsData, "", true);
-        renderProducts(parsed.productsData, "", true);
+        renderProducts(parsed.productsData, "", true, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -447,9 +450,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     try {
+      let countryParam = "";
+      if (window.Shopify && window.Shopify.country) {
+         countryParam = `&country=${window.Shopify.country}`;
+      }
+      
       // 1. Fetch 4 popular products in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling${countryParam}`
       ).then((res) => res.json());
 
       // 2. Fetch all/popular collections in background
@@ -478,7 +486,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!currentQuery) {
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
-        renderProducts(productsData, "", true);
+        renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
       }
 
     } catch (error) {
@@ -555,6 +563,39 @@ document.addEventListener("DOMContentLoaded", function () {
     renderRecentSearches("");
   }
 
+  function renderSuggestions(suggestions, query) {
+    const container = document.getElementById("cfp-recent-searches-container");
+    const list = document.getElementById("cfp-recent-searches-list");
+    const collectionsTitle = document.getElementById("cfp-collections-title");
+    
+    if (container) container.style.display = "block";
+    if (collectionsTitle) collectionsTitle.style.display = "none";
+
+    let html = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div class="cfp-search-section-title" style="margin-bottom: 0;">Suggestions</div>
+      </div>
+    `;
+    suggestions.forEach((s) => {
+      // Highlight matching query
+      let displayTitle = s;
+      if (query && query.trim().length > 0) {
+        const regex = new RegExp(`(${query})`, 'gi');
+        displayTitle = displayTitle.replace(regex, '<strong>$1</strong>');
+      }
+      
+      html += `
+        <li class="cfp-recent-search-item">
+          <a href="/search?q=${encodeURIComponent(s)}" class="cfp-recent-search-link">
+            <svg class="cfp-history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            ${displayTitle}
+          </a>
+        </li>
+      `;
+    });
+    if(list) list.innerHTML = html;
+  }
+
   async function performSearch(query) {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const trimmedQuery = query.trim().toLowerCase();
@@ -569,7 +610,7 @@ document.addEventListener("DOMContentLoaded", function () {
       try {
         const parsed = JSON.parse(cached);
         renderCollections(parsed.collectionsData, query);
-        renderProducts(parsed.productsData, query);
+        renderProducts(parsed.productsData, query, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -579,9 +620,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     try {
+      let countryParam = "";
+      if (window.Shopify && window.Shopify.country) {
+         countryParam = `&country=${window.Shopify.country}`;
+      }
+
       // 1. Fetch products from OUR API in background
       const productsPromise = fetch(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}${countryParam}`
       ).then((res) => res.json());
 
       // 2. Fetch collections from Shopify Predictive Search API in background
@@ -606,8 +652,36 @@ document.addEventListener("DOMContentLoaded", function () {
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value.trim().toLowerCase() : "";
       if (currentQuery === trimmedQuery) {
+        
+        // Did You Mean logic
+        const dymContainer = document.getElementById("cfp-did-you-mean-container");
+        if (dymContainer) {
+          if (productsData && productsData.didYouMean) {
+            dymContainer.innerHTML = `Sorry, nothing found for '<strong>${query}</strong>'. Did you mean '<a href="#" id="cfp-dym-link" style="font-weight: 700; text-decoration: underline; color: #0f172a;">${productsData.didYouMean}</a>'?`;
+            dymContainer.style.display = "block";
+            
+            document.getElementById("cfp-dym-link").addEventListener("click", (e) => {
+              e.preventDefault();
+              if (inputEl) {
+                 inputEl.value = productsData.didYouMean;
+                 inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                 inputEl.focus();
+              }
+            });
+          } else {
+            dymContainer.style.display = "none";
+          }
+        }
+
         renderCollections(collectionsData, query);
-        renderProducts(productsData, query);
+        renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
+        if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
+           renderSuggestions(productsData.suggestions, query);
+        } else if (currentQuery.length > 0) {
+           // Hide suggestions container if no suggestions
+           const container = document.getElementById("cfp-recent-searches-container");
+           if (container) container.style.display = "none";
+        }
       }
 
     } catch (error) {
@@ -679,15 +753,23 @@ document.addEventListener("DOMContentLoaded", function () {
     list.innerHTML = html;
   }
 
-  function renderProducts(data, query) {
+  function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
     console.log("CFP: renderProducts called with", data.products ? data.products.length : 0, "products");
     const grid = document.getElementById("cfp-search-products");
     const products = data.products || [];
 
     if (products.length === 0) {
+      const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
+      
       grid.innerHTML = query 
-        ? `<div class="cfp-search-no-results">No products found for "${query}"</div>`
-        : `<div class="cfp-search-no-results">No trending products found.</div>`;
+        ? `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
+             ${emptyStateSvg}
+             <p style="margin: 0;">No matches found for <strong>'${query}'</strong>. Please try again with a different term.</p>
+           </div>`
+        : `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
+             ${emptyStateSvg}
+             <p style="margin: 0;">No trending products found.</p>
+           </div>`;
       return;
     }
 
@@ -706,6 +788,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // 2. Extract Color Swatches from Variants
       let swatchesHtml = "";
       let defaultImageUrl = "";
+      let defaultVariantId = "";
       let hasMatchedColor = false;
       
       if (colorOptionIndex !== -1 && p.variants && p.variants.length > 0) {
@@ -728,7 +811,7 @@ document.addEventListener("DOMContentLoaded", function () {
           let activeIndex = 0;
           if (query) {
              const q = query.toLowerCase();
-             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(q));
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(q) || q.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
                 hasMatchedColor = true;
@@ -736,6 +819,9 @@ document.addEventListener("DOMContentLoaded", function () {
           }
 
           defaultImageUrl = colorsArray[activeIndex][1].imgUrl;
+          if (colorsArray[activeIndex][1].variantId) {
+             defaultVariantId = colorsArray[activeIndex][1].variantId;
+          }
           
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
@@ -772,11 +858,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // 3. Extract main image
       let imageUrl = "";
-      if (hasMatchedColor && defaultImageUrl) {
-        // If search matched a color swatch, force use that color's image!
-        imageUrl = defaultImageUrl;
-      } else if (p.merchandisingImage) {
+      if (p.merchandisingImage) {
         imageUrl = p.merchandisingImage;
+      } else if (defaultImageUrl) {
+        // Always use the swatch image corresponding to the activeIndex
+        imageUrl = defaultImageUrl;
       } else if (p.images) {
         try {
           const imgs = typeof p.images === "string" ? JSON.parse(p.images) : p.images;
@@ -785,20 +871,40 @@ document.addEventListener("DOMContentLoaded", function () {
           }
         } catch (e) {}
       }
-      
-      // If we still don't have an image, but we have a swatch image, use it
-      if (!imageUrl && defaultImageUrl) {
-         imageUrl = defaultImageUrl;
-      }
 
       if (!imageUrl) {
          imageUrl = "https://cdn.shopify.com/s/images/admin/no-image-large.gif";
       }
 
-      const price = p.priceMin !== undefined ? `$${p.priceMin}` : ""; 
+      let rate = 1;
+      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
+        rate = parseFloat(window.Shopify.currency.rate) || 1;
+      }
+      let symbol = '$';
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+         try {
+            const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
+            const sym = parts.find(p => p.type === 'currency');
+            if (sym) symbol = sym.value;
+         } catch(e) {
+            symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+         }
+      } else {
+         symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+      }
       
+      let price = "";
+      if (p.priceMin !== undefined) {
+         const priceVal = parseFloat(p.priceMin) * rate;
+         price = `${symbol}${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      let productUrl = `/products/${p.handle}`;
+      if (defaultVariantId) {
+         productUrl += `?variant=${defaultVariantId}`;
+      }
+
       html += `
-        <a href="/products/${p.handle}" class="cfp-search-product-card">
+        <a href="${productUrl}" class="cfp-search-product-card">
           <div class="cfp-search-product-image-wrap">
             <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
           </div>

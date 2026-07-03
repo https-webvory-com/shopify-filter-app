@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -12,7 +12,14 @@ export const loader = async ({ request }) => {
     where: { shop: session.shop },
   });
 
-  return { syncedProductsCount };
+  const activeSyncJob = await prisma.syncJob.findFirst({
+    where: { shop: session.shop, status: "IN_PROGRESS" },
+  });
+
+  return { 
+    syncedProductsCount, 
+    isSyncingBackground: !!activeSyncJob 
+  };
 };
 
 export const action = async ({ request }) => {
@@ -22,8 +29,8 @@ export const action = async ({ request }) => {
 
   if (actionType === "sync") {
     try {
-      const count = await syncProducts(session.shop, admin);
-      return { success: true, count, type: "sync" };
+      const result = await syncProducts(session.shop, admin);
+      return { success: true, message: result.message, type: "sync" };
     } catch (e) {
       console.error("Sync error:", e);
       return { error: e.message, type: "sync" };
@@ -34,20 +41,20 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount } = useLoaderData();
+  const { syncedProductsCount, isSyncingBackground } = useLoaderData();
   const syncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
+  const { revalidate } = useRevalidator();
 
   const isSyncing =
-    ["loading", "submitting"].includes(syncFetcher.state) &&
-    syncFetcher.formData?.get("actionType") === "sync";
+    (["loading", "submitting"].includes(syncFetcher.state) &&
+      syncFetcher.formData?.get("actionType") === "sync") ||
+    isSyncingBackground;
 
   useEffect(() => {
-    if (syncFetcher.data?.success) {
-      shopify.toast.show(
-        `Successfully synced ${syncFetcher.data.count} products!`,
-      );
+    if (syncFetcher.data?.success && syncFetcher.data?.type === "sync") {
+      shopify.toast.show(syncFetcher.data.message || "Sync started in background!");
     } else if (syncFetcher.data?.error) {
       shopify.toast.show(`Sync failed: ${syncFetcher.data.error}`, {
         isError: true,
@@ -55,12 +62,21 @@ export default function Index() {
     }
   }, [syncFetcher.data, shopify]);
 
+  // Poll for sync completion if running in background
+  useEffect(() => {
+    if (isSyncingBackground) {
+      const interval = setInterval(() => {
+        revalidate();
+      }, 3000); // Check every 3 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isSyncingBackground, revalidate]);
+
   const triggerSync = () =>
     syncFetcher.submit({ actionType: "sync" }, { method: "POST" });
 
-  const currentCount = syncFetcher.data?.success
-    ? syncFetcher.data.count
-    : syncedProductsCount;
+  // Since sync is now background, we just show the initial loader count
+  const currentCount = syncedProductsCount;
 
   return (
     <s-page heading="Collection Filter Pro Dashboard">
@@ -597,7 +613,7 @@ export default function Index() {
           </div>
 
           {/* Box 3: Search Synonym */}
-          <div className="sov-card-soon">
+          <div className="sov-card">
             <div className="sov-card-body">
               <div className="sov-card-header">
                 <div className="sov-card-icon">
@@ -622,9 +638,14 @@ export default function Index() {
                 Create synonyms to help users find matching products with
                 alternative search terms.
               </p>
-              <div className="sov-soon-bar">
+              <button
+                className="sov-link-btn"
+                onClick={() => navigate("/app/search/synonyms")}
+              >
+                Manage synonyms
                 <svg
-                  className="sov-soon-icon"
+                  width="14"
+                  height="14"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -633,13 +654,11 @@ export default function Index() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth="2"
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+                    d="M17 8l4 4m0 0l-4 4m4-4H3"
+                  ></path>
                 </svg>
-                Coming Soon
-              </div>
+              </button>
             </div>
-            <div className="sov-soon-ribbon">UPCOMING</div>
           </div>
         </div>
       </div>

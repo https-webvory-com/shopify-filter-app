@@ -48,7 +48,7 @@
     }
   }
 
-  console.log("check againg 1")
+  console.log("check againg 6")
 
   // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const PAGE_SIZE = 28;
@@ -246,6 +246,10 @@
       const queryParams = new URLSearchParams();
       queryParams.append('shop', shop);
       
+      if (window.Shopify && window.Shopify.country) {
+         queryParams.append('country', window.Shopify.country);
+      }
+      
       if (window.cfpCustomerTags) {
         queryParams.append('customer_tags', window.cfpCustomerTags);
       }
@@ -304,8 +308,28 @@
         applyGlobalSettings(globalSettings);
       }
       
+      const grid = document.getElementById('cfp-products-grid');
+      
+      // Did You Mean UI
+      if (data.didYouMean && templateName === 'search') {
+         let dymContainer = document.getElementById("cfp-dym-page-container");
+         if (!dymContainer) {
+            dymContainer = document.createElement("div");
+            dymContainer.id = "cfp-dym-page-container";
+            dymContainer.style.cssText = "width: 100%; margin-bottom: 24px; padding: 16px 24px; background: #fef2f2; border: 1px solid #fecaca; text-align: center; color: #991b1b; font-size: 15px; border-radius: 8px;";
+            if (grid) grid.parentElement.insertBefore(dymContainer, grid);
+         }
+         if (dymContainer) {
+            dymContainer.innerHTML = `Sorry, nothing found for '<strong>${searchTerms}</strong>'. Did you mean '<a href="/search?q=${data.didYouMean}" style="font-weight: bold; text-decoration: underline; color: #991b1b;">${data.didYouMean}</a>'?`;
+            dymContainer.style.display = "block";
+         }
+      } else {
+         const dymContainer = document.getElementById("cfp-dym-page-container");
+         if (dymContainer) dymContainer.style.display = "none";
+      }
+
       if (data.products) {
-        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues);
+        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied);
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
@@ -394,10 +418,10 @@
   }
 
 
-  function renderProducts(products, totalCount, isLoadMore, mergedValues) {
+  function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     console.log('[CFP] First product data:', products[0]);
-
+    // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
       productContainer = document.createElement('div');
@@ -431,10 +455,16 @@
     }
 
     if (products.length === 0) {
+      const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
+      const emptyMsg = searchTerms && Object.keys(activeFilters).every(k => k === 'page' || k === 'sortBy' || (Array.isArray(activeFilters[k]) ? activeFilters[k].length === 0 : !activeFilters[k]))
+         ? `No matches found for <strong>'${searchTerms}'</strong>. Please try again with a different term.`
+         : `No products match your selected filters.`;
+
       grid.innerHTML = `
-        <div class="cfp-no-products">
-          <p>No products match your selected filters.</p>
-          <button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline" style="max-width: 137px; margin: 23px auto; width: 100%;">Reset Filters</button>
+        <div class="cfp-no-products" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
+          ${emptyStateSvg}
+          <p style="margin: 0;">${emptyMsg}</p>
+          <button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline" style="max-width: 137px; margin: 23px auto 0; width: 100%;">Reset Filters</button>
         </div>
       `;
       const resetBtn = document.getElementById('cfp-reset-inline');
@@ -450,6 +480,8 @@
     const productsHtml = products.map(product => {
 
       let variantImg = null;
+      let matchedVariantId = null;
+      let matchedVariant = null;
         if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
           const selectedValues = [];
           Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
@@ -467,26 +499,84 @@
 
           if (selectedValues.length > 0 && product.variants && product.variants.length > 0) {
             // Lowercase all for case-insensitive matching
-            const expandedLower = expandedSelectedValues.map(x => x.toLowerCase());
-            // Find a variant that matches one of the expanded selected option values
-            const matchedVariant = product.variants.find(v => 
-              (v.option1 && expandedLower.includes(v.option1.toLowerCase())) ||
-              (v.option2 && expandedLower.includes(v.option2.toLowerCase())) ||
-              (v.option3 && expandedLower.includes(v.option3.toLowerCase()))
-            );
-            if (matchedVariant && matchedVariant.imageUrl) {
-              variantImg = matchedVariant.imageUrl;
+            const expandedLower = expandedSelectedValues.map(x => x.trim().toLowerCase());
+            
+            let bestScore = -1;
+            
+            product.variants.forEach(v => {
+               let score = 0;
+               const vOpts = [v.option1, v.option2, v.option3]
+                  .filter(Boolean)
+                  .map(x => x.trim().toLowerCase());
+                  
+               expandedLower.forEach(val => {
+                   if (vOpts.includes(val)) score++;
+               });
+               
+               if (score > bestScore) {
+                   bestScore = score;
+                   matchedVariant = v;
+               }
+            });
+            
+            if (bestScore === 0) matchedVariant = null;
+            if (matchedVariant) {
+              if (matchedVariant.imageUrl) {
+                variantImg = matchedVariant.imageUrl;
+              }
+              matchedVariantId = matchedVariant.id ? matchedVariant.id.replace('gid://shopify/ProductVariant/', '') : null;
             }
           }
         }
   
         let primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
-      const price = parseFloat(product.priceMin).toFixed(2);
-      const comparePrice = product.variants?.[0]?.compareAtPrice 
-        ? parseFloat(product.variants[0].compareAtPrice).toFixed(2) 
-        : null;
+        
+        let productUrl = `/products/${product.handle}`;
+        if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
+           productUrl += `?variant=${matchedVariantId}`;
+        }
+      let rate = 1;
+      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
+        rate = parseFloat(window.Shopify.currency.rate) || 1;
+      }
+      
+      let symbol = '$';
+      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+         try {
+            const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
+            const sym = parts.find(p => p.type === 'currency');
+            if (sym) symbol = sym.value;
+         } catch(e) {
+            symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+         }
+      } else {
+         symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+      }
+      
+      let basePrice = product.priceMin;
+      let baseComparePrice = product.variants?.[0]?.compareAtPrice;
 
-      const onSale = comparePrice && parseFloat(comparePrice) > parseFloat(price);
+      if (matchedVariant) {
+         if (matchedVariant.price !== undefined && matchedVariant.price !== null) {
+            basePrice = matchedVariant.price;
+         }
+         if (matchedVariant.compareAtPrice !== undefined && matchedVariant.compareAtPrice !== null) {
+            baseComparePrice = matchedVariant.compareAtPrice;
+         } else {
+            baseComparePrice = null;
+         }
+      }
+
+      const priceVal = parseFloat(basePrice) * rate;
+      const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      
+      let comparePrice = null;
+      let onSale = false;
+      if (baseComparePrice) {
+        const compareVal = parseFloat(baseComparePrice) * rate;
+        comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        onSale = compareVal > priceVal;
+      }
 
       // Extract Color Swatches from Variants
       let colorOptionIndex = -1;
@@ -521,7 +611,7 @@
           // 1. Check if there's a search query matching a color
           if (activeFilters.q && activeFilters.q.trim() !== "") {
              const qLower = activeFilters.q.toLowerCase().trim();
-             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower));
+             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower) || qLower.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
              }
@@ -545,8 +635,18 @@
                 activeIndex = foundIndex;
              }
           }
+           
+           if (activeIndex === 0 && matchedVariant && typeof optionKey !== 'undefined') {
+              const matchedVariantColor = matchedVariant[optionKey];
+              if (matchedVariantColor) {
+                 const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase() === matchedVariantColor.toLowerCase());
+                 if (foundIndex !== -1) {
+                    activeIndex = foundIndex;
+                 }
+              }
+           }
 
-          matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
+           matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
 
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
@@ -580,6 +680,9 @@
           
           if (matchedColorUrl) {
              primaryImg = matchedColorUrl;
+             if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
+                 productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
+             }
           }
         }
       }
@@ -601,7 +704,7 @@
 
       return `
         <div class="cfp-product-card">
-          <a href="/products/${product.handle}" class="cfp-product-card__link">
+          <a href="${productUrl}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
               ${badgesHtml}
@@ -611,8 +714,8 @@
               <h3 class="cfp-product-card__title">${product.title}</h3>
               ${swatchesHtml}
               <div class="cfp-product-card__price-row">
-                <span class="cfp-product-card__price">$${price}</span>
-                ${onSale ? `<span class="cfp-product-card__compare-price">$${comparePrice}</span>` : ''}
+                <span class="cfp-product-card__price">${symbol}${price}</span>
+                ${onSale ? `<span class="cfp-product-card__compare-price">${symbol}${comparePrice}</span>` : ''}
               </div>
             </div>
           </a>
@@ -902,9 +1005,36 @@
           items = items.filter(i => !config.excludedValues.includes(i.value));
         }
         if (config.useManualValues && config.manualValues && config.manualValues.length > 0) {
-          items = items.filter(i => config.manualValues.includes(i.value));
+          const manualLower = config.manualValues.map(v => v.toLowerCase().trim());
+          const prefixLower = prefix ? prefix.toLowerCase().trim() : '';
+
+          items = items.filter(i => {
+              let val = (i.value || "").toLowerCase().trim();
+              let valStripped = val;
+              if (prefixLower && val.startsWith(prefixLower)) {
+                  valStripped = val.slice(prefixLower.length).trim();
+              }
+              return manualLower.includes(val) || manualLower.includes(valStripped);
+          });
+          
           if (config.sortManualValues) {
-            items.sort((a,b) => config.manualValues.indexOf(a.value) - config.manualValues.indexOf(b.value));
+            items.sort((a,b) => {
+               let valA = (a.value || "").toLowerCase().trim();
+               let valAStripped = valA;
+               if (prefixLower && valA.startsWith(prefixLower)) valAStripped = valA.slice(prefixLower.length).trim();
+               let idxA = manualLower.indexOf(valA);
+               if (idxA === -1) idxA = manualLower.indexOf(valAStripped);
+               if (idxA === -1) idxA = 999;
+               
+               let valB = (b.value || "").toLowerCase().trim();
+               let valBStripped = valB;
+               if (prefixLower && valB.startsWith(prefixLower)) valBStripped = valB.slice(prefixLower.length).trim();
+               let idxB = manualLower.indexOf(valB);
+               if (idxB === -1) idxB = manualLower.indexOf(valBStripped);
+               if (idxB === -1) idxB = 999;
+               
+               return idxA - idxB;
+            });
           }
         }
         if (type === 'tag' || type === 'tags') {
@@ -1472,7 +1602,7 @@
         let arr = [];
         if (name === 'availability') arr = activeFilters.availability;
         else if (name === 'vendor') arr = activeFilters.vendors;
-        else if (name === 'type') arr = activeFilters.types;
+        else if (name === 'product_type') arr = activeFilters.types;
         else if (name === 'collection') arr = activeFilters.collections;
         else if (name === 'tag' || name === 'tags') arr = activeFilters.tags;
         else if (name === 'title') arr = activeFilters.titles;
@@ -1511,7 +1641,7 @@
               const cbVal = cb.value;
               if (name === 'availability') updateFilterArray(activeFilters.availability, cbVal, false);
               else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
-              else if (name === 'type') updateFilterArray(activeFilters.types, cbVal, false);
+              else if (name === 'product_type') updateFilterArray(activeFilters.types, cbVal, false);
               else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
               else if (name === 'tag' || name === 'tags') updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
               else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
@@ -1534,7 +1664,7 @@
           updateFilterArray(activeFilters.availability, val, checked);
         } else if (name === 'vendor') {
           updateFilterArray(activeFilters.vendors, val, checked);
-        } else if (name === 'type') {
+        } else if (name === 'product_type') {
           updateFilterArray(activeFilters.types, val, checked);
         } else if (name === 'collection') {
           updateFilterArray(activeFilters.collections, val, checked);
@@ -1800,7 +1930,19 @@
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
+        if (window.cfpFullWidth) {
+          wrapper.classList.add('cfp-full-width-mode');
+        }
         container.appendChild(wrapper);
+        
+        // Expand the theme's native container if Full Width is enabled
+        if (window.cfpFullWidth) {
+           const themeContainer = wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');
+           if (themeContainer) {
+              themeContainer.style.maxWidth = '100%';
+              themeContainer.style.padding = window.innerWidth <= 768 ? '0 15px' : '0 40px';
+           }
+        }
       }
 
       // Move the Search Header above the wrapper if it exists in the container

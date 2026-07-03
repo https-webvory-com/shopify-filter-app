@@ -10,6 +10,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { invalidateShop } from "../services/shopCache.server";
 
 // ── Loader ───────────────────────────────────────────────────────────
 export const loader = async ({ request }) => {
@@ -170,6 +171,7 @@ export const action = async ({ request }) => {
     await prisma.mergedValue.create({
       data: { shop, filterType, filterKey, targetValue, sourceValues },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -199,6 +201,7 @@ export const action = async ({ request }) => {
         }
       }
     }
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -215,12 +218,14 @@ export const action = async ({ request }) => {
       where: { id },
       data: { targetValue, sourceValues },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
   if (intent === "delete") {
     const id = formData.get("id");
     await prisma.mergedValue.delete({ where: { id } });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -231,6 +236,7 @@ export const action = async ({ request }) => {
       where: { id },
       data: { isActive },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -434,7 +440,6 @@ const AutocompleteInput = ({
         placeholder={placeholder}
         value={inputValue}
         onChange={handleChange}
-        onFocus={() => setIsOpen(true)}
         onClick={() => setIsOpen(true)}
         style={{
           width: "100%",

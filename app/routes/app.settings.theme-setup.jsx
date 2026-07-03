@@ -14,10 +14,21 @@ export const loader = async ({ request }) => {
 
   const themes = await Promise.all(
     themeEdges.map(async ({ node }) => {
-      const settingsResponse = await admin.graphql(GET_THEME_SETTINGS, {
-        variables: { themeId: node.id },
-      });
-      const settingsJson = await settingsResponse.json();
+      let settingsJson = null;
+      try {
+        const settingsResponse = await admin.graphql(GET_THEME_SETTINGS, {
+          variables: { themeId: node.id },
+        });
+        settingsJson = await settingsResponse.json();
+      } catch (error) {
+        console.error(`\n❌ [ThemeSetup Error] Failed to fetch settings for Theme ID: ${node.id}`);
+        console.error("Error Message:", error.message);
+        if (error.graphQLErrors) {
+          console.error("GraphQL Errors:", JSON.stringify(error.graphQLErrors, null, 2));
+        } else {
+          console.error("Full Error:", error);
+        }
+      }
       const assetContent =
         settingsJson?.data?.theme?.files?.nodes?.[0]?.body?.content || "";
       let canPreview = false;
