@@ -1,4 +1,7 @@
 import { Meilisearch } from "meilisearch";
+import * as dotenv from "dotenv";
+
+dotenv.config();
 
 let meiliClient;
 
