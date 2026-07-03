@@ -292,6 +292,11 @@ export const loader = async ({ request }) => {
         .map((v) => `'${v.replace(/'/g, "\\'")}'`)
         .join(",")}]`;
     }
+    if (collections.length > 0) {
+      categoryFilters["collection_titles"] = `collection_titles IN [${collections
+        .map((c) => `'${c.replace(/'/g, "\\'")}'`)
+        .join(",")}]`;
+    }
     if (types.length > 0) {
       categoryFilters["productType"] = `productType IN [${types
         .map((t) => `'${t.replace(/'/g, "\\'")}'`)
@@ -588,7 +593,7 @@ export const loader = async ({ request }) => {
     const titleCounts = {};
     const optionCounts = {};
     const metafieldCounts = {};
-    const collectionCounts = facetDistribution.collections || {};
+    const collectionCounts = facetDistribution.collection_titles || {};
     const inStockCount = facetDistribution.available?.true || 0;
     const outOfStockCount = facetDistribution.available?.false || 0;
 
