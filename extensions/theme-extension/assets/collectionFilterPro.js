@@ -593,11 +593,41 @@
         const optionKey = `option${colorOptionIndex + 1}`;
         const uniqueColors = new Map();
 
+        let expandedLower = [];
+        if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
+            let sv = [];
+            Object.values(activeFilters.options).forEach(arr => sv.push(...arr));
+            let expanded = [...sv];
+            if (typeof mergedValues !== 'undefined' && mergedValues && mergedValues.length > 0) {
+                for(const v of sv) {
+                    const rules = mergedValues.filter(m => m.targetValue.toLowerCase() === v.toLowerCase());
+                    for(const r of rules) {
+                        expanded.push(...r.sourceValues);
+                    }
+                }
+            }
+            expandedLower = expanded.map(x => x.trim().toLowerCase());
+        }
+
         product.variants.forEach(v => {
           const colorName = v[optionKey];
-          if (colorName && !uniqueColors.has(colorName) && v.imageUrl) {
+          if (colorName && v.imageUrl) {
             const numericId = v.id ? v.id.replace('gid://shopify/ProductVariant/', '') : '';
-            uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId });
+            
+            let score = 0;
+            if (expandedLower.length > 0) {
+                const vOpts = [v.option1, v.option2, v.option3].filter(Boolean).map(x => x.trim().toLowerCase());
+                expandedLower.forEach(val => { if (vOpts.includes(val)) score++; });
+            }
+
+            if (!uniqueColors.has(colorName)) {
+                uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId, score: score });
+            } else {
+                // Keep the variant that matches the active filters (like size) better!
+                if (score > uniqueColors.get(colorName).score) {
+                    uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId, score: score });
+                }
+            }
           }
         });
 
