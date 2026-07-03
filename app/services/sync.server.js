@@ -400,8 +400,12 @@ async function processSyncChunk(jobId, shop, admin) {
 
       // ✅ Run DB upserts and Meilisearch push in PARALLEL (not serial)
       await Promise.all([
-        // DB upserts in parallel
-        Promise.all(products.map((product) => smartUpsertProduct(shop, product, prisma))),
+        // DB upserts sequentially to prevent connection pool exhaustion (Prisma P2028 timeout)
+        (async () => {
+          for (const product of products) {
+            await smartUpsertProduct(shop, product, prisma);
+          }
+        })(),
         // Meili push (no DB re-read needed anymore!)
         meiliClient.index("products").addDocuments(meiliDocs).then((task) => {
           console.log(`CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`);
