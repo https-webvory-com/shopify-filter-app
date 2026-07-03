@@ -9,7 +9,7 @@ import {
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
-import { getCached, invalidateShop } from "../services/shopCache.server";
+import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 
 /**

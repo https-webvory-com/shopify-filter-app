@@ -3,7 +3,6 @@ import prisma from "../db.server";
 import { getActivePinningRuleForSearch } from "../services/merchandising.server";
 import meiliClient from "../services/meiliClient.server";
 
-import { extractFiltersFromQuery } from "../services/ai.server";
 
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
