@@ -51,3 +51,8 @@ redirect_urls = [ "https://aisearchfilter.webvory.com/api/auth" ]
 url = "https://aisearchfilter.webvory.com"
 subpath = "collection-filter-pro"
 prefix = "apps"
+
+[env]
+[env.variables]
+MEILI_HOST = "https://meilisearch.webvory.com"
+MEILI_MASTER_KEY = "c9E90mOIsFK2jKgNy69i00PLiy9P/ot0ZE/ww6pfmH8="
