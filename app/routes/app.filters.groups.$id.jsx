@@ -12,6 +12,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { invalidateShop } from "../services/shopCache.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { CreateFilterModal } from "../components/ui/CreateFilterModal";
 import { Modal } from "../components/ui/Modal";
@@ -313,6 +314,7 @@ export const action = async ({ request, params }) => {
       });
     }
 
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -362,6 +364,7 @@ export const action = async ({ request, params }) => {
         ...(config !== undefined ? { config } : {}),
       },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -406,6 +409,7 @@ export const action = async ({ request, params }) => {
         ...(config !== undefined ? { config } : {}),
       },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -427,6 +431,7 @@ export const action = async ({ request, params }) => {
       data: { isEnabled: newStatus },
     });
 
+    invalidateShop(shop);
     return {
       success: true,
       intent,
@@ -438,6 +443,7 @@ export const action = async ({ request, params }) => {
   if (intent === "deleteFilter") {
     const filterId = formData.get("filterId");
     await prisma.filterGroupItem.delete({ where: { id: filterId } });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -464,6 +470,7 @@ export const action = async ({ request, params }) => {
         config: source.config,
       },
     });
+    invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -477,6 +484,7 @@ export const action = async ({ request, params }) => {
         }),
       ),
     );
+    invalidateShop(shop);
     return { success: true, intent };
   }
 

@@ -45,6 +45,8 @@ export async function formatAndPushToMeili(products) {
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
       // ✅ All product images — no limit, full gallery
       images: Array.isArray(p.images) ? p.images : [],
+      // ✅ Product options array for storefront swatch rendering
+      options: p.options ? p.options.map(opt => ({ name: opt.name, values: Array.isArray(opt.values) ? opt.values : [opt.values] })) : [],
       // ✅ Variant prices + options for price display and swatch rendering
       // This eliminates the need for a second Postgres query on every filter/search request
       variantPrices: p.variants
