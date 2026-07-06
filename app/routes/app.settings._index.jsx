@@ -96,9 +96,9 @@ const settingsCards = [
     title: "Integrations",
     tag: "Apps",
     description:
-      "Connect Collection Filter Pro with your favorite Shopify apps like product reviews, translation, and currencies.",
+      "Connect AI Search & Filter with your favorite Shopify apps like product reviews, translation, and currencies.",
     path: "/app/settings/integrations",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"
@@ -115,7 +115,7 @@ const settingsCards = [
         ></path>
       </svg>
     ),
-  },
+  }
 ];
 
 export default function SettingsOverview() {

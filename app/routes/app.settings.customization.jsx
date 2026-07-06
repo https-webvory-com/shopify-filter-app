@@ -16,7 +16,7 @@ export default function Customization() {
     "/* Write custom CSS here */\n.cfp-filter-title {\n  font-weight: bold;\n}",
   );
   const [jsCode, setJsCode] = useState(
-    "// Write custom Javascript here\nconsole.log('Collection Filter Pro initialized');",
+    "// Write custom Javascript here\nconsole.log('AI Search & Filter initialized');",
   );
 
   const [swatches, setSwatches] = useState([

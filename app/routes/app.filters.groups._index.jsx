@@ -387,13 +387,13 @@ export default function FilterGroups() {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.filter-dropdown-inside')) {
+      if (!e.target.closest(".filter-dropdown-inside")) {
         setShowViewsDropdown(false);
         setShowCollDropdown(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const [showCreate, setShowCreate] = useState(false);
@@ -534,6 +534,8 @@ export default function FilterGroups() {
     submit({ intent: "duplicate", id }, { method: "POST" });
   };
 
+  
+
   return (
     <s-page heading="Filter Groups">
       <ui-title-bar title="Filter Groups">
@@ -542,7 +544,9 @@ export default function FilterGroups() {
         </button>
       </ui-title-bar>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         /* Custom styling for Filter Groups Page */
         .filter-groups-container {
           background: #ffffff !important;
@@ -840,7 +844,9 @@ export default function FilterGroups() {
           border-radius: 12px !important;
           box-shadow: 0 10px 25px -5px rgba(30, 27, 75, 0.08) !important;
         }
-      ` }} />
+      `,
+        }}
+      />
 
       <div
         style={{
@@ -919,7 +925,7 @@ export default function FilterGroups() {
         </s-box> */}
 
         {/* Toolbar & Groups Table */}
-        <div 
+        <div
           className="filter-groups-container"
           style={{
             background: "#ffffff",
@@ -927,11 +933,11 @@ export default function FilterGroups() {
             borderRadius: "12px",
             boxShadow: "0 1px 3px rgba(30, 27, 75, 0.02)",
             overflow: "hidden",
-            marginTop: "16px"
+            marginTop: "16px",
           }}
         >
           {/* Toolbar */}
-          <div 
+          <div
             className="table-toolbar"
             style={{
               padding: "20px",
@@ -939,13 +945,16 @@ export default function FilterGroups() {
               justifyContent: "space-between",
               alignItems: "center",
               borderBottom: "1px solid #e2e8f0",
-              background: "#ffffff"
+              background: "#ffffff",
             }}
           >
             {/* Left Actions */}
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
               {/* Views Dropdown */}
-              <div style={{ position: "relative" }} className="filter-dropdown-inside">
+              <div
+                style={{ position: "relative" }}
+                className="filter-dropdown-inside"
+              >
                 <button
                   onClick={() => setShowViewsDropdown(!showViewsDropdown)}
                   className="view-dropdown-btn"
@@ -961,7 +970,7 @@ export default function FilterGroups() {
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
-                    transition: "all 0.2s ease"
+                    transition: "all 0.2s ease",
                   }}
                 >
                   {getActiveViewLabel()} ({filteredGroups.length})
@@ -993,7 +1002,7 @@ export default function FilterGroups() {
                       border: "1px solid rgba(30, 27, 75, 0.08)",
                       borderRadius: "12px",
                       boxShadow: "0 10px 25px rgba(30, 27, 75, 0.08)",
-                      overflow: "hidden"
+                      overflow: "hidden",
                     }}
                   >
                     {[
@@ -1033,7 +1042,9 @@ export default function FilterGroups() {
                           color: activeView === view.id ? "#5B21B6" : "#1E1B4B",
                           fontWeight: activeView === view.id ? "600" : "400",
                           borderBottom:
-                            view.id === "all" ? "1px solid rgba(30, 27, 75, 0.08)" : "none",
+                            view.id === "all"
+                              ? "1px solid rgba(30, 27, 75, 0.08)"
+                              : "none",
                         }}
                       >
                         {view.label}
@@ -1088,7 +1099,7 @@ export default function FilterGroups() {
                   gap: "8px",
                   position: "relative",
                   overflow: "hidden",
-                  transition: "all 0.3s ease"
+                  transition: "all 0.3s ease",
                 }}
               >
                 Create filter group
@@ -1139,7 +1150,7 @@ export default function FilterGroups() {
                     position: "absolute",
                     left: "14px",
                     top: "50%",
-                    transform: "translateY(-50%)"
+                    transform: "translateY(-50%)",
                   }}
                 >
                   <circle cx="8.5" cy="8.5" r="5" />
@@ -1161,7 +1172,7 @@ export default function FilterGroups() {
                     color: "#1E1B4B",
                     outline: "none",
                     fontWeight: "500",
-                    boxSizing: "border-box"
+                    boxSizing: "border-box",
                   }}
                 />
               </div>
@@ -1176,7 +1187,7 @@ export default function FilterGroups() {
                   display: "flex",
                   alignItems: "center",
                   padding: "8px",
-                  borderRadius: "8px"
+                  borderRadius: "8px",
                 }}
               >
                 <svg
@@ -1204,7 +1215,7 @@ export default function FilterGroups() {
                   display: "flex",
                   alignItems: "center",
                   padding: "8px",
-                  borderRadius: "8px"
+                  borderRadius: "8px",
                 }}
               >
                 <svg
@@ -1227,11 +1238,11 @@ export default function FilterGroups() {
             </div>
           </div>
 
-          <table 
+          <table
             className="groups-table"
             style={{
               width: "100%",
-              borderCollapse: "collapse"
+              borderCollapse: "collapse",
             }}
           >
             <thead>
@@ -1239,7 +1250,7 @@ export default function FilterGroups() {
                 {columns
                   .filter((c) => c.isVisible)
                   .map((col) => (
-                    <th 
+                    <th
                       key={col.id}
                       style={{
                         background: "#1E1B4B",
@@ -1248,7 +1259,7 @@ export default function FilterGroups() {
                         fontSize: "13px",
                         color: "#ffffff",
                         textTransform: "uppercase",
-                        letterSpacing: "0.5px"
+                        letterSpacing: "0.5px",
                       }}
                     >
                       {col.label}
@@ -1273,11 +1284,11 @@ export default function FilterGroups() {
                 </tr>
               ) : (
                 filteredGroups.map((group) => (
-                  <tr 
+                  <tr
                     key={group.id}
                     style={{
                       borderBottom: "1px solid #e2e8f0",
-                      transition: "background-color 0.2s ease"
+                      transition: "background-color 0.2s ease",
                     }}
                   >
                     {columns
@@ -1287,7 +1298,9 @@ export default function FilterGroups() {
                           return (
                             <td key="name" style={{ padding: "18px 20px" }}>
                               <button
-                                onClick={() => navigate(`/app/filters/groups/${group.id}`)}
+                                onClick={() =>
+                                  navigate(`/app/filters/groups/${group.id}`)
+                                }
                                 className="group-name-btn"
                                 style={{
                                   background: "none",
@@ -1297,13 +1310,13 @@ export default function FilterGroups() {
                                   fontWeight: "700",
                                   cursor: "pointer",
                                   padding: 0,
-                                  textAlign: "left"
+                                  textAlign: "left",
                                 }}
                               >
                                 {group.name}
                               </button>
                               {group.isDefault && (
-                                <span 
+                                <span
                                   className="badge-default-group"
                                   style={{
                                     marginLeft: "8px",
@@ -1313,7 +1326,7 @@ export default function FilterGroups() {
                                     color: "#5B21B6",
                                     fontSize: "10.5px",
                                     fontWeight: "700",
-                                    letterSpacing: "0.5px"
+                                    letterSpacing: "0.5px",
                                   }}
                                 >
                                   DEFAULT
@@ -1324,13 +1337,22 @@ export default function FilterGroups() {
                         }
                         if (col.id === "collections") {
                           return (
-                            <td key="collections" style={{ padding: "18px 20px" }}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                            <td
+                              key="collections"
+                              style={{ padding: "18px 20px" }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                }}
+                              >
                                 {group.collections
                                   .filter((c) => c.pageType === "collection")
                                   .map((c) => (
-                                    <span 
-                                      key={c.id} 
+                                    <span
+                                      key={c.id}
                                       className="collection-tag-badge"
                                     >
                                       {c.collectionTitle}
@@ -1343,12 +1365,18 @@ export default function FilterGroups() {
                         if (col.id === "pages") {
                           return (
                             <td key="pages" style={{ padding: "18px 20px" }}>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                }}
+                              >
                                 {group.collections
                                   .filter((c) => c.pageType === "search")
                                   .map((c) => (
-                                    <span 
-                                      key={c.id} 
+                                    <span
+                                      key={c.id}
                                       className="collection-tag-badge"
                                     >
                                       {c.collectionTitle}
@@ -1366,7 +1394,15 @@ export default function FilterGroups() {
                                   Always Active
                                 </span>
                               ) : (
-                                <label style={{ position: "relative", display: "inline-block", width: "40px", height: "22px", cursor: "pointer" }}>
+                                <label
+                                  style={{
+                                    position: "relative",
+                                    display: "inline-block",
+                                    width: "40px",
+                                    height: "22px",
+                                    cursor: "pointer",
+                                  }}
+                                >
                                   <input
                                     type="checkbox"
                                     checked={group.status}
@@ -1379,8 +1415,10 @@ export default function FilterGroups() {
                                       position: "absolute",
                                       inset: 0,
                                       borderRadius: "34px",
-                                      backgroundColor: group.status ? "#10B981" : "#e2e8f0",
-                                      transition: "all 0.3s ease"
+                                      backgroundColor: group.status
+                                        ? "#10B981"
+                                        : "#e2e8f0",
+                                      transition: "all 0.3s ease",
                                     }}
                                   >
                                     <span
@@ -1403,10 +1441,25 @@ export default function FilterGroups() {
                         }
                         if (col.id === "action") {
                           return (
-                            <td key="action" style={{ padding: "18px 20px", textAlign: "right" }}>
-                              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+                            <td
+                              key="action"
+                              style={{
+                                padding: "18px 20px",
+                                textAlign: "right",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "8px",
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                }}
+                              >
                                 <button
-                                  onClick={() => navigate(`/app/filters/groups/${group.id}`)}
+                                  onClick={() =>
+                                    navigate(`/app/filters/groups/${group.id}`)
+                                  }
                                   className="row-action-btn btn-edit-action"
                                   title="Edit"
                                   style={{
@@ -1416,10 +1469,17 @@ export default function FilterGroups() {
                                     padding: "6px",
                                     borderRadius: "6px",
                                     display: "inline-flex",
-                                    alignItems: "center"
+                                    alignItems: "center",
                                   }}
                                 >
-                                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      fill: "#5c5f62",
+                                    }}
+                                  >
                                     <path d="M17.414 2.586a2 2 0 0 0-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 0 0 0-2.828zM5 12v1h1l7.586-7.586-1-1L5 12zM3 16h14v2H3v-2z" />
                                   </svg>
                                 </button>
@@ -1434,10 +1494,17 @@ export default function FilterGroups() {
                                     padding: "6px",
                                     borderRadius: "6px",
                                     display: "inline-flex",
-                                    alignItems: "center"
+                                    alignItems: "center",
                                   }}
                                 >
-                                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#5c5f62" }}>
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      fill: "#5c5f62",
+                                    }}
+                                  >
                                     <path d="M14 6h-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-8 6V4h6v2h-2a2 2 0 0 0-2 2v4H6zm8 4H8V8h6v8z" />
                                   </svg>
                                 </button>
@@ -1453,10 +1520,17 @@ export default function FilterGroups() {
                                       padding: "6px",
                                       borderRadius: "6px",
                                       display: "inline-flex",
-                                      alignItems: "center"
+                                      alignItems: "center",
                                     }}
                                   >
-                                    <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "#d82c0d" }}>
+                                    <svg
+                                      viewBox="0 0 20 20"
+                                      style={{
+                                        width: "16px",
+                                        height: "16px",
+                                        fill: "#d82c0d",
+                                      }}
+                                    >
                                       <path d="M16 4h-3V3a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6h1a1 1 0 1 0 0-2zM9 3h2v1H9V3zm5 14H6V6h8v11z" />
                                     </svg>
                                   </button>
@@ -1603,7 +1677,10 @@ export default function FilterGroups() {
                 </label>
 
                 {groupType === "collections" && (
-                  <div style={{ marginLeft: "24px", position: "relative" }} className="filter-dropdown-inside">
+                  <div
+                    style={{ marginLeft: "24px", position: "relative" }}
+                    className="filter-dropdown-inside"
+                  >
                     <div
                       onClick={() => setShowCollDropdown(!showCollDropdown)}
                       style={{
@@ -1823,7 +1900,7 @@ export default function FilterGroups() {
                 }}
               >
                 <span>Show results matching</span>
-                 <div style={{ position: "relative", display: "inline-block" }}>
+                <div style={{ position: "relative", display: "inline-block" }}>
                   <select
                     value={filterMatch}
                     onChange={(e) => setFilterMatch(e.target.value)}
@@ -1882,10 +1959,12 @@ export default function FilterGroups() {
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = "#DB3A5D";
                     e.currentTarget.style.color = "#DB3A5D";
-                    e.currentTarget.style.background = "rgba(219, 58, 93, 0.04)";
+                    e.currentTarget.style.background =
+                      "rgba(219, 58, 93, 0.04)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)";
+                    e.currentTarget.style.borderColor =
+                      "rgba(30, 27, 75, 0.12)";
                     e.currentTarget.style.color = "#4b5563";
                     e.currentTarget.style.background = "#fff";
                   }}
@@ -2080,7 +2159,9 @@ export default function FilterGroups() {
                             position: "absolute",
                             inset: 0,
                             backgroundColor:
-                              cond.value === "true" ? "#10B981" : "rgba(30, 27, 75, 0.12)",
+                              cond.value === "true"
+                                ? "#10B981"
+                                : "rgba(30, 27, 75, 0.12)",
                             borderRadius: "34px",
                             transition: "0.2s",
                           }}
@@ -2121,8 +2202,13 @@ export default function FilterGroups() {
                       borderRadius: "8px",
                       transition: "all 0.2s ease",
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "rgba(219, 58, 93, 0.08)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "rgba(219, 58, 93, 0.08)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "none")
+                    }
                   >
                     <svg
                       viewBox="0 0 20 20"
@@ -2142,7 +2228,9 @@ export default function FilterGroups() {
               ))}
 
               <div
-                style={{ marginTop: filterConditions.length > 0 ? "12px" : "0" }}
+                style={{
+                  marginTop: filterConditions.length > 0 ? "12px" : "0",
+                }}
               >
                 <button
                   onClick={() =>
@@ -2175,11 +2263,13 @@ export default function FilterGroups() {
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "#1E1B4B";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(30, 27, 75, 0.2)";
+                    e.currentTarget.style.boxShadow =
+                      "0 4px 12px rgba(30, 27, 75, 0.2)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "#5B21B6";
-                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(91, 33, 182, 0.15)";
+                    e.currentTarget.style.boxShadow =
+                      "0 4px 12px rgba(91, 33, 182, 0.15)";
                   }}
                 >
                   <span style={{ fontSize: "16px", fontWeight: "300" }}>+</span>{" "}
@@ -2238,11 +2328,13 @@ export default function FilterGroups() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "#1E1B4B";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(30, 27, 75, 0.2)";
+                  e.currentTarget.style.boxShadow =
+                    "0 4px 12px rgba(30, 27, 75, 0.2)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = "#5B21B6";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(91, 33, 182, 0.15)";
+                  e.currentTarget.style.boxShadow =
+                    "0 4px 12px rgba(91, 33, 182, 0.15)";
                 }}
               >
                 OK

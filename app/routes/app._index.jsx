@@ -12,9 +12,24 @@ export const loader = async ({ request }) => {
     where: { shop: session.shop },
   });
 
-  const activeSyncJob = await prisma.syncJob.findFirst({
+  let activeSyncJob = await prisma.syncJob.findFirst({
     where: { shop: session.shop, status: "IN_PROGRESS" },
   });
+
+  // Crash recovery: if the job hasn't been updated in 2 minutes, it's stuck
+  if (activeSyncJob) {
+    const now = new Date();
+    const lastUpdate = new Date(activeSyncJob.updatedAt);
+    const diffMinutes = (now - lastUpdate) / 1000 / 60;
+    
+    if (diffMinutes > 2) {
+      await prisma.syncJob.update({
+        where: { id: activeSyncJob.id },
+        data: { status: "FAILED" }
+      });
+      activeSyncJob = null;
+    }
+  }
 
   return { 
     syncedProductsCount, 
@@ -79,7 +94,7 @@ export default function Index() {
   const currentCount = syncedProductsCount;
 
   return (
-    <s-page heading="Collection Filter Pro Dashboard">
+    <s-page heading="AI Search & Filter Dashboard">
       <ui-title-bar title="Dashboard"></ui-title-bar>
 
       <style

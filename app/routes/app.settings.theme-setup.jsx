@@ -323,7 +323,7 @@ export default function ThemeSetup() {
         }}>
           <div style={{ padding: "24px 32px", borderBottom: "1px solid #f1f5f9" }}>
             <h2 style={{ fontSize: "16px", fontWeight: "700", color: "#1E1B4B", margin: 0 }}>
-              List of themes set up with Collection Filter Pro Widget
+              List of themes set up with AI Search & Filter Widget
             </h2>
           </div>
           

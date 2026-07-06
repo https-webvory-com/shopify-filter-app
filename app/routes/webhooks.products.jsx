@@ -3,6 +3,8 @@ import prisma from "../db.server";
 import { syncSingleProduct } from "../services/sync.server";
 import meiliClient from "../services/meiliClient.server";
 
+import { withRetry } from "../utils/retry.server";
+
 export const action = async ({ request }) => {
   const { shop, payload, topic, admin } = await authenticate.webhook(request);
 
@@ -17,33 +19,38 @@ export const action = async ({ request }) => {
       case "PRODUCTS_CREATE":
       case "PRODUCTS_UPDATE": {
         const productId = `gid://shopify/Product/${payload.id}`;
-        // Ensure admin client exists. If the webhook is triggered out of band without a valid token, we fallback safely.
         if (admin) {
-          await syncSingleProduct(shop, admin, productId);
-        } else {
-          console.warn(
-            `CFP: Admin client not available in webhook for ${shop}. Skipping real-time fetch.`,
+          // FIRE AND FORGET WITH RETRY: Process in background, handle transient failures
+          withRetry(() => syncSingleProduct(shop, admin, productId)).catch(
+            (err) => {
+              console.error(
+                `CFP: Background webhook sync completely failed for ${productId} after retries.`,
+                err,
+              );
+            },
           );
+        } else {
+          console.warn(`CFP: Admin client not available for ${shop}.`);
         }
         break;
       }
       case "PRODUCTS_DELETE": {
         const productId = `gid://shopify/Product/${payload.id}`;
-        console.log(`CFP: Deleting product ${productId} from DB...`);
+        console.log(`CFP: Queuing delete for product ${productId}...`);
 
-        // Because we set onDelete: Cascade on relations in Prisma, deleting the product
-        // will automatically clean up Variants, Collections, and Metafields!
-        await prisma.product.deleteMany({ where: { id: productId } });
-
-        try {
-          const numericId = payload.id.toString();
-          await meiliClient.index("products").deleteDocument(numericId);
-          console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
-        } catch (e) {
-          console.error("CFP: Failed to delete document from Meilisearch", e);
-        }
-
-        console.log(`CFP: Product ${productId} successfully deleted.`);
+        // FIRE AND FORGET: Background deletion
+        (async () => {
+          try {
+            await prisma.product.deleteMany({ where: { id: productId } });
+            const numericId = payload.id.toString();
+            await meiliClient.index("products").deleteDocument(numericId);
+            console.log(
+              `CFP: Product ${productId} successfully deleted in background.`,
+            );
+          } catch (e) {
+            console.error("CFP: Background delete failed", e);
+          }
+        })();
         break;
       }
       default:

@@ -268,13 +268,12 @@ export const loader = async ({ request }) => {
     if (resolvedCollectionId) {
       baseFilters.push(`collections = '${resolvedCollectionId}'`);
     }
-    if (minPrice > 0 || maxPrice < 9999999) {
-      baseFilters.push(
-        `priceMin >= ${minPrice} AND priceMin <= ${maxPrice}`
-      );
-    }
-
     const categoryFilters = {};
+    if (minPrice > 0 || maxPrice < 9999999) {
+      const bufferedMin = Math.max(0, minPrice - 0.5);
+      const bufferedMax = maxPrice + 0.5;
+      categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
+    }
     if (availability.length > 0) {
       if (
         availability.includes("in_stock") &&
@@ -399,11 +398,12 @@ export const loader = async ({ request }) => {
     const meiliStart = Date.now();
     let meiliRes = { hits: [], estimatedTotalHits: 0 };
     let facetDistribution = {};
+    let facetRes = null;
 
     try {
       const multiSearchRes = await meiliClient.multiSearch({ queries });
       meiliRes = multiSearchRes.results[0]; // Main paginated results
-      const facetRes = multiSearchRes.results[1]; // Facet-only result
+      facetRes = multiSearchRes.results[1]; // Facet-only result
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };
 
       // Merge disjunctive facet counts
@@ -412,6 +412,11 @@ export const loader = async ({ request }) => {
         const catRes = multiSearchRes.results[i + 2];
         if (catRes?.facetDistribution?.[cat]) {
           facetDistribution[cat] = catRes.facetDistribution[cat];
+        }
+        if (catRes?.facetStats?.[cat]) {
+          if (!facetRes) facetRes = {};
+          if (!facetRes.facetStats) facetRes.facetStats = {};
+          facetRes.facetStats[cat] = catRes.facetStats[cat];
         }
       }
     } catch (e) {
@@ -559,22 +564,36 @@ export const loader = async ({ request }) => {
     let absoluteMinPrice = Infinity;
     let absoluteMaxPrice = -Infinity;
 
-    if (allMatchedProducts.length > 0) {
-      allMatchedProducts.forEach((p) => {
-        if (priceRangeCounts.length > 0) {
+    if (facetRes && facetRes.facetStats && facetRes.facetStats.priceMin) {
+      absoluteMinPrice = facetRes.facetStats.priceMin.min;
+      absoluteMaxPrice = facetRes.facetStats.priceMin.max;
+      
+      // Fallback loop for price range list counts (note: only counts current page unless broadFetch)
+      if (allMatchedProducts.length > 0 && priceRangeCounts.length > 0) {
+        allMatchedProducts.forEach((p) => {
           priceRangeCounts.forEach((r) => {
             const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
             const rMaxVal = r.max !== undefined ? r.max : r.to;
-            const rMax =
-              rMaxVal === "" || rMaxVal === null || rMaxVal === undefined
-                ? Infinity
-                : parseFloat(rMaxVal);
+            const rMax = rMaxVal === "" || rMaxVal === null || rMaxVal === undefined ? Infinity : parseFloat(rMaxVal);
             if (p.priceMin >= rMin && p.priceMin <= rMax) r.count += 1;
           });
-        }
-        if (p.priceMin < absoluteMinPrice) absoluteMinPrice = p.priceMin;
-        if (p.priceMax > absoluteMaxPrice) absoluteMaxPrice = p.priceMax;
-      });
+        });
+      }
+    } else {
+      if (allMatchedProducts.length > 0) {
+        allMatchedProducts.forEach((p) => {
+          if (priceRangeCounts.length > 0) {
+            priceRangeCounts.forEach((r) => {
+              const rMin = parseFloat(r.min !== undefined ? r.min : r.from) || 0;
+              const rMaxVal = r.max !== undefined ? r.max : r.to;
+              const rMax = rMaxVal === "" || rMaxVal === null || rMaxVal === undefined ? Infinity : parseFloat(rMaxVal);
+              if (p.priceMin >= rMin && p.priceMin <= rMax) r.count += 1;
+            });
+          }
+          if (p.priceMin < absoluteMinPrice) absoluteMinPrice = p.priceMin;
+          if (p.priceMax > absoluteMaxPrice) absoluteMaxPrice = p.priceMax; // or p.priceMin
+        });
+      }
     }
 
     // ── 16. Build facet counts from Meilisearch distribution ──────────

@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { formatAndPushToMeili } from "../services/sync.server";
+import { withRetry } from "../utils/retry.server";
 
 export const action = async ({ request }) => {
   const { shop, payload, topic } = await authenticate.webhook(request);
@@ -14,59 +15,77 @@ export const action = async ({ request }) => {
       case "COLLECTIONS_CREATE":
       case "COLLECTIONS_UPDATE": {
         const collectionId = `gid://shopify/Collection/${payload.id}`;
-        
-        await prisma.collection.upsert({
-          where: { id: collectionId },
-          update: {
-            title: payload.title,
-            handle: payload.handle,
-          },
-          create: {
-            id: collectionId,
-            shop,
-            title: payload.title,
-            handle: payload.handle,
-          },
-        });
-        
-        console.log(`CFP: Collection ${collectionId} successfully synced.`);
+
+        // FIRE AND FORGET WITH RETRY
+        withRetry(() =>
+          prisma.collection.upsert({
+            where: { id: collectionId },
+            update: {
+              title: payload.title,
+              handle: payload.handle,
+            },
+            create: {
+              id: collectionId,
+              shop,
+              title: payload.title,
+              handle: payload.handle,
+            },
+          }),
+        )
+          .then(() => {
+            console.log(
+              `CFP: Collection ${collectionId} successfully synced in background.`,
+            );
+          })
+          .catch((err) => {
+            console.error("CFP: Background collection upsert failed", err);
+          });
+
         break;
       }
       case "COLLECTIONS_DELETE": {
         const collectionId = `gid://shopify/Collection/${payload.id}`;
-        console.log(`CFP: Deleting collection ${collectionId} from DB...`);
+        console.log(`CFP: Queuing delete for collection ${collectionId}...`);
 
-        // 1. Find all products associated with this collection before we delete the link
-        const linkedProducts = await prisma.productCollection.findMany({
-          where: { collectionId },
-          select: { productId: true }
-        });
-        const productIdsToUpdate = linkedProducts.map(lp => lp.productId);
+        // FIRE AND FORGET
+        (async () => {
+          try {
+            const linkedProducts = await prisma.productCollection.findMany({
+              where: { collectionId },
+              select: { productId: true },
+            });
+            const productIdsToUpdate = linkedProducts.map((lp) => lp.productId);
 
-        // 2. Delete the collection and links from Prisma
-        await prisma.$transaction(async (tx) => {
-          await tx.productCollection.deleteMany({ where: { collectionId } });
-          await tx.collection.deleteMany({ where: { id: collectionId } });
-        });
+            await prisma.$transaction(async (tx) => {
+              await tx.productCollection.deleteMany({
+                where: { collectionId },
+              });
+              await tx.collection.deleteMany({ where: { id: collectionId } });
+            });
 
-        // 3. Resync those specific products to Meilisearch so their collections array is clean
-        if (productIdsToUpdate.length > 0) {
-          console.log(`CFP: Resyncing ${productIdsToUpdate.length} products to Meilisearch to remove stale collection ID...`);
-          const dbProducts = await prisma.product.findMany({
-            where: { id: { in: productIdsToUpdate } },
-            include: {
-              variants: true,
-              collections: { select: { collectionId: true } },
-              metafields: true,
-              // handle and images are top-level columns on Product model, auto-included
-            },
-          });
-          if (dbProducts.length > 0) {
-            await formatAndPushToMeili(dbProducts);
+            if (productIdsToUpdate.length > 0) {
+              console.log(
+                `CFP: Resyncing ${productIdsToUpdate.length} products to Meilisearch...`,
+              );
+              const dbProducts = await prisma.product.findMany({
+                where: { id: { in: productIdsToUpdate } },
+                include: {
+                  variants: true,
+                  collections: { select: { collectionId: true } },
+                  metafields: true,
+                },
+              });
+              if (dbProducts.length > 0) {
+                await formatAndPushToMeili(dbProducts);
+              }
+            }
+            console.log(
+              `CFP: Collection ${collectionId} successfully deleted in background.`,
+            );
+          } catch (e) {
+            console.error("CFP: Background collection delete failed", e);
           }
-        }
-
-        console.log(`CFP: Collection ${collectionId} successfully deleted and Meilisearch cleaned.`);
+        })();
         break;
       }
       default:

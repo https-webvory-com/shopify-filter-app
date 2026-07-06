@@ -2,8 +2,8 @@ import { data } from "react-router";
 import prisma from "../db.server";
 import { getActivePinningRuleForSearch } from "../services/merchandising.server";
 import meiliClient from "../services/meiliClient.server";
-
-
+import { getFilterGlobalSettings } from "../services/filterSettings.server";
+import { getCached } from "../services/shopCache.server";
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -174,8 +174,11 @@ export const loader = async ({ request }) => {
       })),
     }));
 
-    // 2. Fetch Active Pinning Rule
-    const pinningRule = await getActivePinningRuleForSearch(shop, query);
+    // 2. Fetch Active Pinning Rule and Global Settings
+    const [pinningRule, globalSettings] = await Promise.all([
+      getActivePinningRuleForSearch(shop, query),
+      getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop))
+    ]);
     
     // 3. Merge Pinned Products and Organic Products
     let pinnedIds = [];
@@ -303,7 +306,8 @@ export const loader = async ({ request }) => {
       products: activeResults,
       suggestions: suggestions,
       didYouMean: didYouMean,
-      contextualPricingApplied: contextualPricingApplied
+      contextualPricingApplied: contextualPricingApplied,
+      globalSettings: globalSettings
     });
 
   } catch (error) {

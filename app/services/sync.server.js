@@ -264,7 +264,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   const query = `#graphql
     query getProducts($cursor: String ${metafieldIdentifiers.length > 0 ? ", $metafieldIdentifiers: [HasMetafieldsIdentifier!]!" : ""}) {
-      products(first: 50, after: $cursor) {
+      products(first: 50, after: $cursor, query: "status:active") {
         pageInfo {
           hasNextPage
           endCursor
@@ -278,6 +278,7 @@ async function processSyncChunk(jobId, shop, admin) {
           tags
           totalInventory
           status
+          onlineStoreUrl
           images(first: 250) {
             nodes {
               url
@@ -337,7 +338,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
       const productsData = responseJson.data?.products;
       if (!productsData || productsData.nodes.length === 0) break;
-      const products = productsData.nodes;
+      const products = productsData.nodes.filter((p) => p.status === "ACTIVE");
       hasNextPage = productsData.pageInfo.hasNextPage;
       cursor = productsData.pageInfo.endCursor;
 
@@ -643,6 +644,7 @@ export async function syncSingleProduct(shop, admin, productId) {
         productType
         tags
         status
+        onlineStoreUrl
         images(first: 250) {
           nodes {
             url
@@ -695,8 +697,8 @@ export async function syncSingleProduct(shop, admin, productId) {
   }
 
   const product = responseJson.data?.product;
-  if (!product) {
-    console.warn(`CFP: Product ${productId} not found on Shopify. Deleting from DB and Meilisearch.`);
+  if (!product || !product.onlineStoreUrl || product.status !== "ACTIVE") {
+    console.warn(`CFP: Product ${productId} not found, draft, or not published. Deleting from DB/Meili.`);
     await prisma.product.deleteMany({ where: { id: productId } });
     // Also remove from Meilisearch
     try {

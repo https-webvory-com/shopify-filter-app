@@ -48,6 +48,24 @@
     }
   }
 
+  function getGlobalCurrencyRate() {
+    if (window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
+      return parseFloat(window.Shopify.currency.rate) || 1;
+    }
+    return 1;
+  }
+
+  function getGlobalCurrencySymbol() {
+    if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+      try {
+        const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
+        const sym = parts.find(p => p.type === 'currency');
+        if (sym) return sym.value;
+      } catch(e) {}
+    }
+    return (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+  }
+
   console.log("check againg 6")
 
   // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -439,6 +457,41 @@
     // Make products container visible (skeleton may have hidden it)
     grid.style.display = 'grid';
 
+    // Inject products into Wishlist App's global pageDataMap if it exists
+    if (typeof window.pageDataMap !== 'undefined') {
+      products.forEach(product => {
+        let variantId = product.variants?.[0]?.id;
+        if (variantId && typeof variantId === 'string') {
+          variantId = variantId.replace('gid://shopify/ProductVariant/', '');
+        }
+        let productId = product.id;
+        if (productId && typeof productId === 'string') {
+          productId = productId.replace('gid://shopify/Product/', '');
+        }
+        const firstVariant = product.variants?.[0] || {};
+        let variantTitle = "";
+        if (firstVariant.option1 && firstVariant.option1 !== 'Default Title') variantTitle += firstVariant.option1;
+        if (firstVariant.option2) variantTitle += " / " + firstVariant.option2;
+        if (firstVariant.option3) variantTitle += " / " + firstVariant.option3;
+        
+        const price = firstVariant.price !== undefined ? parseFloat(firstVariant.price) * 100 : (parseFloat(product.priceMin || 0) * 100);
+        const compareAtPrice = firstVariant.compareAtPrice ? parseFloat(firstVariant.compareAtPrice) * 100 : null;
+
+        window.pageDataMap[product.handle] = {
+           ...firstVariant,
+           id: variantId,
+           title: variantTitle || 'Default Title',
+           price: price,
+           compare_at_price: compareAtPrice,
+           available: firstVariant.available !== false,
+           product_id: productId,
+           product_handle: product.handle,
+           product_image: product.merchandisingImage || product.images?.[0],
+           product_title: product.title
+        };
+      });
+    }
+
     // Update count labels
     const countLabel = document.querySelector('.cfp-product-count');
     if (countLabel) {
@@ -732,12 +785,23 @@
            }
       }
 
+      let wishlistHtml = '';
+      // console.log("CFP DEBUG: globalSettings.integrations =>", globalSettings?.integrations);
+      if (typeof window.pageDataMap !== 'undefined' && globalSettings && globalSettings.integrations && globalSettings.integrations.wishlist === true) {
+        wishlistHtml = `<div class="wishlist-btn-container" data-product-id="${product.handle}" style="position: absolute; top: 10px; right: 10px; z-index: 99;">
+             <button type="button" class="wishlist-toggle-btn" style="background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none; box-shadow: none;">
+                <svg class="wishlist-icon-svg" style="overflow: visible;" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.6706 5.4736C17.6806 3.8336 14.7206 4.1236 12.8906 5.9536L12.0006 6.8436L11.1106 5.9536C9.29063 4.1336 6.32064 3.8336 4.33064 5.4736C2.05064 7.3536 1.93063 10.7436 3.97063 12.7836L11.6406 20.4536C11.8406 20.6536 12.1506 20.6536 12.3506 20.4536L20.0206 12.7836C22.0706 10.7436 21.9506 7.3636 19.6706 5.4736Z"></path></svg>
+             </button>
+          </div>`;
+      }
+
       return `
         <div class="cfp-product-card">
           <a href="${productUrl}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
               ${badgesHtml}
+              ${wishlistHtml}
             </div>
             <div class="cfp-product-card__info">
               <span class="cfp-product-card__vendor">${product.vendor}</span>
@@ -888,9 +952,10 @@
       } 
       else if (type === 'price' && displayMode.toLowerCase() === 'range') {
         const s = config.sliderConfig || {};
-        const prefixStr = s.sliderPrefix || (setting.type === "price_range" ? "$" : "");
+        const prefixStr = s.sliderPrefix || (setting.type === "price_range" ? getGlobalCurrencySymbol() : "");
         const suffixStr = s.sliderSuffix || "";
         const step = s.sliderStep || 1;
+        const rate = getGlobalCurrencyRate();
         // Calculate max and min price from priceRanges
         let maxLimit = 100000;
         let minLimit = 0;
@@ -930,9 +995,14 @@
         if (effectiveMax === 999999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
         if (effectiveMax < minLimit) effectiveMax = minLimit;
 
-        const rangeDiff = maxLimit - minLimit;
-        const fillLeft = rangeDiff > 0 ? ((effectiveMin - minLimit) / rangeDiff) * 100 : 0;
-        const fillRight = rangeDiff > 0 ? 100 - ((effectiveMax - minLimit) / rangeDiff) * 100 : 0;
+        const displayMinLimit = minLimit * rate;
+        const displayMaxLimit = maxLimit * rate;
+        const displayEffectiveMin = effectiveMin * rate;
+        const displayEffectiveMax = effectiveMax * rate;
+
+        const rangeDiff = displayMaxLimit - displayMinLimit;
+        const fillLeft = rangeDiff > 0 ? ((displayEffectiveMin - displayMinLimit) / rangeDiff) * 100 : 0;
+        const fillRight = rangeDiff > 0 ? 100 - ((displayEffectiveMax - displayMinLimit) / rangeDiff) * 100 : 0;
         
         const intervals = parseInt(s.sliderRange) > 0 ? parseInt(s.sliderRange) : 4;
         const points = intervals + 1;
@@ -949,7 +1019,7 @@
 
         for (let i = 0; i < points; i++) {
           const percent = (i / (points - 1)) * 100;
-          const val = minLimit + (i / (points - 1)) * (maxLimit - minLimit);
+          const val = displayMinLimit + (i / (points - 1)) * (displayMaxLimit - displayMinLimit);
           ticksHtml += `
             <div style="position: absolute; left: ${percent}%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; top: 16px; z-index: 0; pointer-events: none;">
               <div style="width: 1px; height: 8px; background: ${sliderColor}; margin-bottom: 4px;"></div>
@@ -965,7 +1035,7 @@
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${effectiveMin}" min="${minLimit}" step="${step}">
+                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${Math.round(displayEffectiveMin)}" min="${Math.round(displayMinLimit)}" step="${step}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -973,7 +1043,7 @@
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${effectiveMax}" min="${minLimit}" step="${step}">
+                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${Math.round(displayEffectiveMax)}" min="${Math.round(displayMinLimit)}" step="${step}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -981,8 +1051,8 @@
             
             <div class="cfp-range-track" id="cfp-slider-track">
               <div class="cfp-range-fill" id="cfp-slider-fill" style="left: ${fillLeft}%; right: ${fillRight}%;"></div>
-              <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="${minLimit}" max="${maxLimit}" value="${effectiveMin}" step="${step}">
-              <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="${minLimit}" max="${maxLimit}" value="${effectiveMax}" step="${step}">
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-min" min="${Math.round(displayMinLimit)}" max="${Math.round(displayMaxLimit)}" value="${Math.round(displayEffectiveMin)}" step="${step}">
+              <input type="range" class="cfp-range-input" id="cfp-slider-range-max" min="${Math.round(displayMinLimit)}" max="${Math.round(displayMaxLimit)}" value="${Math.round(displayEffectiveMax)}" step="${step}">
               ${ticksHtml}
             </div>
           </div>
@@ -993,13 +1063,26 @@
         items = [];
         if (type === 'price') {
           const rangesList = facets.priceRanges && facets.priceRanges.ranges ? facets.priceRanges.ranges : (Array.isArray(facets.priceRanges) ? facets.priceRanges : []);
+          const rate = getGlobalCurrencyRate();
+          const symbol = getGlobalCurrencySymbol();
           items = rangesList.map(r => {
-            const minStr = r.min !== undefined ? r.min : (r.from || "");
-            const maxStr = r.max !== undefined ? r.max : (r.to || "");
-            let parsedLabel = (r.label || "").replace("{0}", minStr);
-            parsedLabel = parsedLabel.replace("{1}", maxStr);
+            const minRaw = r.min !== undefined ? r.min : (r.from || 0);
+            const maxRaw = r.max !== undefined ? r.max : (r.to || 0);
+            
+            // Format for display
+            let minStrDisp = Math.round(minRaw * rate).toString();
+            let maxStrDisp = Math.round(maxRaw * rate).toString();
+            
+            // Prepend symbol if label doesn't already include it
+            const rawLabel = r.label || "";
+            if (!rawLabel.includes('$') && !rawLabel.includes(symbol)) {
+               minStrDisp = symbol + minStrDisp;
+               maxStrDisp = symbol + maxStrDisp;
+            }
+
+            let parsedLabel = rawLabel.replace("{0}", minStrDisp).replace("{1}", maxStrDisp);
             return {
-              value: `${minStr}-${maxStr}`,
+              value: `${minRaw}-${maxRaw}`,
               label: parsedLabel,
               count: r.count
             };
@@ -1559,11 +1642,12 @@
 
     if (minInput && maxInput) {
       const applyPriceFilter = () => {
+        const rate = getGlobalCurrencyRate();
         let minV = parseFloat(minInput.value) || 0;
-        let maxV = parseFloat(maxInput.value) || 999999;
+        let maxV = parseFloat(maxInput.value) || (999999 * rate);
         if(minV > maxV) { let t=minV; minV=maxV; maxV=t; minInput.value=minV; maxInput.value=maxV; }
-        activeFilters.minPrice = minV;
-        activeFilters.maxPrice = maxV;
+        activeFilters.minPrice = minV / rate;
+        activeFilters.maxPrice = maxV / rate;
         activeFilters.page = 1;
         fetchAndRenderData();
       };
@@ -1598,7 +1682,8 @@
       });
 
       rangeMin.addEventListener('change', () => {
-        activeFilters.minPrice = parseFloat(rangeMin.value);
+        const rate = getGlobalCurrencyRate();
+        activeFilters.minPrice = parseFloat(rangeMin.value) / rate;
         activeFilters.page = 1;
         fetchAndRenderData();
       });
@@ -1615,7 +1700,8 @@
       });
 
       rangeMax.addEventListener('change', () => {
-        activeFilters.maxPrice = parseFloat(rangeMax.value);
+        const rate = getGlobalCurrencyRate();
+        activeFilters.maxPrice = parseFloat(rangeMax.value) / rate;
         activeFilters.page = 1;
         fetchAndRenderData();
       });
@@ -1881,8 +1967,12 @@
     });
 
     if (activeFilters.minPrice > 0 || activeFilters.maxPrice < 999999) {
-      const displayMax = activeFilters.maxPrice === 999999 ? maxPriceLimit : activeFilters.maxPrice;
-      addChip(`${activeFilters.minPrice} - ${displayMax}`, 'price', 'range');
+      const rate = getGlobalCurrencyRate();
+      const symbol = getGlobalCurrencySymbol();
+      const displayMaxRaw = activeFilters.maxPrice === 999999 ? maxPriceLimit : activeFilters.maxPrice;
+      const minVal = Math.round(activeFilters.minPrice * rate);
+      const maxVal = Math.round(displayMaxRaw * rate);
+      addChip(`${symbol}${minVal} - ${symbol}${maxVal}`, 'price', 'range');
     }
 
     if (hasFilters) {

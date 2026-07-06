@@ -773,6 +773,40 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
+    if (typeof window.pageDataMap !== 'undefined') {
+      products.forEach(product => {
+        let variantId = product.variants?.[0]?.id;
+        if (variantId && typeof variantId === 'string') {
+          variantId = variantId.replace('gid://shopify/ProductVariant/', '');
+        }
+        let productId = product.id;
+        if (productId && typeof productId === 'string') {
+          productId = productId.replace('gid://shopify/Product/', '');
+        }
+        const firstVariant = product.variants?.[0] || {};
+        let variantTitle = "";
+        if (firstVariant.option1 && firstVariant.option1 !== 'Default Title') variantTitle += firstVariant.option1;
+        if (firstVariant.option2) variantTitle += " / " + firstVariant.option2;
+        if (firstVariant.option3) variantTitle += " / " + firstVariant.option3;
+        
+        const price = firstVariant.price !== undefined ? parseFloat(firstVariant.price) * 100 : (parseFloat(product.priceMin || 0) * 100);
+        const compareAtPrice = firstVariant.compareAtPrice ? parseFloat(firstVariant.compareAtPrice) * 100 : null;
+
+        window.pageDataMap[product.handle] = {
+           ...firstVariant,
+           id: variantId,
+           title: variantTitle || 'Default Title',
+           price: price,
+           compare_at_price: compareAtPrice,
+           available: firstVariant.available !== false,
+           product_id: productId,
+           product_handle: product.handle,
+           product_image: product.merchandisingImage || product.images?.[0],
+           product_title: product.title
+        };
+      });
+    }
+
     let html = "";
     products.forEach((p) => {
       // 1. Identify Color Option Index
@@ -903,10 +937,21 @@ document.addEventListener("DOMContentLoaded", function () {
          productUrl += `?variant=${defaultVariantId}`;
       }
 
+      let wishlistHtml = '';
+      console.log("CFP SEARCH DEBUG: data.globalSettings.integrations =>", data.globalSettings?.integrations);
+      if (typeof window.pageDataMap !== 'undefined' && data.globalSettings && data.globalSettings.integrations && data.globalSettings.integrations.wishlist === true) {
+        wishlistHtml = `<div class="wishlist-btn-container" data-product-id="${p.handle}" style="position: absolute; top: 10px; right: 10px; z-index: 99;">
+             <button type="button" class="wishlist-toggle-btn" style="background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none; box-shadow: none;">
+                <svg class="wishlist-icon-svg" style="overflow: visible;" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#121212" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.6706 5.4736C17.6806 3.8336 14.7206 4.1236 12.8906 5.9536L12.0006 6.8436L11.1106 5.9536C9.29063 4.1336 6.32064 3.8336 4.33064 5.4736C2.05064 7.3536 1.93063 10.7436 3.97063 12.7836L11.6406 20.4536C11.8406 20.6536 12.1506 20.6536 12.3506 20.4536L20.0206 12.7836C22.0706 10.7436 21.9506 7.3636 19.6706 5.4736Z"></path></svg>
+             </button>
+          </div>`;
+      }
+
       html += `
         <a href="${productUrl}" class="cfp-search-product-card">
           <div class="cfp-search-product-image-wrap">
             <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
+            ${wishlistHtml}
           </div>
           <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
           ${swatchesHtml}
