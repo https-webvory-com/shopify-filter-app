@@ -581,8 +581,22 @@
             }
           }
         }
+        let customImage = null;
+        const handle = collectionHandle || '';
+        
+        if (handle.includes('plus-size') && product['metafield_custom.plus_size_collection_image']) {
+            customImage = product['metafield_custom.plus_size_collection_image'];
+        } else if ((handle.includes('mother-of-the-bride') || handle.includes('mob')) && product['metafield_custom.mother_of_the_bride_collection_image']) {
+            customImage = product['metafield_custom.mother_of_the_bride_collection_image'];
+        } else if (handle.includes('wedding') && product['metafield_custom.wedding_collection_image']) {
+            customImage = product['metafield_custom.wedding_collection_image'];
+        }
+
+        console.log(`[CFP Image Debug] Handle: "${handle}", Product ID: ${product.id}`);
+        console.log(`[CFP Image Debug] wedding metafield:`, product['metafield_custom.wedding_collection_image']);
+        console.log(`[CFP Image Debug] customImage determined:`, customImage);
   
-        let primaryImg = variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = customImage || variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         
         let productUrl = `/products/${product.handle}`;
         if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
@@ -690,6 +704,7 @@
           
           let activeIndex = 0;
           let matchedColorUrl = "";
+          let colorWasFiltered = false;
 
           // 1. Check if there's a search query matching a color
           if (activeFilters.q && activeFilters.q.trim() !== "") {
@@ -697,6 +712,7 @@
              const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower) || qLower.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
+                colorWasFiltered = true;
              }
           } else if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
              // 2. Check if there's an active color filter matching a color
@@ -716,6 +732,7 @@
              const foundIndex = colorsArray.findIndex(c => expandedLower.includes(c[0].toLowerCase()));
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
+                colorWasFiltered = true;
              }
           }
            
@@ -761,7 +778,7 @@
           }
           swatchesHtml += `</div>`;
           
-          if (matchedColorUrl) {
+          if (matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = matchedColorUrl;
              if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
                  productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;

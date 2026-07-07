@@ -359,6 +359,9 @@ export const loader = async ({ request }) => {
         "id", "title", "handle", "vendor", "productType",
         "priceMin", "priceMax", "tags", "images", "variantPrices",
         "merchandisingImage", "options", "status", "available", "createdAt",
+        "metafield_custom.plus_size_collection_image",
+        "metafield_custom.mother_of_the_bride_collection_image",
+        "metafield_custom.wedding_collection_image"
       ],
     };
     if (meiliSort) mainQuery.sort = meiliSort;
@@ -490,7 +493,7 @@ export const loader = async ({ request }) => {
     // ── 13. Shape products for response ───────────────────────────────
     let products = paginatedSlice.map((p) => {
       const variantPrices = p.variantPrices || [];
-      return {
+      const productObj = {
         id: p.id,
         title: p.title,
         handle: p.handle,
@@ -514,6 +517,15 @@ export const loader = async ({ request }) => {
           imageUrl: v.imageUrl,
         })),
       };
+
+      // Pass through any metafields from Meilisearch
+      Object.keys(p).forEach(key => {
+        if (key.startsWith("metafield_")) {
+          productObj[key] = p[key];
+        }
+      });
+
+      return productObj;
     });
 
     // ── 14. Did-you-mean suggestion ────────────────────────────────────

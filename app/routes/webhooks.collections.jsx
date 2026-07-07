@@ -1,10 +1,10 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { formatAndPushToMeili } from "../services/sync.server";
+import { formatAndPushToMeili, syncCollectionProducts } from "../services/sync.server";
 import { withRetry } from "../utils/retry.server";
 
 export const action = async ({ request }) => {
-  const { shop, payload, topic } = await authenticate.webhook(request);
+  const { shop, payload, topic, admin } = await authenticate.webhook(request);
 
   console.log(`CFP: Received ${topic} webhook for ${shop}`);
 
@@ -36,6 +36,14 @@ export const action = async ({ request }) => {
             console.log(
               `CFP: Collection ${collectionId} successfully synced in background.`,
             );
+            if (admin) {
+              // Sync products after collection table is updated
+              syncCollectionProducts(shop, admin, collectionId).catch(err => {
+                console.error("CFP: Background collection products sync failed", err);
+              });
+            } else {
+              console.warn("CFP: Admin client not available, skipping product sync.");
+            }
           })
           .catch((err) => {
             console.error("CFP: Background collection upsert failed", err);

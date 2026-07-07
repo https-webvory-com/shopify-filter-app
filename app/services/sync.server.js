@@ -244,26 +244,8 @@ async function processSyncChunk(jobId, shop, admin) {
     where: { shop, type: "metafield" },
   });
 
-  const metafieldIdentifiers = metafieldSettings
-    .filter((s) => s.key && s.key.includes("."))
-    .map((s) => {
-      const [namespace, key] = s.key.split(".");
-      return { namespace, key };
-    });
-
-  const metafieldQueryPart =
-    metafieldIdentifiers.length > 0
-      ? `metafields(identifiers: $metafieldIdentifiers) {
-        id
-        namespace
-        key
-        value
-        type
-      }`
-      : "";
-
   const query = `#graphql
-    query getProducts($cursor: String ${metafieldIdentifiers.length > 0 ? ", $metafieldIdentifiers: [HasMetafieldsIdentifier!]!" : ""}) {
+    query getProducts($cursor: String) {
       products(first: 50, after: $cursor, query: "status:active") {
         pageInfo {
           hasNextPage
@@ -312,7 +294,58 @@ async function processSyncChunk(jobId, shop, admin) {
               }
             }
           }
-          ${metafieldQueryPart}
+          plusSizeMetafield: metafield(namespace: "custom", key: "plus_size_collection_image") {
+            id
+            namespace
+            key
+            value
+            type
+            reference {
+              ... on MediaImage { image { url } }
+              ... on GenericFile { url }
+            }
+          }
+          motbMetafield: metafield(namespace: "custom", key: "mother_of_the_bride_collection_image") {
+            id
+            namespace
+            key
+            value
+            type
+            reference {
+              ... on MediaImage { image { url } }
+              ... on GenericFile { url }
+            }
+          }
+          weddingMetafield: metafield(namespace: "custom", key: "wedding_collection_image") {
+            id
+            namespace
+            key
+            value
+            type
+            reference {
+              ... on MediaImage { image { url } }
+              ... on GenericFile { url }
+            }
+          }
+          metafields(first: 250) {
+            nodes {
+              id
+              namespace
+              key
+              value
+              type
+              reference {
+                ... on MediaImage {
+                  image {
+                    url
+                  }
+                }
+                ... on GenericFile {
+                  url
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -325,9 +358,6 @@ async function processSyncChunk(jobId, shop, admin) {
   while (hasNextPage) {
     try {
       const variables = { cursor };
-      if (metafieldIdentifiers.length > 0) {
-        variables.metafieldIdentifiers = metafieldIdentifiers;
-      }
 
       const response = await admin.graphql(query, { variables });
       const responseJson = await response.json();
@@ -357,8 +387,23 @@ async function processSyncChunk(jobId, shop, admin) {
 
         const formattedMetafields = {};
         if (p.metafields) {
-          p.metafields.forEach((m) => {
-            if (m && m.value) formattedMetafields[`metafield_${m.namespace}.${m.key}`] = m.value;
+          if (!p.metafields.nodes) p.metafields.nodes = [];
+          if (p.plusSizeMetafield) p.metafields.nodes.push(p.plusSizeMetafield);
+          if (p.motbMetafield) p.metafields.nodes.push(p.motbMetafield);
+          if (p.weddingMetafield) p.metafields.nodes.push(p.weddingMetafield);
+          
+          p.metafields.nodes.forEach((m) => {
+            if (m && m.value) {
+              let val = m.value;
+              console.log(`CFP: Debug Metafield ${m.namespace}.${m.key} ->`, JSON.stringify(m));
+              if (m.reference && m.reference.image && m.reference.image.url) {
+                val = m.reference.image.url;
+              } else if (m.reference && m.reference.url) {
+                // Fallback if it's a GenericFile instead of MediaImage
+                val = m.reference.url;
+              }
+              formattedMetafields[`metafield_${m.namespace}.${m.key}`] = val;
+            }
           });
         }
 
@@ -578,12 +623,12 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
     }
 
     // Smart Sync Metafields
-    if (product.metafields) {
+    if (product.metafields && product.metafields.nodes) {
       const existingMetafields = await tx.productMetafield.findMany({
         where: { productId: product.id },
         select: { id: true }
       });
-      const validMetafields = product.metafields.filter(m => m && m.value);
+      const validMetafields = product.metafields.nodes.filter(m => m && m.value);
       const incomingMetafieldIds = validMetafields.map(m => m.id);
       const metafieldsToDelete = existingMetafields.filter(em => !incomingMetafieldIds.includes(em.id)).map(m => m.id);
 
@@ -616,26 +661,8 @@ export async function syncSingleProduct(shop, admin, productId) {
     where: { shop, type: "metafield" },
   });
 
-  const metafieldIdentifiers = metafieldSettings
-    .filter((s) => s.key && s.key.includes("."))
-    .map((s) => {
-      const [namespace, key] = s.key.split(".");
-      return { namespace, key };
-    });
-
-  const metafieldQueryPart =
-    metafieldIdentifiers.length > 0
-      ? `metafields(identifiers: $metafieldIdentifiers) {
-        id
-        namespace
-        key
-        value
-        type
-      }`
-      : "";
-
   const query = `#graphql
-    query getProduct($id: ID! ${metafieldIdentifiers.length > 0 ? ", $metafieldIdentifiers: [HasMetafieldsIdentifier!]!" : ""}) {
+    query getProduct($id: ID!) {
       product(id: $id) {
         id
         title
@@ -678,15 +705,63 @@ export async function syncSingleProduct(shop, admin, productId) {
             }
           }
         }
-        ${metafieldQueryPart}
+        plusSizeMetafield: metafield(namespace: "custom", key: "plus_size_collection_image") {
+          id
+          namespace
+          key
+          value
+          type
+          reference {
+            ... on MediaImage { image { url } }
+            ... on GenericFile { url }
+          }
+        }
+        motbMetafield: metafield(namespace: "custom", key: "mother_of_the_bride_collection_image") {
+          id
+          namespace
+          key
+          value
+          type
+          reference {
+            ... on MediaImage { image { url } }
+            ... on GenericFile { url }
+          }
+        }
+        weddingMetafield: metafield(namespace: "custom", key: "wedding_collection_image") {
+          id
+          namespace
+          key
+          value
+          type
+          reference {
+            ... on MediaImage { image { url } }
+            ... on GenericFile { url }
+          }
+        }
+        metafields(first: 250) {
+          nodes {
+            id
+            namespace
+            key
+            value
+            type
+            reference {
+              ... on MediaImage {
+                image {
+                  url
+                }
+              }
+              ... on GenericFile {
+                url
+              }
+            }
+          }
+        }
       }
     }
   `;
 
   const variables = { id: productId };
-  if (metafieldIdentifiers.length > 0) {
-    variables.metafieldIdentifiers = metafieldIdentifiers;
-  }
 
   const response = await admin.graphql(query, { variables });
   const responseJson = await response.json();
@@ -697,8 +772,8 @@ export async function syncSingleProduct(shop, admin, productId) {
   }
 
   const product = responseJson.data?.product;
-  if (!product || !product.onlineStoreUrl || product.status !== "ACTIVE") {
-    console.warn(`CFP: Product ${productId} not found, draft, or not published. Deleting from DB/Meili.`);
+  if (!product || product.status !== "ACTIVE") {
+    console.warn(`CFP: Product ${productId} not found or not ACTIVE. Deleting from DB/Meili.`);
     await prisma.product.deleteMany({ where: { id: productId } });
     // Also remove from Meilisearch
     try {
@@ -725,8 +800,21 @@ export async function syncSingleProduct(shop, admin, productId) {
 
   const formattedMetafields = {};
   if (product.metafields) {
-    product.metafields.forEach((m) => {
-      if (m && m.value) formattedMetafields[`metafield_${m.namespace}.${m.key}`] = m.value;
+    if (!product.metafields.nodes) product.metafields.nodes = [];
+    if (product.plusSizeMetafield) product.metafields.nodes.push(product.plusSizeMetafield);
+    if (product.motbMetafield) product.metafields.nodes.push(product.motbMetafield);
+    if (product.weddingMetafield) product.metafields.nodes.push(product.weddingMetafield);
+
+    product.metafields.nodes.forEach((m) => {
+      if (m && m.value) {
+        let val = m.value;
+        if (m.reference && m.reference.image && m.reference.image.url) {
+          val = m.reference.image.url;
+        } else if (m.reference && m.reference.url) {
+          val = m.reference.url;
+        }
+        formattedMetafields[`metafield_${m.namespace}.${m.key}`] = val;
+      }
     });
   }
 
@@ -785,3 +873,84 @@ export async function syncSingleProduct(shop, admin, productId) {
   console.log(`CFP: Webhook sync complete for product ${productId}.`);
   return productId;
 }
+
+/**
+ * Synchronize the products of a specific collection.
+ * Detects products that were added or removed from the collection and syncs them.
+ * Useful for COLLECTIONS_UPDATE webhooks where product lists might change.
+ */
+export async function syncCollectionProducts(shop, admin, collectionId) {
+  console.log(`CFP: Syncing products for collection ${collectionId} in background...`);
+  
+  // 1. Fetch all product IDs from Shopify for this collection
+  let hasNextPage = true;
+  let cursor = null;
+  const shopifyProductIds = new Set();
+  
+  while (hasNextPage) {
+    const query = `#graphql
+      query getCollectionProducts($id: ID!, $cursor: String) {
+        collection(id: $id) {
+          products(first: 250, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes { id }
+          }
+        }
+      }
+    `;
+    try {
+      const response = await admin.graphql(query, { variables: { id: collectionId, cursor } });
+      const responseJson = await response.json();
+      if (responseJson.errors) {
+        console.error("CFP: GraphQL error fetching collection products", responseJson.errors);
+        break;
+      }
+      
+      const products = responseJson.data?.collection?.products;
+      if (!products) break;
+      
+      products.nodes.forEach(n => shopifyProductIds.add(n.id));
+      hasNextPage = products.pageInfo.hasNextPage;
+      cursor = products.pageInfo.endCursor;
+    } catch (e) {
+      console.error("CFP: Error fetching collection products", e);
+      break;
+    }
+  }
+  
+  // 2. Fetch all product IDs currently linked to this collection in DB
+  const dbLinks = await prisma.productCollection.findMany({
+    where: { collectionId },
+    select: { productId: true }
+  });
+  const dbProductIds = new Set(dbLinks.map(link => link.productId));
+  
+  // 3. Find differences
+  const productsToSync = new Set();
+  
+  // Added to collection
+  for (const id of shopifyProductIds) {
+    if (!dbProductIds.has(id)) productsToSync.add(id);
+  }
+  
+  // Removed from collection
+  for (const id of dbProductIds) {
+    if (!shopifyProductIds.has(id)) productsToSync.add(id);
+  }
+  
+  // 4. Sync affected products
+  if (productsToSync.size > 0) {
+    console.log(`CFP: Found ${productsToSync.size} product differences for collection ${collectionId}. Syncing...`);
+    for (const productId of productsToSync) {
+      try {
+        await syncSingleProduct(shop, admin, productId);
+      } catch(e) {
+        console.error(`CFP: Error syncing product ${productId} during collection update`, e);
+      }
+    }
+    console.log(`CFP: Finished syncing product differences for collection ${collectionId}.`);
+  } else {
+    console.log(`CFP: No product differences found for collection ${collectionId}.`);
+  }
+}
+
