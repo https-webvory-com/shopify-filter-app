@@ -288,14 +288,14 @@ async function processSyncChunk(jobId, shop, admin) {
             name
             values
           }
-          collections(first: 100) {
+          collections(first: 250) {
             nodes {
               id
               title
               handle
             }
           }
-          variants(first: 100) {
+          variants(first: 250) {
             nodes {
               id
               sku
@@ -654,14 +654,14 @@ export async function syncSingleProduct(shop, admin, productId) {
           name
           values
         }
-        collections(first: 100) {
+        collections(first: 250) {
           nodes {
             id
             title
             handle
           }
         }
-        variants(first: 100) {
+        variants(first: 250) {
           nodes {
             id
             sku
