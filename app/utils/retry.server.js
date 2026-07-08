@@ -7,8 +7,10 @@ export async function withRetry(operation, maxRetries = 3, baseDelayMs = 2000) {
         throw error;
       }
       const delay = baseDelayMs * attempt;
-      console.warn(`CFP: Operation failed. Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      console.warn(
+        `CFP: Operation failed. Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 }

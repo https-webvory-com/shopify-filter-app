@@ -397,10 +397,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const collectionsList = document.getElementById("cfp-search-collections");
     
     loader.style.display = "none"; // Hide old spinner entirely
-    console.log("CFP: renderLoading called with", isLoading);
-    
     if (isLoading) {
-      console.log("CFP: Injecting skeletons into productsGrid and collectionsList");
       body.classList.add("cfp-has-results"); // Keep body visible for skeletons
       
       let skeletonProducts = '';
@@ -754,7 +751,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
-    console.log("CFP: renderProducts called with", data.products ? data.products.length : 0, "products");
+
     const grid = document.getElementById("cfp-search-products");
     const products = data.products || [];
 
@@ -949,7 +946,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       let wishlistHtml = '';
-      console.log("CFP SEARCH DEBUG: data.globalSettings.integrations =>", data.globalSettings?.integrations);
+
       if (typeof window.pageDataMap !== 'undefined' && data.globalSettings && data.globalSettings.integrations && data.globalSettings.integrations.wishlist === true) {
         wishlistHtml = `<div class="wishlist-btn-container" data-product-id="${p.handle}" style="position: absolute; top: 10px; right: 10px; z-index: 99;">
              <button type="button" class="wishlist-toggle-btn" style="background: transparent; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none; box-shadow: none;">

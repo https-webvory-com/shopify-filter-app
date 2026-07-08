@@ -66,7 +66,7 @@
     return (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
   }
 
-  console.log("check againg 6")
+  // Production build - debug logs removed
 
   // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const PAGE_SIZE = 28;
@@ -438,7 +438,6 @@
 
   function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
-    console.log('[CFP] First product data:', products[0]);
     // Get or create our dedicated products container (a plain div, never Dawn's ul)
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
@@ -584,17 +583,30 @@
         let customImage = null;
         const handle = collectionHandle || '';
         
-        if (handle.includes('plus-size') && product['metafield_custom.plus_size_collection_image']) {
-            customImage = product['metafield_custom.plus_size_collection_image'];
-        } else if ((handle.includes('mother-of-the-bride') || handle.includes('mob')) && product['metafield_custom.mother_of_the_bride_collection_image']) {
-            customImage = product['metafield_custom.mother_of_the_bride_collection_image'];
-        } else if (handle.includes('wedding') && product['metafield_custom.wedding_collection_image']) {
-            customImage = product['metafield_custom.wedding_collection_image'];
-        }
+        let urlParams = new URLSearchParams(window.location.search);
+        let activeCollections = urlParams.getAll('collections').join(' ').toLowerCase();
+        let handleAndFilters = (handle + ' ' + activeCollections).toLowerCase();
+        
+        // Parse metafield image - can be string URL or object with url property
+        const parseMetafieldImage = (val) => {
+          if (!val) return null;
+          if (typeof val === 'string') return val;
+          if (typeof val === 'object') {
+            return val.url || val.src || val.image?.url || null;
+          }
+          return null;
+        };
 
-        console.log(`[CFP Image Debug] Handle: "${handle}", Product ID: ${product.id}`);
-        console.log(`[CFP Image Debug] wedding metafield:`, product['metafield_custom.wedding_collection_image']);
-        console.log(`[CFP Image Debug] customImage determined:`, customImage);
+        if ((handleAndFilters.includes('plus-size') || handleAndFilters.includes('plus size'))) {
+            customImage = parseMetafieldImage(product['metafield_custom.plus_size_collection_image']);
+        } else {
+            let mobImage = parseMetafieldImage(product['metafield_custom.mob_collection_image']) || parseMetafieldImage(product['metafield_custom.mother_of_the_bride_collection_image']);
+            if ((handleAndFilters.includes('mother-of-the-bride') || handleAndFilters.includes('mob') || handleAndFilters.includes('mother of the bride')) && mobImage) {
+                customImage = mobImage;
+            } else if (handleAndFilters.includes('wedding')) {
+                customImage = parseMetafieldImage(product['metafield_custom.wedding_collection_image']);
+            }
+        }
   
         // Resize shopify image URL to avoid massive memory usage on storefront
         const getResizedImageUrl = (url, size = '600x') => {
@@ -854,7 +866,6 @@
       `;
     }).join('');
     
-    console.log('[CFP] Generated HTML length:', productsHtml.length);
     if (productsHtml.length < 100 && products.length > 0) {
       console.error('[CFP] HTML generation failed or returned empty!', productsHtml);
     }

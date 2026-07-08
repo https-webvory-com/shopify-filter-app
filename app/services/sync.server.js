@@ -39,21 +39,30 @@ export async function formatAndPushToMeili(products) {
       priceMin: parseFloat(p.priceMin),
       priceMax: parseFloat(p.priceMax),
       tags: p.tags || [],
-      collections: p.collections ? p.collections.map((c) => c.collectionId) : [],
+      collections: p.collections
+        ? p.collections.map((c) => c.collectionId)
+        : [],
       available,
-      status: p.status ? p.status.toUpperCase() : 'ACTIVE',
+      status: p.status ? p.status.toUpperCase() : "ACTIVE",
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
       // ✅ All product images — no limit, full gallery
       images: Array.isArray(p.images) ? p.images : [],
       // ✅ Product options array for storefront swatch rendering
-      options: p.options ? p.options.map(opt => ({ name: opt.name, values: Array.isArray(opt.values) ? opt.values : [opt.values] })) : [],
+      options: p.options
+        ? p.options.map((opt) => ({
+            name: opt.name,
+            values: Array.isArray(opt.values) ? opt.values : [opt.values],
+          }))
+        : [],
       // ✅ Variant prices + options for price display and swatch rendering
       // This eliminates the need for a second Postgres query on every filter/search request
       variantPrices: p.variants
         ? p.variants.map((v) => ({
             id: v.id ? v.id.split("/").pop() : "",
             price: parseFloat(v.price),
-            compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : null,
+            compareAtPrice: v.compareAtPrice
+              ? parseFloat(v.compareAtPrice)
+              : null,
             available: v.available !== undefined ? v.available : true,
             option1: v.option1 || null,
             option2: v.option2 || null,
@@ -69,7 +78,9 @@ export async function formatAndPushToMeili(products) {
   try {
     const index = meiliClient.index("products");
     const task = await index.addDocuments(documents);
-    console.log(`CFP: Pushed ${documents.length} products to Meilisearch (Task ID: ${task.taskUid})`);
+    console.log(
+      `CFP: Pushed ${documents.length} products to Meilisearch (Task ID: ${task.taskUid})`,
+    );
   } catch (error) {
     console.error("CFP: Failed to push to Meilisearch", error);
   }
@@ -82,7 +93,7 @@ async function updateMeiliSettings(shop) {
   try {
     const index = meiliClient.index("products");
     const dynamicKeys = new Set();
-    
+
     // Get all options
     const products = await prisma.product.findMany({
       where: { shop },
@@ -115,7 +126,7 @@ async function updateMeiliSettings(shop) {
       "available",
       "status",
       "priceMin",
-      ...Array.from(dynamicKeys)
+      ...Array.from(dynamicKeys),
     ];
 
     const searchableAttributes = [
@@ -137,28 +148,34 @@ async function updateMeiliSettings(shop) {
     if (process.env.GEMINI_API_KEY) {
       await index.updateEmbedders({
         default: {
-          source: 'rest',
+          source: "rest",
           url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY}`,
           request: {
-            "model": "models/gemini-embedding-2",
-            "content": {
-              "parts": [{ "text": "{{text}}" }]
-            }
+            model: "models/gemini-embedding-2",
+            content: {
+              parts: [{ text: "{{text}}" }],
+            },
           },
           response: {
-            "embedding": {
-              "values": "{{embedding}}"
-            }
+            embedding: {
+              values: "{{embedding}}",
+            },
           },
-          documentTemplate: "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}"
-        }
+          documentTemplate:
+            "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}",
+        },
       });
-      console.log(`CFP: AI Vector embedder (Gemini) settings configured for ${shop}`);
+      console.log(
+        `CFP: AI Vector embedder (Gemini) settings configured for ${shop}`,
+      );
     }
-    
+
     console.log(`CFP: Meilisearch settings updated successfully for ${shop}`);
   } catch (error) {
-    console.error(`CFP: Failed to update Meilisearch settings for ${shop}`, error);
+    console.error(
+      `CFP: Failed to update Meilisearch settings for ${shop}`,
+      error,
+    );
   }
 }
 
@@ -243,6 +260,41 @@ async function processSyncChunk(jobId, shop, admin) {
   const metafieldSettings = await prisma.filterSetting.findMany({
     where: { shop, type: "metafield" },
   });
+
+  let publishedCollectionIds = null;
+  try {
+    publishedCollectionIds = new Set();
+    let hasNext = true;
+    let colCursor = null;
+    while (hasNext) {
+      const colQuery = `#graphql
+         query getPublishedCollections($cursor: String) {
+           collections(first: 250, after: $cursor, query: "published_status:published") {
+             pageInfo { hasNextPage endCursor }
+             nodes { id }
+           }
+         }
+       `;
+      const colRes = await admin.graphql(colQuery, {
+        variables: { cursor: colCursor },
+      });
+      const colData = await colRes.json();
+      for (const c of colData.data.collections.nodes) {
+        publishedCollectionIds.add(c.id);
+      }
+      hasNext = colData.data.collections.pageInfo.hasNextPage;
+      colCursor = colData.data.collections.pageInfo.endCursor;
+    }
+    console.log(
+      `CFP: Found ${publishedCollectionIds.size} published collections for ${shop}`,
+    );
+  } catch (e) {
+    console.error(
+      "CFP: Error fetching published collections, skipping filter",
+      e,
+    );
+    publishedCollectionIds = null;
+  }
 
   const query = `#graphql
     query getProducts($cursor: String) {
@@ -353,7 +405,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   let hasNextPage = true;
   let cursor = job.cursor;
-  
+
   // We process in a while loop but we save state every chunk
   while (hasNextPage) {
     try {
@@ -363,7 +415,9 @@ async function processSyncChunk(jobId, shop, admin) {
       const responseJson = await response.json();
 
       if (responseJson.errors) {
-        throw new Error("GraphQL Errors: " + JSON.stringify(responseJson.errors));
+        throw new Error(
+          "GraphQL Errors: " + JSON.stringify(responseJson.errors),
+        );
       }
 
       const productsData = responseJson.data?.products;
@@ -382,7 +436,9 @@ async function processSyncChunk(jobId, shop, admin) {
 
         const formattedOptions = {};
         p.options.forEach((opt) => {
-          formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values) ? opt.values : [opt.values];
+          formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values)
+            ? opt.values
+            : [opt.values];
         });
 
         const formattedMetafields = {};
@@ -391,11 +447,14 @@ async function processSyncChunk(jobId, shop, admin) {
           if (p.plusSizeMetafield) p.metafields.nodes.push(p.plusSizeMetafield);
           if (p.motbMetafield) p.metafields.nodes.push(p.motbMetafield);
           if (p.weddingMetafield) p.metafields.nodes.push(p.weddingMetafield);
-          
+
           p.metafields.nodes.forEach((m) => {
             if (m && m.value) {
               let val = m.value;
-              console.log(`CFP: Debug Metafield ${m.namespace}.${m.key} ->`, JSON.stringify(m));
+              console.log(
+                `CFP: Debug Metafield ${m.namespace}.${m.key} ->`,
+                JSON.stringify(m),
+              );
               if (m.reference && m.reference.image && m.reference.image.url) {
                 val = m.reference.image.url;
               } else if (m.reference && m.reference.url) {
@@ -417,15 +476,29 @@ async function processSyncChunk(jobId, shop, admin) {
           priceMin,
           priceMax,
           tags: p.tags || [],
-          collections: p.collections.nodes.map((c) => c.id),
-          collection_titles: p.collections.nodes.map((c) => c.title),
+          collections: p.collections.nodes
+            .filter(
+              (c) =>
+                publishedCollectionIds === null ||
+                publishedCollectionIds.has(c.id),
+            )
+            .map((c) => c.id),
+          collection_titles: p.collections.nodes
+            .filter(
+              (c) =>
+                publishedCollectionIds === null ||
+                publishedCollectionIds.has(c.id),
+            )
+            .map((c) => c.title),
           available,
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: Date.now(),
           images: p.images.nodes.map((img) => img.url), // all images, no limit
           variantPrices: p.variants.nodes.map((v) => {
             const optionsList = p.options || [];
-            let option1 = null, option2 = null, option3 = null;
+            let option1 = null,
+              option2 = null,
+              option3 = null;
             (v.selectedOptions || []).forEach((selOpt) => {
               const idx = optionsList.findIndex((o) => o.name === selOpt.name);
               if (idx === 0) option1 = selOpt.value;
@@ -435,7 +508,9 @@ async function processSyncChunk(jobId, shop, admin) {
             return {
               id: v.id.split("/").pop(),
               price: parseFloat(v.price),
-              compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : null,
+              compareAtPrice: v.compareAtPrice
+                ? parseFloat(v.compareAtPrice)
+                : null,
               available: v.availableForSale === true,
               option1,
               option2,
@@ -457,11 +532,17 @@ async function processSyncChunk(jobId, shop, admin) {
           }
         })(),
         // Meili push (no DB re-read needed anymore!)
-        meiliClient.index("products").addDocuments(meiliDocs).then((task) => {
-          console.log(`CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`);
-        }).catch((e) => {
-          console.error("CFP: Meilisearch push failed", e);
-        }),
+        meiliClient
+          .index("products")
+          .addDocuments(meiliDocs)
+          .then((task) => {
+            console.log(
+              `CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`,
+            );
+          })
+          .catch((e) => {
+            console.error("CFP: Meilisearch push failed", e);
+          }),
       ]);
 
       // Update Job State
@@ -474,11 +555,12 @@ async function processSyncChunk(jobId, shop, admin) {
         },
       });
 
-      console.log(`CFP: SyncJob ${jobId} processed ${job.productsProcessed} products so far.`);
-      
-      // Small delay to yield event loop and avoid Shopify rate limits
-      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log(
+        `CFP: SyncJob ${jobId} processed ${job.productsProcessed} products so far.`,
+      );
 
+      // Small delay to yield event loop and avoid Shopify rate limits
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (err) {
       console.error(`CFP: Error processing chunk for job ${jobId}`, err);
       await prisma.syncJob.update({
@@ -550,15 +632,19 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       where: { productId: product.id },
       select: { id: true },
     });
-    const incomingVariantIds = product.variants.nodes.map(v => v.id);
-    const variantsToDelete = existingVariants.filter(ev => !incomingVariantIds.includes(ev.id)).map(v => v.id);
-    
+    const incomingVariantIds = product.variants.nodes.map((v) => v.id);
+    const variantsToDelete = existingVariants
+      .filter((ev) => !incomingVariantIds.includes(ev.id))
+      .map((v) => v.id);
+
     if (variantsToDelete.length > 0) {
       await tx.variant.deleteMany({ where: { id: { in: variantsToDelete } } });
     }
 
     for (const variant of product.variants.nodes) {
-      let option1 = null, option2 = null, option3 = null;
+      let option1 = null,
+        option2 = null,
+        option3 = null;
       variant.selectedOptions.forEach((selOpt) => {
         const optIndex = optionsList.findIndex((o) => o.name === selOpt.name);
         if (optIndex === 0) option1 = selOpt.value;
@@ -574,37 +660,50 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
         update: {
           sku: variant.sku || null,
           price: parseFloat(variant.price),
-          compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
+          compareAtPrice: variant.compareAtPrice
+            ? parseFloat(variant.compareAtPrice)
+            : null,
           available: available,
           inventory: inventory,
           imageUrl: variant.image?.url || null,
-          option1, option2, option3,
+          option1,
+          option2,
+          option3,
         },
         create: {
           id: variant.id,
           productId: product.id,
           sku: variant.sku || null,
           price: parseFloat(variant.price),
-          compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
+          compareAtPrice: variant.compareAtPrice
+            ? parseFloat(variant.compareAtPrice)
+            : null,
           available: available,
           inventory: inventory,
           imageUrl: variant.image?.url || null,
-          option1, option2, option3,
-        }
+          option1,
+          option2,
+          option3,
+        },
       });
     }
 
     // Smart Sync Collections
     const existingCollections = await tx.productCollection.findMany({
       where: { productId: product.id },
-      select: { collectionId: true }
+      select: { collectionId: true },
     });
-    const incomingCollectionIds = product.collections.nodes.map(c => c.id);
-    const collectionsToDelete = existingCollections.filter(ec => !incomingCollectionIds.includes(ec.collectionId)).map(c => c.collectionId);
+    const incomingCollectionIds = product.collections.nodes.map((c) => c.id);
+    const collectionsToDelete = existingCollections
+      .filter((ec) => !incomingCollectionIds.includes(ec.collectionId))
+      .map((c) => c.collectionId);
 
     if (collectionsToDelete.length > 0) {
       await tx.productCollection.deleteMany({
-        where: { productId: product.id, collectionId: { in: collectionsToDelete } }
+        where: {
+          productId: product.id,
+          collectionId: { in: collectionsToDelete },
+        },
       });
     }
 
@@ -612,12 +711,19 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       await tx.collection.upsert({
         where: { id: collection.id },
         update: { title: collection.title, handle: collection.handle },
-        create: { id: collection.id, shop, title: collection.title, handle: collection.handle },
+        create: {
+          id: collection.id,
+          shop,
+          title: collection.title,
+          handle: collection.handle,
+        },
       });
 
-      if (!existingCollections.some(ec => ec.collectionId === collection.id)) {
+      if (
+        !existingCollections.some((ec) => ec.collectionId === collection.id)
+      ) {
         await tx.productCollection.create({
-          data: { productId: product.id, collectionId: collection.id }
+          data: { productId: product.id, collectionId: collection.id },
         });
       }
     }
@@ -626,21 +732,39 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
     if (product.metafields && product.metafields.nodes) {
       const existingMetafields = await tx.productMetafield.findMany({
         where: { productId: product.id },
-        select: { id: true }
+        select: { id: true },
       });
-      const validMetafields = product.metafields.nodes.filter(m => m && m.value);
-      const incomingMetafieldIds = validMetafields.map(m => m.id);
-      const metafieldsToDelete = existingMetafields.filter(em => !incomingMetafieldIds.includes(em.id)).map(m => m.id);
+      const validMetafields = product.metafields.nodes.filter(
+        (m) => m && m.value,
+      );
+      const incomingMetafieldIds = validMetafields.map((m) => m.id);
+      const metafieldsToDelete = existingMetafields
+        .filter((em) => !incomingMetafieldIds.includes(em.id))
+        .map((m) => m.id);
 
       if (metafieldsToDelete.length > 0) {
-        await tx.productMetafield.deleteMany({ where: { id: { in: metafieldsToDelete } } });
+        await tx.productMetafield.deleteMany({
+          where: { id: { in: metafieldsToDelete } },
+        });
       }
 
       for (const metafield of validMetafields) {
         await tx.productMetafield.upsert({
           where: { id: metafield.id },
-          update: { value: metafield.value, type: metafield.type, namespace: metafield.namespace, key: metafield.key },
-          create: { id: metafield.id, productId: product.id, namespace: metafield.namespace, key: metafield.key, value: metafield.value, type: metafield.type }
+          update: {
+            value: metafield.value,
+            type: metafield.type,
+            namespace: metafield.namespace,
+            key: metafield.key,
+          },
+          create: {
+            id: metafield.id,
+            productId: product.id,
+            namespace: metafield.namespace,
+            key: metafield.key,
+            value: metafield.value,
+            type: metafield.type,
+          },
         });
       }
     }
@@ -767,13 +891,18 @@ export async function syncSingleProduct(shop, admin, productId) {
   const responseJson = await response.json();
 
   if (responseJson.errors) {
-    console.error(`CFP: GraphQL Errors syncing product ${productId}:`, responseJson.errors);
+    console.error(
+      `CFP: GraphQL Errors syncing product ${productId}:`,
+      responseJson.errors,
+    );
     throw new Error(`Failed to fetch product ${productId} from Shopify`);
   }
 
   const product = responseJson.data?.product;
   if (!product || product.status !== "ACTIVE") {
-    console.warn(`CFP: Product ${productId} not found or not ACTIVE. Deleting from DB/Meili.`);
+    console.warn(
+      `CFP: Product ${productId} not found or not ACTIVE. Deleting from DB/Meili.`,
+    );
     await prisma.product.deleteMany({ where: { id: productId } });
     // Also remove from Meilisearch
     try {
@@ -795,15 +924,20 @@ export async function syncSingleProduct(shop, admin, productId) {
 
   const formattedOptions = {};
   product.options.forEach((opt) => {
-    formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values) ? opt.values : [opt.values];
+    formattedOptions[`option_${opt.name}`] = Array.isArray(opt.values)
+      ? opt.values
+      : [opt.values];
   });
 
   const formattedMetafields = {};
   if (product.metafields) {
     if (!product.metafields.nodes) product.metafields.nodes = [];
-    if (product.plusSizeMetafield) product.metafields.nodes.push(product.plusSizeMetafield);
-    if (product.motbMetafield) product.metafields.nodes.push(product.motbMetafield);
-    if (product.weddingMetafield) product.metafields.nodes.push(product.weddingMetafield);
+    if (product.plusSizeMetafield)
+      product.metafields.nodes.push(product.plusSizeMetafield);
+    if (product.motbMetafield)
+      product.metafields.nodes.push(product.motbMetafield);
+    if (product.weddingMetafield)
+      product.metafields.nodes.push(product.weddingMetafield);
 
     product.metafields.nodes.forEach((m) => {
       if (m && m.value) {
@@ -836,7 +970,9 @@ export async function syncSingleProduct(shop, admin, productId) {
     images: product.images.nodes.map((img) => img.url), // all images, no limit
     variantPrices: product.variants.nodes.map((v) => {
       const optionsList = product.options || [];
-      let option1 = null, option2 = null, option3 = null;
+      let option1 = null,
+        option2 = null,
+        option3 = null;
       (v.selectedOptions || []).forEach((selOpt) => {
         const idx = optionsList.findIndex((o) => o.name === selOpt.name);
         if (idx === 0) option1 = selOpt.value;
@@ -861,11 +997,17 @@ export async function syncSingleProduct(shop, admin, productId) {
   // ✅ Parallel: DB upsert + Meilisearch push at the same time
   await Promise.all([
     smartUpsertProduct(shop, product, prisma),
-    meiliClient.index("products").addDocuments([meiliDoc]).then((task) => {
-      console.log(`CFP: Pushed product ${meiliDoc.id} to Meilisearch (Task ID: ${task.taskUid})`);
-    }).catch((e) => {
-      console.error("CFP: Failed to push product to Meilisearch", e);
-    }),
+    meiliClient
+      .index("products")
+      .addDocuments([meiliDoc])
+      .then((task) => {
+        console.log(
+          `CFP: Pushed product ${meiliDoc.id} to Meilisearch (Task ID: ${task.taskUid})`,
+        );
+      })
+      .catch((e) => {
+        console.error("CFP: Failed to push product to Meilisearch", e);
+      }),
   ]);
 
   await autoSeedOptionFilters(shop);
@@ -880,13 +1022,15 @@ export async function syncSingleProduct(shop, admin, productId) {
  * Useful for COLLECTIONS_UPDATE webhooks where product lists might change.
  */
 export async function syncCollectionProducts(shop, admin, collectionId) {
-  console.log(`CFP: Syncing products for collection ${collectionId} in background...`);
-  
+  console.log(
+    `CFP: Syncing products for collection ${collectionId} in background...`,
+  );
+
   // 1. Fetch all product IDs from Shopify for this collection
   let hasNextPage = true;
   let cursor = null;
   const shopifyProductIds = new Set();
-  
+
   while (hasNextPage) {
     const query = `#graphql
       query getCollectionProducts($id: ID!, $cursor: String) {
@@ -899,17 +1043,22 @@ export async function syncCollectionProducts(shop, admin, collectionId) {
       }
     `;
     try {
-      const response = await admin.graphql(query, { variables: { id: collectionId, cursor } });
+      const response = await admin.graphql(query, {
+        variables: { id: collectionId, cursor },
+      });
       const responseJson = await response.json();
       if (responseJson.errors) {
-        console.error("CFP: GraphQL error fetching collection products", responseJson.errors);
+        console.error(
+          "CFP: GraphQL error fetching collection products",
+          responseJson.errors,
+        );
         break;
       }
-      
+
       const products = responseJson.data?.collection?.products;
       if (!products) break;
-      
-      products.nodes.forEach(n => shopifyProductIds.add(n.id));
+
+      products.nodes.forEach((n) => shopifyProductIds.add(n.id));
       hasNextPage = products.pageInfo.hasNextPage;
       cursor = products.pageInfo.endCursor;
     } catch (e) {
@@ -917,40 +1066,48 @@ export async function syncCollectionProducts(shop, admin, collectionId) {
       break;
     }
   }
-  
+
   // 2. Fetch all product IDs currently linked to this collection in DB
   const dbLinks = await prisma.productCollection.findMany({
     where: { collectionId },
-    select: { productId: true }
+    select: { productId: true },
   });
-  const dbProductIds = new Set(dbLinks.map(link => link.productId));
-  
+  const dbProductIds = new Set(dbLinks.map((link) => link.productId));
+
   // 3. Find differences
   const productsToSync = new Set();
-  
+
   // Added to collection
   for (const id of shopifyProductIds) {
     if (!dbProductIds.has(id)) productsToSync.add(id);
   }
-  
+
   // Removed from collection
   for (const id of dbProductIds) {
     if (!shopifyProductIds.has(id)) productsToSync.add(id);
   }
-  
+
   // 4. Sync affected products
   if (productsToSync.size > 0) {
-    console.log(`CFP: Found ${productsToSync.size} product differences for collection ${collectionId}. Syncing...`);
+    console.log(
+      `CFP: Found ${productsToSync.size} product differences for collection ${collectionId}. Syncing...`,
+    );
     for (const productId of productsToSync) {
       try {
         await syncSingleProduct(shop, admin, productId);
-      } catch(e) {
-        console.error(`CFP: Error syncing product ${productId} during collection update`, e);
+      } catch (e) {
+        console.error(
+          `CFP: Error syncing product ${productId} during collection update`,
+          e,
+        );
       }
     }
-    console.log(`CFP: Finished syncing product differences for collection ${collectionId}.`);
+    console.log(
+      `CFP: Finished syncing product differences for collection ${collectionId}.`,
+    );
   } else {
-    console.log(`CFP: No product differences found for collection ${collectionId}.`);
+    console.log(
+      `CFP: No product differences found for collection ${collectionId}.`,
+    );
   }
 }
-

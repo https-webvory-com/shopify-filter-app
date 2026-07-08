@@ -3,7 +3,11 @@ import prisma from "../db.server";
 /**
  * Fetches the active merchandising rule for a given shop and collection.
  */
-export async function getActiveRuleForCollection(shop, collectionTitle, currentCustomerTags = []) {
+export async function getActiveRuleForCollection(
+  shop,
+  collectionTitle,
+  currentCustomerTags = [],
+) {
   if (!shop || !collectionTitle) return null;
 
   const now = new Date();
@@ -16,16 +20,16 @@ export async function getActiveRuleForCollection(shop, collectionTitle, currentC
         {
           OR: [
             { collections: { has: collectionTitle } },
-            { collections: { equals: [] } }
-          ]
+            { collections: { equals: [] } },
+          ],
         },
         {
-          OR: [{ startDate: null }, { startDate: { lte: now } }]
+          OR: [{ startDate: null }, { startDate: { lte: now } }],
         },
         {
-          OR: [{ endDate: null }, { endDate: { gte: now } }]
-        }
-      ]
+          OR: [{ endDate: null }, { endDate: { gte: now } }],
+        },
+      ],
     },
     include: { conditions: true },
     orderBy: { createdAt: "desc" },
@@ -37,10 +41,13 @@ export async function getActiveRuleForCollection(shop, collectionTitle, currentC
     }
 
     // Rule has specific customer tags, check if currentCustomerTags intersect
-    const requiredTags = rule.customerTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-    const userTags = currentCustomerTags.map(t => t.trim().toLowerCase());
+    const requiredTags = rule.customerTags
+      .split(",")
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
 
-    const hasMatchingTag = requiredTags.some(tag => userTags.includes(tag));
+    const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
     if (hasMatchingTag) {
       return rule;
     }
@@ -52,7 +59,11 @@ export async function getActiveRuleForCollection(shop, collectionTitle, currentC
 /**
  * Fetches the active merchandising rule for a given shop and search query.
  */
-export async function getActiveRuleForSearch(shop, searchQuery, currentCustomerTags = []) {
+export async function getActiveRuleForSearch(
+  shop,
+  searchQuery,
+  currentCustomerTags = [],
+) {
   if (!shop || !searchQuery) return null;
 
   const now = new Date();
@@ -65,12 +76,12 @@ export async function getActiveRuleForSearch(shop, searchQuery, currentCustomerT
       ruleType: "search",
       AND: [
         {
-          OR: [{ startDate: null }, { startDate: { lte: now } }]
+          OR: [{ startDate: null }, { startDate: { lte: now } }],
         },
         {
-          OR: [{ endDate: null }, { endDate: { gte: now } }]
-        }
-      ]
+          OR: [{ endDate: null }, { endDate: { gte: now } }],
+        },
+      ],
     },
     include: { conditions: true },
     orderBy: { createdAt: "desc" },
@@ -80,18 +91,21 @@ export async function getActiveRuleForSearch(shop, searchQuery, currentCustomerT
 
   for (const rule of rules) {
     if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
-    
+
     // Check if any of the search queries match the user's query
-    if (rule.searchQueries.some(q => q.toLowerCase() === queryLower)) {
+    if (rule.searchQueries.some((q) => q.toLowerCase() === queryLower)) {
       if (!rule.customerTags || rule.customerTags.trim() === "") {
         return rule; // Rule applies to everyone
       }
 
       // Rule has specific customer tags, check if currentCustomerTags intersect
-      const requiredTags = rule.customerTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      const userTags = currentCustomerTags.map(t => t.trim().toLowerCase());
+      const requiredTags = rule.customerTags
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
 
-      const hasMatchingTag = requiredTags.some(tag => userTags.includes(tag));
+      const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
       if (hasMatchingTag) {
         return rule;
       }
@@ -132,7 +146,11 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   return specificRule;
 }
 
-export async function getActivePinningRuleForSearch(shop, searchQuery, searchType = "page") {
+export async function getActivePinningRuleForSearch(
+  shop,
+  searchQuery,
+  searchType = "page",
+) {
   if (!shop || !searchQuery) return null;
 
   const activeRules = await prisma.pinnedProductRule.findMany({
@@ -148,13 +166,16 @@ export async function getActivePinningRuleForSearch(shop, searchQuery, searchTyp
 
   for (const rule of activeRules) {
     if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
-    
+
     // Check if the rule applies to this type of search (instant vs page)
-    if (rule.applyToSearchType !== "both" && rule.applyToSearchType !== searchType) {
+    if (
+      rule.applyToSearchType !== "both" &&
+      rule.applyToSearchType !== searchType
+    ) {
       continue;
     }
 
-    if (rule.searchQueries.some(q => q.toLowerCase() === queryLower)) {
+    if (rule.searchQueries.some((q) => q.toLowerCase() === queryLower)) {
       return rule;
     }
   }
@@ -278,7 +299,9 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
       if (Array.isArray(parsedPins)) {
         pinnedIds = parsedPins.map((p) => p.id);
       }
-    } catch (e) {console.error("Error parsing pinned products:", e);}
+    } catch (e) {
+      console.error("Error parsing pinned products:", e);
+    }
   }
 
   if (rule && rule.conditions && rule.conditions.length > 0) {
@@ -336,7 +359,8 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
   }
 
   // Determine if a custom sort is applied
-  const isCustomSort = sortBy && sortBy !== "best-selling" && sortBy !== "relevance";
+  const isCustomSort =
+    sortBy && sortBy !== "best-selling" && sortBy !== "relevance";
 
   // Sort logic
   filteredProducts.sort((a, b) => {
@@ -397,11 +421,17 @@ export function buildIncludeWhereClause(includeConditions) {
 
   for (const cond of includeConditions) {
     const field = cond.field || "";
-    
+
     if (["Price", "Available"].includes(field)) {
-      const min = cond.minValue && cond.minValue !== "" ? parseFloat(cond.minValue) : -999999999;
-      const max = cond.maxValue && cond.maxValue !== "" ? parseFloat(cond.maxValue) : 999999999;
-      
+      const min =
+        cond.minValue && cond.minValue !== ""
+          ? parseFloat(cond.minValue)
+          : -999999999;
+      const max =
+        cond.maxValue && cond.maxValue !== ""
+          ? parseFloat(cond.maxValue)
+          : 999999999;
+
       if (field === "Price") {
         OR.push({ priceMin: { gte: min, lte: max } });
       }
@@ -412,7 +442,10 @@ export function buildIncludeWhereClause(includeConditions) {
     }
 
     const valueString = cond.value || "";
-    const values = valueString.split(",").map(s => s.trim()).filter(Boolean);
+    const values = valueString
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     if (values.length === 0) continue;
 
@@ -426,7 +459,7 @@ export function buildIncludeWhereClause(includeConditions) {
       OR.push({ title: { in: values } });
     } else if (field === "Collections") {
       OR.push({
-        collections: { some: { collection: { title: { in: values } } } }
+        collections: { some: { collection: { title: { in: values } } } },
       });
     } else if (field.includes("(product option)")) {
       OR.push({
@@ -435,10 +468,10 @@ export function buildIncludeWhereClause(includeConditions) {
             OR: [
               { option1: { in: values } },
               { option2: { in: values } },
-              { option3: { in: values } }
-            ]
-          }
-        }
+              { option3: { in: values } },
+            ],
+          },
+        },
       });
     }
   }
@@ -446,4 +479,3 @@ export function buildIncludeWhereClause(includeConditions) {
   if (OR.length === 0) return null;
   return { OR };
 }
-

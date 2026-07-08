@@ -345,9 +345,16 @@ export const loader = async ({ request }) => {
     const hasMerchandisingExclude =
       activeRule?.conditions?.some((c) => c.action === "Exclude") ?? false;
 
-    // If pinning or merchandising exclude is active, we still need broader fetch
-    // to apply JS-side ordering correctly
+    // If pinning or merchandising exclude is active, we need broader fetch
+    // to apply JS-side ordering correctly.
+    // ⚡ PERFORMANCE FIX: Instead of fetching 1000 docs from offset 0,
+    // fetch only current page + extra buffer for pinned products injection.
+    // This means ALL 50k products are accessible via pagination!
     const needsBroadFetch = hasPinning || hasMerchandisingExclude;
+    // Fetch current page window + pinned products count as buffer
+    const pinnedBuffer = pinnedIds.length > 0 ? pinnedIds.length : 0;
+    const broadFetchLimit = limit + pinnedBuffer + 10; // e.g. 24 + pins + 10 safety buffer
+    const broadFetchOffset = Math.max(0, (page - 1) * limit - pinnedBuffer);
 
     const queries = [];
 
@@ -356,14 +363,15 @@ export const loader = async ({ request }) => {
       indexUid: "products",
       q: searchQuery,
       filter: allFiltersList,
-      limit: needsBroadFetch ? 1000 : limit,
-      offset: needsBroadFetch ? 0 : (page - 1) * limit,
+      limit: needsBroadFetch ? broadFetchLimit : limit,
+      offset: needsBroadFetch ? broadFetchOffset : (page - 1) * limit,
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
         "priceMin", "priceMax", "tags", "images", "variantPrices",
         "merchandisingImage", "options", "status", "available", "createdAt",
         "metafield_custom.plus_size_collection_image",
         "metafield_custom.mother_of_the_bride_collection_image",
+        "metafield_custom.mob_collection_image",
         "metafield_custom.wedding_collection_image"
       ],
     };
@@ -736,7 +744,13 @@ export const loader = async ({ request }) => {
     }
 
     const totalMs = Date.now() - startTime;
-    console.log(`CFP: api/filter completed in ${totalMs}ms (meili: ${meiliTime}ms, broadFetch: ${needsBroadFetch})`);
+    console.log(`CFP: api/filter completed in ${totalMs}ms (meili: ${meiliTime}ms, broadFetch: ${needsBroadFetch}, broadFetchLimit: ${needsBroadFetch ? broadFetchLimit : limit})`);
+
+    // ⚡ PERFORMANCE: Cache the response for 10 seconds on CDN/browser
+    // This avoids repeat API calls when user navigates back or re-renders
+    const responseHeaders = {
+      'Cache-Control': 'public, max-age=10, stale-while-revalidate=30',
+    };
 
     return data({
       products,
@@ -811,7 +825,7 @@ export const loader = async ({ request }) => {
           maxLimit: absoluteMaxPrice === -Infinity ? 100000 : absoluteMaxPrice,
         },
       },
-    });
+    }, { headers: responseHeaders });
   } catch (err) {
     console.error("API Filter Error: ", err);
     return data(
