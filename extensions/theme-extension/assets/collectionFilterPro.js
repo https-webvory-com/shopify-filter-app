@@ -596,7 +596,17 @@
         console.log(`[CFP Image Debug] wedding metafield:`, product['metafield_custom.wedding_collection_image']);
         console.log(`[CFP Image Debug] customImage determined:`, customImage);
   
+        // Resize shopify image URL to avoid massive memory usage on storefront
+        const getResizedImageUrl = (url, size = '600x') => {
+           if (!url || typeof url !== 'string') return url;
+           if (url.indexOf('cdn.shopify.com') === -1) return url;
+           // If it already has size params, just return or handle safely. This basic regex appends _600x before extension.
+           return url.replace(/_(pico|icon|thumb|small|compact|medium|large|grande|original|1024x1024|2048x2048|master)+\./g, '.')
+                     .replace(/\.([a-zA-Z0-9]+)(\?.*)?$/, `_${size}.$1$2`);
+        };
+  
         let primaryImg = customImage || variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        primaryImg = getResizedImageUrl(primaryImg, '600x');
         
         let productUrl = `/products/${product.handle}`;
         if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
@@ -756,12 +766,12 @@
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
-                           card.querySelector('.cfp-product-card__image--primary').src='${data.imgUrl}';
+                           card.querySelector('.cfp-product-card__image--primary').src='${getResizedImageUrl(data.imgUrl, '600x')}';
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
                            if('${data.variantId}') card.querySelector('a').href='/products/${product.handle}?variant=${data.variantId}';">
-                <img src="${data.imgUrl}" alt="${colorName}" />
+                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
              </div>`;
           });
           
@@ -779,7 +789,7 @@
           swatchesHtml += `</div>`;
           
           if (matchedColorUrl && (!customImage || colorWasFiltered)) {
-             primaryImg = matchedColorUrl;
+             primaryImg = getResizedImageUrl(matchedColorUrl, '600x');
              if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
                  productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
              }
@@ -817,7 +827,7 @@
         let hoverImg = product.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
-           hoverImageHtml = `<img src="${hoverImgSrc}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" />`;
+           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, '600x')}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" />`;
         }
       }
 

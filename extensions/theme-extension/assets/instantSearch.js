@@ -808,6 +808,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     let html = "";
+    
+    // Resize shopify image URL to avoid massive memory usage on storefront
+    const getResizedImageUrl = (url, size = '600x') => {
+       if (!url || typeof url !== 'string') return url;
+       if (url.indexOf('cdn.shopify.com') === -1) return url;
+       return url.replace(/_(pico|icon|thumb|small|compact|medium|large|grande|original|1024x1024|2048x2048|master)+\./g, '.')
+                 .replace(/\.([a-zA-Z0-9]+)(\?.*)?$/, `_${size}.$1$2`);
+    };
+
     products.forEach((p) => {
       // 1. Identify Color Option Index
       let colorOptionIndex = -1;
@@ -866,12 +875,12 @@ document.addEventListener("DOMContentLoaded", function () {
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-search-product-card');
-                           card.querySelector('.cfp-main-img').src='${data.imgUrl}';
+                           card.querySelector('.cfp-main-img').src='${getResizedImageUrl(data.imgUrl, '600x')}';
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
                            if('${data.variantId}') card.href='/products/${p.handle}?variant=${data.variantId}';">
-                <img src="${data.imgUrl}" alt="${colorName}" />
+                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
              </div>`;
           });
           
@@ -908,6 +917,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
       if (!imageUrl) {
          imageUrl = "https://cdn.shopify.com/s/images/admin/no-image-large.gif";
+      } else {
+         imageUrl = getResizedImageUrl(imageUrl, '600x');
       }
 
       let rate = 1;
@@ -952,7 +963,7 @@ document.addEventListener("DOMContentLoaded", function () {
         let hoverImg = p.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
-           hoverImageHtml = `<img src="${hoverImgSrc}" alt="${p.title}" class="cfp-secondary-img" loading="lazy" />`;
+           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, '600x')}" alt="${p.title}" class="cfp-secondary-img" loading="lazy" />`;
         }
       }
 
