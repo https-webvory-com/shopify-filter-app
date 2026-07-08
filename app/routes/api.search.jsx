@@ -21,6 +21,7 @@ export const loader = async ({ request }) => {
   }
 
   try {
+    const globalSettings = await getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop));
     let organicProducts = [];
     
     const searchQuery = query ? query.trim() : "";
@@ -31,6 +32,10 @@ export const loader = async ({ request }) => {
     const cleanSearchQuery = typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
     
     let meiliFilters = [`shop = '${shop}'`];
+    
+    if (globalSettings?.showOnlyInStock) {
+      meiliFilters.push(`available = true`);
+    }
     
     if (aiExtracted.min_price !== undefined && aiExtracted.min_price !== null) {
         meiliFilters.push(`priceMin >= ${aiExtracted.min_price}`);
@@ -174,11 +179,8 @@ export const loader = async ({ request }) => {
       })),
     }));
 
-    // 2. Fetch Active Pinning Rule and Global Settings
-    const [pinningRule, globalSettings] = await Promise.all([
-      getActivePinningRuleForSearch(shop, query),
-      getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop))
-    ]);
+    // 2. Fetch Active Pinning Rule
+    const pinningRule = await getActivePinningRuleForSearch(shop, query);
     
     // 3. Merge Pinned Products and Organic Products
     let pinnedIds = [];

@@ -42,7 +42,7 @@ const settingsCards = [
     description:
       "Configure automatic sync frequency, manage Storefront API credentials, and control product statuses included in sync.",
     path: "/app/settings/general",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

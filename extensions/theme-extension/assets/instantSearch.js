@@ -947,10 +947,20 @@ document.addEventListener("DOMContentLoaded", function () {
           </div>`;
       }
 
+      let hoverImageHtml = '';
+      if (data.globalSettings && data.globalSettings.secondImageOnHover !== false && Array.isArray(p.images) && p.images.length > 1) {
+        let hoverImg = p.images[1];
+        let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
+        if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
+           hoverImageHtml = `<img src="${hoverImgSrc}" alt="${p.title}" class="cfp-secondary-img" loading="lazy" />`;
+        }
+      }
+
       html += `
         <a href="${productUrl}" class="cfp-search-product-card">
           <div class="cfp-search-product-image-wrap">
             <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
+            ${hoverImageHtml}
             ${wishlistHtml}
           </div>
           <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>

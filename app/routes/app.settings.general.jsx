@@ -1,14 +1,51 @@
+import React, { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData, useFetcher } from "react-router";
+import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const settings = await getFilterGlobalSettings(session.shop);
+  return Response.json({ settings });
+};
+
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  
+  const payload = {
+    showOnlyInStock: formData.get("showOnlyInStock") === "true",
+    secondImageOnHover: formData.get("secondImageOnHover") === "true",
+  };
+  
+  await updateFilterGlobalSettings(session.shop, payload);
+  return Response.json({ success: true });
 };
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { settings } = useLoaderData();
+  const fetcher = useFetcher();
+
+  const showOnlyInStock = fetcher.formData ? fetcher.formData.get("showOnlyInStock") === "true" : (settings?.showOnlyInStock ?? false);
+  const secondImageOnHover = fetcher.formData ? fetcher.formData.get("secondImageOnHover") === "true" : (settings?.secondImageOnHover ?? true);
+
+  const toggleSetting = (key, currentValue) => {
+    fetcher.submit(
+      { 
+        showOnlyInStock: key === "showOnlyInStock" ? String(!currentValue) : String(showOnlyInStock),
+        secondImageOnHover: key === "secondImageOnHover" ? String(!currentValue) : String(secondImageOnHover)
+      }, 
+      { method: "POST" }
+    );
+  };
+
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      shopify.toast.show("Display settings updated");
+    }
+  }, [fetcher.data]);
 
   return (
     <s-page heading="App Settings">
@@ -17,6 +54,107 @@ export default function Settings() {
           Settings
         </button>
       </ui-title-bar>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          .int-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-top: 24px;
+          }
+          @media (max-width: 700px) {
+            .int-grid { grid-template-columns: 1fr; }
+          }
+          .int-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #ede9fe;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: transform 0.28s cubic-bezier(0.16,1,0.3,1),
+                        box-shadow 0.28s cubic-bezier(0.16,1,0.3,1),
+                        border-color 0.28s ease;
+            box-shadow: 0 1px 3px rgba(91,33,182,0.06), 0 1px 8px rgba(0,0,0,0.04);
+          }
+          .int-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(91,33,182,0.10), 0 1px 4px rgba(0,0,0,0.04);
+            border-color: #a5b4fc;
+          }
+          .int-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .int-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+            margin-bottom: 6px;
+          }
+          .int-desc {
+            font-size: 13.5px;
+            color: #6b7280;
+            line-height: 1.5;
+            margin: 0;
+          }
+          .int-tag {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 4px 10px;
+            border-radius: 12px;
+          }
+          .int-tag-inventory {
+            color: #4338ca;
+            background: #e0e7ff;
+          }
+          .int-toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+          }
+          .int-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+          }
+          .int-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .3s;
+            border-radius: 24px;
+          }
+          .int-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          }
+          .int-toggle input:checked + .int-slider {
+            background: linear-gradient(160deg, #7C3AED 0%, #5B21B6 100%);
+          }
+          .int-toggle input:checked + .int-slider:before {
+            transform: translateX(20px);
+          }
+          `
+        }}
+      />
 
       <div
         style={{
@@ -59,176 +197,48 @@ export default function Settings() {
         </a>
       </div>
 
-      <s-button slot="primary-action">Save Settings</s-button>
       <s-stack direction="block" gap="base">
-        <s-layout>
-          <s-layout-section>
-            <s-card heading="Synchronization Settings">
-              <s-stack direction="block" gap="base">
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                  }}
-                >
-                  <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                    Automatic Sync Frequency
-                  </label>
-                  <select
-                    defaultValue="daily"
-                    style={{
-                      padding: "8px 12px",
-                      border: "1px solid #ccc",
-                      borderRadius: "6px",
-                      fontSize: "14px",
-                    }}
-                  >
-                    <option value="realtime">Real-time (Webhooks only)</option>
-                    <option value="hourly">Every Hour + Webhooks</option>
-                    <option value="daily">Daily Cron + Webhooks</option>
-                    <option value="manual">Manual only</option>
-                  </select>
-                </div>
+        <s-section heading="Product Display Settings">
+          <s-paragraph>
+            Manage exactly which products are visible to your customers across your store's search and filtering widgets.
+          </s-paragraph>
 
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                  }}
-                >
-                  <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                    Include Product Statuses
-                  </label>
-                  <s-stack direction="inline" gap="base">
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        defaultChecked
-                        id="status-active"
-                        style={{ width: "16px", height: "16px" }}
-                      />
-                      <label
-                        htmlFor="status-active"
-                        style={{ fontSize: "14px" }}
-                      >
-                        Active
-                      </label>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        defaultChecked
-                        id="status-draft"
-                        style={{ width: "16px", height: "16px" }}
-                      />
-                      <label
-                        htmlFor="status-draft"
-                        style={{ fontSize: "14px" }}
-                      >
-                        Draft
-                      </label>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        id="status-archived"
-                        style={{ width: "16px", height: "16px" }}
-                      />
-                      <label
-                        htmlFor="status-archived"
-                        style={{ fontSize: "14px" }}
-                      >
-                        Archived
-                      </label>
-                    </div>
-                  </s-stack>
-                </div>
-              </s-stack>
-            </s-card>
-
-            <s-card heading="Storefront API Credentials">
-              <s-stack direction="block" gap="base">
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                  }}
-                >
-                  <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                    Public Access Token
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value="shpat_demo_access_token_cfp_widget_12345"
-                    style={{
-                      padding: "8px 12px",
-                      border: "1px solid #ccc",
-                      borderRadius: "6px",
-                      fontSize: "14px",
-                      fontFamily: "monospace",
-                      backgroundColor: "#f6f6f7",
-                      color: "#6d7175",
-                    }}
-                  />
-                  <s-text tone="subdued" variant="bodySm">
-                    Use this token if you are writing custom headless frontends
-                    or connecting from other domains.
-                  </s-text>
-                </div>
-              </s-stack>
-            </s-card>
-          </s-layout-section>
-
-          <s-layout-section variant="secondary">
-            <s-card heading="Danger Zone">
-              <s-paragraph>
-                Clearing or resetting local database copies does not affect your
-                live products in Shopify.
-              </s-paragraph>
-              <div style={{ marginTop: "12px" }}>
-                <button
-                  onClick={() =>
-                    alert("Local products database reset initiated.")
-                  }
-                  style={{
-                    background: "#d82c0d",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "10px 18px",
-                    fontWeight: "600",
-                    fontSize: "14px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Clear Cached Database
-                </button>
+          <div className="int-grid">
+            {/* Card 1: Inventory */}
+            <div className="int-card">
+              <div className="int-header">
+                <span className="int-tag int-tag-inventory">INVENTORY</span>
+                <label className="int-toggle">
+                  <input type="checkbox" checked={showOnlyInStock} onChange={() => toggleSetting("showOnlyInStock", showOnlyInStock)} />
+                  <span className="int-slider"></span>
+                </label>
               </div>
-            </s-card>
-          </s-layout-section>
-        </s-layout>
+              <div>
+                <h3 className="int-title">Show only in-stock products</h3>
+                <p className="int-desc">
+                  If enabled, out-of-stock products will be completely hidden from the storefront search and filter results.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 2: Hover Image */}
+            <div className="int-card">
+              <div className="int-header">
+                <span className="int-tag int-tag-inventory" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>DISPLAY</span>
+                <label className="int-toggle">
+                  <input type="checkbox" checked={secondImageOnHover} onChange={() => toggleSetting("secondImageOnHover", secondImageOnHover)} />
+                  <span className="int-slider"></span>
+                </label>
+              </div>
+              <div>
+                <h3 className="int-title">2nd image on hover</h3>
+                <p className="int-desc">
+                  Display the second product image when a customer hovers over a product card in the search and filter results.
+                </p>
+              </div>
+            </div>
+          </div>
+        </s-section>
       </s-stack>
     </s-page>
   );

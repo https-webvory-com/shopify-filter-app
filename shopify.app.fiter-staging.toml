@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f0784c29e822aa5959ef9f0417095b8c"
-application_url = "https://pie-duration-pads-easter.trycloudflare.com"
+application_url = "https://clinic-lock-massage-valid.trycloudflare.com"
 embedded = true
 name = "fiter-staging"
 
@@ -38,7 +38,7 @@ api_version = "2026-07"
   topics = [ "app/uninstalled" ]
 
 [app_proxy]
-url = "https://pie-duration-pads-easter.trycloudflare.com"
+url = "https://clinic-lock-massage-valid.trycloudflare.com"
 subpath = "collection-filter-pro"
 prefix = "apps"
 
@@ -48,7 +48,7 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://pie-duration-pads-easter.trycloudflare.com/api/auth"
+  "https://clinic-lock-massage-valid.trycloudflare.com/api/auth"
 ]
 
 [build]

@@ -265,6 +265,9 @@ export const loader = async ({ request }) => {
 
     // ── 7. Build Meilisearch filters ───────────────────────────────────
     const baseFilters = [`shop = '${shop}'`, `status = 'ACTIVE'`];
+    if (globalSettings?.showOnlyInStock) {
+      baseFilters.push(`available = true`);
+    }
     if (resolvedCollectionId) {
       baseFilters.push(`collections = '${resolvedCollectionId}'`);
     }

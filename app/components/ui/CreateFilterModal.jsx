@@ -504,8 +504,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           { id: Date.now() + 5, label: "", from: "5", to: "" }
         ]);
         setStockStatusConfig({
-          inStock: true, inStockLabel: "In stock", inStockType: "checkbox",
-          outOfStock: true, outOfStockLabel: "Out of stock", outOfStockType: "checkbox"
+          inStock: { enabled: true, label: "In stock" },
+          stockOnHand: { enabled: true, label: "Stock On Hand" },
+          preOrder: { enabled: true, label: "Pre-Order" },
+          outOfStock: { enabled: false, label: "Out of stock" }
         });
         setRatingColor("#ffff00");
         setSwatchConfig({

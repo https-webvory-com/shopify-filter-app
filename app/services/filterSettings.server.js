@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { invalidateShop } from "./shopCache.server";
 
 /**
  * Get global filter settings for a shop
@@ -22,7 +23,7 @@ export async function getFilterGlobalSettings(shop) {
  * Update global filter settings for a shop
  */
 export async function updateFilterGlobalSettings(shop, data) {
-  return await prisma.filterGlobalSetting.upsert({
+  const settings = await prisma.filterGlobalSetting.upsert({
     where: { shop },
     update: data,
     create: {
@@ -30,4 +31,7 @@ export async function updateFilterGlobalSettings(shop, data) {
       ...data,
     },
   });
+  
+  invalidateShop(shop);
+  return settings;
 }

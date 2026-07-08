@@ -812,11 +812,21 @@
           </div>`;
       }
 
+      let hoverImageHtml = '';
+      if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(product.images) && product.images.length > 1) {
+        let hoverImg = product.images[1];
+        let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
+        if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
+           hoverImageHtml = `<img src="${hoverImgSrc}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" />`;
+        }
+      }
+
       return `
         <div class="cfp-product-card">
           <a href="${productUrl}" class="cfp-product-card__link">
             <div class="cfp-product-card__image-container">
               <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
+              ${hoverImageHtml}
               ${badgesHtml}
               ${wishlistHtml}
             </div>
