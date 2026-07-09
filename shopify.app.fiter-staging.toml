@@ -1,21 +1,16 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f0784c29e822aa5959ef9f0417095b8c"
-application_url = "https://clinic-lock-massage-valid.trycloudflare.com"
-embedded = true
 name = "fiter-staging"
+application_url = "https://ink-los-fellow-drum.trycloudflare.com"
+embedded = true
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/products"
-  topics = [ "products/delete", "products/create", "products/update" ]
-
-  
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/collections"
-  topics = [ "collections/create", "collections/update", "collections/delete" ]
+  topics = [ "products/create", "products/update", "products/delete" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
@@ -30,17 +25,20 @@ api_version = "2026-07"
   compliance_topics = [ "shop/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/collections"
+  topics = [
+  "collections/delete",
+  "collections/update",
+  "collections/create"
+]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
-[app_proxy]
-url = "https://clinic-lock-massage-valid.trycloudflare.com"
-subpath = "collection-filter-pro"
-prefix = "apps"
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -48,8 +46,13 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://clinic-lock-massage-valid.trycloudflare.com/api/auth"
+  "https://ink-los-fellow-drum.trycloudflare.com/api/auth"
 ]
+
+[app_proxy]
+url = "https://ink-los-fellow-drum.trycloudflare.com"
+subpath = "collection-filter-pro"
+prefix = "apps"
 
 [build]
 automatically_update_urls_on_dev = true

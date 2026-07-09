@@ -965,16 +965,23 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       html += `
-        <a href="${productUrl}" class="cfp-search-product-card">
-          <div class="cfp-search-product-image-wrap">
-            <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
-            ${hoverImageHtml}
-            ${wishlistHtml}
+        <div class="cfp-product-card" style="position:relative; width: 100%;">
+          <div class="cfp-search-product-image-wrapper" style="position: relative;">
+            <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
+              <div class="cfp-search-product-image-wrap">
+                <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
+                ${hoverImageHtml}
+                ${wishlistHtml}
+              </div>
+            </a>
+            <button type="button" class="cfp-quick-view-btn" data-product-handle="${p.handle}">Quick View</button>
           </div>
-          <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
-          ${swatchesHtml}
-          <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${price}</div>
-        </a>
+          <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
+            <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
+            ${swatchesHtml}
+            <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${price}</div>
+          </a>
+        </div>
       `;
     });
 

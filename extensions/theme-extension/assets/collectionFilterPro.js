@@ -845,13 +845,18 @@
 
       return `
         <div class="cfp-product-card">
-          <a href="${productUrl}" class="cfp-product-card__link">
-            <div class="cfp-product-card__image-container">
-              <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
-              ${hoverImageHtml}
-              ${badgesHtml}
-              ${wishlistHtml}
-            </div>
+          <div class="cfp-product-card__image-wrapper" style="position: relative;">
+            <a href="${productUrl}" class="cfp-product-card__link">
+              <div class="cfp-product-card__image-container">
+                <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
+                ${hoverImageHtml}
+                ${badgesHtml}
+                ${wishlistHtml}
+              </div>
+            </a>
+            <button type="button" class="cfp-quick-view-btn" data-product-handle="${product.handle}">Quick View</button>
+          </div>
+          <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
             <div class="cfp-product-card__info">
               <span class="cfp-product-card__vendor">${product.vendor}</span>
               <h3 class="cfp-product-card__title">${product.title}</h3>
