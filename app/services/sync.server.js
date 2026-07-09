@@ -198,30 +198,36 @@ async function autoSeedOptionFilters(shop) {
 
   if (seen.size === 0) return;
 
+  // ✅ OPTIMIZED: Single query to find ALL existing option filters at once (no N+1 loop)
+  const existingFilters = await prisma.filterSetting.findMany({
+    where: { shop, type: "option" },
+    select: { key: true },
+  });
+  const existingKeys = new Set(existingFilters.map((f) => f.key));
+
+  const newOptions = Array.from(seen).filter((name) => !existingKeys.has(name));
+  if (newOptions.length === 0) return;
+
   const lastSetting = await prisma.filterSetting.findFirst({
     where: { shop },
     orderBy: { order: "desc" },
   });
   let nextOrder = (lastSetting?.order ?? 5) + 1;
 
-  for (const optName of seen) {
-    const existing = await prisma.filterSetting.findFirst({
-      where: { shop, type: "option", key: optName },
-    });
-    if (!existing) {
-      await prisma.filterSetting.create({
-        data: {
-          shop,
-          type: "option",
-          key: optName,
-          label: optName,
-          order: nextOrder++,
-          isEnabled: true,
-        },
-      });
-      console.log(`CFP: Auto-seeded option filter: ${optName}`);
-    }
-  }
+  // ✅ OPTIMIZED: Single createMany instead of N individual creates
+  await prisma.filterSetting.createMany({
+    data: newOptions.map((optName, i) => ({
+      shop,
+      type: "option",
+      key: optName,
+      label: optName,
+      order: nextOrder + i,
+      isEnabled: true,
+    })),
+    skipDuplicates: true,
+  });
+
+  console.log(`CFP: Auto-seeded ${newOptions.length} new option filters for ${shop}`);
 }
 
 /**
@@ -582,7 +588,7 @@ async function processSyncChunk(jobId, shop, admin) {
   }
 }
 
-// Function for smart upserting
+// Function for smart upserting — OPTIMIZED to use batch operations and avoid P2028 transaction timeouts
 export async function smartUpsertProduct(shop, product, prismaClient) {
   const optionsList = product.options.map((opt) => ({
     name: opt.name,
@@ -594,182 +600,159 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
   const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
   const imageUrls = product.images.nodes.map((img) => img.url);
 
-  await prismaClient.$transaction(async (tx) => {
-    // Upsert the core Product
-    await tx.product.upsert({
-      where: { id: product.id },
-      update: {
-        title: product.title,
-        handle: product.handle,
-        vendor: product.vendor,
-        productType: product.productType,
-        priceMin: priceMin,
-        priceMax: priceMax,
-        tags: product.tags,
-        images: imageUrls,
-        options: optionsList,
-        status: product.status.toLowerCase(),
-        updatedAt: new Date(),
-      },
-      create: {
-        id: product.id,
-        shop,
-        title: product.title,
-        handle: product.handle,
-        vendor: product.vendor,
-        productType: product.productType,
-        priceMin: priceMin,
-        priceMax: priceMax,
-        tags: product.tags,
-        images: imageUrls,
-        options: optionsList,
-        status: product.status.toLowerCase(),
-      },
-    });
+  // ✅ OPTIMIZATION: Use short, focused transactions instead of one giant transaction
+  // This prevents P2028 timeouts that were causing 57,666 failures
 
-    // Smart Sync Variants
-    const existingVariants = await tx.variant.findMany({
-      where: { productId: product.id },
-      select: { id: true },
-    });
-    const incomingVariantIds = product.variants.nodes.map((v) => v.id);
-    const variantsToDelete = existingVariants
-      .filter((ev) => !incomingVariantIds.includes(ev.id))
-      .map((v) => v.id);
-
-    if (variantsToDelete.length > 0) {
-      await tx.variant.deleteMany({ where: { id: { in: variantsToDelete } } });
-    }
-
-    for (const variant of product.variants.nodes) {
-      let option1 = null,
-        option2 = null,
-        option3 = null;
-      variant.selectedOptions.forEach((selOpt) => {
-        const optIndex = optionsList.findIndex((o) => o.name === selOpt.name);
-        if (optIndex === 0) option1 = selOpt.value;
-        else if (optIndex === 1) option2 = selOpt.value;
-        else if (optIndex === 2) option3 = selOpt.value;
-      });
-
-      const available = variant.availableForSale === true;
-      const inventory = variant.inventoryQuantity || 0;
-
-      await tx.variant.upsert({
-        where: { id: variant.id },
-        update: {
-          sku: variant.sku || null,
-          price: parseFloat(variant.price),
-          compareAtPrice: variant.compareAtPrice
-            ? parseFloat(variant.compareAtPrice)
-            : null,
-          available: available,
-          inventory: inventory,
-          imageUrl: variant.image?.url || null,
-          option1,
-          option2,
-          option3,
-        },
-        create: {
-          id: variant.id,
-          productId: product.id,
-          sku: variant.sku || null,
-          price: parseFloat(variant.price),
-          compareAtPrice: variant.compareAtPrice
-            ? parseFloat(variant.compareAtPrice)
-            : null,
-          available: available,
-          inventory: inventory,
-          imageUrl: variant.image?.url || null,
-          option1,
-          option2,
-          option3,
-        },
-      });
-    }
-
-    // Smart Sync Collections
-    const existingCollections = await tx.productCollection.findMany({
-      where: { productId: product.id },
-      select: { collectionId: true },
-    });
-    const incomingCollectionIds = product.collections.nodes.map((c) => c.id);
-    const collectionsToDelete = existingCollections
-      .filter((ec) => !incomingCollectionIds.includes(ec.collectionId))
-      .map((c) => c.collectionId);
-
-    if (collectionsToDelete.length > 0) {
-      await tx.productCollection.deleteMany({
-        where: {
-          productId: product.id,
-          collectionId: { in: collectionsToDelete },
-        },
-      });
-    }
-
-    for (const collection of product.collections.nodes) {
-      await tx.collection.upsert({
-        where: { id: collection.id },
-        update: { title: collection.title, handle: collection.handle },
-        create: {
-          id: collection.id,
-          shop,
-          title: collection.title,
-          handle: collection.handle,
-        },
-      });
-
-      if (
-        !existingCollections.some((ec) => ec.collectionId === collection.id)
-      ) {
-        await tx.productCollection.create({
-          data: { productId: product.id, collectionId: collection.id },
-        });
-      }
-    }
-
-    // Smart Sync Metafields
-    if (product.metafields && product.metafields.nodes) {
-      const existingMetafields = await tx.productMetafield.findMany({
-        where: { productId: product.id },
-        select: { id: true },
-      });
-      const validMetafields = product.metafields.nodes.filter(
-        (m) => m && m.value,
-      );
-      const incomingMetafieldIds = validMetafields.map((m) => m.id);
-      const metafieldsToDelete = existingMetafields
-        .filter((em) => !incomingMetafieldIds.includes(em.id))
-        .map((m) => m.id);
-
-      if (metafieldsToDelete.length > 0) {
-        await tx.productMetafield.deleteMany({
-          where: { id: { in: metafieldsToDelete } },
-        });
-      }
-
-      for (const metafield of validMetafields) {
-        await tx.productMetafield.upsert({
-          where: { id: metafield.id },
-          update: {
-            value: metafield.value,
-            type: metafield.type,
-            namespace: metafield.namespace,
-            key: metafield.key,
-          },
-          create: {
-            id: metafield.id,
-            productId: product.id,
-            namespace: metafield.namespace,
-            key: metafield.key,
-            value: metafield.value,
-            type: metafield.type,
-          },
-        });
-      }
-    }
+  // Step 1: Upsert core product (fast, single-row operation)
+  await prismaClient.product.upsert({
+    where: { id: product.id },
+    update: {
+      title: product.title,
+      handle: product.handle,
+      vendor: product.vendor,
+      productType: product.productType,
+      priceMin,
+      priceMax,
+      tags: product.tags,
+      images: imageUrls,
+      options: optionsList,
+      status: product.status.toLowerCase(),
+      updatedAt: new Date(),
+    },
+    create: {
+      id: product.id,
+      shop,
+      title: product.title,
+      handle: product.handle,
+      vendor: product.vendor,
+      productType: product.productType,
+      priceMin,
+      priceMax,
+      tags: product.tags,
+      images: imageUrls,
+      options: optionsList,
+      status: product.status.toLowerCase(),
+    },
   });
+
+  // Step 2: Batch sync variants (delete stale, then upsert all at once)
+  const incomingVariantIds = product.variants.nodes.map((v) => v.id);
+
+  // Delete variants no longer in Shopify
+  await prismaClient.variant.deleteMany({
+    where: { productId: product.id, id: { notIn: incomingVariantIds } },
+  });
+
+  // Prepare all variant data
+  const variantData = product.variants.nodes.map((variant) => {
+    let option1 = null, option2 = null, option3 = null;
+    variant.selectedOptions.forEach((selOpt) => {
+      const optIndex = optionsList.findIndex((o) => o.name === selOpt.name);
+      if (optIndex === 0) option1 = selOpt.value;
+      else if (optIndex === 1) option2 = selOpt.value;
+      else if (optIndex === 2) option3 = selOpt.value;
+    });
+    return {
+      id: variant.id,
+      productId: product.id,
+      sku: variant.sku || null,
+      price: parseFloat(variant.price),
+      compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice) : null,
+      available: variant.availableForSale === true,
+      inventory: variant.inventoryQuantity || 0,
+      imageUrl: variant.image?.url || null,
+      option1,
+      option2,
+      option3,
+    };
+  });
+
+  // ✅ Batch upsert all variants in one transaction (much faster than N individual upserts)
+  await prismaClient.$transaction(
+    variantData.map((v) =>
+      prismaClient.variant.upsert({
+        where: { id: v.id },
+        update: {
+          sku: v.sku,
+          price: v.price,
+          compareAtPrice: v.compareAtPrice,
+          available: v.available,
+          inventory: v.inventory,
+          imageUrl: v.imageUrl,
+          option1: v.option1,
+          option2: v.option2,
+          option3: v.option3,
+        },
+        create: v,
+      })
+    ),
+    { timeout: 15000 } // 15s timeout for large variant sets
+  );
+
+  // Step 3: Batch sync collections
+  const incomingCollectionIds = product.collections.nodes.map((c) => c.id);
+
+  // Upsert all collections in a single transaction
+  if (product.collections.nodes.length > 0) {
+    await prismaClient.$transaction(
+      product.collections.nodes.map((collection) =>
+        prismaClient.collection.upsert({
+          where: { id: collection.id },
+          update: { title: collection.title, handle: collection.handle },
+          create: { id: collection.id, shop, title: collection.title, handle: collection.handle },
+        })
+      ),
+      { timeout: 10000 }
+    );
+  }
+
+  // Get existing links and remove stale ones, add new ones
+  const existingLinks = await prismaClient.productCollection.findMany({
+    where: { productId: product.id },
+    select: { collectionId: true },
+  });
+  const existingIds = new Set(existingLinks.map((l) => l.collectionId));
+  const toAdd = incomingCollectionIds.filter((id) => !existingIds.has(id));
+  const toRemove = Array.from(existingIds).filter((id) => !incomingCollectionIds.includes(id));
+
+  if (toRemove.length > 0) {
+    await prismaClient.productCollection.deleteMany({
+      where: { productId: product.id, collectionId: { in: toRemove } },
+    });
+  }
+  if (toAdd.length > 0) {
+    await prismaClient.productCollection.createMany({
+      data: toAdd.map((collectionId) => ({ productId: product.id, collectionId })),
+      skipDuplicates: true,
+    });
+  }
+
+  // Step 4: Batch sync metafields
+  if (product.metafields?.nodes) {
+    const validMetafields = product.metafields.nodes.filter((m) => m?.value);
+    const incomingMetafieldIds = validMetafields.map((m) => m.id);
+
+    // Delete removed metafields
+    await prismaClient.productMetafield.deleteMany({
+      where: { productId: product.id, id: { notIn: incomingMetafieldIds } },
+    });
+
+    // Batch upsert all metafields
+    if (validMetafields.length > 0) {
+      await prismaClient.$transaction(
+        validMetafields.map((m) =>
+          prismaClient.productMetafield.upsert({
+            where: { id: m.id },
+            update: { value: m.value, type: m.type, namespace: m.namespace, key: m.key },
+            create: { id: m.id, productId: product.id, namespace: m.namespace, key: m.key, value: m.value, type: m.type },
+          })
+        ),
+        { timeout: 10000 }
+      );
+    }
+  }
 }
+
 
 /**
  * Sync a single product from Shopify to PostgreSQL.
