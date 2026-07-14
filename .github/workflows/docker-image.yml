@@ -16,6 +16,12 @@ jobs:
         uses: actions/checkout@v4
 
 
+      # Create .env file for Docker build
+      - name: Create .env file
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+
       # Login Docker Hub
       - name: Docker Hub Login
         uses: docker/login-action@v3
@@ -24,10 +30,11 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
 
-      # Build Docker Image
+      # Build Docker Image with .env
       - name: Build Docker Image
         run: |
           docker build \
+            --env-file .env \
             -t ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest .
 
 
@@ -38,27 +45,29 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
 
 
+
       # Deploy EC2
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
 
         with:
+
           host: ${{ secrets.EC2_HOST }}
+
           username: ${{ secrets.EC2_USER }}
+
           key: ${{ secrets.EC2_SSH_KEY }}
+
 
           script: |
 
             echo "====== Deployment Started ======"
 
-            echo "Login to Docker Hub"
 
             docker login \
               -u ${{ secrets.DOCKERHUB_USERNAME }} \
               -p ${{ secrets.DOCKERHUB_PASSWORD }}
 
-
-            echo "Pull latest image"
 
             docker pull \
               ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
@@ -72,6 +81,7 @@ jobs:
 
 
             # echo "Start new container"
+
 
             # docker run -d \
             #   --name shopify-filter-app \
