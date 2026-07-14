@@ -49,9 +49,8 @@ jobs:
 
           script: |
 
-            cd /var/www/myapp
 
-            # echo "Pull latest Docker image"
+            echo "====== donne ============"
 
             # docker login \
             #   -u ${{ secrets.DOCKERHUB_USERNAME }} \
