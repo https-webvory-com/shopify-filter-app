@@ -1,5 +1,5 @@
-name: Deploy to EC2                           
-                                                        
+name: Deploy to EC2
+
 on:
   push:
     branches:
@@ -49,23 +49,36 @@ jobs:
 
           script: |
 
+            echo "====== Deployment Started ======"
 
-            echo "====== donne ============"
+            echo "Login to Docker Hub"
 
-            # docker login \
-            #   -u ${{ secrets.DOCKERHUB_USERNAME }} \
-            #   -p ${{ secrets.DOCKERHUB_PASSWORD }}
+            docker login \
+              -u ${{ secrets.DOCKERHUB_USERNAME }} \
+              -p ${{ secrets.DOCKERHUB_PASSWORD }}
 
 
-            # docker pull \
+            echo "Pull latest image"
+
+            docker pull \
+              ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
+
+
+            # echo "Stop old container"
+
+            # docker stop shopify-filter-app || true
+
+            # docker rm shopify-filter-app || true
+
+
+            # echo "Start new container"
+
+            # docker run -d \
+            #   --name shopify-filter-app \
+            #   --env-file .env \
+            #   -p 3005:3005 \
+            #   --restart always \
             #   ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
 
 
-            # echo "Restart application"
-
-            # docker compose down
-
-            # docker compose up -d
-
-
-            # echo "Deployment completed"
+            # echo "====== Deployment Completed ======"
