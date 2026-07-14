@@ -146,28 +146,35 @@ async function updateMeiliSettings(shop) {
     await index.updateFaceting({ maxValuesPerFacet: 100000 });
 
     if (process.env.GEMINI_API_KEY) {
-      await index.updateEmbedders({
-        default: {
-          source: "rest",
-          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY}`,
-          request: {
-            model: "models/gemini-embedding-2",
-            content: {
-              parts: [{ text: "{{text}}" }],
+      try {
+        await index.updateEmbedders({
+          default: {
+            source: "rest",
+            url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY}`,
+            request: {
+              model: "models/gemini-embedding-2",
+              content: {
+                parts: [{ text: "{{text}}" }],
+              },
             },
-          },
-          response: {
-            embedding: {
-              values: "{{embedding}}",
+            response: {
+              embedding: {
+                values: "{{embedding}}",
+              },
             },
+            documentTemplate:
+              "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}",
           },
-          documentTemplate:
-            "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}",
-        },
-      });
-      console.log(
-        `CFP: AI Vector embedder (Gemini) settings configured for ${shop}`,
-      );
+        });
+        console.log(`CFP: AI Vector embedder (Gemini) configured for ${shop}`);
+      } catch (embedErr) {
+        // vector store experimental feature not enabled on this Meilisearch instance — skip silently
+        if (embedErr?.cause?.code === 'feature_not_enabled') {
+          console.warn(`CFP: Meilisearch vector store not enabled — skipping embedder config. Enable with --experimental-enable-vector-store`);
+        } else {
+          throw embedErr; // re-throw unexpected errors
+        }
+      }
     }
 
     console.log(`CFP: Meilisearch settings updated successfully for ${shop}`);
@@ -457,10 +464,6 @@ async function processSyncChunk(jobId, shop, admin) {
           p.metafields.nodes.forEach((m) => {
             if (m && m.value) {
               let val = m.value;
-              console.log(
-                `CFP: Debug Metafield ${m.namespace}.${m.key} ->`,
-                JSON.stringify(m),
-              );
               if (m.reference && m.reference.image && m.reference.image.url) {
                 val = m.reference.image.url;
               } else if (m.reference && m.reference.url) {

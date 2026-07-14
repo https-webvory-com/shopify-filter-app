@@ -2,64 +2,57 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncSingleProduct } from "../services/sync.server";
 import meiliClient from "../services/meiliClient.server";
-
-import { withRetry } from "../utils/retry.server";
+import { enqueueWebhookJob } from "../utils/webhookQueue.server";
 
 export const action = async ({ request }) => {
   const { shop, payload, topic, admin } = await authenticate.webhook(request);
 
   console.log(`CFP: Received ${topic} webhook for ${shop}`);
 
-  // Topic names can be PRODUCTS_CREATE, PRODUCTS_UPDATE, PRODUCTS_DELETE depending on Shopify context
-  // We handle normalized uppercase names as well as the standard lowercase names.
   const normalizedTopic = topic.toUpperCase();
 
-  try {
-    switch (normalizedTopic) {
-      case "PRODUCTS_CREATE":
-      case "PRODUCTS_UPDATE": {
-        const productId = `gid://shopify/Product/${payload.id}`;
-        if (admin) {
-          // FIRE AND FORGET WITH RETRY: Process in background, handle transient failures
-          withRetry(() => syncSingleProduct(shop, admin, productId)).catch(
-            (err) => {
-              console.error(
-                `CFP: Background webhook sync completely failed for ${productId} after retries.`,
-                err,
-              );
-            },
-          );
-        } else {
-          console.warn(`CFP: Admin client not available for ${shop}.`);
-        }
-        break;
+  switch (normalizedTopic) {
+    case "PRODUCTS_CREATE":
+    case "PRODUCTS_UPDATE": {
+      const productId = `gid://shopify/Product/${payload.id}`;
+      if (admin) {
+        // ✅ QUEUE: Enqueue job instead of running immediately
+        // - Returns 200 to Shopify instantly (prevents Shopify retries)
+        // - Queue processes with max 3 concurrent (DB pool never exhausted)
+        // - Deduplication: if same product webhook arrives 5x, only 1 DB write
+        enqueueWebhookJob(
+          productId,
+          () => syncSingleProduct(shop, admin, productId),
+          `${normalizedTopic}:${payload.id}`
+        );
+      } else {
+        console.warn(`CFP: Admin client not available for ${shop}.`);
       }
-      case "PRODUCTS_DELETE": {
-        const productId = `gid://shopify/Product/${payload.id}`;
-        console.log(`CFP: Queuing delete for product ${productId}...`);
-
-        // FIRE AND FORGET: Background deletion
-        (async () => {
-          try {
-            await prisma.product.deleteMany({ where: { id: productId } });
-            const numericId = payload.id.toString();
-            await meiliClient.index("products").deleteDocument(numericId);
-            console.log(
-              `CFP: Product ${productId} successfully deleted in background.`,
-            );
-          } catch (e) {
-            console.error("CFP: Background delete failed", e);
-          }
-        })();
-        break;
-      }
-      default:
-        console.log(`CFP: Unhandled topic ${topic}`);
+      break;
     }
-  } catch (error) {
-    console.error(`CFP: Error processing webhook ${topic} for ${shop}:`, error);
-    // Even if database operation fails, return a 200 OK so Shopify does not retry indefinitely
+
+    case "PRODUCTS_DELETE": {
+      const productId = `gid://shopify/Product/${payload.id}`;
+      console.log(`CFP: Queuing delete for product ${productId}...`);
+
+      // ✅ QUEUE: Delete also goes through queue for consistency
+      enqueueWebhookJob(
+        productId,
+        async () => {
+          await prisma.product.deleteMany({ where: { id: productId } });
+          const numericId = payload.id.toString();
+          await meiliClient.index("products").deleteDocument(numericId);
+          console.log(`CFP: Product ${productId} successfully deleted.`);
+        },
+        `PRODUCTS_DELETE:${payload.id}`
+      );
+      break;
+    }
+
+    default:
+      console.log(`CFP: Unhandled topic ${topic}`);
   }
 
+  // ✅ Always return 200 immediately — queue handles the rest in background
   return new Response("Webhook received", { status: 200 });
 };
