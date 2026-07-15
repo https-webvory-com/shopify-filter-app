@@ -1,9 +1,9 @@
+import { useNavigate } from "react-router";
 import { useState, useRef, useEffect } from "react";
 import {
   useLoaderData,
   useSubmit,
   useNavigation,
-  useNavigate,
   useActionData,
 } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -12,7 +12,7 @@ import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { invalidateShop } from "../services/shopCache.server";
 
-// ── Loader ───────────────────────────────────────────────────────────
+// â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
@@ -151,7 +151,7 @@ export const loader = async ({ request }) => {
   };
 };
 
-// ── Action ───────────────────────────────────────────────────────────
+// â”€â”€ Action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -243,7 +243,7 @@ export const action = async ({ request }) => {
   return { success: false };
 };
 
-// ── Custom UI Components ────────────────────────────────────────────────
+// â”€â”€ Custom UI Components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const OPTION_TYPES = [
   { value: "collection", label: "Collections" },
   { value: "vendor", label: "Vendor" },
@@ -547,7 +547,7 @@ const AutocompleteInput = ({
   );
 };
 
-// ── Component ────────────────────────────────────────────────────────
+// â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function MergedValues() {
   const { rules, optionNames, storeData, pagination } = useLoaderData();
   const submit = useSubmit();
@@ -1526,7 +1526,7 @@ export default function MergedValues() {
         </div>
       )}
 
-      {/* ── Add / Edit Modal ─────────────────────────────────────── */}
+      {/* â”€â”€ Add / Edit Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {showModal && (
         <div className="merged-modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
           <div className="merged-modal-card">

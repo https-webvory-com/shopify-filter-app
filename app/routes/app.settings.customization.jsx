@@ -1,7 +1,7 @@
+import { useNavigate } from "react-router";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useNavigate } from "react-router";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -341,7 +341,7 @@ export default function Customization() {
                           fontWeight: "600",
                         }}
                       >
-                        ✕
+                        âœ•
                       </button>
                     </div>
                   ))}

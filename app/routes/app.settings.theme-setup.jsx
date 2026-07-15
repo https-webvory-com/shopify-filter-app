@@ -21,7 +21,7 @@ export const loader = async ({ request }) => {
         });
         settingsJson = await settingsResponse.json();
       } catch (error) {
-        console.error(`\n❌ [ThemeSetup Error] Failed to fetch settings for Theme ID: ${node.id}`);
+        console.error(`\nâŒ [ThemeSetup Error] Failed to fetch settings for Theme ID: ${node.id}`);
         console.error("Error Message:", error.message);
         if (error.graphQLErrors) {
           console.error("GraphQL Errors:", JSON.stringify(error.graphQLErrors, null, 2));
@@ -100,7 +100,7 @@ export default function ThemeSetup() {
   const navigate = useNavigate();
   // console.log("Fetched themes from loader (Check rawAssetContent inside):", themes);
   
-  // Normalize Shopify data → UI format
+  // Normalize Shopify data â†’ UI format
   const mappedThemes = themes.map((theme) => ({
     id: theme.id,
     themeId: theme.themeId != null ? String(theme.themeId) : null,

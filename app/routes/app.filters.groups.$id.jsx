@@ -32,6 +32,7 @@ const FILTER_TYPE_OPTIONS = [
   { value: "collection", label: "Collection", icon: "C" },
   { value: "option", label: "Product Option", icon: "O" },
   { value: "metafield", label: "Metafield", icon: "M" },
+  { value: "tag", label: "Tag", icon: "#" },
 ];
 
 const DISPLAY_MODES = [
@@ -156,6 +157,7 @@ export const loader = async ({ request, params }) => {
   const allProducts = await prisma.product.findMany({
     where: { shop },
     select: {
+      title: true,
       tags: true,
       options: true,
       variants: { select: { available: true, inventory: true } },
@@ -164,6 +166,7 @@ export const loader = async ({ request, params }) => {
 
   const tagsMap = new Map();
   const optionsMap = new Map();
+  const titleMap = new Map();
 
   let stockOnHandCount = 0;
   let preOrderCount = 0;
@@ -171,6 +174,9 @@ export const loader = async ({ request, params }) => {
   let outOfStockCount = 0;
 
   for (const p of allProducts) {
+    // Process title
+    if (p.title) titleMap.set(p.title, (titleMap.get(p.title) || 0) + 1);
+
     // Process tags
     for (const t of p.tags || []) {
       if (t) tagsMap.set(t, (tagsMap.get(t) || 0) + 1);
@@ -222,6 +228,9 @@ export const loader = async ({ request, params }) => {
     tags: Array.from(tagsMap.entries())
       .map(([value, count]) => ({ value, count }))
       .sort((a, b) => a.value.localeCompare(b.value)),
+    titles: Array.from(titleMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
     locations: shopifyLocations,
     options: Array.from(optionsMap.entries()).reduce((acc, [name, valMap]) => {
       acc[name] = Array.from(valMap.entries())
@@ -268,7 +277,11 @@ export const action = async ({ request, params }) => {
       
       if (!existingFilter) {
         existingFilter = await prisma.filterGroupItem.findFirst({
-          where: { filterGroupId, filterType: filter.filterType, filterKey: filter.filterKey }
+          where: { 
+            filterGroupId, 
+            filterType: filter.filterType, 
+            ...(filter.filterKey ? { filterKey: filter.filterKey } : { label: filter.label })
+          }
         });
       }
       
@@ -279,7 +292,8 @@ export const action = async ({ request, params }) => {
             label: filter.label,
             displayMode: filter.displayMode,
             isEnabled: filter.isEnabled,
-            order: filter.order !== undefined ? filter.order : existingFilter.order
+            order: filter.order !== undefined ? filter.order : existingFilter.order,
+            ...(filter.config ? { config: filter.config } : {})
           }
         });
       } else {
@@ -291,7 +305,8 @@ export const action = async ({ request, params }) => {
             label: filter.label,
             displayMode: filter.displayMode,
             isEnabled: filter.isEnabled,
-            order: filter.order || 0
+            order: filter.order !== undefined ? filter.order : 0,
+            ...(filter.config ? { config: filter.config } : {})
           }
         });
       }
@@ -384,7 +399,7 @@ export const action = async ({ request, params }) => {
       "collection",
       "vendor",
       "product_type",
-      "tags",
+      "tag",
       "price",
       "percent_sale",
       "weight",

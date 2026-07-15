@@ -1,7 +1,8 @@
+import { useNavigate } from "react-router";
 import React, { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useNavigate, useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 
 export const loader = async ({ request }) => {

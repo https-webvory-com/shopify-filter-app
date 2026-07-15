@@ -97,6 +97,11 @@ export function ImportFilterItemsModal({ isOpen, onClose, onSubmit, isSubmitting
       }
     }
 
+    let config = null;
+    if (row.LabelPrefix) {
+      config = { prefix: row.LabelPrefix };
+    }
+
     return {
       id: row["Filter name"] || row.Id || null,
       filterType,
@@ -105,6 +110,7 @@ export function ImportFilterItemsModal({ isOpen, onClose, onSubmit, isSubmitting
       displayMode,
       isEnabled: (row.Active || row.active)?.toString().trim().toUpperCase() !== "FALSE",
       order: parseInt(row.Ordinal, 10) || 0,
+      config,
     };
   };
 

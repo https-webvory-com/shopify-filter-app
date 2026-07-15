@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { useFetcher, useLoaderData, useRevalidator, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -16,7 +16,7 @@ export const loader = async ({ request }) => {
     where: { shop: session.shop, status: "IN_PROGRESS" },
   });
 
-  // Crash recovery: if the job hasn't been updated in 30 minutes, it's stuck
+  // Crash recovery: if the job hasn't been updated in 30 minutes, it's stuck â†’ mark FAILED (resumable)
   if (activeSyncJob) {
     const now = new Date();
     const lastUpdate = new Date(activeSyncJob.updatedAt);
@@ -24,11 +24,19 @@ export const loader = async ({ request }) => {
     if (diffMinutes > 30) {
       await prisma.syncJob.update({
         where: { id: activeSyncJob.id },
-        data: { status: "FAILED" }
+        data: { status: "FAILED" }   // FAILED = resumable, not lost
       });
       activeSyncJob = null;
     }
   }
+
+  // Check if a FAILED (resumable) job exists
+  const resumableJob = !activeSyncJob
+    ? await prisma.syncJob.findFirst({
+        where: { shop: session.shop, status: "FAILED" },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
 
   // Fetch full Shopify store stats in one GraphQL call
   let shopifyStats = null;
@@ -70,6 +78,16 @@ export const loader = async ({ request }) => {
     shopifyActiveCount: shopifyStats?.activeProducts ?? null,
     isSyncingBackground: !!activeSyncJob,
     lastSyncedAt: lastCompletedJob?.updatedAt ?? null,
+    // Live progress during sync
+    syncProgress: activeSyncJob ? {
+      processed: activeSyncJob.productsProcessed ?? 0,
+      total: activeSyncJob.totalProducts ?? shopifyStats?.activeProducts ?? null,
+    } : null,
+    // Resumable job info
+    resumableJob: resumableJob ? {
+      processed: resumableJob.productsProcessed ?? 0,
+      total: resumableJob.totalProducts ?? shopifyStats?.activeProducts ?? null,
+    } : null,
   };
 };
 
@@ -93,11 +111,12 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount, shopifyStats, shopifyActiveCount, isSyncingBackground, lastSyncedAt } = useLoaderData();
+  const { syncedProductsCount, shopifyStats, shopifyActiveCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob } = useLoaderData();
   const syncFetcher = useFetcher();
   const shopify = useAppBridge();
-  const navigate = useNavigate();
   const { revalidate } = useRevalidator();
+
+  const navigate = useNavigate();
 
   const isSyncing =
     (["loading", "submitting"].includes(syncFetcher.state) &&
@@ -114,7 +133,7 @@ export default function Index() {
     }
   }, [syncFetcher.data, shopify]);
 
-  // Show toast when background sync COMPLETES (isSyncingBackground goes true → false)
+  // Show toast when background sync COMPLETES (isSyncingBackground goes true â†’ false)
   const wasSyncingRef = useRef(false);
   useEffect(() => {
     if (wasSyncingRef.current === true && isSyncingBackground === false) {
@@ -168,7 +187,7 @@ export default function Index() {
             .sov-grid { grid-template-columns: 1fr; }
           }
 
-          /* ✨ Active Card ✨ */
+          /* âœ¨ Active Card âœ¨ */
           .sov-card {
             background: #ffffff;
             border-radius: 16px;
@@ -193,7 +212,7 @@ export default function Index() {
             border-color: #a5b4fc;
           }
 
-          /* ✨ Coming Soon Card ✨ */
+          /* âœ¨ Coming Soon Card âœ¨ */
           .sov-card-soon {
             background: #fafafa;
             border-radius: 16px;
@@ -362,7 +381,7 @@ export default function Index() {
           fontFamily: '"Inter", sans-serif',
         }}
       >
-        {/* ── Store Stats Grid ─────────────────────────────────────── */}
+        {/* ———————————————————————————————————————————————— */}
         {shopifyStats && (
           <>
             <h2 className="dash-section-title" style={{ marginTop: "0" }}>Store Overview</h2>
@@ -434,10 +453,29 @@ export default function Index() {
               Database Synchronization
             </h2>
 
+            {/* Resumable job banner */}
+            {resumableJob && !isSyncing && (
+              <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "13px", color: "#854d0e", display: "flex", alignItems: "center", gap: "8px" }}>
+                ⚠️ Previous sync stopped at <strong>{resumableJob.processed.toLocaleString()}</strong>
+                {resumableJob.total ? <> / {resumableJob.total.toLocaleString()}</> : ""} products.
+                Click <strong>Resume Sync</strong> to continue from where it stopped.
+              </div>
+            )}
+
             {/* Synced vs Total */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b" }}>
-                {shopifyActiveCount ? (
+                {/* During active sync — show live processed count */}
+                {isSyncing && syncProgress ? (
+                  <>
+                    <strong style={{ color: "#7c3aed", fontSize: "16px" }}>
+                      {syncProgress.processed.toLocaleString()}
+                    </strong>
+                    {syncProgress.total
+                      ? <span> / {syncProgress.total.toLocaleString()} syncing...</span>
+                      : <span> products synced so far...</span>}
+                  </>
+                ) : shopifyActiveCount ? (
                   <>
                     <strong style={{ color: "#1E1B4B", fontSize: "16px" }}>
                       {Math.min(currentCount, shopifyActiveCount).toLocaleString()}
@@ -453,44 +491,45 @@ export default function Index() {
               </span>
 
               {/* Fully synced */}
-              {shopifyActiveCount && currentCount >= shopifyActiveCount && (
+              {!isSyncing && shopifyActiveCount && currentCount >= shopifyActiveCount && (
                 <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
                   ✅ Fully Synced
                 </span>
               )}
               {/* Missing */}
-              {shopifyActiveCount && currentCount < shopifyActiveCount && !isSyncing && (
+              {!isSyncing && shopifyActiveCount && currentCount < shopifyActiveCount && (
                 <span style={{ background: "#fef9c3", color: "#a16207", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
                   ⚠️ {(shopifyActiveCount - currentCount).toLocaleString()} missing
                 </span>
               )}
-              {/* Stale records hint */}
-              {shopifyActiveCount && currentCount > shopifyActiveCount && (
-                <span style={{ background: "#f1f5f9", color: "#64748b", fontSize: "11px", fontWeight: "500", padding: "2px 8px", borderRadius: "20px" }}>
-                  +{(currentCount - shopifyActiveCount).toLocaleString()} stale (draft/archived)
-                </span>
-              )}
             </div>
 
-            {/* Progress bar */}
-            {shopifyActiveCount && shopifyActiveCount > 0 && (
-              <div style={{ background: "#e2e8f0", borderRadius: "999px", height: "6px", width: "100%", maxWidth: "300px", marginBottom: "6px" }}>
-                <div style={{
-                  background: currentCount >= shopifyActiveCount ? "#16a34a" : "#7c3aed",
-                  borderRadius: "999px",
-                  height: "6px",
-                  width: `${Math.min(100, Math.round((currentCount / shopifyActiveCount) * 100))}%`,
-                  transition: "width 0.5s ease"
-                }} />
-              </div>
-            )}
+            {/* Progress bar — live during sync OR static DB progress */}
+            {(() => {
+              const total = (isSyncing && syncProgress?.total) || shopifyActiveCount;
+              const done  = (isSyncing && syncProgress?.processed) || currentCount;
+              if (!total || total === 0) return null;
+              const pct = Math.min(100, Math.round((done / total) * 100));
+              const color = pct === 100 ? "#16a34a" : isSyncing ? "#7c3aed" : "#7c3aed";
+              return (
+                <div style={{ marginBottom: "6px" }}>
+                  <div style={{ background: "#e2e8f0", borderRadius: "999px", height: "8px", width: "100%", maxWidth: "340px" }}>
+                    <div style={{ background: color, borderRadius: "999px", height: "8px", width: `${pct}%`, transition: "width 0.6s ease" }} />
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px" }}>
+                    {pct}% — {done.toLocaleString()} / {total.toLocaleString()}
+                  </div>
+                </div>
+              );
+            })()}
 
-            {lastSyncedAt && (
+            {lastSyncedAt && !isSyncing && (
               <p style={{ color: "#94a3b8", margin: 0, fontSize: "12px" }}>
                 Last synced: {new Date(lastSyncedAt).toLocaleString()}
               </p>
             )}
           </div>
+
           <button
             onClick={triggerSync}
             disabled={isSyncing}
@@ -567,7 +606,7 @@ export default function Index() {
                 ></path>
               </svg>
             )}
-            {isSyncing ? "Syncing..." : "Sync Products from Shopify"}
+            {isSyncing ? "Syncing..." : resumableJob ? "▶ Resume Sync" : "Sync Products from Shopify"}
           </button>
         </div>
 

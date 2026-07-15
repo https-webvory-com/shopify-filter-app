@@ -245,25 +245,56 @@ async function autoSeedOptionFilters(shop) {
 export async function syncProducts(shop, admin) {
   console.log(`CFP: Initializing background product sync for ${shop}...`);
 
-  // Delete previous sync jobs for this shop to keep the database clean
-  await prisma.syncJob.deleteMany({
-    where: { shop },
+  // ── Resume or Fresh Start ──────────────────────────────────────────
+  // Check if there's a previously FAILED job with a saved cursor → resume it
+  // Otherwise delete old jobs and start fresh
+  let job = await prisma.syncJob.findFirst({
+    where: { shop, status: "FAILED" },
+    orderBy: { createdAt: "desc" },
   });
 
-  // Create a pending sync job
-  const job = await prisma.syncJob.create({
-    data: {
-      shop,
-      status: "IN_PROGRESS",
-    },
-  });
+  if (job && job.cursor) {
+    // Resume from where it stopped
+    console.log(`CFP: Resuming failed sync for ${shop} from cursor (${job.productsProcessed} already done)`);
+    job = await prisma.syncJob.update({
+      where: { id: job.id },
+      data: { status: "IN_PROGRESS", updatedAt: new Date() },
+    });
+  } else {
+    // Fresh start — delete all old jobs
+    await prisma.syncJob.deleteMany({ where: { shop } });
+
+    // Fetch total active products count for progress display
+    let totalProducts = null;
+    try {
+      const countRes = await admin.graphql(`#graphql
+        query { productsCount(query: "status:active") { count } }
+      `);
+      const countData = await countRes.json();
+      totalProducts = countData.data?.productsCount?.count ?? null;
+    } catch (e) { /* non-critical */ }
+
+    job = await prisma.syncJob.create({
+      data: {
+        shop,
+        status: "IN_PROGRESS",
+        totalProducts,
+      },
+    });
+    console.log(`CFP: Starting fresh sync for ${shop} — ${totalProducts ?? "?"} total active products`);
+  }
 
   // Start background processing without awaiting it
   processSyncChunk(job.id, shop, admin).catch((err) => {
     console.error(`CFP: Background sync failed for ${shop}`, err);
   });
 
-  return { jobId: job.id, message: "Sync started in background" };
+  return {
+    jobId: job.id,
+    message: job.cursor
+      ? `Resuming sync from product ${job.productsProcessed}...`
+      : "Sync started in background",
+  };
 }
 
 async function processSyncChunk(jobId, shop, admin) {
@@ -581,31 +612,6 @@ async function processSyncChunk(jobId, shop, admin) {
   }
 
   if (!hasNextPage) {
-    // ── Cleanup stale products ─────────────────────────────────────
-    // Remove products from DB that are no longer ACTIVE in Shopify
-    // (they were synced when active, but are now draft/archived/deleted)
-    try {
-      const syncedIds = await prisma.product.findMany({
-        where: { shop },
-        select: { id: true },
-      });
-
-      // Fetch all current active IDs from Meilisearch index we just built
-      // We use the meiliDocs we upserted — track them by collecting all IDs seen during this sync
-      // Simpler approach: delete DB products whose status is not ACTIVE
-      const deleted = await prisma.product.deleteMany({
-        where: {
-          shop,
-          status: { not: "ACTIVE" },
-        },
-      });
-      if (deleted.count > 0) {
-        console.log(`CFP: Cleaned up ${deleted.count} stale (non-active) products from DB for ${shop}`);
-      }
-    } catch (cleanupErr) {
-      console.error(`CFP: Stale cleanup error (non-critical):`, cleanupErr);
-    }
-
     await autoSeedOptionFilters(shop);
     await updateMeiliSettings(shop);
     await prisma.syncJob.update({

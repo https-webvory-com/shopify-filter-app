@@ -1,9 +1,9 @@
+import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
   useLoaderData,
   useSubmit,
   useNavigation,
-  useNavigate,
   useActionData,
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";

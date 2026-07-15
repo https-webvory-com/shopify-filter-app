@@ -262,6 +262,12 @@
 
     try {
       const queryParams = new URLSearchParams();
+
+      // Guard: shop must be present
+      if (!shop) {
+        console.error('CFP: Missing shop domain — cannot fetch filter data.');
+        return;
+      }
       queryParams.append('shop', shop);
       
       if (window.Shopify && window.Shopify.country) {
@@ -318,6 +324,8 @@
         }
         const response = await fetch(`/apps/collection-filter-pro/api/filter?${queryParams.toString()}`);
       const data = await response.json();
+
+      console.log('[CFP] API Response:', data);
 
       sidebar.classList.remove('cfp-loading');
 
