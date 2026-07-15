@@ -8,7 +8,7 @@ const vpsHost = "http://127.0.0.1:7700"
 if (!global.meiliClient) {
   global.meiliClient = new Meilisearch({
     host: vpsHost,
-    apiKey: "819e418879c751fe28633f696152cd1edf7549a8bec743c8042cb2a8a99eed91",
+    apiKey: "c9E90mOIsFK2jKgNy69i00PLiy9P/ot0ZE/ww6pfmH8=",
   });
 }
 
