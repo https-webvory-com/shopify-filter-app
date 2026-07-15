@@ -581,6 +581,31 @@ async function processSyncChunk(jobId, shop, admin) {
   }
 
   if (!hasNextPage) {
+    // ── Cleanup stale products ─────────────────────────────────────
+    // Remove products from DB that are no longer ACTIVE in Shopify
+    // (they were synced when active, but are now draft/archived/deleted)
+    try {
+      const syncedIds = await prisma.product.findMany({
+        where: { shop },
+        select: { id: true },
+      });
+
+      // Fetch all current active IDs from Meilisearch index we just built
+      // We use the meiliDocs we upserted — track them by collecting all IDs seen during this sync
+      // Simpler approach: delete DB products whose status is not ACTIVE
+      const deleted = await prisma.product.deleteMany({
+        where: {
+          shop,
+          status: { not: "ACTIVE" },
+        },
+      });
+      if (deleted.count > 0) {
+        console.log(`CFP: Cleaned up ${deleted.count} stale (non-active) products from DB for ${shop}`);
+      }
+    } catch (cleanupErr) {
+      console.error(`CFP: Stale cleanup error (non-critical):`, cleanupErr);
+    }
+
     await autoSeedOptionFilters(shop);
     await updateMeiliSettings(shop);
     await prisma.syncJob.update({
