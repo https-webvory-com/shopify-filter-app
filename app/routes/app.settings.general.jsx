@@ -9,9 +9,14 @@ import {
 } from "../services/filterSettings.server";
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
-  const settings = await getFilterGlobalSettings(session.shop);
-  return Response.json({ settings });
+  try {
+    const { session } = await authenticate.admin(request);
+    const settings = await getFilterGlobalSettings(session.shop);
+    return Response.json({ settings });
+  } catch (error) {
+    console.error("LOADER ERROR:", error);
+    throw error;
+  }
 };
 
 export const action = async ({ request }) => {
