@@ -52,31 +52,10 @@ const DEFAULT_FILTERS = [
   },
   {
     filterType: "option",
-    filterKey: "Denominations",
-    label: "Denominations",
-    displayMode: "list",
-    order: 5,
-  },
-  {
-    filterType: "option",
     filterKey: "Size",
     label: "Size",
     displayMode: "list",
-    order: 6,
-  },
-  {
-    filterType: "option",
-    filterKey: "slot",
-    label: "slot",
-    displayMode: "list",
-    order: 7,
-  },
-  {
-    filterType: "option",
-    filterKey: "Title",
-    label: "Title",
-    displayMode: "list",
-    order: 8,
+    order: 5,
   },
 ];
 

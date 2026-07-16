@@ -867,16 +867,50 @@ document.addEventListener("DOMContentLoaded", function () {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
              const isActive = index === activeIndex ? 'cfp-swatch-active' : '';
              
+             let hoverImgUrlForSwatch = '';
+             if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(p.images) && data.imgUrl) {
+                 const targetUrlBase = data.imgUrl.split('?')[0].replace(/^https?:/, '');
+                 let foundIdx = -1;
+                 for (let i=0; i<p.images.length; i++) {
+                     let src = typeof p.images[i] === 'object' ? p.images[i].src : p.images[i];
+                     if (src && (src.includes(targetUrlBase) || targetUrlBase.includes(src.split('?')[0].replace(/^https?:/, '')))) {
+                         foundIdx = i;
+                         break;
+                     }
+                 }
+                 if (foundIdx !== -1 && foundIdx + 1 < p.images.length) {
+                     let nextImg = p.images[foundIdx + 1];
+                     let nextImgSrc = typeof nextImg === 'object' ? nextImg.src : nextImg;
+                     
+                     let isVariantImage = false;
+                     if (p.variants) {
+                         const nextUrlBase = nextImgSrc.split('?')[0].replace(/^https?:/, '');
+                         isVariantImage = p.variants.some(v => v.imageUrl && (v.imageUrl.includes(nextUrlBase) || nextUrlBase.includes(v.imageUrl.split('?')[0].replace(/^https?:/, ''))));
+                     }
+                     if (!isVariantImage) {
+                         hoverImgUrlForSwatch = nextImgSrc;
+                     }
+                 }
+             }
+
+             const secondaryImgJS = `
+               const secImg = card.querySelector('.cfp-secondary-img');
+               if (secImg) {
+                   ${hoverImgUrlForSwatch ? `secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
+               }
+             `;
+             
              // We use onmouseenter for instant preview and onclick for selection.
              swatchesHtml += `<div class="cfp-swatch-item ${isActive} ${isHidden}" 
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
-                           const card = this.closest('.cfp-search-product-card');
+                           const card = this.closest('.cfp-product-card');
                            card.querySelector('.cfp-main-img').src='${getResizedImageUrl(data.imgUrl, '600x')}';
+                           ${secondaryImgJS.replace(/\n/g, ' ')}
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
-                           if('${data.variantId}') card.href='/products/${p.handle}?variant=${data.variantId}';">
+                           if('${data.variantId}') card.querySelector('a').href='/products/${p.handle}?variant=${data.variantId}';">
                 <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
              </div>`;
           });

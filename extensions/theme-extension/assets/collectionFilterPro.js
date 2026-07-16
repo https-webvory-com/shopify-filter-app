@@ -782,11 +782,45 @@
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
              const isActive = index === activeIndex ? 'cfp-swatch-active' : '';
              
+             let hoverImgUrlForSwatch = '';
+             if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(product.images) && data.imgUrl) {
+                 const targetUrlBase = data.imgUrl.split('?')[0].replace(/^https?:/, '');
+                 let foundIdx = -1;
+                 for (let i=0; i<product.images.length; i++) {
+                     let src = typeof product.images[i] === 'object' ? product.images[i].src : product.images[i];
+                     if (src && (src.includes(targetUrlBase) || targetUrlBase.includes(src.split('?')[0].replace(/^https?:/, '')))) {
+                         foundIdx = i;
+                         break;
+                     }
+                 }
+                 if (foundIdx !== -1 && foundIdx + 1 < product.images.length) {
+                     let nextImg = product.images[foundIdx + 1];
+                     let nextImgSrc = typeof nextImg === 'object' ? nextImg.src : nextImg;
+                     
+                     let isVariantImage = false;
+                     if (product.variants) {
+                         const nextUrlBase = nextImgSrc.split('?')[0].replace(/^https?:/, '');
+                         isVariantImage = product.variants.some(v => v.imageUrl && (v.imageUrl.includes(nextUrlBase) || nextUrlBase.includes(v.imageUrl.split('?')[0].replace(/^https?:/, ''))));
+                     }
+                     if (!isVariantImage) {
+                         hoverImgUrlForSwatch = nextImgSrc;
+                     }
+                 }
+             }
+
+             const secondaryImgJS = `
+               const secImg = card.querySelector('.cfp-product-card__image--secondary');
+               if (secImg) {
+                   ${hoverImgUrlForSwatch ? `secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
+               }
+             `;
+             
              swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}" 
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
                            card.querySelector('.cfp-product-card__image--primary').src='${getResizedImageUrl(data.imgUrl, '600x')}';
+                           ${secondaryImgJS.replace(/\n/g, ' ')}
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');

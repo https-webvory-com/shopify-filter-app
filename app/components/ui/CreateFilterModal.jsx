@@ -539,6 +539,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     vendor: (storeData?.vendors || []).map(v => ({ label: v.value, count: v.count })),
     product_type: (storeData?.productTypes || []).map(p => ({ label: p.value, count: p.count })),
     tag: (storeData?.tags || []).map(t => ({ label: t.value, count: t.count })),
+    tags: (storeData?.tags || []).map(t => ({ label: t.value, count: t.count })),
     title: (storeData?.titles || []).map(t => ({ label: t.value, count: t.count })),
   };
 
@@ -591,10 +592,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
       return storeData?.locations?.map(l => ({ label: l.value, count: l.count })) || [];
     }
 
-    // If it's a known top-level type, return its data
-    if (DUMMY_DATA[type]) return DUMMY_DATA[type];
+    // If it's a known top-level type, return its data (case-insensitive lookup)
+    const typeKey = Object.keys(DUMMY_DATA).find(k => k.toLowerCase() === type.toLowerCase());
+    if (typeKey && DUMMY_DATA[typeKey] && DUMMY_DATA[typeKey].length > 0) return DUMMY_DATA[typeKey];
     
-    // Check if it's a dynamic option type (like 'color', 'size', 'title')
+    // Check if it's a dynamic option type (like 'color', 'size', 'title', 'Denominations')
     if (storeData?.options) {
       const matchedKey = Object.keys(storeData.options).find(k => k.toLowerCase() === type.toLowerCase());
       if (matchedKey && storeData.options[matchedKey]) {
