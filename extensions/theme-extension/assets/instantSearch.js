@@ -1008,7 +1008,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ${wishlistHtml}
               </div>
             </a>
-            <button type="button" class="cfp-quick-view-btn" data-product-handle="${p.handle}">Quick View</button>
+            ${(data.globalSettings && data.globalSettings.showQuickViewInstantSearch !== false) ? `<button type="button" class="cfp-quick-view-btn" data-product-handle="${p.handle}">Quick View</button>` : ''}
           </div>
           <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
             <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>

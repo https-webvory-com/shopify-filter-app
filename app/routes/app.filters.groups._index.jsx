@@ -103,26 +103,8 @@ async function ensureDefaultGroup(shop) {
     });
   }
 
-  const filtersToDelete = existing.filters
-    .filter(
-      (filter) =>
-        filter.filterType === "availability" || filter.filterType === "tag",
-    )
-    .map((filter) => filter.id);
-
-  if (filtersToDelete.length > 0) {
-    await prisma.filterGroupItem.deleteMany({
-      where: { id: { in: filtersToDelete } },
-    });
-  }
-
   const existingFilterKeys = new Set(
-    existing.filters
-      .filter(
-        (filter) =>
-          filter.filterType !== "availability" && filter.filterType !== "tag",
-      )
-      .map((filter) => `${filter.filterType}:${filter.filterKey ?? ""}`),
+    existing.filters.map((filter) => `${filter.filterType}:${filter.filterKey ?? ""}`)
   );
 
   const missingFilters = DEFAULT_FILTERS.filter(
@@ -2952,7 +2934,7 @@ export default function FilterGroups() {
                   padding: "4px",
                 }}
               >
-                Ã¢Å“â€¢
+                ✕
               </button>
             </div>
 

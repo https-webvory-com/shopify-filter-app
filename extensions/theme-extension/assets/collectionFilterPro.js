@@ -896,7 +896,7 @@
                 ${wishlistHtml}
               </div>
             </a>
-            <button type="button" class="cfp-quick-view-btn" data-product-handle="${product.handle}">Quick View</button>
+            ${(globalSettings && globalSettings.showQuickViewCollection !== false) ? `<button type="button" class="cfp-quick-view-btn" data-product-handle="${product.handle}">Quick View</button>` : ''}
           </div>
           <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
             <div class="cfp-product-card__info">
