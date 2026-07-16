@@ -77,16 +77,18 @@ jobs:
 
             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-            # docker stop shopify-filter-app || true
-            # docker rm shopify-filter-app || true
+            cd /home/ubuntu/shopify-filter-app
 
-            # docker run -d \
-            #   --name shopify-filter-app \
-            #   --env-file .env \
-            #   -p 3005:3005 \
-            #   --restart always \
-            #   $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            docker stop shopify-filter-app || true
+            docker rm shopify-filter-app || true
 
-            # docker image prune -f
+            docker run -d \
+              --name shopify-filter-app \
+              --env-file .env \
+              -p 3005:3005 \
+              --restart always \
+              $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-            # echo "Deployment completed successfully."
+            docker image prune -f
+
+            echo "Deployment completed successfully."
