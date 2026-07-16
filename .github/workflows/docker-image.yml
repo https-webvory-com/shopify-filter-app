@@ -1,88 +1,92 @@
-name: Deploy to EC2
+# name: Deploy to EC2
 
-on:
-  push:
-    branches:
-      - main
+# on:
+#   push:
+#     branches:
+#       - main
 
-jobs:
-  deploy:
+# env:
+#   AWS_REGION: ap-south-1
+#   ECR_REGISTRY: 450367038243.dkr.ecr.ap-south-1.amazonaws.com
+#   ECR_REPOSITORY: shopify_filter
+#   IMAGE_TAG: latest
 
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
 
-      - name: Checkout code
-        uses: actions/checkout@v4
+#       # Create .env (if needed during docker build)
+#       - name: Create .env
+#         run: |
+#           echo "${{ secrets.ENV_FILE }}" > .env
 
+#       # Configure AWS Credentials
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
 
-      # Create .env file (only if your Dockerfile uses it)
-      - name: Create .env file
-        run: |
-          echo "${{ secrets.ENV_FILE }}" > .env
+#       # Login to ECR
+#       - name: Login to Amazon ECR
+#         run: |
+#           aws ecr get-login-password --region $AWS_REGION | \
+#           docker login \
+#             --username AWS \
+#             --password-stdin $ECR_REGISTRY
 
+#       # Build Docker Image
+#       - name: Build Docker Image
+#         run: |
+#           docker build -t shopify-filter-app .
 
-      # Login Docker Hub
-      - name: Docker Hub Login
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+#       # Tag Image
+#       - name: Tag Docker Image
+#         run: |
+#           docker tag shopify-filter-app:latest \
+#             $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
+#       # Push Image
+#       - name: Push Docker Image
+#         run: |
+#           docker push \
+#             $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # Build Docker Image
-      - name: Build Docker Image
-        run: |
-          docker build \
-            -t ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest .
+#       # Deploy to EC2
+#       - name: Deploy to EC2
+#         uses: appleboy/ssh-action@v1.0.3
+#         with:
+#           host: ${{ secrets.EC2_HOST }}
+#           username: ${{ secrets.EC2_USER }}
+#           key: ${{ secrets.EC2_SSH_KEY }}
 
+#           script: |
+#             AWS_REGION=ap-south-1
+#             ECR_REGISTRY=450367038243.dkr.ecr.ap-south-1.amazonaws.com
+#             ECR_REPOSITORY=shopify_filter
 
-      # Push Docker Image
-      - name: Push Docker Image
-        run: |
-          docker push \
-            ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
+#             aws ecr get-login-password --region $AWS_REGION | \
+#             docker login \
+#               --username AWS \
+#               --password-stdin $ECR_REGISTRY
 
+#             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      # Deploy EC2
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
+#             docker stop shopify-filter-app || true
+#             docker rm shopify-filter-app || true
 
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+#             docker run -d \
+#               --name shopify-filter-app \
+#               --env-file .env \
+#               -p 3005:3005 \
+#               --restart always \
+#               $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-          script: |
+#             docker image prune -f
 
-            echo "====== Deployment Started ======"
-
-
-            docker login \
-              -u ${{ secrets.DOCKERHUB_USERNAME }} \
-              -p ${{ secrets.DOCKERHUB_PASSWORD }}
-
-
-            docker pull \
-              ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
-
-
-            # echo "Stop old container"
-
-            # docker stop shopify-filter-app || true
-
-            # docker rm shopify-filter-app || true
-
-
-            # echo "Start new container"
-
-
-            # docker run -d \
-            #   --name shopify-filter-app \
-            #   --env-file .env \
-            #   -p 3005:3005 \
-            #   --restart always \
-            #   ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
-
-
-            # echo "====== Deployment Completed ======"
+#             echo "Deployment completed successfully."
