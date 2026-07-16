@@ -38,32 +38,47 @@ export const loader = async ({ request }) => {
       })
     : null;
 
-  // Fetch full Shopify store stats in one GraphQL call
+  // ── Fetch accurate Shopify store stats via REST Admin API ────────────────
+  // WHY REST: GraphQL productsCount caps at 10,000 — inaccurate for 49k+ stores
+  // We use session.accessToken + fetch to call REST directly
   let shopifyStats = null;
   try {
-    const statsRes = await admin.graphql(`#graphql
+    const shop = session.shop;
+    const token = session.accessToken;
+    const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
+    const apiBase = `https://${shop}/admin/api/2025-10`;
+
+    const [activeRes, draftRes, archivedRes] = await Promise.all([
+      fetch(`${apiBase}/products/count.json?status=active`, { headers }),
+      fetch(`${apiBase}/products/count.json?status=draft`,  { headers }),
+      fetch(`${apiBase}/products/count.json?status=archived`, { headers }),
+    ]);
+
+    const activeCount   = (await activeRes.json())?.count   ?? 0;
+    const draftCount    = (await draftRes.json())?.count    ?? 0;
+    const archivedCount = (await archivedRes.json())?.count ?? 0;
+
+    // Collections via GraphQL (no 10k cap issue for collections)
+    const colRes = await admin.graphql(`#graphql
       query {
-        activeProducts: productsCount(query: "status:active") { count }
-        draftProducts: productsCount(query: "status:draft") { count }
-        archivedProducts: productsCount(query: "status:archived") { count }
         allCollections: collectionsCount { count }
         publishedCollections: collectionsCount(query: "published_status:published") { count }
         smartCollections: collectionsCount(query: "collection_type:smart") { count }
       }
     `);
-    const statsData = await statsRes.json();
-    const d = statsData.data;
+    const colData = (await colRes.json())?.data;
+
     shopifyStats = {
-      activeProducts: d?.activeProducts?.count ?? 0,
-      draftProducts: d?.draftProducts?.count ?? 0,
-      archivedProducts: d?.archivedProducts?.count ?? 0,
-      totalProducts: (d?.activeProducts?.count ?? 0) + (d?.draftProducts?.count ?? 0) + (d?.archivedProducts?.count ?? 0),
-      allCollections: d?.allCollections?.count ?? 0,
-      publishedCollections: d?.publishedCollections?.count ?? 0,
-      smartCollections: d?.smartCollections?.count ?? 0,
+      activeProducts:       activeCount,
+      draftProducts:        draftCount,
+      archivedProducts:     archivedCount,
+      totalProducts:        activeCount + draftCount + archivedCount,
+      allCollections:       colData?.allCollections?.count       ?? 0,
+      publishedCollections: colData?.publishedCollections?.count ?? 0,
+      smartCollections:     colData?.smartCollections?.count     ?? 0,
     };
   } catch (e) {
-    // non-critical, ignore
+    console.error("CFP: Store stats fetch error:", e?.message);
   }
 
   // Last completed sync job
@@ -99,7 +114,7 @@ export const action = async ({ request }) => {
 
   if (actionType === "sync") {
     try {
-      const result = await syncProducts(session.shop, admin);
+      const result = await syncProducts(session.shop, admin, session);
       return { success: true, message: result.message, type: "sync" };
     } catch (e) {
       console.error("Sync error:", e);

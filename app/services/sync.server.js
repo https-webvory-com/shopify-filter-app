@@ -242,7 +242,7 @@ async function autoSeedOptionFilters(shop) {
  * @param {string} shop - The shop domain
  * @param {object} admin - The authenticated Shopify Admin API client
  */
-export async function syncProducts(shop, admin) {
+export async function syncProducts(shop, admin, session = null) {
   console.log(`CFP: Initializing background product sync for ${shop}...`);
 
   // ── Resume or Fresh Start ──────────────────────────────────────────
@@ -265,14 +265,19 @@ export async function syncProducts(shop, admin) {
     await prisma.syncJob.deleteMany({ where: { shop } });
 
     // Fetch total active products count for progress display
+    // Using REST API — GraphQL productsCount caps at 10,000 (inaccurate for large stores)
     let totalProducts = null;
     try {
-      const countRes = await admin.graphql(`#graphql
-        query { productsCount(query: "status:active") { count } }
-      `);
-      const countData = await countRes.json();
-      totalProducts = countData.data?.productsCount?.count ?? null;
-    } catch (e) { /* non-critical */ }
+      const accessToken = session?.accessToken;
+      if (accessToken) {
+        const countRes = await fetch(
+          `https://${shop}/admin/api/2025-10/products/count.json?status=active`,
+          { headers: { "X-Shopify-Access-Token": accessToken } }
+        );
+        const countData = await countRes.json();
+        totalProducts = countData?.count ?? null;
+      }
+    } catch (e) { /* non-critical — progress bar will just not show total */ }
 
     job = await prisma.syncJob.create({
       data: {
