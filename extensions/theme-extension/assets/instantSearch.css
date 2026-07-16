@@ -1,5 +1,10 @@
-/* Instant Search UI - Full Screen Modal Overlay */
+/* ==========================================================================
+   Instant Search UI - Full Screen Modal Overlay
+   All classes are namespaced with "cfp-" prefix to avoid conflicts with
+   theme styles. Do NOT add any global/unscoped rules here.
+   ========================================================================== */
 
+/* ── Overlay ───────────────────────────────────────────────────────────────── */
 .cfp-search-modal-overlay {
   position: fixed;
   top: 0;
@@ -19,7 +24,7 @@
   visibility: visible;
 }
 
-/* The modal wrapper sliding from top */
+/* ── Modal wrapper (slides from top) ───────────────────────────────────────── */
 .cfp-search-modal {
   position: fixed;
   top: 0;
@@ -44,7 +49,7 @@
   transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out, visibility 0s linear 0s;
 }
 
-/* Header with the big input */
+/* ── Search header (input bar) ─────────────────────────────────────────────── */
 .cfp-search-header {
   border-bottom: 1px solid #e2e8f0;
   padding: 15px 30px;
@@ -57,7 +62,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  max-width: 1600px; /* Wider to match reference */
+  max-width: 1600px;
   margin: 0 auto;
   gap: 20px;
 }
@@ -74,7 +79,7 @@
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
-  font-size: 20px !important; /* Larger text */
+  font-size: 20px !important;
   padding: 5px 0 !important;
   margin: 0 !important;
   background: transparent !important;
@@ -121,7 +126,7 @@
   stroke-width: 1.5;
 }
 
-/* Body containing results */
+/* ── Results body ───────────────────────────────────────────────────────────── */
 .cfp-search-body {
   display: none;
   max-width: 1400px;
@@ -136,7 +141,7 @@
   display: flex;
 }
 
-/* Loading State */
+/* ── Loading state ──────────────────────────────────────────────────────────── */
 .cfp-search-loading-container {
   width: 100%;
   padding: 60px 0;
@@ -162,7 +167,7 @@
   to { transform: rotate(360deg); }
 }
 
-/* Layout Columns */
+/* ── Layout columns ─────────────────────────────────────────────────────────── */
 .cfp-search-column-left {
   flex: 1;
   border-right: 1px solid #e2e8f0;
@@ -183,7 +188,7 @@
   font-weight: 600;
 }
 
-/* Collections List */
+/* ── Collections list ───────────────────────────────────────────────────────── */
 .cfp-search-collections-list {
   list-style: none;
   padding: 0;
@@ -214,7 +219,7 @@
   opacity: 0.4;
 }
 
-/* Product Grid */
+/* ── Product grid ───────────────────────────────────────────────────────────── */
 .cfp-search-product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -278,7 +283,7 @@
   width: 100%;
 }
 
-/* Recent Searches */
+/* ── Recent searches ────────────────────────────────────────────────────────── */
 .cfp-recent-searches-list {
   list-style: none;
   padding: 0;
@@ -332,7 +337,8 @@
   width: 14px;
   height: 14px;
 }
-/* Skeleton Loader Classes */
+
+/* ── Skeleton loaders ───────────────────────────────────────────────────────── */
 .cfp-skeleton {
   background: #f1f5f9;
   border-radius: 4px;
@@ -340,8 +346,8 @@
 }
 
 @keyframes cfp-pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%   { opacity: 1; }
+  50%  { opacity: 0.5; }
   100% { opacity: 1; }
 }
 
@@ -375,7 +381,7 @@
   margin: 10px 0;
 }
 
-/* Responsive */
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .cfp-search-header {
     padding: 15px 20px;
@@ -398,16 +404,62 @@
   }
 }
 
+/* ==========================================================================
+   Suppress theme's OWN search modal/drawer while our modal is open.
 
-/* Prevent theme default search modals from showing */
-body.cfp-search-active details[open] > .search-modal,
-body.cfp-search-active details[open] > summary + div[class*="search"],
-body.cfp-search-active #SearchDrawer,
-body.cfp-search-active .search-drawer,
-body.cfp-search-active .search-modal,
-body.cfp-search-active dialog[id*="search"] {
-    display: none !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
+   SAFETY: All rules are gated on body.cfp-search-active — they ONLY apply
+   while our modal is open. When our modal is closed, ZERO effect on theme.
+
+   LAYERS (from safest to broadest):
+   1. Shopify custom elements — these are ALWAYS search, 100% safe
+   2. Known exact IDs — always safe
+   3. Header-scoped classes — safe because header only has search UI, not
+      country pickers or other non-search elements at the .search-modal level
+   4. Avoid: page-wide [class*="search"], div[class*="search"] — too broad
+   ========================================================================== */
+
+/* ── Layer 1: Shopify custom elements (always search, 100% safe) ─────────── */
+body.cfp-search-active predictive-search,
+body.cfp-search-active search-modal {
+  display:      none !important;
+  visibility:   hidden !important;
+  pointer-events: none !important;
 }
+
+/* ── Layer 2: Known exact IDs across major themes ────────────────────────── */
+body.cfp-search-active #SearchModal,
+body.cfp-search-active #SearchDrawer,
+body.cfp-search-active #search-modal,
+body.cfp-search-active #search-drawer {
+  display:      none !important;
+  opacity:      0    !important;
+  visibility:   hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── Layer 3: Header-scoped class selectors ──────────────────────────────────
+   Scoping to header / .shopify-section--header makes these SAFE:
+   - The header only contains navigation + search UI
+   - Country/currency pickers are NOT called .search-modal inside the header
+   - So .search-modal inside header = always the theme's search popup ──── */
+body.cfp-search-active header .search-modal,
+body.cfp-search-active header .search-drawer,
+body.cfp-search-active header .search-popup,
+body.cfp-search-active .shopify-section--header .search-modal,
+body.cfp-search-active .shopify-section--header .search-drawer,
+body.cfp-search-active .shopify-section--header .search-popup {
+  display:      none !important;
+  opacity:      0    !important;
+  visibility:   hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── Layer 4: Details-based search popups (Dawn/Sense open state) ────────── */
+/* Only target <details> that have search in their class/id inside header */
+body.cfp-search-active header details[open].header__search > :not(summary),
+body.cfp-search-active header details[open][class*="search"] > :not(summary) {
+  display:      none !important;
+  visibility:   hidden !important;
+  pointer-events: none !important;
+}
+

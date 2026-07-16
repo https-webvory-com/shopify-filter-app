@@ -456,49 +456,94 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function closeThemeSearch() {
-      // 1. details-based modals
-      document.querySelectorAll('details[open]').forEach(details => {
-        if (
-          details.querySelector('[class*="search" i]') || 
-          details.className.toLowerCase().includes('search') ||
-          details.id.toLowerCase().includes('search') ||
-          details.querySelector('summary[class*="search" i]')
-        ) {
+    // Close the theme's own search modal so ours can take over.
+    // Strategy: layered approach from safest to broadest, all scoped to header.
+
+    const headerEl = document.querySelector(
+      'header, sticky-header, .site-header, #shopify-section-header'
+    );
+
+    // ── Layer 1: Shopify custom elements (always search, 100% safe) ──────────
+    document.querySelectorAll('predictive-search, search-modal').forEach(el => {
+      if (!el.id.includes('cfp-')) {
+        el.style.display    = 'none';
+        el.style.visibility = 'hidden';
+        el.removeAttribute('open');
+      }
+    });
+
+    // ── Layer 2: Close <details open> inside header with search class/id ─────
+    if (headerEl) {
+      headerEl.querySelectorAll('details[open]').forEach(details => {
+        const cls = (details.className || '').toLowerCase();
+        const id  = (details.id || '').toLowerCase();
+        const hasSearchChild = details.querySelector('predictive-search, search-modal');
+        if (cls.includes('search') || id.includes('search') || hasSearchChild) {
           details.removeAttribute('open');
         }
       });
-      
-      // 2. dialog-based modals
-      document.querySelectorAll('dialog[open]').forEach(dialog => {
-        if (dialog.className.toLowerCase().includes('search') || dialog.id.toLowerCase().includes('search')) {
-          dialog.close();
-        }
-      });
-      
-      // 3. active class based modals
-      document.querySelectorAll('[class*="search" i].active, [class*="search" i].is-active, [class*="search" i].open, [class*="search" i].is-open, [id*="search" i].active, [id*="search" i].is-active, [id*="search" i].open, [id*="search" i].is-open').forEach(el => {
-        if (!el.id.includes('cfp-search')) {
-          el.classList.remove('active', 'is-active', 'open', 'is-open');
-        }
-      });
-
-      // 4. body classes
-      document.body.classList.forEach(cls => {
-         if (cls.toLowerCase().includes('search') && !cls.includes('cfp-search')) {
-            document.body.classList.remove(cls);
-         }
-      });
-      
-      // 5. Inline styles (e.g., display: block or opacity: 1) on common search wrappers
-      const commonWrappers = document.querySelectorAll('.search-modal, #SearchDrawer, .search-drawer, .header__search, .search-popup, #search-modal, #search-popup');
-      commonWrappers.forEach(el => {
-          if (!el.id.includes('cfp-search')) {
-             if (el.style.display === 'block') el.style.display = '';
-             if (el.style.opacity === '1') el.style.opacity = '';
-             if (el.style.visibility === 'visible') el.style.visibility = '';
-          }
-      });
     }
+
+    // ── Layer 3: Close <dialog> by known exact IDs ───────────────────────────
+    ['SearchModal', 'SearchDrawer', 'search-modal', 'search-drawer'].forEach(dialogId => {
+      const dialog = document.getElementById(dialogId);
+      if (dialog) {
+        if (typeof dialog.close === 'function' && dialog.open) {
+          try { dialog.close(); } catch (e) {}
+        }
+        dialog.style.display    = 'none';
+        dialog.style.visibility = 'hidden';
+      }
+    });
+
+    // ── Layer 4: Remove open/active classes from search components in header ──
+    if (headerEl) {
+      const searchComponents = [
+        'search-modal', 'predictive-search',
+        '.header__search', '.site-nav__search',
+        '.search-modal', '.search-drawer', '.search-popup',
+      ].join(', ');
+      try {
+        headerEl.querySelectorAll(searchComponents).forEach(el => {
+          if (!el.id.includes('cfp-')) {
+            el.classList.remove('active', 'is-active', 'open', 'is-open', 'is-visible');
+          }
+        });
+      } catch (e) {}
+    }
+
+    // ── Layer 5: Reset inline styles on header search elements ───────────────
+    if (headerEl) {
+      const inlineTargets = [
+        '.search-modal', '.search-drawer', '.search-popup',
+        '.header__search', '#SearchDrawer', '#SearchModal',
+      ].join(', ');
+      try {
+        headerEl.querySelectorAll(inlineTargets).forEach(el => {
+          if (!el.id.includes('cfp-')) {
+            if (el.style.display === 'block') el.style.display = '';
+            if (el.style.opacity === '1')     el.style.opacity = '';
+            if (el.style.visibility === 'visible') el.style.visibility = '';
+          }
+        });
+      } catch (e) {}
+    }
+
+    // ── Layer 6: Remove KNOWN theme body classes for search-open state ────────
+    // We only remove specific well-known class names, NOT any class with "search".
+    // These are classes themes add to <body> when their search is open.
+    const knownThemeSearchBodyClasses = [
+      'search-open',        // common pattern
+      'search-is-open',     // common pattern
+      'js-search-open',     // common pattern
+      'overlay-search',     // some themes
+    ];
+    knownThemeSearchBodyClasses.forEach(cls => {
+      document.body.classList.remove(cls);
+    });
+  }
+
+
 
   function renderLoading(isLoading) {
     const loader = document.getElementById("cfp-search-loading");
