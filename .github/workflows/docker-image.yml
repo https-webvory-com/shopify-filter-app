@@ -57,36 +57,36 @@ jobs:
           docker push \
             $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # Deploy to EC2
-      # - name: Deploy to EC2
-      #   uses: appleboy/ssh-action@v1.0.3
-      #   with:
-      #     host: ${{ secrets.EC2_HOST }}
-      #     username: ${{ secrets.EC2_USER }}
-      #     key: ${{ secrets.EC2_SSH_KEY }}
+      Deploy to EC2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
 
-      #     script: |
-      #       AWS_REGION=ap-south-1
-      #       ECR_REGISTRY=450367038243.dkr.ecr.ap-south-1.amazonaws.com
-      #       ECR_REPOSITORY=shopify_filter
+          script: |
+            AWS_REGION=ap-south-1
+            ECR_REGISTRY=450367038243.dkr.ecr.ap-south-1.amazonaws.com
+            ECR_REPOSITORY=shopify_filter
 
-      #       aws ecr get-login-password --region $AWS_REGION | \
-      #       docker login \
-      #         --username AWS \
-      #         --password-stdin $ECR_REGISTRY
+            aws ecr get-login-password --region $AWS_REGION | \
+            docker login \
+              --username AWS \
+              --password-stdin $ECR_REGISTRY
 
-      #       docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      #       docker stop shopify-filter-app || true
-      #       docker rm shopify-filter-app || true
+            # docker stop shopify-filter-app || true
+            # docker rm shopify-filter-app || true
 
-      #       docker run -d \
-      #         --name shopify-filter-app \
-      #         --env-file .env \
-      #         -p 3005:3005 \
-      #         --restart always \
-      #         $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            # docker run -d \
+            #   --name shopify-filter-app \
+            #   --env-file .env \
+            #   -p 3005:3005 \
+            #   --restart always \
+            #   $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      #       docker image prune -f
+            # docker image prune -f
 
-      #       echo "Deployment completed successfully."
+            # echo "Deployment completed successfully."
