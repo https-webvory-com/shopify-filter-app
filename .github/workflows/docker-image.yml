@@ -66,6 +66,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
 
           script: |
+            set -xve
+            
             AWS_REGION=ap-south-1
             ECR_REGISTRY=450367038243.dkr.ecr.ap-south-1.amazonaws.com
             ECR_REPOSITORY=shopify_filter
