@@ -1,4 +1,5 @@
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
@@ -270,7 +271,7 @@ export default function Integrations() {
                   <h3 className="int-title">
                     {item.url ? (
                       <a href={item.url} target="_blank" rel="noreferrer" style={{color: "inherit", textDecoration: "underline"}}>
-                        {item.name} ↗
+                        {item.name} â†—
                       </a>
                     ) : (
                       item.name

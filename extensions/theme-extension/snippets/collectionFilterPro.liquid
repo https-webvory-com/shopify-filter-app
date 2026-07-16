@@ -211,7 +211,15 @@
 
 <!-- Static skeleton removed, will be rendered via JS into the products container -->
 
-<div id="cfp-sidebar" class="cfp-sidebar" data-shop="{{ shop.permanent_domain }}" data-template-name="{{ template.name }}" data-search-terms="{{ search.terms | escape }}" data-collection-id="{{ collection.id }}" data-collection-handle="{{ collection.handle }}" role="complementary" aria-label="Product Filters">
+{%- assign cfp_collection_handle = collection.handle | default: '' -%}
+{%- assign cfp_collection_id = collection.id | default: '' -%}
+{%- comment -%}Fallback: extract handle from URL path for automated/smart collections{%- endcomment -%}
+{%- if cfp_collection_handle == '' -%}
+  {%- assign cfp_path_parts = request.path | split: '/' -%}
+  {%- assign cfp_collection_handle = cfp_path_parts | last -%}
+{%- endif -%}
+
+<div id="cfp-sidebar" class="cfp-sidebar" data-shop="{{ shop.permanent_domain }}" data-template-name="{{ template.name }}" data-search-terms="{{ search.terms | escape }}" data-collection-id="{{ cfp_collection_id }}" data-collection-handle="{{ cfp_collection_handle }}" role="complementary" aria-label="Product Filters">
   <div class="cfp-sidebar__header">
     <div class="cfp-sidebar__header-info">
       <span class="cfp-sidebar__title">

@@ -260,7 +260,7 @@
   z-index: 1;
 }
 
-.cfp-search-product-card:hover .cfp-search-product-image-wrap img.cfp-secondary-img {
+.cfp-search-product-image-wrapper:hover .cfp-search-product-image-wrap img.cfp-secondary-img {
   opacity: 1;
 }
 

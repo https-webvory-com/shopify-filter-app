@@ -1,8 +1,8 @@
+import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
   useLoaderData,
   useSubmit,
-  useNavigate,
   useNavigation,
   useActionData,
 } from "react-router";
@@ -10,8 +10,10 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { ImportFilterGroupModal } from "../components/ui/ImportFilterGroupModal";
+import { ExportFilterGroupsModal } from "../components/ui/ExportFilterGroupsModal";
 
-// ── Built-in filters seeded into every new default group ─────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Built-in filters seeded into every new default group Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const DEFAULT_FILTERS = [
   {
     filterType: "price",
@@ -50,35 +52,14 @@ const DEFAULT_FILTERS = [
   },
   {
     filterType: "option",
-    filterKey: "Denominations",
-    label: "Denominations",
-    displayMode: "list",
-    order: 5,
-  },
-  {
-    filterType: "option",
     filterKey: "Size",
     label: "Size",
     displayMode: "list",
-    order: 6,
-  },
-  {
-    filterType: "option",
-    filterKey: "slot",
-    label: "slot",
-    displayMode: "list",
-    order: 7,
-  },
-  {
-    filterType: "option",
-    filterKey: "Title",
-    label: "Title",
-    displayMode: "list",
-    order: 8,
+    order: 5,
   },
 ];
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 async function ensureDefaultGroup(shop) {
   const existing = await prisma.filterGroup.findFirst({
     where: { shop, isDefault: true },
@@ -164,7 +145,7 @@ async function ensureDefaultGroup(shop) {
   }
 }
 
-// ── Loader ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Loader Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -190,7 +171,7 @@ export const loader = async ({ request }) => {
   return { groups, collections };
 };
 
-// ── Action ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Action Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -256,6 +237,118 @@ export const action = async ({ request }) => {
     });
 
     return { success: true, groupId: group.id, intent };
+  }
+
+  if (intent === "import") {
+    const parsedGroupsStr = formData.get("groups") || "[]";
+    let parsedGroups = [];
+    try {
+      parsedGroups = JSON.parse(parsedGroupsStr);
+    } catch (e) {
+      console.error("Failed to parse imported groups", e);
+    }
+
+    if (!parsedGroups || parsedGroups.length === 0) {
+      return {
+        success: false,
+        error: "No valid groups found to import.",
+        intent,
+      };
+    }
+
+    const lastGroup = await prisma.filterGroup.findFirst({
+      where: { shop },
+      orderBy: { order: "desc" },
+    });
+    let nextOrder = (lastGroup?.order ?? -1) + 1;
+
+    for (const groupData of parsedGroups) {
+      let existingGroup = null;
+      if (groupData.id) {
+        existingGroup = await prisma.filterGroup.findFirst({
+          where: { shop, id: groupData.id },
+        });
+      }
+      if (!existingGroup) {
+        existingGroup = await prisma.filterGroup.findFirst({
+          where: { shop, name: { equals: groupData.name, mode: "insensitive" } },
+        });
+      }
+
+      let collectionsToCreate = [];
+      if (groupData.forCollections !== false) {
+        // It's for collection pages
+        let parsedCollectionIds = [];
+        let parsedCollectionTitles = [];
+        try {
+          if (groupData.collections) parsedCollectionIds = JSON.parse(groupData.collections);
+          if (groupData.collectionTitles) parsedCollectionTitles = JSON.parse(groupData.collectionTitles);
+        } catch (e) {
+          console.error("Failed to parse collection IDs/Titles from CSV", e);
+        }
+
+        if (parsedCollectionIds.length > 0) {
+          // Map specific collections
+          collectionsToCreate = parsedCollectionIds.map((id, index) => ({
+            collectionId: id.toString(),
+            collectionTitle: parsedCollectionTitles[index] || "Unknown Collection",
+            pageType: "collection",
+          }));
+        } else {
+          // Fallback to All Collections if none specified
+          collectionsToCreate = [
+            {
+              collectionId: "__all__",
+              collectionTitle: "All Collections",
+              pageType: "collection",
+            },
+          ];
+        }
+      } else {
+        // It's for the search page
+        collectionsToCreate = [
+          {
+            collectionId: "search",
+            collectionTitle: "Search Results",
+            pageType: "search",
+          },
+        ];
+      }
+
+      if (existingGroup) {
+        // Delete old collections
+        await prisma.filterGroupCollection.deleteMany({
+          where: { filterGroupId: existingGroup.id },
+        });
+
+        // Update group and create new collections
+        await prisma.filterGroup.update({
+          where: { id: existingGroup.id },
+          data: {
+            name: groupData.name,
+            status: groupData.status !== undefined ? groupData.status : true,
+            collections: {
+              create: collectionsToCreate,
+            },
+          },
+        });
+      } else {
+        await prisma.filterGroup.create({
+          data: {
+            shop,
+            name: groupData.name,
+            isDefault: false,
+            status: groupData.status !== undefined ? groupData.status : true,
+            order: nextOrder++,
+            collections: {
+              create: collectionsToCreate,
+            },
+          },
+        });
+      }
+    }
+
+    return { success: true, importedCount: parsedGroups.length, intent };
   }
 
   if (intent === "delete") {
@@ -345,7 +438,7 @@ export const action = async ({ request }) => {
   return { success: false };
 };
 
-// ── Component ────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const INITIAL_COLUMNS = [
   { id: "name", label: "Filter group name", isVisible: true, isRequired: true },
   {
@@ -390,6 +483,7 @@ export default function FilterGroups() {
       if (!e.target.closest(".filter-dropdown-inside")) {
         setShowViewsDropdown(false);
         setShowCollDropdown(false);
+        setShowCreateDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -397,6 +491,8 @@ export default function FilterGroups() {
   }, []);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [groupType, setGroupType] = useState("collections");
   const [selectedColls, setSelectedColls] = useState([]);
@@ -490,6 +586,9 @@ export default function FilterGroups() {
     return "All groups";
   };
 
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [showExportModal, setShowExportModal] = useState(false);
+
   const handleToggleCollection = (coll) => {
     setSelectedColls((prev) =>
       prev.find((c) => c.id === coll.id)
@@ -534,7 +633,16 @@ export default function FilterGroups() {
     submit({ intent: "duplicate", id }, { method: "POST" });
   };
 
-  
+  const handleImportSubmit = (parsedGroups) => {
+    submit(
+      {
+        intent: "import",
+        groups: JSON.stringify(parsedGroups),
+      },
+      { method: "POST" }
+    );
+    setShowImportModal(false);
+  };
 
   return (
     <s-page heading="Filter Groups">
@@ -883,47 +991,6 @@ export default function FilterGroups() {
       </div>
 
       <s-stack direction="block" gap="base">
-        {/* Info Banner */}
-        {/* <s-box
-          padding="base"
-          style={{
-            background: "#f1f2f4",
-            border: "1px solid #c9cccf",
-            borderRadius: "8px",
-          }}
-        >
-          <s-stack direction="inline" gap="base" blockAlign="center">
-            <svg
-              viewBox="0 0 20 20"
-              style={{
-                width: "20px",
-                height: "20px",
-                fill: "#5c5f62",
-                flexShrink: 0,
-              }}
-              aria-hidden="true"
-            >
-              <path d="M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-1-9v5h2V9H9zm0-3v2h2V6H9z" />
-            </svg>
-            <div>
-              <s-text variant="headingSm" fontWeight="bold">
-                About Filter Groups
-              </s-text>
-              <s-paragraph
-                style={{
-                  margin: "4px 0 0",
-                  fontSize: "13px",
-                  color: "#202223",
-                }}
-              >
-                A filter group consists of filters shown on your collection and
-                search pages. When no matching filter group is found for a
-                collection, the Default filter group is used automatically.
-              </s-paragraph>
-            </div>
-          </s-stack>
-        </s-box> */}
-
         {/* Toolbar & Groups Table */}
         <div
           className="filter-groups-container"
@@ -1081,50 +1148,171 @@ export default function FilterGroups() {
                 )}
               </div>
 
-              {/* Create filter group button */}
-              <button
-                onClick={() => setShowCreate(true)}
-                className="btn-create-group"
-                style={{
-                  backgroundColor: "#5B21B6",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "10px 20px",
-                  fontSize: "13.5px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  position: "relative",
-                  overflow: "hidden",
-                  transition: "all 0.3s ease",
-                }}
-              >
-                Create filter group
-                <span
+              {/* Export button */}
+              {selectedGroups.length > 0 && (
+                <button
+                  onClick={() => setShowExportModal(true)}
                   style={{
-                    borderLeft: "1px solid rgba(255,255,255,0.3)",
-                    paddingLeft: "8px",
+                    backgroundColor: "#ffffff",
+                    color: "#1E1B4B",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "10px",
+                    padding: "10px 16px",
+                    fontSize: "13.5px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
                     display: "flex",
                     alignItems: "center",
+                    gap: "6px"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#f8fafc";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#ffffff";
                   }}
                 >
-                  <svg
-                    viewBox="0 0 20 20"
+                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "none", stroke: "currentColor", strokeWidth: "2" }}>
+                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Export filters groups
+                </button>
+              )}
+
+              {/* Create filter group dropdown */}
+              <div style={{ position: "relative" }} className="filter-dropdown-inside">
+                <button
+                  onClick={() => setShowCreateDropdown(!showCreateDropdown)}
+                  className="btn-create-group"
+                  style={{
+                    backgroundColor: "#5B21B6",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    padding: "10px 20px",
+                    fontSize: "13.5px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    position: "relative",
+                    overflow: "hidden",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  Create filter group
+                  <span
                     style={{
-                      width: "14px",
-                      height: "14px",
-                      fill: "none",
-                      stroke: "currentColor",
-                      strokeWidth: "2.5",
+                      borderLeft: "1px solid rgba(255,255,255,0.3)",
+                      paddingLeft: "8px",
+                      display: "flex",
+                      alignItems: "center",
                     }}
                   >
-                    <path d="M5 7l5 5 5-5" />
-                  </svg>
-                </span>
-              </button>
+                    <svg
+                      viewBox="0 0 20 20"
+                      style={{
+                        width: "14px",
+                        height: "14px",
+                        fill: "none",
+                        stroke: "currentColor",
+                        strokeWidth: "2.5",
+                      }}
+                    >
+                      <path d="M5 7l5 5 5-5" />
+                    </svg>
+                  </span>
+                </button>
+
+                {showCreateDropdown && (
+                  <div
+                    className="glass-popup-menu"
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      right: 0,
+                      marginTop: "8px",
+                      width: "220px",
+                      zIndex: 100,
+                      background: "rgba(255, 255, 255, 0.98)",
+                      border: "1px solid rgba(30, 27, 75, 0.08)",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 25px rgba(30, 27, 75, 0.08)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setShowCreateDropdown(false);
+                        setShowCreate(true);
+                      }}
+                      style={{
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        cursor: "pointer",
+                        color: "#1E1B4B",
+                        fontWeight: "500",
+                        fontSize: "13.5px",
+                        borderBottom: "1px solid rgba(30, 27, 75, 0.08)",
+                        transition: "background 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        style={{
+                          width: "18px",
+                          height: "18px",
+                          fill: "none",
+                          stroke: "#3b82f6",
+                          strokeWidth: "2",
+                        }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create filter group
+                    </div>
+                    <div
+                      onClick={() => {
+                        setShowCreateDropdown(false);
+                        setShowImportModal(true);
+                      }}
+                      style={{
+                        padding: "12px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        cursor: "pointer",
+                        color: "#1E1B4B",
+                        fontWeight: "500",
+                        fontSize: "13.5px",
+                        transition: "background 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        style={{
+                          width: "18px",
+                          height: "18px",
+                          fill: "none",
+                          stroke: "#3b82f6",
+                          strokeWidth: "2",
+                        }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Import filters groups
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Right Actions */}
@@ -1247,6 +1435,20 @@ export default function FilterGroups() {
           >
             <thead>
               <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                <th style={{ padding: "16px 20px", width: "40px" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.length > 0 && selectedGroups.length === filteredGroups.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedGroups(filteredGroups.map(g => g.id));
+                      } else {
+                        setSelectedGroups([]);
+                      }
+                    }}
+                    style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                  />
+                </th>
                 {columns
                   .filter((c) => c.isVisible)
                   .map((col) => (
@@ -1289,8 +1491,23 @@ export default function FilterGroups() {
                     style={{
                       borderBottom: "1px solid #e2e8f0",
                       transition: "background-color 0.2s ease",
+                      background: selectedGroups.includes(group.id) ? "rgba(0, 122, 255, 0.05)" : "transparent",
                     }}
                   >
+                    <td style={{ padding: "18px 20px", width: "40px" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGroups.includes(group.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGroups([...selectedGroups, group.id]);
+                          } else {
+                            setSelectedGroups(selectedGroups.filter(id => id !== group.id));
+                          }
+                        }}
+                        style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                      />
+                    </td>
                     {columns
                       .filter((c) => c.isVisible)
                       .map((col) => {
@@ -1549,7 +1766,7 @@ export default function FilterGroups() {
         </div>
       </s-stack>
 
-      {/* ── Create Group Modal ──────────────────────────────────── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Create Group Modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showCreate && (
         <div
           style={{
@@ -1824,7 +2041,7 @@ export default function FilterGroups() {
           </div>
         </div>
       )}
-      {/* ── Filter Modal ────────────────────────────────────────── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Filter Modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showFilterModal && (
         <div
           style={{
@@ -2343,7 +2560,7 @@ export default function FilterGroups() {
           </div>
         </div>
       )}
-      {/* ── Customize Columns Modal ─────────────────────────────── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Customize Columns Modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showColumnsModal && (
         <div
           style={{
@@ -2682,7 +2899,7 @@ export default function FilterGroups() {
         </div>
       )}
 
-      {/* ── Delete Confirm Modal ──────────────────────────────────── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Delete Confirm Modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {groupToDelete && (
         <div
           style={{
@@ -2735,7 +2952,7 @@ export default function FilterGroups() {
                   padding: "4px",
                 }}
               >
-                ✕
+                Ã¢Å“â€¢
               </button>
             </div>
 
@@ -2793,6 +3010,20 @@ export default function FilterGroups() {
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
+      <ImportFilterGroupModal 
+        isOpen={showImportModal} 
+        onClose={() => setShowImportModal(false)} 
+        onSubmit={handleImportSubmit}
+      />
+
+      <ExportFilterGroupsModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        selectedGroups={selectedGroups}
+        allGroups={groups}
+      />
     </s-page>
   );
 }

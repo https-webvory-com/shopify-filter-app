@@ -56,7 +56,7 @@ const OPTION_TYPES = [
   { value: "collection", label: "Collection" },
   { value: "vendor", label: "Vendor" },
   { value: "product_type", label: "Product type" },
-  { value: "tags", label: "Tags" },
+  { value: "tag", label: "Tag" },
   { value: "color", label: "Color (product option)" },
   { value: "title", label: "Title (product option)" },
   { value: "price", label: "Price" },
@@ -538,7 +538,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     collection: (shopifyCollections || []).map(c => ({ label: c, count: 0 })),
     vendor: (storeData?.vendors || []).map(v => ({ label: v.value, count: v.count })),
     product_type: (storeData?.productTypes || []).map(p => ({ label: p.value, count: p.count })),
+    tag: (storeData?.tags || []).map(t => ({ label: t.value, count: t.count })),
     tags: (storeData?.tags || []).map(t => ({ label: t.value, count: t.count })),
+    title: (storeData?.titles || []).map(t => ({ label: t.value, count: t.count })),
   };
 
   const getDummyData = (type) => {
@@ -590,10 +592,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
       return storeData?.locations?.map(l => ({ label: l.value, count: l.count })) || [];
     }
 
-    // If it's a known top-level type, return its data
-    if (DUMMY_DATA[type]) return DUMMY_DATA[type];
+    // If it's a known top-level type, return its data (case-insensitive lookup)
+    const typeKey = Object.keys(DUMMY_DATA).find(k => k.toLowerCase() === type.toLowerCase());
+    if (typeKey && DUMMY_DATA[typeKey] && DUMMY_DATA[typeKey].length > 0) return DUMMY_DATA[typeKey];
     
-    // Check if it's a dynamic option type (like 'color', 'size', 'title')
+    // Check if it's a dynamic option type (like 'color', 'size', 'title', 'Denominations')
     if (storeData?.options) {
       const matchedKey = Object.keys(storeData.options).find(k => k.toLowerCase() === type.toLowerCase());
       if (matchedKey && storeData.options[matchedKey]) {
@@ -1628,7 +1631,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <TooltipIcon content="When checked, users can choose multiple filter option values." />
                   </div>
 
-                  {multipleSelection && ["collection", "tags", "inventory_locations"].includes(optionType?.toLowerCase()) && (
+                  {multipleSelection && ["collection", "tag", "inventory_locations"].includes(optionType?.toLowerCase()) && (
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <Checkbox checked={narrowDown} onChange={setNarrowDown} />
                       <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Narrow down filter option values</span>
@@ -1877,7 +1880,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {layout === "top" && (
                               <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
                             )}
-                            {["vendor", "collection", "product_type", "tags", "color", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
+                            {["vendor", "collection", "product_type", "tag", "color", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
                               <div style={{ marginBottom: "12px", position: "relative" }}>
                                 <input 
                                   type="text" 
@@ -1972,7 +1975,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     }}>
                       {displayMode === "Range" ? renderSliderPreview(false, device) : (
                         <>
-                          {["vendor", "collection", "product_type", "tags", "color", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
+                          {["vendor", "collection", "product_type", "tag", "color", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
                             <div style={{ marginBottom: "12px", position: "relative" }}>
                               <input 
                                 type="text" 

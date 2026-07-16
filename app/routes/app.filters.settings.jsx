@@ -1,7 +1,8 @@
+import { useNavigate } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useNavigate, useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 import { invalidateShop } from "../services/shopCache.server";
@@ -34,7 +35,7 @@ export const action = async ({ request }) => {
   return { success: true };
 };
 
-// ── Toggle Row Component ──────────────────────────────────────────────
+// â”€â”€ Toggle Row Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SettingToggle({ label, description, value, onChange }) {
   return (
     <div className="settings-row">
@@ -57,7 +58,7 @@ function SettingToggle({ label, description, value, onChange }) {
   );
 }
 
-// ── Select Row Component ──────────────────────────────────────────────
+// â”€â”€ Select Row Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SettingSelect({ label, description, value, onChange, options }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -169,7 +170,7 @@ function SettingSelect({ label, description, value, onChange, options }) {
   );
 }
 
-// ── Section Component ─────────────────────────────────────────────────
+// â”€â”€ Section Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SettingsSection({ title, children }) {
   return (
     <div className="settings-card">
@@ -191,7 +192,7 @@ function SettingsSection({ title, children }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function FilterSettings() {
   const navigate = useNavigate();
   const shopify = useAppBridge();

@@ -1,9 +1,9 @@
+import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
   useFetcher,
   useNavigation,
   useLoaderData,
-  useNavigate,
 } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";

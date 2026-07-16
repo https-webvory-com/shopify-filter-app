@@ -8,6 +8,7 @@ import {
   useSubmit,
   Link,
   data,
+  useNavigation,
 } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -15,6 +16,8 @@ import prisma from "../db.server";
 import { invalidateShop } from "../services/shopCache.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { CreateFilterModal } from "../components/ui/CreateFilterModal";
+import { ExportFilterItemsModal } from "../components/ui/ExportFilterItemsModal";
+import { ImportFilterItemsModal } from "../components/ui/ImportFilterItemsModal";
 import { Modal } from "../components/ui/Modal";
 import { Button } from "../components/ui/Button";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -29,14 +32,16 @@ const FILTER_TYPE_OPTIONS = [
   { value: "collection", label: "Collection", icon: "C" },
   { value: "option", label: "Product Option", icon: "O" },
   { value: "metafield", label: "Metafield", icon: "M" },
+  { value: "tag", label: "Tag", icon: "#" },
 ];
 
 const DISPLAY_MODES = [
   { value: "list", label: "List (Checkboxes)" },
   { value: "range", label: "Range (Price Slider)" },
-  { value: "swatch", label: "Color Swatch" },
+  { value: "swatch", label: "Swatch (Color)" },
   { value: "button", label: "Button / Chip" },
   { value: "dropdown", label: "Dropdown Select" },
+  { value: "box", label: "Box" },
 ];
 
 // ── Loader ───────────────────────────────────────────────────────────
@@ -152,6 +157,7 @@ export const loader = async ({ request, params }) => {
   const allProducts = await prisma.product.findMany({
     where: { shop },
     select: {
+      title: true,
       tags: true,
       options: true,
       variants: { select: { available: true, inventory: true } },
@@ -160,6 +166,7 @@ export const loader = async ({ request, params }) => {
 
   const tagsMap = new Map();
   const optionsMap = new Map();
+  const titleMap = new Map();
 
   let stockOnHandCount = 0;
   let preOrderCount = 0;
@@ -167,6 +174,9 @@ export const loader = async ({ request, params }) => {
   let outOfStockCount = 0;
 
   for (const p of allProducts) {
+    // Process title
+    if (p.title) titleMap.set(p.title, (titleMap.get(p.title) || 0) + 1);
+
     // Process tags
     for (const t of p.tags || []) {
       if (t) tagsMap.set(t, (tagsMap.get(t) || 0) + 1);
@@ -218,6 +228,9 @@ export const loader = async ({ request, params }) => {
     tags: Array.from(tagsMap.entries())
       .map(([value, count]) => ({ value, count }))
       .sort((a, b) => a.value.localeCompare(b.value)),
+    titles: Array.from(titleMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value)),
     locations: shopifyLocations,
     options: Array.from(optionsMap.entries()).reduce((acc, [name, valMap]) => {
       acc[name] = Array.from(valMap.entries())
@@ -249,6 +262,59 @@ export const action = async ({ request, params }) => {
   });
   if (!group)
     return data({ success: false, error: "Not found" }, { status: 404 });
+
+  if (intent === "importFilters") {
+    const filtersData = JSON.parse(formData.get("filters") || "[]");
+    
+    // Process imports
+    for (const filter of filtersData) {
+      let existingFilter = null;
+      if (filter.id) {
+        existingFilter = await prisma.filterGroupItem.findFirst({
+          where: { filterGroupId, id: filter.id }
+        });
+      }
+      
+      if (!existingFilter) {
+        existingFilter = await prisma.filterGroupItem.findFirst({
+          where: { 
+            filterGroupId, 
+            filterType: filter.filterType, 
+            ...(filter.filterKey ? { filterKey: filter.filterKey } : { label: filter.label })
+          }
+        });
+      }
+      
+      if (existingFilter) {
+        await prisma.filterGroupItem.update({
+          where: { id: existingFilter.id },
+          data: {
+            label: filter.label,
+            displayMode: filter.displayMode,
+            isEnabled: filter.isEnabled,
+            order: filter.order !== undefined ? filter.order : existingFilter.order,
+            ...(filter.config ? { config: filter.config } : {})
+          }
+        });
+      } else {
+        await prisma.filterGroupItem.create({
+          data: {
+            filterGroupId,
+            filterType: filter.filterType,
+            filterKey: filter.filterKey,
+            label: filter.label,
+            displayMode: filter.displayMode,
+            isEnabled: filter.isEnabled,
+            order: filter.order !== undefined ? filter.order : 0,
+            ...(filter.config ? { config: filter.config } : {})
+          }
+        });
+      }
+    }
+    
+    await invalidateShop(shop);
+    return { success: true, intent, count: filtersData.length };
+  }
 
   if (intent === "updateGroupSettings") {
     const name = formData.get("name");
@@ -333,6 +399,7 @@ export const action = async ({ request, params }) => {
       "collection",
       "vendor",
       "product_type",
+      "tag",
       "tags",
       "price",
       "percent_sale",
@@ -385,6 +452,7 @@ export const action = async ({ request, params }) => {
       "collection",
       "vendor",
       "product_type",
+      "tag",
       "tags",
       "price",
       "percent_sale",
@@ -505,6 +573,7 @@ function DisplayModeBadge({ mode }) {
     range: { bg: "rgba(16, 185, 129, 0.05)", text: "#10B981", border: "rgba(16, 185, 129, 0.15)" },
     swatch: { bg: "rgba(219, 58, 93, 0.05)", text: "#DB3A5D", border: "rgba(219, 58, 93, 0.15)" },
     button: { bg: "rgba(91, 33, 182, 0.05)", text: "#5B21B6", border: "rgba(91, 33, 182, 0.15)" },
+    box: { bg: "rgba(91, 33, 182, 0.05)", text: "#5B21B6", border: "rgba(91, 33, 182, 0.15)" },
     dropdown: { bg: "rgba(123, 96, 243, 0.06)", text: "#7B60F3", border: "rgba(123, 96, 243, 0.15)" },
   };
   const c = colors[mode] || colors.list;
@@ -554,6 +623,7 @@ export default function FilterGroupDetail() {
   const actionData = useActionData();
   const submit = useSubmit();
   const shopify = useAppBridge();
+  const navigation = useNavigation();
 
   const [groupName, setGroupName] = useState(group.name);
 
@@ -601,12 +671,28 @@ export default function FilterGroupDetail() {
   const [configCollapsed, setConfigCollapsed] = useState(false);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const handleImportSubmit = (parsedFilters) => {
+    submit(
+      {
+        intent: "importFilters",
+        filters: JSON.stringify(parsedFilters),
+      },
+      { method: "POST" }
+    );
+    setIsImportModalOpen(false);
+  };
+  const [selectedFilters, setSelectedFilters] = useState([]);
   const [editingFilterData, setEditingFilterData] = useState(null);
 
   // Toolbar State
   const [filterSearch, setFilterSearch] = useState("");
   const [filterStatusView, setFilterStatusView] = useState("all"); // 'all', 'active', 'inactive'
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [isAddFilterDropdownOpen, setIsAddFilterDropdownOpen] = useState(false);
+  const addFilterDropdownRef = useRef(null);
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
   const [reorderItems, setReorderItems] = useState([]);
   
@@ -673,6 +759,9 @@ export default function FilterGroupDetail() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsViewDropdownOpen(false);
       }
+      if (addFilterDropdownRef.current && !addFilterDropdownRef.current.contains(event.target)) {
+        setIsAddFilterDropdownOpen(false);
+      }
       if (!event.target.closest('.filter-dropdown-inside')) {
         setShowCollDropdown(false);
       }
@@ -700,6 +789,8 @@ export default function FilterGroupDetail() {
           shopify.toast.show("Filter duplicated successfully");
         } else if (actionData.intent === "reorderFilters") {
           shopify.toast.show("Filters reordered successfully");
+        } else if (actionData.intent === "importFilters") {
+          shopify.toast.show(`${actionData.count || "Filters"} imported successfully`);
         }
       } else if (actionData.error) {
         shopify.toast.show(actionData.error, { isError: true });
@@ -836,7 +927,45 @@ export default function FilterGroupDetail() {
       { method: "POST" },
     );
     shopify.toast.show("Group updated");
+    shopify.toast.show("Group updated");
   };
+
+  const filteredFiltersList = group.filters
+    .filter((filter) => {
+      if (filterStatusView === "active") return filter.isEnabled;
+      if (filterStatusView === "inactive") return !filter.isEnabled;
+      return true;
+    })
+    .filter((filter) =>
+      filter.label.toLowerCase().includes(filterSearch.toLowerCase()),
+    )
+    .filter((filter) => {
+      if (advancedConditions.length === 0) return true;
+
+      const passesCondition = (c) => {
+        const val = filter[c.field];
+        const target = c.value;
+
+        if (c.operator === "equals") return val === target;
+        if (c.operator === "doesNotEqual") return val !== target;
+
+        if (typeof val === "string") {
+          const sVal = val.toLowerCase();
+          const sTarget = String(target).toLowerCase();
+          if (c.operator === "contains") return sVal.includes(sTarget);
+          if (c.operator === "doesNotContain") return !sVal.includes(sTarget);
+          if (c.operator === "startsWith") return sVal.startsWith(sTarget);
+          if (c.operator === "endsWith") return sVal.endsWith(sTarget);
+        }
+        return false;
+      };
+
+      if (advancedMatchType === "all") {
+        return advancedConditions.every(passesCondition);
+      } else {
+        return advancedConditions.some(passesCondition);
+      }
+    });
 
   return (
     <s-page>
@@ -1016,6 +1145,8 @@ export default function FilterGroupDetail() {
           cursor: pointer !important;
           transition: all 0.2s ease !important;
           box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
+          white-space: nowrap !important;
+          flex-shrink: 0 !important;
         }
         .btn-view-filters:hover {
           border-color: #5B21B6 !important;
@@ -1780,36 +1911,133 @@ export default function FilterGroupDetail() {
 
               {/* Add Filter Split Button */}
               <div
-                className="add-filter-split-btn"
+                ref={addFilterDropdownRef}
                 style={{
-                  display: "flex",
-                  borderRadius: "10px",
-                  overflow: "hidden",
+                  position: "relative",
+                  display: "inline-block"
                 }}
               >
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="btn-add-filter-main"
+                <div
+                  className="add-filter-split-btn"
+                  style={{
+                    display: "flex",
+                    borderRadius: "10px",
+                    overflow: "hidden",
+                  }}
                 >
-                  Add filter
-                </button>
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="btn-add-filter-arrow"
-                >
-                  <svg
-                    viewBox="0 0 20 20"
+                  <button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="btn-add-filter-main"
+                  >
+                    Add filter
+                  </button>
+                  <button
+                    onClick={() => setIsAddFilterDropdownOpen(!isAddFilterDropdownOpen)}
+                    className="btn-add-filter-arrow"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      style={{
+                        width: "16px",
+                        height: "16px",
+                        fill: "currentColor",
+                        display: "block",
+                      }}
+                    >
+                      <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
+                    </svg>
+                  </button>
+                </div>
+                
+                {isAddFilterDropdownOpen && (
+                  <div
                     style={{
-                      width: "16px",
-                      height: "16px",
-                      fill: "currentColor",
-                      display: "block",
+                      position: "absolute",
+                      top: "100%",
+                      right: 0,
+                      marginTop: "4px",
+                      background: "#ffffff",
+                      border: "1px solid rgba(30, 27, 75, 0.08)",
+                      borderRadius: "8px",
+                      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                      minWidth: "160px",
+                      zIndex: 50,
+                      padding: "6px",
                     }}
                   >
-                    <path d="M10 14a1 1 0 0 1-.707-.293l-4-4a1 1 0 0 1 1.414-1.414L10 11.586l3.293-3.293a1 1 0 0 1 1.414 1.414l-4 4A1 1 0 0 1 10 14z" />
-                  </svg>
-                </button>
+                    <button
+                      onClick={() => {
+                        setIsCreateModalOpen(true);
+                        setIsAddFilterDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        width: "100%",
+                        padding: "10px 12px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        borderRadius: "6px",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = "rgba(30, 27, 75, 0.04)"}
+                      onMouseOut={(e) => e.currentTarget.style.background = "none"}
+                    >
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "none", stroke: "#007BFF", strokeWidth: "2" }}>
+                        <path d="M10 4v12m-6-6h12" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Add filter
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsImportModalOpen(true);
+                        setIsAddFilterDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        width: "100%",
+                        padding: "10px 12px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        borderRadius: "6px",
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = "rgba(30, 27, 75, 0.04)"}
+                      onMouseOut={(e) => e.currentTarget.style.background = "none"}
+                    >
+                      <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "none", stroke: "#007BFF", strokeWidth: "2" }}>
+                        <path d="M4 4v1a3 3 0 003 3h10a3 3 0 003-3V4m-4 4l-4-4m0 0l-4 4m4-4v12" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Import filters
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {selectedFilters.length > 0 && (
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="btn-view-filters"
+                  style={{
+                    color: "#5B21B6",
+                    borderColor: "#5B21B6",
+                  }}
+                >
+                  <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "none", stroke: "currentColor", strokeWidth: "2" }}>
+                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Export selected
+                </button>
+              )}
             </div>
 
             <div style={{ flex: 1 }}></div>
@@ -1928,8 +2156,17 @@ export default function FilterGroupDetail() {
             <table className="filters-table">
               <thead>
                 <tr>
-                  <th style={{ width: "32px" }}></th>
-                  <th>Filter title</th>
+                  <th style={{ width: "32px", padding: "12px 16px" }}></th>
+                  <th style={{ display: "flex", alignItems: "center", gap: "12px", color: "#fff" }}>
+                    <Checkbox
+                      checked={selectedFilters.length > 0 && selectedFilters.length === filteredFiltersList.length}
+                      onChange={(checked) => {
+                        if (checked) setSelectedFilters(filteredFiltersList.map((f) => f.id));
+                        else setSelectedFilters([]);
+                      }}
+                    />
+                    Filter title
+                  </th>
                   <th>Display mode</th>
                   <th>Filter values</th>
                   <th>Status</th>
@@ -1937,52 +2174,9 @@ export default function FilterGroupDetail() {
                 </tr>
               </thead>
               <tbody>
-                {group.filters
-                  .filter((filter) => {
-                    if (filterStatusView === "active") return filter.isEnabled;
-                    if (filterStatusView === "inactive")
-                      return !filter.isEnabled;
-                    return true;
-                  })
-                  .filter((filter) =>
-                    filter.label
-                      .toLowerCase()
-                      .includes(filterSearch.toLowerCase()),
-                  )
-                  .filter((filter) => {
-                    if (advancedConditions.length === 0) return true;
-
-                    const passesCondition = (c) => {
-                      const val = filter[c.field];
-                      const target = c.value;
-
-                      if (c.operator === "equals") return val === target;
-                      if (c.operator === "doesNotEqual") return val !== target;
-
-                      if (typeof val === "string") {
-                        const sVal = val.toLowerCase();
-                        const sTarget = String(target).toLowerCase();
-                        if (c.operator === "contains")
-                          return sVal.includes(sTarget);
-                        if (c.operator === "doesNotContain")
-                          return !sVal.includes(sTarget);
-                        if (c.operator === "startsWith")
-                          return sVal.startsWith(sTarget);
-                        if (c.operator === "endsWith")
-                          return sVal.endsWith(sTarget);
-                      }
-                      return false;
-                    };
-
-                    if (advancedMatchType === "all") {
-                      return advancedConditions.every(passesCondition);
-                    } else {
-                      return advancedConditions.some(passesCondition);
-                    }
-                  })
-                  .map((filter) => (
+                {filteredFiltersList.map((filter) => (
                     <tr key={filter.id}>
-                      <td style={{ cursor: "grab", textAlign: "center" }}>
+                      <td style={{ cursor: "grab", textAlign: "center", verticalAlign: "middle" }}>
                         <svg
                           viewBox="0 0 20 20"
                           style={{
@@ -1994,7 +2188,14 @@ export default function FilterGroupDetail() {
                           <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
                         </svg>
                       </td>
-                      <td>
+                      <td style={{ display: "flex", alignItems: "center", gap: "12px", verticalAlign: "middle" }}>
+                        <Checkbox
+                          checked={selectedFilters.includes(filter.id)}
+                          onChange={(checked) => {
+                            if (checked) setSelectedFilters([...selectedFilters, filter.id]);
+                            else setSelectedFilters(selectedFilters.filter(id => id !== filter.id));
+                          }}
+                        />
                         <button
                           onClick={() => openConfigModal(filter)}
                           style={{
@@ -2427,6 +2628,20 @@ export default function FilterGroupDetail() {
           </div>
         </div>
       )}
+
+      <ExportFilterItemsModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        filters={selectedFilters.length > 0 ? group.filters.filter(f => selectedFilters.includes(f.id)) : group.filters}
+        filterGroupId={group.id}
+      />
+      
+      <ImportFilterItemsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSubmit={handleImportSubmit}
+        isSubmitting={navigation.state === "submitting" && navigation.formData?.get("intent") === "importFilters"}
+      />
 
       <Modal
           isOpen={isReorderModalOpen}

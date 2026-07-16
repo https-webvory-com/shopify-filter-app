@@ -1005,7 +1005,7 @@ facet-filters-form,
   transition: transform 0.5s ease, opacity 0.5s ease;
 }
 
-.cfp-product-card:hover .cfp-product-card__image--primary {
+.cfp-product-card__image-wrapper:hover .cfp-product-card__image--primary {
   transform: scale(1.05);
 }
 
@@ -1014,7 +1014,7 @@ facet-filters-form,
   z-index: 1;
 }
 
-.cfp-product-card:hover .cfp-product-card__image--secondary {
+.cfp-product-card__image-wrapper:hover .cfp-product-card__image--secondary {
   opacity: 1;
   transform: scale(1.05);
 }

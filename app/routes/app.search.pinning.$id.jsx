@@ -1,9 +1,9 @@
+import { useNavigate } from "react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
   useLoaderData,
   useSubmit,
   useNavigation,
-  useNavigate,
   useFetcher,
   redirect,
 } from "react-router";
@@ -541,7 +541,7 @@ export default function PinningEditor() {
       <ui-title-bar title={name}>
         <button
           variant="breadcrumb"
-          onClick={() => handleNavigate("/app/search/pinning")}
+          onClick={() => handlenavigate("/app/search/pinning")}
         >
           Product Pinning
         </button>
@@ -560,7 +560,7 @@ export default function PinningEditor() {
           href="/app/search/pinning"
           onClick={(e) => {
             e.preventDefault();
-            handleNavigate("/app/search/pinning");
+            handlenavigate("/app/search/pinning");
           }}
           style={{
             color: "#006e52",
@@ -610,7 +610,7 @@ export default function PinningEditor() {
         >
           <div>
             <button
-              onClick={() => handleNavigate("/app/search/pinning")}
+              onClick={() => handlenavigate("/app/search/pinning")}
               style={{
                 background: "none",
                 border: "none",
@@ -653,7 +653,7 @@ export default function PinningEditor() {
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              onClick={() => handleNavigate("/app/search/pinning")}
+              onClick={() => handlenavigate("/app/search/pinning")}
               style={{
                 background: "#fff",
                 border: "1px solid #cbd5e1",
