@@ -3,7 +3,10 @@ import React, { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useFetcher } from "react-router";
-import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
+import {
+  getFilterGlobalSettings,
+  updateFilterGlobalSettings,
+} from "../services/filterSettings.server";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -14,12 +17,15 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
-  
+
   const payload = {
     showOnlyInStock: formData.get("showOnlyInStock") === "true",
     secondImageOnHover: formData.get("secondImageOnHover") === "true",
+    showQuickViewInstantSearch:
+      formData.get("showQuickViewInstantSearch") === "true",
+    showQuickViewCollection: formData.get("showQuickViewCollection") === "true",
   };
-  
+
   await updateFilterGlobalSettings(session.shop, payload);
   return Response.json({ success: true });
 };
@@ -29,16 +35,40 @@ export default function Settings() {
   const { settings } = useLoaderData();
   const fetcher = useFetcher();
 
-  const showOnlyInStock = fetcher.formData ? fetcher.formData.get("showOnlyInStock") === "true" : (settings?.showOnlyInStock ?? false);
-  const secondImageOnHover = fetcher.formData ? fetcher.formData.get("secondImageOnHover") === "true" : (settings?.secondImageOnHover ?? true);
+  const showOnlyInStock = fetcher.formData
+    ? fetcher.formData.get("showOnlyInStock") === "true"
+    : (settings?.showOnlyInStock ?? false);
+  const secondImageOnHover = fetcher.formData
+    ? fetcher.formData.get("secondImageOnHover") === "true"
+    : (settings?.secondImageOnHover ?? true);
+  const showQuickViewInstantSearch = fetcher.formData
+    ? fetcher.formData.get("showQuickViewInstantSearch") === "true"
+    : (settings?.showQuickViewInstantSearch ?? true);
+  const showQuickViewCollection = fetcher.formData
+    ? fetcher.formData.get("showQuickViewCollection") === "true"
+    : (settings?.showQuickViewCollection ?? true);
 
   const toggleSetting = (key, currentValue) => {
     fetcher.submit(
-      { 
-        showOnlyInStock: key === "showOnlyInStock" ? String(!currentValue) : String(showOnlyInStock),
-        secondImageOnHover: key === "secondImageOnHover" ? String(!currentValue) : String(secondImageOnHover)
-      }, 
-      { method: "POST" }
+      {
+        showOnlyInStock:
+          key === "showOnlyInStock"
+            ? String(!currentValue)
+            : String(showOnlyInStock),
+        secondImageOnHover:
+          key === "secondImageOnHover"
+            ? String(!currentValue)
+            : String(secondImageOnHover),
+        showQuickViewInstantSearch:
+          key === "showQuickViewInstantSearch"
+            ? String(!currentValue)
+            : String(showQuickViewInstantSearch),
+        showQuickViewCollection:
+          key === "showQuickViewCollection"
+            ? String(!currentValue)
+            : String(showQuickViewCollection),
+      },
+      { method: "POST" },
     );
   };
 
@@ -153,7 +183,7 @@ export default function Settings() {
           .int-toggle input:checked + .int-slider:before {
             transform: translateX(20px);
           }
-          `
+          `,
         }}
       />
 
@@ -201,7 +231,8 @@ export default function Settings() {
       <s-stack direction="block" gap="base">
         <s-section heading="Product Display Settings">
           <s-paragraph>
-            Manage exactly which products are visible to your customers across your store's search and filtering widgets.
+            Manage exactly which products are visible to your customers across
+            your store's search and filtering widgets.
           </s-paragraph>
 
           <div className="int-grid">
@@ -210,14 +241,21 @@ export default function Settings() {
               <div className="int-header">
                 <span className="int-tag int-tag-inventory">INVENTORY</span>
                 <label className="int-toggle">
-                  <input type="checkbox" checked={showOnlyInStock} onChange={() => toggleSetting("showOnlyInStock", showOnlyInStock)} />
+                  <input
+                    type="checkbox"
+                    checked={showOnlyInStock}
+                    onChange={() =>
+                      toggleSetting("showOnlyInStock", showOnlyInStock)
+                    }
+                  />
                   <span className="int-slider"></span>
                 </label>
               </div>
               <div>
                 <h3 className="int-title">Show only in-stock products</h3>
                 <p className="int-desc">
-                  If enabled, out-of-stock products will be completely hidden from the storefront search and filter results.
+                  If enabled, out-of-stock products will be completely hidden
+                  from the storefront search and filter results.
                 </p>
               </div>
             </div>
@@ -225,16 +263,92 @@ export default function Settings() {
             {/* Card 2: Hover Image */}
             <div className="int-card">
               <div className="int-header">
-                <span className="int-tag int-tag-inventory" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>DISPLAY</span>
+                <span
+                  className="int-tag int-tag-inventory"
+                  style={{ backgroundColor: "#fef3c7", color: "#b45309" }}
+                >
+                  DISPLAY
+                </span>
                 <label className="int-toggle">
-                  <input type="checkbox" checked={secondImageOnHover} onChange={() => toggleSetting("secondImageOnHover", secondImageOnHover)} />
+                  <input
+                    type="checkbox"
+                    checked={secondImageOnHover}
+                    onChange={() =>
+                      toggleSetting("secondImageOnHover", secondImageOnHover)
+                    }
+                  />
                   <span className="int-slider"></span>
                 </label>
               </div>
               <div>
                 <h3 className="int-title">2nd image on hover</h3>
                 <p className="int-desc">
-                  Display the second product image when a customer hovers over a product card in the search and filter results.
+                  Display the second product image when a customer hovers over a
+                  product card in the search and filter results.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 3: Quick View (Instant Search) */}
+            <div className="int-card">
+              <div className="int-header">
+                <span
+                  className="int-tag int-tag-inventory"
+                  style={{ backgroundColor: "#dbeafe", color: "#1e40af" }}
+                >
+                  FEATURES
+                </span>
+                <label className="int-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showQuickViewInstantSearch}
+                    onChange={() =>
+                      toggleSetting(
+                        "showQuickViewInstantSearch",
+                        showQuickViewInstantSearch,
+                      )
+                    }
+                  />
+                  <span className="int-slider"></span>
+                </label>
+              </div>
+              <div>
+                <h3 className="int-title">Quick View (Instant Search)</h3>
+                <p className="int-desc">
+                  Show a "Quick View" button on product cards inside the instant
+                  search dropdown.
+                </p>
+              </div>
+            </div>
+
+            {/* Card 4: Quick View (Collection & Search) */}
+            <div className="int-card">
+              <div className="int-header">
+                <span
+                  className="int-tag int-tag-inventory"
+                  style={{ backgroundColor: "#dbeafe", color: "#1e40af" }}
+                >
+                  FEATURES
+                </span>
+                <label className="int-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showQuickViewCollection}
+                    onChange={() =>
+                      toggleSetting(
+                        "showQuickViewCollection",
+                        showQuickViewCollection,
+                      )
+                    }
+                  />
+                  <span className="int-slider"></span>
+                </label>
+              </div>
+              <div>
+                <h3 className="int-title">Quick View (Collection/Search)</h3>
+                <p className="int-desc">
+                  Show a "Quick View" button on product cards in search and
+                  collection pages.
                 </p>
               </div>
             </div>

@@ -254,6 +254,8 @@ model FilterGlobalSetting {
   darkMode                            Boolean  @default(false)
   showOnlyInStock                     Boolean  @default(false)
   secondImageOnHover                  Boolean  @default(true)
+  showQuickViewInstantSearch          Boolean  @default(true)
+  showQuickViewCollection             Boolean  @default(true)
   integrations                        Json?
   createdAt                           DateTime @default(now())
   updatedAt                           DateTime @updatedAt
