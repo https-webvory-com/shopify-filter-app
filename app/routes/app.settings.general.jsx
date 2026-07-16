@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 import React, { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useRouteError } from "react-router";
 import {
   getFilterGlobalSettings,
   updateFilterGlobalSettings,
@@ -77,6 +77,14 @@ export default function Settings() {
       shopify.toast.show("Display settings updated");
     }
   }, [fetcher.data]);
+
+  console.log("Settings rendering with settings data:", settings);
+  console.log("Derived values:", {
+    showOnlyInStock,
+    secondImageOnHover,
+    showQuickViewInstantSearch,
+    showQuickViewCollection
+  });
 
   return (
     <s-page heading="App Settings">
@@ -355,6 +363,23 @@ export default function Settings() {
           </div>
         </s-section>
       </s-stack>
+    </s-page>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  console.error("General Settings ErrorBoundary caught:", error);
+  
+  return (
+    <s-page heading="App Settings Error">
+      <div style={{ padding: '20px', background: '#ffebee', color: '#c62828', borderRadius: '8px' }}>
+        <h2>Something went wrong!</h2>
+        <p><b>Message:</b> {error?.message || "Unknown error"}</p>
+        <pre style={{ whiteSpace: 'pre-wrap', fontSize: '12px', marginTop: '10px' }}>
+          {error?.stack}
+        </pre>
+      </div>
     </s-page>
   );
 }
