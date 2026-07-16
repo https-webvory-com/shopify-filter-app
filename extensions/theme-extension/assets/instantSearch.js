@@ -217,43 +217,142 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function attachListeners() {
-      // 1. Hijack all theme search inputs/icons using a global delegated listener (capture phase)
-      // This ensures we catch clicks even if the theme dynamically re-renders the header (e.g. sticky header)
-      let defaultSelector = 'input[type="search"], input[name="q"], summary[aria-haspopup="dialog"], .header__search, [href="/search"]';
+      // ─────────────────────────────────────────────────────────────────────────
+      // WHITELIST APPROACH: Only intercept elements that are 100% confirmed
+      // to be search triggers. This prevents false-positives on country pickers,
+      // currency selectors, and any other non-search UI elements.
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // ── TIER 1: Precise CSS selectors for all major Shopify themes ────────────
+      // Each selector here maps to a real search element in a known theme.
+      const SEARCH_SELECTORS = [
+        // ── Universal (standard HTML) ──
+        'input[type="search"]',                        // any theme using standard search input
+        'input[name="q"]',                             // Shopify's conventional search param
+
+        // ── Dawn, Sense, Refresh, CDawn (Shopify free themes) ──
+        '.header__search',                             // the search icon button
+        '.header__icon--search',                       // icon variant
+        'details.header__search > summary',            // details/summary search toggle
+        'search-modal',                                // Dawn's <search-modal> custom element
+
+        // ── Debut ──
+        '.site-nav__search-toggle',
+        '.search-bar__input',
+
+        // ── Brooklyn ──
+        '.js-search-bar-toggle',
+        '.icon-search',
+
+        // ── Minimal ──
+        '.search-trigger',
+        '.search-toggle',
+
+        // ── Narrative ──
+        '.site-header__search',
+
+        // ── Impulse / Turbo (Out of the Sandbox) ──
+        '.navmenu-search__btn',
+        '.header-search-trigger',
+        '[data-search-modal-trigger]',
+
+        // ── Prestige / Streamline (Maestrooo) ──
+        '.search-bar__toggle',
+        '[data-action="open-search"]',
+
+        // ── Flex / Empire (ThemeForest) ──
+        '.js-toggle-search',
+        '[data-target="search"]',
+
+        // ── Broadcast / Venue (Invisible Themes) ──
+        '.header__tool--search',
+        '[data-open="search"]',
+
+        // ── Motion / Pipeline (Archetype Themes) ──
+        '[data-search-button]',
+        '.mobile-nav__search',
+
+        // ── Expanse / Kingdom ──
+        '.icon-btn--search',
+
+        // ── Avone / Kalles (common paid themes) ──
+        '.btn-search',
+        '.search-icon',
+
+        // ── Generic "search" aria-label buttons (safe fallback) ──
+        // aria-label must contain "search" word (case-insensitive)
+        // Handled via isSearchByAria() function below – NOT in CSS selector
+      ];
+
+      // Add custom selector from admin settings
       if (CONFIG.customSelector) {
-          defaultSelector += ', ' + CONFIG.customSelector;
+        SEARCH_SELECTORS.push(CONFIG.customSelector);
       }
-      
+
+      const combinedSelector = SEARCH_SELECTORS.join(', ');
+
+      // ── TIER 2: DOM-based search validation for elements NOT in TIER 1 ────────
+      // Checks if an element is search-related via aria-label, role, or class/id.
+      // This is the safe fallback for custom/unknown themes.
+      function isSearchElement(el) {
+        if (!el) return false;
+
+        // Check aria-label for "search" keyword
+        const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+        if (ariaLabel.includes('search')) return true;
+
+        // Check element's own class and id for "search" keyword
+        const cls = (el.className && typeof el.className === 'string') ? el.className.toLowerCase() : '';
+        const id  = (el.id || '').toLowerCase();
+        if (cls.includes('search') || id.includes('search')) return true;
+
+        // Check immediate parent for "search" in class/id (e.g. icon inside button)
+        const parent = el.parentElement;
+        if (parent) {
+          const pCls = (parent.className && typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
+          const pId  = (parent.id || '').toLowerCase();
+          if (pCls.includes('search') || pId.includes('search')) return true;
+        }
+
+        return false;
+      }
+
       const handleEvent = (e) => {
-         // Find if the event target is inside our defaultSelector
-         const trigger = e.target.closest ? e.target.closest(defaultSelector) : null;
-         if (!trigger) return;
-         
-         // Ignore clicks inside our own modal to prevent self-closing issues
-         if (e.target.closest('#cfp-search-overlay') || e.target.closest('#cfp-instant-search-styles')) return;
+        // ── GATE 0: Ignore clicks inside our own modal ───────────────────────
+        if (e.target.closest('#cfp-search-overlay') || e.target.closest('#cfp-instant-search-styles')) return;
 
-         // Only hijack search elements that are inside the header, unless they match the custom selector
-         const isHeaderElement = trigger.closest('header') || 
-                                 trigger.closest('sticky-header') || 
-                                 trigger.closest('.header') || 
-                                 trigger.closest('[id*="header"]');
-                                 
-         const isCustomSelector = CONFIG.customSelector && trigger.matches(CONFIG.customSelector);
+        // ── GATE 1: Must be inside header — FIRST CHECK, nothing outside header ever passes ──
+        // This is the primary guard. If the click is not in the header area,
+        // we stop immediately — no further checks needed.
+        const isCustomClick = CONFIG.customSelector && e.target.closest(CONFIG.customSelector);
+        const headerContainer = e.target.closest(
+          'header, sticky-header, .header, #header, [id*="header"], .site-header, .page-header, nav.header__inline-menu'
+        );
 
-         if (!isHeaderElement && trigger.tagName !== 'SUMMARY' && !isCustomSelector) {
-           return; // Ignore inputs that are not in the header (e.g. main search page input)
-         }
+        if (!headerContainer && !isCustomClick) return; // ← Not in header, not custom → STOP
 
-         // Only intercept left clicks for mouse events
-         if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
-         
-         if (e.type === 'keydown' && e.key !== 'Enter') return;
+        // ── GATE 2: Find the actual search trigger element ────────────────────
+        // Try TIER 1: precise whitelist CSS selectors
+        let trigger = e.target.closest ? e.target.closest(combinedSelector) : null;
 
-         e.preventDefault();
-         e.stopPropagation();
-         e.stopImmediatePropagation();
-         closeThemeSearch(trigger);
-         openModal(trigger);
+        // Try TIER 2: fallback DOM check (only runs if we're already inside header)
+        // Checks aria-label / class / id for the word "search"
+        if (!trigger && isSearchElement(e.target)) {
+          trigger = e.target;
+        }
+
+        if (!trigger) return; // Inside header but not a search element — skip
+
+        // ── GATE 3: Filter event types ────────────────────────────────────────
+        if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
+        if (e.type === 'keydown' && e.key !== 'Enter') return;
+
+        // ── All gates passed — intercept and open our search modal ────────────
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        closeThemeSearch(trigger);
+        openModal(trigger);
       };
 
       ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus', 'keydown'].forEach(eventType => {
