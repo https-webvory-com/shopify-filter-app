@@ -227,22 +227,20 @@ document.addEventListener("DOMContentLoaded", function () {
       // Each selector here maps to a real search element in a known theme.
       const SEARCH_SELECTORS = [
         // ── Universal (standard HTML) ──
-        'input[type="search"]',                        // any theme using standard search input
-        'input[name="q"]',                             // Shopify's conventional search param
+        'input[type="search"]',               // standard search input
+        'input[name="q"]',                    // Shopify's conventional search param
 
         // ── Dawn, Sense, Refresh, CDawn (Shopify free themes) ──
-        '.header__search',                             // the search icon button
-        '.header__icon--search',                       // icon variant
-        'details.header__search > summary',            // details/summary search toggle
-        'search-modal',                                // Dawn's <search-modal> custom element
+        '.header__search',                    // search icon button / wrapper
+        '.header__icon--search',              // icon variant
+        'details.header__search > summary',   // details/summary search toggle
+        'search-modal',                       // Dawn's <search-modal> custom element
 
         // ── Debut ──
         '.site-nav__search-toggle',
-        '.search-bar__input',
 
         // ── Brooklyn ──
         '.js-search-bar-toggle',
-        '.icon-search',
 
         // ── Minimal ──
         '.search-trigger',
@@ -262,7 +260,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // ── Flex / Empire (ThemeForest) ──
         '.js-toggle-search',
-        '[data-target="search"]',
 
         // ── Broadcast / Venue (Invisible Themes) ──
         '.header__tool--search',
@@ -275,13 +272,9 @@ document.addEventListener("DOMContentLoaded", function () {
         // ── Expanse / Kingdom ──
         '.icon-btn--search',
 
-        // ── Avone / Kalles (common paid themes) ──
-        '.btn-search',
-        '.search-icon',
-
-        // ── Generic "search" aria-label buttons (safe fallback) ──
-        // aria-label must contain "search" word (case-insensitive)
-        // Handled via isSearchByAria() function below – NOT in CSS selector
+        // NOTE: Generic selectors like .search-icon, .icon-search, .btn-search
+        // are intentionally REMOVED — they match too many non-search elements.
+        // Use CONFIG.customSelector in admin settings for custom themes instead.
       ];
 
       // Add custom selector from admin settings
@@ -291,29 +284,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const combinedSelector = SEARCH_SELECTORS.join(', ');
 
-      // ── TIER 2: DOM-based search validation for elements NOT in TIER 1 ────────
-      // Checks if an element is search-related via aria-label, role, or class/id.
-      // This is the safe fallback for custom/unknown themes.
-      function isSearchElement(el) {
+      // ── TIER 2: aria-label only fallback for custom/unknown themes ────────────
+      // STRICT: Only checks aria-label containing exact word "search".
+      // We intentionally do NOT check class/id names — too many false positives
+      // (e.g. country pickers, currency dropdowns could have "search" in their
+      //  parent wrapper class names in some themes).
+      function isSearchByAriaLabel(el) {
         if (!el) return false;
-
-        // Check aria-label for "search" keyword
+        // Check the element itself
         const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-        if (ariaLabel.includes('search')) return true;
-
-        // Check element's own class and id for "search" keyword
-        const cls = (el.className && typeof el.className === 'string') ? el.className.toLowerCase() : '';
-        const id  = (el.id || '').toLowerCase();
-        if (cls.includes('search') || id.includes('search')) return true;
-
-        // Check immediate parent for "search" in class/id (e.g. icon inside button)
+        if (/\bsearch\b/.test(ariaLabel)) return true;
+        // Check parent element (e.g. SVG icon inside a button)
         const parent = el.parentElement;
         if (parent) {
-          const pCls = (parent.className && typeof parent.className === 'string') ? parent.className.toLowerCase() : '';
-          const pId  = (parent.id || '').toLowerCase();
-          if (pCls.includes('search') || pId.includes('search')) return true;
+          const pAria = (parent.getAttribute('aria-label') || '').toLowerCase();
+          if (/\bsearch\b/.test(pAria)) return true;
         }
-
         return false;
       }
 
@@ -335,9 +321,9 @@ document.addEventListener("DOMContentLoaded", function () {
         // Try TIER 1: precise whitelist CSS selectors
         let trigger = e.target.closest ? e.target.closest(combinedSelector) : null;
 
-        // Try TIER 2: fallback DOM check (only runs if we're already inside header)
-        // Checks aria-label / class / id for the word "search"
-        if (!trigger && isSearchElement(e.target)) {
+        // Try TIER 2: strict aria-label fallback (only if already inside header)
+        // Checks ONLY aria-label for the word "search" — nothing else
+        if (!trigger && isSearchByAriaLabel(e.target)) {
           trigger = e.target;
         }
 
@@ -355,9 +341,34 @@ document.addEventListener("DOMContentLoaded", function () {
         openModal(trigger);
       };
 
-      ['click', 'mousedown', 'pointerdown', 'touchstart', 'focus', 'keydown'].forEach(eventType => {
-          document.addEventListener(eventType, handleEvent, true);
+      // Only listen to 'click' and 'keydown' globally.
+      // ✗ 'focus'      — removed: when country dropdown opens, theme JS focuses a hidden
+      //                  search input, firing our listener incorrectly.
+      // ✗ 'mousedown'  — removed: 'click' is sufficient and fires after mouseup,
+      //                  preventing accidental double-triggers.
+      // ✗ 'pointerdown'— removed: same reason as mousedown.
+      // ✗ 'touchstart' — removed: 'click' fires on touch too (300ms delay is fine
+      //                  since we preventDefault on actual search clicks).
+      ['click', 'keydown'].forEach(eventType => {
+        document.addEventListener(eventType, handleEvent, true);
       });
+
+      // Add focused 'focus' listener ONLY on actual search inputs in header.
+      // This handles keyboard users tabbing into the search box.
+      // Done via delegation on document but guarded to input[type=search] / input[name=q] only.
+      document.addEventListener('focus', (e) => {
+        const el = e.target;
+        if (!el) return;
+        if (el.tagName !== 'INPUT') return;                          // Only inputs
+        if (el.type !== 'search' && el.name !== 'q') return;        // Only search inputs
+        if (e.target.closest('#cfp-search-overlay')) return;        // Not our own modal
+        const inHeader = el.closest('header, sticky-header, .header, #header, [id*="header"], .site-header');
+        if (!inHeader) return;                                       // Must be in header
+        // Valid search input focused in header — open modal
+        e.preventDefault();
+        closeThemeSearch(el);
+        openModal(el);
+      }, true);
 
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
