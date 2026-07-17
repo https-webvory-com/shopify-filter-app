@@ -342,6 +342,16 @@ document.addEventListener("DOMContentLoaded", function () {
           'details[id*="country"]',
           'details[id*="locale"]',
           'details[id*="currency"]',
+          // Third-party Translation/Currency Apps
+          'weglot-switcher',
+          '.weglot-container',
+          'ly-as-desktop',
+          '.ly-custom-dropdown',
+          '.doubly-wrapper',
+          '.transcy-switcher',
+          '.gtranslate_wrapper',
+          '#gtranslate_wrapper',
+          '.wg-default',
           // Header Account / User
           '.header__icon--account',
           '.site-header__account',
