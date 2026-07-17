@@ -11,6 +11,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import FilterModal from "../components/merchandising/FilterModal";
 import CreateSearchRuleModal from "../components/merchandising/CreateSearchRuleModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
+import ImportMerchandisingRulesModal from "../components/merchandising/ImportMerchandisingRulesModal";
+import ExportMerchandisingRulesModal from "../components/merchandising/ExportMerchandisingRulesModal";
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -52,6 +54,8 @@ export const action = async ({ request }) => {
             field: c.field,
             value:
               typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+            maxValue:
+              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -102,6 +106,8 @@ export const action = async ({ request }) => {
             field: c.field,
             value:
               typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+            maxValue:
+              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -153,6 +159,7 @@ export const action = async ({ request }) => {
             action: c.action,
             field: c.field,
             value: c.value,
+            maxValue: c.maxValue,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -161,6 +168,51 @@ export const action = async ({ request }) => {
       },
     });
     return Response.json({ success: true, intent: "duplicate" });
+  }
+
+  if (actionType === "importRules") {
+    const rules = JSON.parse(formData.get("rules") || "[]");
+    let importedCount = 0;
+    
+    for (const r of rules) {
+      const ruleName = r.name || "Imported Rule";
+      
+      const existingRule = await prisma.merchandisingRule.findFirst({
+        where: { shop, name: ruleName, ruleType: "search" }
+      });
+      
+      if (existingRule) {
+        await prisma.merchandisingRule.delete({ where: { id: existingRule.id } });
+      }
+      
+      await prisma.merchandisingRule.create({
+        data: {
+          shop,
+          name: ruleName,
+          searchQueries: r.searchQueries || [],
+          ruleType: "search",
+          customerTags: r.customerTags || "",
+          locales: r.locales || "",
+          startDate: r.startDate ? new Date(r.startDate) : null,
+          endDate: r.endDate ? new Date(r.endDate) : null,
+          status: r.status,
+          conditions: {
+            create: (r.conditions || []).map((c) => ({
+              action: c.action,
+              field: c.field,
+              value: typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+              maxValue: c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
+              operator: c.operator,
+              operand: c.operand,
+              dateValue: c.dateValue,
+            })),
+          },
+        },
+      });
+      importedCount++;
+    }
+    
+    return Response.json({ success: true, intent: "importRules", count: importedCount });
   }
 
   return Response.json({ error: "Invalid action" });
@@ -360,6 +412,10 @@ export default function MerchandisingIndex() {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isCreateSearchRuleModalOpen, setIsCreateSearchRuleModalOpen] =
     useState(false);
+  const [isCreateDropdownOpen, setIsCreateDropdownOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedRules, setSelectedRules] = useState([]);
   const [ruleToDelete, setRuleToDelete] = useState(null);
   const [ruleToEdit, setRuleToEdit] = useState(null);
   const [ruleMatchType, setRuleMatchType] = useState("all");
@@ -377,6 +433,16 @@ export default function MerchandisingIndex() {
   ];
   const [tableColumns, setTableColumns] = useState(defaultColumns);
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isCreateDropdownOpen && !e.target.closest('.create-dropdown-inside')) {
+        setIsCreateDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isCreateDropdownOpen]);
 
   const filteredRules = merchandisingRules.filter((rule) => {
     if (statusFilter === "active" && !rule.status) return false;
@@ -760,33 +826,117 @@ export default function MerchandisingIndex() {
               )}
             </div>
 
-            {/* Create rule button */}
-            <div
-              onClick={() => {
-                setRuleToEdit(null);
-                setIsCreateSearchRuleModalOpen(true);
-              }}
-              className="merch-btn-primary"
-            >
-              Create rule
-              <div
-                style={{
-                  borderLeft: "1px solid rgba(255,255,255,0.3)",
-                  marginLeft: "12px",
-                  paddingLeft: "8px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <svg
-                  style={{ width: "12px", height: "12px" }}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+            {/* Create rule button & Export logic */}
+            {selectedRules.length > 0 ? (
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", color: "#64748b" }}>
+                  {selectedRules.length} rule{selectedRules.length > 1 ? "s" : ""} selected
+                </span>
+                <button
+                  className="merch-btn-secondary"
+                  onClick={() => setIsExportModalOpen(true)}
+                  style={{ gap: "8px", border: "1px solid #5B21B6", color: "#5B21B6" }}
                 >
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
+                  Export selected
+                </button>
               </div>
-            </div>
+            ) : (
+              <div style={{ position: "relative" }} className="create-dropdown-inside">
+                <div
+                  className="merch-btn-primary"
+                  onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
+                >
+                  Create rule
+                  <div
+                    style={{
+                      borderLeft: "1px solid rgba(255,255,255,0.3)",
+                      marginLeft: "12px",
+                      paddingLeft: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <svg
+                      style={{
+                        width: "12px",
+                        height: "12px",
+                        transform: isCreateDropdownOpen ? "rotate(180deg)" : "none",
+                        transition: "transform 0.2s ease"
+                      }}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {isCreateDropdownOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      width: "200px",
+                      background: "#fff",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
+                      border: "1px solid rgba(0,0,0,0.05)",
+                      zIndex: 100,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.04)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onClick={() => {
+                        setRuleToEdit(null);
+                        setIsCreateSearchRuleModalOpen(true);
+                        setIsCreateDropdownOpen(false);
+                      }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create a New Rule
+                    </div>
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.04)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onClick={() => {
+                        setIsImportModalOpen(true);
+                        setIsCreateDropdownOpen(false);
+                      }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Import Rules
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right side search */}
@@ -938,6 +1088,14 @@ export default function MerchandisingIndex() {
                             >
                               <input
                                 type="checkbox"
+                                checked={filteredRules.length > 0 && selectedRules.length === filteredRules.length}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedRules(filteredRules);
+                                  } else {
+                                    setSelectedRules([]);
+                                  }
+                                }}
                                 style={{
                                   accentColor: "#5B21B6",
                                   width: "15px",
@@ -1008,6 +1166,14 @@ export default function MerchandisingIndex() {
                                     </svg>
                                     <input
                                       type="checkbox"
+                                      checked={selectedRules.some(r => r.id === rule.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedRules([...selectedRules, rule]);
+                                        } else {
+                                          setSelectedRules(selectedRules.filter(r => r.id !== rule.id));
+                                        }
+                                      }}
                                       style={{
                                         accentColor: "#5B21B6",
                                         width: "15px",
@@ -1361,6 +1527,7 @@ export default function MerchandisingIndex() {
                   Add rule
                 </button>
                 <button
+                  onClick={() => setIsImportModalOpen(true)}
                   style={{
                     background: "#ffffff",
                     color: "#5B21B6",
@@ -1523,6 +1690,30 @@ export default function MerchandisingIndex() {
             setIsCustomizeColumnsOpen(false);
           }}
         />
+        {isImportModalOpen && (
+          <ImportMerchandisingRulesModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            onSubmit={(parsedRules) => {
+              setIsImportModalOpen(false);
+              const formData = new FormData();
+              formData.append("actionType", "importRules");
+              formData.append("rules", JSON.stringify(parsedRules));
+              fetcher.submit(formData, { method: "POST" });
+            }}
+          />
+        )}
+        {isExportModalOpen && (
+          <ExportMerchandisingRulesModal
+            isOpen={isExportModalOpen}
+            onClose={() => {
+              setIsExportModalOpen(false);
+              setSelectedRules([]);
+            }}
+            selectedRuleIds={selectedRules}
+            allRules={merchandisingRules}
+          />
+        )}
       </div>
     </s-page>
   );

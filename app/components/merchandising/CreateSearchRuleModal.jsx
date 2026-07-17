@@ -95,10 +95,17 @@ export default function CreateSearchRuleModal({
                 parsedValue = JSON.parse(c.value);
               }
             } catch (e) {}
+            let parsedValue2 = c.maxValue;
+            try {
+              if (typeof c.maxValue === 'string' && (c.maxValue.startsWith('[') || c.maxValue.startsWith('{'))) {
+                parsedValue2 = JSON.parse(c.maxValue);
+              }
+            } catch (e) {}
             return {
               action: c.action || "Boost",
               field: c.field || "",
               value: parsedValue || "",
+              value2: parsedValue2 || "",
               operator: c.operator || "Operator",
               operand: c.operand || "",
               dateValue: c.dateValue || ""
@@ -111,7 +118,7 @@ export default function CreateSearchRuleModal({
         setRuleName("");
         setCustomerTags("");
         setLocales("");
-        setRuleRules([{ action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
+        setRuleRules([{ action: "Boost", field: "", value: "", value2: "", operator: "Operator", operand: "", dateValue: "" }]);
         setIsSearchQueriesDropdownOpen(false);
         setSearchQueryInput("");
         setSearchQueries([]);
@@ -160,7 +167,7 @@ export default function CreateSearchRuleModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   const addRuleRule = () => {
-    setRuleRules([...ruleRules, { action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
+    setRuleRules([...ruleRules, { action: "Boost", field: "", value: "", value2: "", operator: "Operator", operand: "", dateValue: "" }]);
   };
 
   const removeRuleRule = (index) => {
@@ -933,25 +940,48 @@ export default function CreateSearchRuleModal({
                           })()}
                         </div>
                       ) : (
-                        <input 
-                          type="text" 
-                          placeholder="Search values" 
-                          value={r.value}
-                          onChange={(e) => {
-                            const newRules = [...ruleRules];
-                            newRules[i].value = e.target.value;
-                            setRuleRules(newRules);
-                          }}
-                          style={{ boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", outline: "none", transition: "all 0.2s" }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = "#5B21B6";
-                            e.target.style.boxShadow = "0 0 0 2px rgba(62, 58, 177, 0.1)";
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = "#c9cccf";
-                            e.target.style.boxShadow = "none";
-                          }}
-                        />
+                        <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                          <input 
+                            type="text" 
+                            placeholder="Search values" 
+                            value={r.value}
+                            onChange={(e) => {
+                              const newRules = [...ruleRules];
+                              newRules[i].value = e.target.value;
+                              setRuleRules(newRules);
+                            }}
+                            style={{ flex: 1, boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", outline: "none", transition: "all 0.2s" }}
+                            onFocus={(e) => {
+                              e.target.style.borderColor = "#5B21B6";
+                              e.target.style.boxShadow = "0 0 0 2px rgba(62, 58, 177, 0.1)";
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.borderColor = "#c9cccf";
+                              e.target.style.boxShadow = "none";
+                            }}
+                          />
+                          {(r.value2 !== undefined && r.value2 !== "" || r.field === "Available" || r.field === "Price" || r.field === "available") && (
+                            <input 
+                              type="text" 
+                              placeholder="Max value" 
+                              value={r.value2}
+                              onChange={(e) => {
+                                const newRules = [...ruleRules];
+                                newRules[i].value2 = e.target.value;
+                                setRuleRules(newRules);
+                              }}
+                              style={{ flex: 1, boxSizing: "border-box", width: "100%", padding: "10px 14px", borderRadius: "10px", border: "1px solid #c9cccf", backgroundColor: "#fff", fontSize: "14px", color: "#202223", outline: "none", transition: "all 0.2s" }}
+                              onFocus={(e) => {
+                                e.target.style.borderColor = "#5B21B6";
+                                e.target.style.boxShadow = "0 0 0 2px rgba(62, 58, 177, 0.1)";
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.borderColor = "#c9cccf";
+                                e.target.style.boxShadow = "none";
+                              }}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
 

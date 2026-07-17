@@ -242,10 +242,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // ── Brooklyn ──
         '.js-search-bar-toggle',
 
-        // ── Minimal ──
-        '.search-trigger',
-        '.search-toggle',
-
         // ── Narrative ──
         '.site-header__search',
 
@@ -255,11 +251,7 @@ document.addEventListener("DOMContentLoaded", function () {
         '[data-search-modal-trigger]',
 
         // ── Prestige / Streamline (Maestrooo) ──
-        '.search-bar__toggle',
         '[data-action="open-search"]',
-
-        // ── Flex / Empire (ThemeForest) ──
-        '.js-toggle-search',
 
         // ── Broadcast / Venue (Invisible Themes) ──
         '.header__tool--search',
@@ -272,10 +264,14 @@ document.addEventListener("DOMContentLoaded", function () {
         // ── Expanse / Kingdom ──
         '.icon-btn--search',
 
-        // NOTE: Generic selectors like .search-icon, .icon-search, .btn-search
-        // are intentionally REMOVED — they match too many non-search elements.
+        // ⚠️  INTENTIONALLY REMOVED (too generic — cause false positives on
+        //     country/language pickers in many themes):
+        //   .search-trigger, .search-toggle, .search-bar__toggle, .js-toggle-search,
+        //   .search-icon, .icon-search, .btn-search
+        //
         // Use CONFIG.customSelector in admin settings for custom themes instead.
       ];
+
 
       // Add custom selector from admin settings
       if (CONFIG.customSelector) {
@@ -304,42 +300,82 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       const handleEvent = (e) => {
-        // ── GATE 0: Ignore clicks inside our own modal ───────────────────────
-        if (e.target.closest('#cfp-search-overlay') || e.target.closest('#cfp-instant-search-styles')) return;
+        // ── GATE 0: Ignore events inside our own modal/overlay ───────────────
+        if (e.target.closest('.cfp-search-modal') || e.target.closest('.cfp-search-modal-overlay')) return;
 
-        // ── GATE 1: Must be inside header — FIRST CHECK, nothing outside header ever passes ──
-        // This is the primary guard. If the click is not in the header area,
-        // we stop immediately — no further checks needed.
+        // ── GATE 1: Must be inside header ────────────────────────────────────
         const isCustomClick = CONFIG.customSelector && e.target.closest(CONFIG.customSelector);
         const headerContainer = e.target.closest(
-          'header, sticky-header, .header, #header, [id*="header"], .site-header, .page-header, nav.header__inline-menu'
+          'header, sticky-header, .header, #header, .site-header, .masthead, ' +
+          '#shopify-section-header, .shopify-section--header'
         );
+        if (!headerContainer && !isCustomClick) return;
 
-        if (!headerContainer && !isCustomClick) return; // ← Not in header, not custom → STOP
+        // ── GATE 1.5: Explicitly EXCLUDE localization / country / currency ────
+        // This must run BEFORE any search selector matching because some themes
+        // use class names like .search-toggle on their country picker buttons,
+        // or because .closest() walks up to a parent that matches our selectors.
+        //
+        // We check if the clicked element (or any ancestor up to the header)
+        // belongs to a localization/country/currency/language component.
+        const LOCALIZATION_SELECTORS = [
+          'localization-form',          // Shopify standard custom element (Dawn etc.)
+          '.localization-form',
+          '.disclosure',                // Dawn's localization disclosure
+          '.disclosure__toggle',
+          '[data-disclosure-toggle]',
+          '[aria-controls*="localization"]',
+          '[aria-controls*="country"]',
+          '[aria-controls*="currency"]',
+          '[aria-controls*="locale"]',
+          'form[action="/localization"]',
+          'form[action*="localization"]',
+          '.country-selector',
+          '.currency-selector',
+          '.language-selector',
+          '.locale-selector',
+          '.country-flag',
+          '.header__localization',
+          '.site-header__localization',
+          '.flag-icon',
+          '[data-country-selector]',
+          '[data-currency-selector]',
+          '[data-locale-selector]',
+          'details.localization-selector',
+          'details[id*="country"]',
+          'details[id*="locale"]',
+          'details[id*="currency"]',
+        ].join(', ');
+
+        if (e.target.closest(LOCALIZATION_SELECTORS)) return; // ← Country/currency/locale → STOP
 
         // ── GATE 2: Find the actual search trigger element ────────────────────
-        // Try TIER 1: precise whitelist CSS selectors
         let trigger = e.target.closest ? e.target.closest(combinedSelector) : null;
 
-        // Try TIER 2: strict aria-label fallback (only if already inside header)
-        // Checks ONLY aria-label for the word "search" — nothing else
+        // TIER 2: strict aria-label fallback (already confirmed inside header)
+        // But also ensure the aria-label element is NOT localization-related
         if (!trigger && isSearchByAriaLabel(e.target)) {
-          trigger = e.target;
+          // Double-check the element itself isn't localization (aria-label="Change country" etc.)
+          const ariaLabel = (e.target.getAttribute('aria-label') || '').toLowerCase();
+          const isLocale = /\b(country|language|locale|currency|region|flag)\b/.test(ariaLabel);
+          if (!isLocale) {
+            trigger = e.target;
+          }
         }
 
         if (!trigger) return; // Inside header but not a search element — skip
 
         // ── GATE 3: Filter event types ────────────────────────────────────────
-        if ((e.type === 'mousedown' || e.type === 'pointerdown') && e.button !== 0) return;
         if (e.type === 'keydown' && e.key !== 'Enter') return;
 
         // ── All gates passed — intercept and open our search modal ────────────
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        closeThemeSearch(trigger);
+        closeThemeSearch();
         openModal(trigger);
       };
+
 
       // Only listen to 'click' and 'keydown' globally.
       // ✗ 'focus'      — removed: when country dropdown opens, theme JS focuses a hidden
@@ -353,20 +389,22 @@ document.addEventListener("DOMContentLoaded", function () {
         document.addEventListener(eventType, handleEvent, true);
       });
 
-      // Add focused 'focus' listener ONLY on actual search inputs in header.
-      // This handles keyboard users tabbing into the search box.
-      // Done via delegation on document but guarded to input[type=search] / input[name=q] only.
+      // Targeted 'focus' listener ONLY for real search inputs in header.
+      // Handles keyboard users who tab into the search box.
+      // Strictly guarded: INPUT tag + search type/name + in header + not our own modal.
       document.addEventListener('focus', (e) => {
         const el = e.target;
         if (!el) return;
-        if (el.tagName !== 'INPUT') return;                          // Only inputs
-        if (el.type !== 'search' && el.name !== 'q') return;        // Only search inputs
-        if (e.target.closest('#cfp-search-overlay')) return;        // Not our own modal
-        const inHeader = el.closest('header, sticky-header, .header, #header, [id*="header"], .site-header');
-        if (!inHeader) return;                                       // Must be in header
-        // Valid search input focused in header — open modal
+        if (el.tagName !== 'INPUT') return;                           // Only input elements
+        if (el.type !== 'search' && el.name !== 'q') return;         // Only search inputs
+        if (el.closest('.cfp-search-modal')) return;                  // Not our own modal input
+        const inHeader = el.closest(
+          'header, sticky-header, .header, #header, .site-header, #shopify-section-header'
+        );
+        if (!inHeader) return;                                        // Must be in header
+        // Valid search input focused in header — intercept
         e.preventDefault();
-        closeThemeSearch(el);
+        closeThemeSearch();
         openModal(el);
       }, true);
 
@@ -417,42 +455,43 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function openModal(triggerElement) {
-    // Determine where to place the modal (below the header)
-    const header = document.querySelector('header, .header, #shopify-section-header');
-    let topPos = 0;
-    
-    if (header) {
-      const rect = header.getBoundingClientRect();
-      topPos = rect.bottom;
-    } else if (triggerElement) {
-      const rect = triggerElement.getBoundingClientRect();
-      topPos = rect.bottom;
-    }
+    // Already open — don't re-open
+    if (modal.classList.contains('cfp-open')) return;
 
-    modal.style.top = `0px`;
+    modal.style.top = '0px';
+    overlay.classList.add('cfp-open');
+    modal.classList.add('cfp-open');
 
-    overlay.classList.add("cfp-open");
-    modal.classList.add("cfp-open");
-    document.body.style.overflow = "hidden"; // Prevent background scrolling
-    document.body.classList.add("cfp-search-active");
-    
-    // Check if input is empty, if so, load default view
+    // Prevent background scrolling.
+    // Save any existing overflow value so we can restore it precisely on close.
+    modal._prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('cfp-search-active');
+
+    // Load default view if input is empty
     if (mainInput.value.trim().length === 0) {
       fetchDefaultView();
     }
 
     // Focus the input after transition
-    setTimeout(() => {
-      mainInput.focus();
-    }, 100);
+    setTimeout(() => { mainInput.focus(); }, 100);
   }
 
   function closeModal() {
-    overlay.classList.remove("cfp-open");
-    modal.classList.remove("cfp-open");
-    document.body.style.overflow = "";
-    document.body.classList.remove("cfp-search-active");
-    closeThemeSearch();
+    if (!modal.classList.contains('cfp-open')) return; // Already closed
+
+    overlay.classList.remove('cfp-open');
+    modal.classList.remove('cfp-open');
+
+    // Restore body overflow to what it was before we set it
+    // (avoids breaking other modals that also use overflow:hidden)
+    document.body.style.overflow = modal._prevBodyOverflow || '';
+    document.body.classList.remove('cfp-search-active');
+
+    // NOTE: We do NOT call closeThemeSearch() here.
+    // The theme's search was already closed when we OPENED our modal.
+    // Calling it on close would interfere with the theme re-opening its own
+    // search if the user navigates away.
   }
 
   function closeThemeSearch() {

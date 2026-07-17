@@ -11,6 +11,8 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import FilterModal from "../components/merchandising/FilterModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
+import ImportSearchPinsModal from "../components/merchandising/ImportSearchPinsModal";
+import ExportSearchPinsModal from "../components/merchandising/ExportSearchPinsModal";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -52,6 +54,54 @@ export const action = async ({ request }) => {
       data: { status },
     });
     return { success: true, action: "toggleStatus", status };
+  }
+
+  if (actionType === "importRules") {
+    const rules = JSON.parse(formData.get("rules"));
+    let importedCount = 0;
+    
+    // 1. Gather all product IDs
+    const allProductIds = new Set();
+    for (const rule of rules) {
+      if (Array.isArray(rule.products)) {
+        for (const p of rule.products) {
+          if (p && p.id) allProductIds.add(p.id);
+        }
+      }
+    }
+
+    // 2. Fetch valid product IDs from DB
+    let validProductsSet = new Set();
+    if (allProductIds.size > 0) {
+      const validProducts = await prisma.product.findMany({
+        where: { shop, id: { in: Array.from(allProductIds) } },
+        select: { id: true }
+      });
+      validProductsSet = new Set(validProducts.map(p => p.id));
+    }
+
+    for (const rule of rules) {
+      const validRuleProducts = (rule.products || []).filter(p => p && p.id && validProductsSet.has(p.id));
+      
+      // Skip if rule has no valid products to pin
+      if (validRuleProducts.length === 0) continue;
+
+      await prisma.pinnedProductRule.create({
+        data: {
+          shop,
+          name: rule.name,
+          status: rule.status,
+          ruleType: rule.ruleType,
+          applyToAll: rule.applyToAll,
+          applyToSearchType: rule.applyToSearchType,
+          collections: rule.collections || [],
+          searchQueries: rule.searchQueries || [],
+          products: validRuleProducts,
+        },
+      });
+      importedCount++;
+    }
+    return { success: true, action: "importRules", count: importedCount, total: rules.length };
   }
 
   return { success: false, message: "Unknown action" };
@@ -102,15 +152,22 @@ export default function PinningIndex() {
         shopify.toast.show("Pin duplicated successfully");
       } else if (actionData.action === "toggleStatus") {
         shopify.toast.show(actionData.status ? "Pin enabled" : "Pin disabled");
+      } else if (actionData.action === "importRules") {
+        if (actionData.count === actionData.total) {
+          shopify.toast.show(`Successfully imported ${actionData.count} pins`);
+        } else {
+          shopify.toast.show(`Imported ${actionData.count} pins. Skipped ${actionData.total - actionData.count} rules due to invalid or missing products.`);
+        }
       }
     }
   }, [actionData, shopify]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (!e.target.closest('.pin-dropdown-inside')) {
+      if (!e.target.closest('.pin-dropdown-inside') && !e.target.closest('.create-pin-dropdown-inside')) {
         setIsStatusDropdownOpen(false);
         setIsSortDropdownOpen(false);
+        setIsCreateDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -128,6 +185,11 @@ export default function PinningIndex() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCreateDropdownOpen, setIsCreateDropdownOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedRules, setSelectedRules] = useState([]);
 
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [ruleMatchType, setRuleMatchType] = useState("all");
@@ -464,38 +526,131 @@ export default function PinningIndex() {
               )}
             </div>
 
-            {/* Create rule button */}
-            <div
-              onClick={handleCreateNew}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                background: "#5B21B6",
-                padding: "8px 16px",
-                borderRadius: "20px",
-                cursor: "pointer",
-                color: "#fff",
-                fontSize: "14px",
-                fontWeight: "600",
-              }}
-            >
-              Create pin
-              <div
-                style={{
-                  borderLeft: "1px solid rgba(255,255,255,0.3)",
-                  marginLeft: "12px",
-                  paddingLeft: "8px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <svg
-                  style={{ width: "12px", height: "12px" }}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+            {/* Import / Export / Create rule buttons */}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              {pinningRules.length > 0 && selectedRules.length > 0 && (
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "#fff",
+                    border: "1px solid #cbd5e1",
+                    padding: "8px 16px",
+                    borderRadius: "20px",
+                    cursor: "pointer",
+                    color: "#334155",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                  }}
                 >
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
+                  Export
+                </button>
+              )}
+
+              <div style={{ position: "relative" }} className="create-pin-dropdown-inside">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "#5B21B6",
+                    padding: "8px 16px",
+                    borderRadius: "20px",
+                    cursor: "pointer",
+                    color: "#fff",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                  }}
+                  onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
+                >
+                  Create pin
+                  <div
+                    style={{
+                      borderLeft: "1px solid rgba(255,255,255,0.3)",
+                      marginLeft: "12px",
+                      paddingLeft: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <svg
+                      style={{
+                        width: "12px",
+                        height: "12px",
+                        transform: isCreateDropdownOpen ? "rotate(180deg)" : "none",
+                        transition: "transform 0.2s ease"
+                      }}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {isCreateDropdownOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      width: "200px",
+                      background: "#fff",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 40px rgba(0,0,0,0.12)",
+                      border: "1px solid rgba(0,0,0,0.05)",
+                      zIndex: 100,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.04)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onClick={() => {
+                        handleCreateNew();
+                        setIsCreateDropdownOpen(false);
+                      }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create a New Pin
+                    </div>
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1E1B4B",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(91, 33, 182, 0.04)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onClick={() => {
+                        setIsImportModalOpen(true);
+                        setIsCreateDropdownOpen(false);
+                      }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Import Pins
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -966,21 +1121,38 @@ export default function PinningIndex() {
                 Select specific products to always appear at the top of a
                 collection.
               </p>
-              <button
-                onClick={handleCreateNew}
-                style={{
-                  background: "#5B21B6",
-                  color: "#fff",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: "20px",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                }}
-              >
-                Add your pins
-              </button>
+              <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+                <button
+                  onClick={handleCreateNew}
+                  style={{
+                    background: "#5B21B6",
+                    color: "#fff",
+                    border: "none",
+                    padding: "10px 20px",
+                    borderRadius: "20px",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Add your pins
+                </button>
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  style={{
+                    background: "#f1f5f9",
+                    color: "#005bd3",
+                    border: "none",
+                    padding: "10px 20px",
+                    borderRadius: "20px",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Import pins
+                </button>
+              </div>
             </div>
           ) : sortedRules.length === 0 ? (
             <div style={{ padding: "60px 20px", textAlign: "center" }}>
@@ -1064,7 +1236,29 @@ export default function PinningIndex() {
                           fontWeight: "600",
                         }}
                       >
-                        {c.label}
+                        {c.id === "Search Queries" ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <input
+                              type="checkbox"
+                              checked={filteredRules.length > 0 && selectedRules.length === filteredRules.length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRules(filteredRules);
+                                } else {
+                                  setSelectedRules([]);
+                                }
+                              }}
+                              style={{
+                                accentColor: "#5B21B6",
+                                width: "15px",
+                                height: "15px",
+                              }}
+                            />{" "}
+                            {c.label}
+                          </div>
+                        ) : (
+                          c.label
+                        )}
                       </th>
                     ))}
                 </tr>
@@ -1102,27 +1296,65 @@ export default function PinningIndex() {
                                   color: "#334155",
                                 }}
                               >
-                                <span
-                                  onClick={() =>
-                                    navigate(
-                                      `/app/search/pinning/${rule.id}`,
-                                    )
-                                  }
-                                  style={{
-                                    color: "#5B21B6",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  {rule.name || "Pinning Rule"}
-                                </span>
-                                <div
-                                  style={{
-                                    fontSize: "12px",
-                                    color: "#64748b",
-                                    marginTop: "4px",
-                                  }}
-                                >
-                                  {collText}
+                                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                  <svg
+                                    style={{
+                                      width: "16px",
+                                      height: "16px",
+                                      cursor: "grab",
+                                      color: "#cbd5e1",
+                                    }}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M4 8h16M4 16h16"
+                                    ></path>
+                                  </svg>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedRules.some(r => r.id === rule.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedRules([...selectedRules, rule]);
+                                      } else {
+                                        setSelectedRules(selectedRules.filter(r => r.id !== rule.id));
+                                      }
+                                    }}
+                                    style={{
+                                      accentColor: "#5B21B6",
+                                      width: "15px",
+                                      height: "15px",
+                                    }}
+                                  />
+                                  <div>
+                                    <span
+                                      onClick={() =>
+                                        navigate(
+                                          `/app/search/pinning/${rule.id}`,
+                                        )
+                                      }
+                                      style={{
+                                        color: "#5B21B6",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      {rule.name || "Pinning Rule"}
+                                    </span>
+                                    <div
+                                      style={{
+                                        fontSize: "12px",
+                                        color: "#64748b",
+                                        marginTop: "4px",
+                                      }}
+                                    >
+                                      {collText}
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
                             );
@@ -1317,6 +1549,31 @@ export default function PinningIndex() {
             setIsCustomizeColumnsOpen(false);
           }}
         />
+
+        <ImportSearchPinsModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          isSubmitting={navigation.state === "submitting"}
+          onSubmit={(rules) => {
+            const formData = new FormData();
+            formData.append("actionType", "importRules");
+            formData.append("rules", JSON.stringify(rules));
+            submit(formData, { method: "POST" });
+            setIsImportModalOpen(false);
+          }}
+        />
+
+        {isExportModalOpen && (
+          <ExportSearchPinsModal
+            isOpen={isExportModalOpen}
+            onClose={() => {
+              setIsExportModalOpen(false);
+              setSelectedRules([]);
+            }}
+            selectedRuleIds={selectedRules.map(r => r.id)}
+            allRules={pinningRules}
+          />
+        )}
       </div>
     </s-page>
   );

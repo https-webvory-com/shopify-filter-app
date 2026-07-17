@@ -538,7 +538,7 @@ export default function PinningEditor() {
       <ui-title-bar title={name}>
         <button
           variant="breadcrumb"
-          onClick={() => handlenavigate("/app/collections/pinning")}
+          onClick={() => navigate("/app/collections/pinning")}
         >
           Product Pinning
         </button>
@@ -557,7 +557,7 @@ export default function PinningEditor() {
           href="/app/collections/pinning"
           onClick={(e) => {
             e.preventDefault();
-            handlenavigate("/app/collections/pinning");
+            navigate("/app/collections/pinning");
           }}
           style={{
             color: "#006e52",
@@ -607,7 +607,7 @@ export default function PinningEditor() {
         >
           <div>
             <button
-              onClick={() => handlenavigate("/app/collections/pinning")}
+              onClick={() => navigate("/app/collections/pinning")}
               style={{
                 background: "none",
                 border: "none",
@@ -650,7 +650,7 @@ export default function PinningEditor() {
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button
-              onClick={() => handlenavigate("/app/collections/pinning")}
+              onClick={() => navigate("/app/collections/pinning")}
               style={{
                 background: "#fff",
                 border: "1px solid rgba(91, 33, 182, 0.2)",

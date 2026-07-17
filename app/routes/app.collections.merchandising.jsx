@@ -51,6 +51,8 @@ export const action = async ({ request }) => {
             field: c.field,
             value:
               typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+            maxValue:
+              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -100,6 +102,8 @@ export const action = async ({ request }) => {
             field: c.field,
             value:
               typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+            maxValue:
+              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -150,6 +154,7 @@ export const action = async ({ request }) => {
             action: c.action,
             field: c.field,
             value: c.value,
+            maxValue: c.maxValue,
             operator: c.operator,
             operand: c.operand,
             dateValue: c.dateValue,
@@ -158,6 +163,52 @@ export const action = async ({ request }) => {
       },
     });
     return Response.json({ success: true, intent: "duplicate" });
+  }
+
+  if (actionType === "importRules") {
+    const rules = JSON.parse(formData.get("rules") || "[]");
+    let importedCount = 0;
+    
+    for (const r of rules) {
+      const ruleName = r.name || "Untitled";
+      
+      const existingRule = await prisma.merchandisingRule.findFirst({
+        where: { shop, name: ruleName }
+      });
+      
+      if (existingRule) {
+        await prisma.merchandisingRule.delete({
+          where: { id: existingRule.id }
+        });
+      }
+
+      await prisma.merchandisingRule.create({
+        data: {
+          shop,
+          name: ruleName,
+          status: r.status !== undefined ? r.status : true,
+          collections: r.collections || [],
+          customerTags: r.customerTags || "",
+          locales: r.locales || "",
+          startDate: r.startDate ? new Date(r.startDate) : null,
+          endDate: r.endDate ? new Date(r.endDate) : null,
+          conditions: {
+            create: (r.conditions || []).map(c => ({
+              action: c.action || "Boost",
+              field: c.field || "",
+              value: typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+              maxValue: c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
+              operator: c.operator || "contains",
+              operand: c.operand || "",
+              dateValue: c.dateValue || ""
+            }))
+          }
+        }
+      });
+      importedCount++;
+    }
+
+    return Response.json({ success: true, intent: "import", count: importedCount });
   }
 
   return Response.json({ error: "Invalid action" });
