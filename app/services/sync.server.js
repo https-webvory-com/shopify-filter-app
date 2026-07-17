@@ -471,26 +471,10 @@ async function processSyncChunk(jobId, shop, admin) {
 
       const productsData = responseJson.data?.products;
       if (!productsData || productsData.nodes.length === 0) break;
-      // ✅ FIX: Filter by ACTIVE status AND published to Online Store (onlineStoreUrl !== null)
-      // Products removed from Online Store channel have onlineStoreUrl = null but status = ACTIVE
-      const products = productsData.nodes.filter(
-        (p) => p.status === "ACTIVE" && p.onlineStoreUrl !== null
-      );
-
-      // Delete products that are ACTIVE but removed from Online Store
-      const unpublishedProducts = productsData.nodes.filter(
-        (p) => p.status === "ACTIVE" && p.onlineStoreUrl === null
-      );
-      if (unpublishedProducts.length > 0) {
-        for (const p of unpublishedProducts) {
-          const numericId = p.id.split("/").pop();
-          await prisma.product.deleteMany({ where: { id: p.id } });
-          try {
-            await meiliClient.index("products").deleteDocument(numericId);
-          } catch (e) { /* ignore if not found */ }
-          console.log(`CFP: Removed unpublished product ${p.id} from DB/Meili`);
-        }
-      }
+      // Filter: only ACTIVE status products
+      // NOTE: We do NOT filter by onlineStoreUrl here — that field returns null
+      // for ALL products on password-protected stores, which would wipe everything.
+      const products = productsData.nodes.filter((p) => p.status === "ACTIVE");
       hasNextPage = productsData.pageInfo.hasNextPage;
       cursor = productsData.pageInfo.endCursor;
 
@@ -940,22 +924,9 @@ export async function syncSingleProduct(shop, admin, productId) {
   }
 
   const product = responseJson.data?.product;
-
-  // ✅ FIX: Delete if product is not found, not ACTIVE, OR removed from Online Store
-  // onlineStoreUrl is null when product is unpublished from Online Store channel
-  const shouldDelete =
-    !product ||
-    product.status !== "ACTIVE" ||
-    product.onlineStoreUrl === null;
-
-  if (shouldDelete) {
-    const reason = !product
-      ? "not found"
-      : product.status !== "ACTIVE"
-      ? `status=${product.status}`
-      : "removed from Online Store channel";
+  if (!product || product.status !== "ACTIVE") {
     console.warn(
-      `CFP: Product ${productId} should be removed (${reason}). Deleting from DB/Meili.`,
+      `CFP: Product ${productId} not found or not ACTIVE. Deleting from DB/Meili.`,
     );
     await prisma.product.deleteMany({ where: { id: productId } });
     // Also remove from Meilisearch
