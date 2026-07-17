@@ -1468,6 +1468,7 @@ export default function MerchandisingIndex() {
                   Add rule
                 </button>
                 <button
+                  onClick={() => setIsImportModalOpen(true)}
                   style={{
                     background: "#ffffff",
                     color: "#5B21B6",
