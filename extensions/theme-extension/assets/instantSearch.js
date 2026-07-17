@@ -311,17 +311,14 @@ document.addEventListener("DOMContentLoaded", function () {
         );
         if (!headerContainer && !isCustomClick) return;
 
-        // ── GATE 1.5: Explicitly EXCLUDE localization / country / currency ────
-        // This must run BEFORE any search selector matching because some themes
-        // use class names like .search-toggle on their country picker buttons,
-        // or because .closest() walks up to a parent that matches our selectors.
-        //
-        // We check if the clicked element (or any ancestor up to the header)
-        // belongs to a localization/country/currency/language component.
-        const LOCALIZATION_SELECTORS = [
-          'localization-form',          // Shopify standard custom element (Dawn etc.)
+        // ── GATE 1.5: Explicitly EXCLUDE localization, cart, account, wishlist ────
+        // This must run BEFORE any search selector matching because a broad custom selector
+        // (e.g. '.header__icon') might accidentally match these other buttons too.
+        const IGNORE_SELECTORS = [
+          // Localization / Country / Currency
+          'localization-form',
           '.localization-form',
-          '.disclosure',                // Dawn's localization disclosure
+          '.disclosure',
           '.disclosure__toggle',
           '[data-disclosure-toggle]',
           '[aria-controls*="localization"]',
@@ -345,9 +342,23 @@ document.addEventListener("DOMContentLoaded", function () {
           'details[id*="country"]',
           'details[id*="locale"]',
           'details[id*="currency"]',
+          // Header Account / User
+          '.header__icon--account',
+          '.site-header__account',
+          '[href*="/account"]',
+          // Header Cart
+          '.header__icon--cart',
+          '.site-header__cart',
+          '[href*="/cart"]',
+          // Header Wishlist
+          '.header__icon--wishlist',
+          '.site-header__wishlist',
+          '[href*="wishlist"]',
+          '.swym-button',
+          '.swym-wishlist'
         ].join(', ');
 
-        if (e.target.closest(LOCALIZATION_SELECTORS)) return; // ← Country/currency/locale → STOP
+        if (e.target.closest(IGNORE_SELECTORS)) return; // ← Ignore these UI elements completely
 
         // ── GATE 2: Find the actual search trigger element ────────────────────
         let trigger = e.target.closest ? e.target.closest(combinedSelector) : null;
