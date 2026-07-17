@@ -74,9 +74,9 @@ export const loader = async ({ request }) => {
             updatedAt: lastSyncJob.updatedAt,
           }
         : null,
-      verdict: isFullySynced
-        ? "✅ All active products are synced!"
-        : `⚠️ ${Math.max(0, missing)} active products are missing from DB. Run sync again.`,
+      message: isFullySynced
+        ? "✅ All products synced successfully."
+        : `⚠️ ${Math.max(0, missing)} active products are unpublished from the Online Store.`,
     });
   } catch (err) {
     return data({ error: err.message }, { status: 500 });

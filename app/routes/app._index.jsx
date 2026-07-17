@@ -513,8 +513,8 @@ export default function Index() {
               )}
               {/* Missing */}
               {!isSyncing && shopifyActiveCount && currentCount < shopifyActiveCount && (
-                <span style={{ background: "#fef9c3", color: "#a16207", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
-                  ⚠️ {(shopifyActiveCount - currentCount).toLocaleString()} missing
+                <span style={{ background: "#fef9c3", color: "#a16207", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }} title="These products are active in Shopify but not published to the Online Store channel.">
+                  ⚠️ {(shopifyActiveCount - currentCount).toLocaleString()} unpublished from Online Store
                 </span>
               )}
             </div>
