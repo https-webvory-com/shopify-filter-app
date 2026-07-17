@@ -423,6 +423,26 @@ document.addEventListener("DOMContentLoaded", function () {
           'header, sticky-header, .header, #header, .site-header, #shopify-section-header'
         );
         if (!inHeader) return;                                        // Must be in header
+        
+        // Ensure it's not a search input hidden inside a country/localization picker!
+        // We reuse the same IGNORE_SELECTORS defined above.
+        // If it's inside localization/cart/user, skip it.
+        const IGNORE_SELECTORS = [
+          'localization-form', '.localization-form', '.disclosure', '.disclosure__toggle',
+          '[data-disclosure-toggle]', '[aria-controls*="localization"]', '[aria-controls*="country"]',
+          '[aria-controls*="currency"]', '[aria-controls*="locale"]', 'form[action="/localization"]',
+          'form[action*="localization"]', '.country-selector', '.currency-selector', '.language-selector',
+          '.locale-selector', '.country-flag', '.header__localization', '.site-header__localization',
+          '.flag-icon', '[data-country-selector]', '[data-currency-selector]', '[data-locale-selector]',
+          'details.localization-selector', 'details[id*="country"]', 'details[id*="locale"]', 'details[id*="currency"]',
+          'weglot-switcher', '.weglot-container', 'ly-as-desktop', '.ly-custom-dropdown', '.doubly-wrapper',
+          '.transcy-switcher', '.gtranslate_wrapper', '#gtranslate_wrapper', '.wg-default',
+          '.header__icon--account', '.site-header__account', '[href*="/account"]',
+          '.header__icon--cart', '.site-header__cart', '[href*="/cart"]',
+          '.header__icon--wishlist', '.site-header__wishlist', '[href*="wishlist"]', '.swym-button', '.swym-wishlist'
+        ].join(', ');
+        if (el.closest(IGNORE_SELECTORS)) return;
+
         // Valid search input focused in header — intercept
         e.preventDefault();
         closeThemeSearch();
