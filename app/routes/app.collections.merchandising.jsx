@@ -11,6 +11,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import FilterModal from "../components/merchandising/FilterModal";
 import CreateRuleModal from "../components/merchandising/CreateRuleModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
+import ImportMerchandisingRulesModal from "../components/merchandising/ImportMerchandisingRulesModal";
+import ExportMerchandisingRulesModal from "../components/merchandising/ExportMerchandisingRulesModal";
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -411,6 +413,10 @@ export default function MerchandisingIndex() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isCreateDropdownOpen, setIsCreateDropdownOpen] = useState(false);
+  const [selectedRules, setSelectedRules] = useState([]);
 
   const defaultColumns = [
     { id: "Name", label: "Name", visible: true },
@@ -515,6 +521,8 @@ export default function MerchandisingIndex() {
         shopify.toast.show("Rule status updated");
       if (fetcher.data.intent === "duplicate")
         shopify.toast.show("Rule duplicated successfully");
+      if (fetcher.data.intent === "import")
+        shopify.toast.show(`Successfully imported ${fetcher.data.count} rule(s)`);
     }
   }, [fetcher.state, fetcher.data]);
 
@@ -857,33 +865,110 @@ export default function MerchandisingIndex() {
               )}
             </div>
 
-            {/* Create rule button */}
-            <div
-              onClick={() => {
-                setRuleToEdit(null);
-                setIsCreateRuleModalOpen(true);
-              }}
-              className="merch-btn-primary"
-            >
-              Create rule
-              <div
-                style={{
-                  borderLeft: "1px solid rgba(255,255,255,0.3)",
-                  marginLeft: "12px",
-                  paddingLeft: "8px",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <svg
-                  style={{ width: "12px", height: "12px" }}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+            {/* Create rule button & Export logic */}
+            {selectedRules.length > 0 ? (
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <span style={{ fontSize: "14px", color: "#64748b" }}>
+                  {selectedRules.length} rule{selectedRules.length > 1 ? "s" : ""} selected
+                </span>
+                <button
+                  className="merch-btn-secondary"
+                  onClick={() => setIsExportModalOpen(true)}
+                  style={{ gap: "8px", border: "1px solid #5B21B6", color: "#5B21B6" }}
                 >
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
+                  Export selected
+                </button>
               </div>
-            </div>
+            ) : (
+              <div style={{ position: "relative" }} className="create-dropdown-inside">
+                <div
+                  className="merch-btn-primary"
+                  onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
+                >
+                  Create rule
+                  <div
+                    style={{
+                      borderLeft: "1px solid rgba(255,255,255,0.3)",
+                      marginLeft: "12px",
+                      paddingLeft: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <svg
+                      style={{
+                        width: "12px",
+                        height: "12px",
+                        transform: isCreateDropdownOpen ? "rotate(180deg)" : "none",
+                        transition: "transform 0.2s ease"
+                      }}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {isCreateDropdownOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      width: "200px",
+                      background: "#fff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                      zIndex: 50,
+                      overflow: "hidden"
+                    }}
+                  >
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        setIsCreateDropdownOpen(false);
+                        setRuleToEdit(null);
+                        setIsCreateRuleModalOpen(true);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "12px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        borderBottom: "1px solid #f1f5f9",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1e293b"
+                      }}
+                    >
+                      Create manual rule
+                    </button>
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        setIsCreateDropdownOpen(false);
+                        setIsImportModalOpen(true);
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: "12px 16px",
+                        textAlign: "left",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "14px",
+                        color: "#1e293b"
+                      }}
+                    >
+                      Import from CSV
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right side search */}
@@ -1027,7 +1112,18 @@ export default function MerchandisingIndex() {
                             <>
                               <input
                                 type="checkbox"
-                                style={{ marginRight: "12px" }}
+                                style={{ marginRight: "12px", accentColor: "#5B21B6", cursor: "pointer" }}
+                                checked={
+                                  filteredRules.length > 0 &&
+                                  selectedRules.length === filteredRules.length
+                                }
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedRules(filteredRules.map((r) => r.id));
+                                  } else {
+                                    setSelectedRules([]);
+                                  }
+                                }}
                               />{" "}
                               {c.label}
                             </>
@@ -1077,7 +1173,20 @@ export default function MerchandisingIndex() {
                                       d="M4 8h16M4 16h16"
                                     ></path>
                                   </svg>
-                                  <input type="checkbox" />
+                                  <input
+                                    type="checkbox"
+                                    style={{ accentColor: "#5B21B6", cursor: "pointer" }}
+                                    checked={selectedRules.includes(rule.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedRules([...selectedRules, rule.id]);
+                                      } else {
+                                        setSelectedRules(
+                                          selectedRules.filter((id) => id !== rule.id)
+                                        );
+                                      }
+                                    }}
+                                  />
                                   <span
                                     onClick={() => {
                                       setRuleToEdit(rule);
@@ -1512,6 +1621,34 @@ export default function MerchandisingIndex() {
           shopifySkus={shopifySkus}
           shopifyBarcodes={shopifyBarcodes}
         />
+        {isImportModalOpen && (
+          <ImportMerchandisingRulesModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            onSubmit={(rules) => {
+              setIsImportModalOpen(false);
+              const formData = new FormData();
+              formData.append("actionType", "importRules");
+              formData.append("rules", JSON.stringify(rules));
+              fetcher.submit(formData, { method: "POST" });
+            }}
+          />
+        )}
+
+        {isExportModalOpen && (
+          <ExportMerchandisingRulesModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            rules={merchandisingRules.filter((r) =>
+              selectedRules.includes(r.id)
+            )}
+            onExport={() => {
+              setIsExportModalOpen(false);
+              setSelectedRules([]);
+            }}
+          />
+        )}
+
         <CustomizeColumnsModal
           isOpen={isCustomizeColumnsOpen}
           onClose={() => setIsCustomizeColumnsOpen(false)}
