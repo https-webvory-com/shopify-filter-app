@@ -3,7 +3,7 @@ import { Meilisearch } from "meilisearch";
 let meiliClient;
 
 const shopifyLocalHost =  "https://meilisearch.webvory.com";
-const vpsHost = "http://10.0.1.162:7700"
+const vpsHost = "http://10.0.2.139:7700"
 
 if (!global.meiliClient) {
   global.meiliClient = new Meilisearch({
