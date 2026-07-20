@@ -1,4 +1,4 @@
-name: Deploy to EC2                 
+name: Deploy to EC2
 
 on:
   push:
@@ -6,9 +6,9 @@ on:
       - main
 
 env:
-  AWS_REGION: ap-south-1
-  ECR_REGISTRY: 450367038243.dkr.ecr.ap-south-1.amazonaws.com
-  ECR_REPOSITORY: shopify_filter
+  AWS_REGION: us-west-1
+  ECR_REGISTRY: 450367038243.dkr.ecr.us-west-1.amazonaws.com
+  ECR_REPOSITORY: shopify
   IMAGE_TAG: latest
 
 jobs:
@@ -19,12 +19,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Create .env (if needed during docker build)
       - name: Create .env
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
 
-      # Configure AWS Credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -32,7 +30,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Login to ECR
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
@@ -40,24 +37,21 @@ jobs:
             --username AWS \
             --password-stdin $ECR_REGISTRY
 
-      # Build Docker Image
       - name: Build Docker Image
         run: |
-          docker build -t shopify-filter-app .
+          docker build -t shopify .
 
-      # Tag Image
       - name: Tag Docker Image
         run: |
-          docker tag shopify-filter-app:latest \
-            $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag shopify:latest \
+          $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # Push Image
       - name: Push Docker Image
         run: |
           docker push \
-            $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-      # Deploy to EC2
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -66,30 +60,37 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
 
           script: |
-            set -xve
-            
-            AWS_REGION=ap-south-1
-            ECR_REGISTRY=450367038243.dkr.ecr.ap-south-1.amazonaws.com
-            ECR_REPOSITORY=shopify_filter
+            set -x
+
+            AWS_REGION=us-west-1
+            ECR_REGISTRY=450367038243.dkr.ecr.us-west-1.amazonaws.com
+            ECR_REPOSITORY=shopify
+
 
             aws ecr get-login-password --region $AWS_REGION | \
             docker login \
-              --username AWS \
-              --password-stdin $ECR_REGISTRY
+            --username AWS \
+            --password-stdin $ECR_REGISTRY
 
-            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+            docker pull \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
 
             cd /home/ubuntu/shopify-filter-app
+
 
             docker stop shopify-filter-app || true
             docker rm shopify-filter-app || true
 
+
             docker run -d \
-              --name shopify-filter-app \
-              --env-file .env \
-              -p 3005:3005 \
-              --restart always \
-              $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            --name shopify-filter-app \
+            --env-file .env \
+            -p 3005:3005 \
+            --restart always \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
 
             docker image prune -f
 
