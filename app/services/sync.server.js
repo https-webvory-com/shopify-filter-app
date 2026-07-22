@@ -94,23 +94,27 @@ async function updateMeiliSettings(shop) {
     const index = meiliClient.index("products");
     const dynamicKeys = new Set();
 
-    // Get all options
-    const products = await prisma.product.findMany({
-      where: { shop },
-      select: { options: true },
-    });
-    for (const p of products) {
-      for (const opt of p.options || []) {
-        if (opt.name) dynamicKeys.add(`option_${opt.name}`);
-      }
+    // Get unique option names efficiently via raw SQL
+    const optionsRaw = await prisma.$queryRaw`
+      SELECT DISTINCT opt->>'name' as name
+      FROM "Product" p,
+      jsonb_array_elements(
+        CASE WHEN jsonb_typeof(p.options) = 'array' THEN p.options ELSE '[]'::jsonb END
+      ) as opt
+      WHERE p.shop = ${shop}
+    `;
+    for (const opt of optionsRaw) {
+      if (opt.name) dynamicKeys.add(`option_${opt.name}`);
     }
 
-    // Get all metafields
-    const metafields = await prisma.productMetafield.findMany({
-      where: { product: { shop } },
-      select: { namespace: true, key: true },
-    });
-    for (const m of metafields) {
+    // Get unique metafields efficiently
+    const metafieldsRaw = await prisma.$queryRaw`
+      SELECT DISTINCT namespace, key
+      FROM "ProductMetafield" pm
+      JOIN "Product" p ON p.id = pm."productId"
+      WHERE p.shop = ${shop}
+    `;
+    for (const m of metafieldsRaw) {
       if (m.namespace && m.key) {
         dynamicKeys.add(`metafield_${m.namespace}.${m.key}`);
       }
@@ -191,16 +195,18 @@ async function updateMeiliSettings(shop) {
  * Called after every sync so new options (Color, Size, etc.) appear in admin automatically.
  */
 async function autoSeedOptionFilters(shop) {
-  const products = await prisma.product.findMany({
-    where: { shop },
-    select: { options: true },
-  });
+  const optionsRaw = await prisma.$queryRaw`
+    SELECT DISTINCT opt->>'name' as name
+    FROM "Product" p,
+    jsonb_array_elements(
+      CASE WHEN jsonb_typeof(p.options) = 'array' THEN p.options ELSE '[]'::jsonb END
+    ) as opt
+    WHERE p.shop = ${shop}
+  `;
 
   const seen = new Set();
-  for (const p of products) {
-    for (const opt of p.options || []) {
-      if (opt.name) seen.add(opt.name);
-    }
+  for (const opt of optionsRaw) {
+    if (opt.name) seen.add(opt.name);
   }
 
   if (seen.size === 0) return;
@@ -554,6 +560,12 @@ async function processSyncChunk(jobId, shop, admin) {
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: Date.now(),
           images: p.images.nodes.map((img) => img.url), // all images, no limit
+          options: p.options
+            ? p.options.map((opt) => ({
+                name: opt.name,
+                values: Array.isArray(opt.values) ? opt.values : [opt.values],
+              }))
+            : [],
           variantPrices: p.variants.nodes.map((v) => {
             const optionsList = p.options || [];
             let option1 = null,
@@ -632,13 +644,21 @@ async function processSyncChunk(jobId, shop, admin) {
   }
 
   if (!hasNextPage) {
-    await autoSeedOptionFilters(shop);
-    await updateMeiliSettings(shop);
-    await prisma.syncJob.update({
-      where: { id: jobId },
-      data: { status: "COMPLETED" },
-    });
-    console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
+    try {
+      await autoSeedOptionFilters(shop);
+      await updateMeiliSettings(shop);
+      await prisma.syncJob.update({
+        where: { id: jobId },
+        data: { status: "COMPLETED" },
+      });
+      console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
+    } catch (finalErr) {
+      console.error(`CFP: Final sync steps failed for ${shop}`, finalErr);
+      await prisma.syncJob.update({
+        where: { id: jobId },
+        data: { status: "FAILED" },
+      });
+    }
   }
 }
 
@@ -1014,6 +1034,12 @@ export async function syncSingleProduct(shop, admin, productId) {
     status: (product.status || "ACTIVE").toUpperCase(),
     createdAt: Date.now(),
     images: product.images.nodes.map((img) => img.url), // all images, no limit
+    options: product.options
+      ? product.options.map((opt) => ({
+          name: opt.name,
+          values: Array.isArray(opt.values) ? opt.values : [opt.values],
+        }))
+      : [],
     variantPrices: product.variants.nodes.map((v) => {
       const optionsList = product.options || [];
       let option1 = null,

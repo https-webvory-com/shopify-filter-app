@@ -237,20 +237,6 @@ export const loader = async ({ request }) => {
           name
         }
       }
-      products(first: 250) {
-        nodes {
-          title
-          featuredImage { url }
-          variants(first: 25) {
-            nodes {
-              title
-              sku
-              barcode
-              image { url }
-            }
-          }
-        }
-      }
       shop {
         fulfillmentServices {
           location {
@@ -290,86 +276,63 @@ export const loader = async ({ request }) => {
   });
   const shopifyProductTypes = productTypesData.map((p) => p.productType).sort();
 
-  const tagsData = await prisma.product.findMany({
-    where: { shop, tags: { isEmpty: false } },
-    select: { tags: true },
-  });
-  const tagsSet = new Set();
-  tagsData.forEach((p) => {
-    if (p.tags && Array.isArray(p.tags)) {
-      p.tags.forEach((t) => tagsSet.add(t.trim()));
-    }
-  });
-  const shopifyTags = Array.from(tagsSet).sort();
+  const tagsRaw = await prisma.$queryRaw`
+    SELECT DISTINCT unnest(tags) as tag
+    FROM "Product"
+    WHERE shop = ${shop} AND array_length(tags, 1) > 0
+  `;
+  const shopifyTags = tagsRaw.map(t => t.tag.trim()).sort();
 
-  const productsData = await prisma.product.findMany({
-    where: { shop },
-    select: { title: true, images: true },
-  });
-  const shopifyProducts = productsData.map((p) => {
-    let image = null;
-    if (p.images) {
-      try {
-        const imgs =
-          typeof p.images === "string" ? JSON.parse(p.images) : p.images;
-        if (imgs && imgs.length > 0) {
-          const firstImg = imgs[0];
-          image =
-            typeof firstImg === "string"
-              ? firstImg
-              : firstImg?.url || firstImg?.originalSrc || firstImg?.src || null;
-        }
-      } catch (e) {}
-    }
-    return { title: p.title, image };
-  });
+  const productsData = await prisma.$queryRaw`
+    SELECT title, 
+           COALESCE(
+             images->0->>'url', 
+             images->0->>'src', 
+             images->0->>'originalSrc',
+             CASE WHEN jsonb_typeof(images->0) = 'string' THEN images->>0 ELSE NULL END
+           ) as image
+    FROM "Product"
+    WHERE shop = ${shop}
+    LIMIT 250
+  `;
+  const shopifyProducts = productsData.map((p) => ({ title: p.title, image: p.image || null }));
 
-  const shopifySkus = [];
-  const shopifyBarcodesSet = new Set();
-
-  graphqlData?.data?.products?.nodes?.forEach((p) => {
-    p.variants?.nodes?.forEach((v) => {
-      if (v.sku) {
-        const image = v.image?.url || p.featuredImage?.url || null;
-        shopifySkus.push({
-          title:
-            `${v.sku}|${p.title} ${v.title !== "Default Title" ? v.title : ""}`.trim(),
-          image,
-        });
-      }
-      if (v.barcode) {
-        shopifyBarcodesSet.add(v.barcode);
-      }
-    });
+  const skusData = await prisma.$queryRaw`
+    SELECT v.sku, p.title as "productTitle", v.option1, v.option2, v.option3, v."imageUrl" as image
+    FROM "Variant" v
+    JOIN "Product" p ON p.id = v."productId"
+    WHERE p.shop = ${shop} AND v.sku IS NOT NULL AND v.sku != ''
+    LIMIT 250
+  `;
+  const shopifySkus = skusData.map((v) => {
+    let variantTitleParts = [v.option1, v.option2, v.option3].filter(Boolean);
+    let variantTitle = variantTitleParts.join(" / ");
+    return {
+      title: `${v.sku}|${v.productTitle} ${variantTitle !== "Default Title" ? variantTitle : ""}`.trim(),
+      image: v.image || null,
+    };
   });
-  const shopifyBarcodes = Array.from(shopifyBarcodesSet).sort();
+  
+  const shopifyBarcodes = [];
 
-  const productsWithOptions = await prisma.product.findMany({
-    where: { shop, options: { not: "[]" } },
-    select: { options: true },
-  });
-
-  const optionsMap = {};
-  for (const p of productsWithOptions) {
-    let opts = [];
-    if (typeof p.options === "string") {
-      try {
-        opts = JSON.parse(p.options);
-      } catch (e) {}
-    } else if (Array.isArray(p.options)) {
-      opts = p.options;
-    }
-    for (const opt of opts) {
-      if (opt && opt.name && opt.values) {
-        if (!optionsMap[opt.name]) optionsMap[opt.name] = new Set();
-        opt.values.forEach((v) => optionsMap[opt.name].add(v));
-      }
-    }
-  }
+  const optionsRaw = await prisma.$queryRaw`
+    SELECT 
+      el->>'name' as name, 
+      jsonb_array_elements_text(el->'values') as value 
+    FROM "Product", 
+    jsonb_array_elements(options) as el 
+    WHERE shop = ${shop} AND options IS NOT NULL AND options::text != 'null' AND options::text != '[]'
+  `;
 
   const shopifyOptions = {};
-  for (const [name, valSet] of Object.entries(optionsMap)) {
-    shopifyOptions[name] = Array.from(valSet).sort();
+  for (const row of optionsRaw) {
+    if (row.name && row.value) {
+      if (!shopifyOptions[row.name]) shopifyOptions[row.name] = new Set();
+      shopifyOptions[row.name].add(row.value);
+    }
+  }
+  for (const key in shopifyOptions) {
+    shopifyOptions[key] = Array.from(shopifyOptions[key]).sort();
   }
 
   const merchandisingRules = await prisma.merchandisingRule.findMany({

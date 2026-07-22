@@ -169,6 +169,11 @@ if (typeof window.CfpQuickView === 'undefined') {
           if (option.name === 'Title' && option.values.length === 1 && option.values[0] === 'Default Title') return;
           
           const isColor = option.name.toLowerCase().includes('color') || option.name.toLowerCase().includes('colour');
+          
+          // Hide non-color options (like Size) if B2B is enabled and customer is not logged in
+          if (window.cfpGlobalSettings && window.cfpGlobalSettings.isWholesale && !window.cfpCustomerLoggedIn && !isColor) {
+            return;
+          }
           const optionPositionIdx = option.position - 1;
           const selectedValueForOption = defaultSelectedOptions[optionPositionIdx] || option.values[0];
           
@@ -234,16 +239,20 @@ if (typeof window.CfpQuickView === 'undefined') {
             ${vendorHtml}
             ${skuHtml}
           </div>
+          ${(window.cfpGlobalSettings && window.cfpGlobalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
           <div class="cfp-qv-price-row">
             <span class="cfp-qv-price">${window.cfpCurrencySymbol || '$'}${formattedPrice}</span>
             <span class="cfp-qv-compare-price" style="display: ${comparePrice && parseFloat(comparePrice) > parseFloat(formattedPrice) ? 'inline-block' : 'none'};">${window.cfpCurrencySymbol || '$'}${comparePrice}</span>
           </div>
+          `}
           
           <div class="cfp-qv-options">
             ${optionsHtml}
           </div>
 
-          <button class="cfp-qv-add-to-cart-btn">ADD TO CART</button>
+          ${(window.cfpGlobalSettings && window.cfpGlobalSettings.isWholesale && !window.cfpCustomerLoggedIn) 
+             ? `<button class="cfp-qv-login-btn" style="width:100%; padding:12px; background:var(--cfp-accent, #000); color:var(--cfp-accent-text, #fff); border:none; border-radius:4px; font-weight:600; cursor:pointer; margin-top:20px; letter-spacing:0.05em;" onclick="window.location.href='/account/login'">Login To Add to Cart</button>`
+             : `<button class="cfp-qv-add-to-cart-btn">ADD TO CART</button>`}
           
           <div class="cfp-qv-view-details-row">
             <a href="${product.url}" class="cfp-qv-view-details-link">View details</a>

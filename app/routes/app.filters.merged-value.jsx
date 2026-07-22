@@ -96,38 +96,32 @@ export const loader = async ({ request }) => {
     by: ["productType"],
     where: { shop, productType: { not: "" } },
   });
-  const allProducts = await prisma.product.findMany({
-    where: { shop },
-    select: { tags: true, options: true },
-  });
+  const tagsRaw = await prisma.$queryRaw`
+    SELECT DISTINCT unnest(tags) as tag
+    FROM "Product"
+    WHERE shop = ${shop}
+  `;
+  const tagsList = tagsRaw.map(t => t.tag.trim()).sort();
 
-  const tagsMap = new Set();
+  const optionsRaw = await prisma.$queryRaw`
+    SELECT DISTINCT 
+      LOWER(opt->>'name') as name,
+      jsonb_array_elements_text(opt->'values') as value
+    FROM "Product" p,
+    jsonb_array_elements(p.options) as opt
+    WHERE p.shop = ${shop}
+  `;
   const optionsMap = new Map();
-
-  allProducts.forEach((p) => {
-    if (p.tags && Array.isArray(p.tags)) {
-      p.tags.forEach((t) => {
-        if (t) tagsMap.add(t);
-      });
-    }
-
-    if (p.options && Array.isArray(p.options)) {
-      p.options.forEach((opt) => {
-        if (opt.name && opt.values) {
-          const optNameLower = opt.name.toLowerCase();
-          if (!optionsMap.has(optNameLower))
-            optionsMap.set(optNameLower, new Set());
-          opt.values.forEach((v) => optionsMap.get(optNameLower).add(v));
-        }
-      });
-    }
+  optionsRaw.forEach(row => {
+    if (!optionsMap.has(row.name)) optionsMap.set(row.name, new Set());
+    optionsMap.get(row.name).add(row.value.trim());
   });
 
   const storeData = {
     collection: shopifyCollections,
     vendor: vendors.map((v) => v.vendor).sort(),
     product_type: productTypes.map((p) => p.productType).sort(),
-    tags: Array.from(tagsMap).sort(),
+    tags: tagsList,
     inventory_locations: shopifyLocations,
     options: Array.from(optionsMap.entries()).reduce((acc, [name, valSet]) => {
       acc[name] = Array.from(valSet).sort();

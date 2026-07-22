@@ -241,6 +241,7 @@
 </div>
 
 <script>
+  window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
   window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
   window.cfpCurrencySymbol = "{{ cart.currency.symbol }}";
   window.cfpCurrencyCode = "{{ cart.currency.iso_code }}";

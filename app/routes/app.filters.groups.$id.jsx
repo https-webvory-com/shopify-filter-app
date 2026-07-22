@@ -62,17 +62,7 @@ export const loader = async ({ request, params }) => {
     throw data({ message: "Filter group not found" }, { status: 404 });
   }
 
-  // Get detected product option names for the add filter modal
-  const products = await prisma.product.findMany({
-    where: { shop },
-    select: { options: true },
-  });
-  const optionNames = new Set();
-  for (const p of products) {
-    for (const opt of p.options || []) {
-      if (opt.name) optionNames.add(opt.name);
-    }
-  }
+  // Option names will be derived from the fast options SQL below
 
   let shopifyCollections = [];
   let shopifyLocations = [];
@@ -154,70 +144,76 @@ export const loader = async ({ request, params }) => {
     _count: { productType: true },
   });
 
-  const allProducts = await prisma.product.findMany({
-    where: { shop },
-    select: {
-      title: true,
-      tags: true,
-      options: true,
-      variants: { select: { available: true, inventory: true } },
-    },
-  });
+  // 1. Tags
+  const tagsRaw = await prisma.$queryRaw`
+    SELECT tag as value, count(*)::int as count 
+    FROM "Product", unnest(tags) as tag
+    WHERE shop = ${shop} 
+    GROUP BY tag
+  `;
 
-  const tagsMap = new Map();
-  const optionsMap = new Map();
-  const titleMap = new Map();
+  // 2. Options (value counts)
+  const optionsRaw = await prisma.$queryRaw`
+    SELECT 
+      el->>'name' as name, 
+      jsonb_array_elements_text(el->'values') as value, 
+      count(*)::int as count 
+    FROM "Product", 
+    jsonb_array_elements(options) as el 
+    WHERE shop = ${shop} AND options IS NOT NULL AND options::text != 'null' AND options::text != '[]'
+    GROUP BY 1, 2
+  `;
 
-  let stockOnHandCount = 0;
-  let preOrderCount = 0;
-  let inStockCount = 0;
-  let outOfStockCount = 0;
+  // 3. Titles
+  const titlesRaw = await prisma.$queryRaw`
+    SELECT title as value, count(*)::int as count 
+    FROM "Product" 
+    WHERE shop = ${shop} AND title IS NOT NULL AND title != ''
+    GROUP BY title
+  `;
 
-  for (const p of allProducts) {
-    // Process title
-    if (p.title) titleMap.set(p.title, (titleMap.get(p.title) || 0) + 1);
+  // 4. Stock statuses
+  const stockRaw = await prisma.$queryRaw`
+    SELECT 
+      SUM(CASE WHEN has_stock THEN 1 ELSE 0 END)::int as "stockOnHandCount",
+      SUM(CASE WHEN is_preorder THEN 1 ELSE 0 END)::int as "preOrderCount",
+      SUM(CASE WHEN is_available THEN 1 ELSE 0 END)::int as "inStockCount",
+      SUM(CASE WHEN NOT is_available THEN 1 ELSE 0 END)::int as "outOfStockCount",
+      COUNT(*)::int as "totalProducts"
+    FROM (
+      SELECT 
+        p.id,
+        bool_or(v.inventory > 0) as has_stock,
+        bool_or(v.available AND v.inventory <= 0) as is_preorder,
+        bool_or(v.available) as is_available
+      FROM "Product" p
+      LEFT JOIN "Variant" v ON v."productId" = p.id
+      WHERE p.shop = ${shop}
+      GROUP BY p.id
+    ) as p_agg
+  `;
 
-    // Process tags
-    for (const t of p.tags || []) {
-      if (t) tagsMap.set(t, (tagsMap.get(t) || 0) + 1);
-    }
-    // Process options
-    if (p.options && Array.isArray(p.options)) {
-      for (const opt of p.options) {
-        if (opt.name && opt.values) {
-          const optName = opt.name;
-          if (!optionsMap.has(optName))
-            optionsMap.set(optName, new Map());
-          const valMap = optionsMap.get(optName);
-          for (const v of opt.values) {
-            valMap.set(v, (valMap.get(v) || 0) + 1);
-          }
-        }
-      }
-    }
-
-    // Process stock status counts
-    if (p.variants && p.variants.length > 0) {
-      const hasStock = p.variants.some((v) => v.inventory > 0);
-      const isPreOrder = p.variants.some(
-        (v) => v.available && v.inventory <= 0,
-      );
-      const isAvailable = p.variants.some((v) => v.available);
-
-      if (hasStock) stockOnHandCount++;
-      if (isPreOrder) preOrderCount++;
-      if (isAvailable) inStockCount++;
-      if (!isAvailable) outOfStockCount++;
+  const optionNamesSet = new Set();
+  const optionsObj = {};
+  for (const row of optionsRaw) {
+    if (row.name) {
+      optionNamesSet.add(row.name);
+      if (!optionsObj[row.name]) optionsObj[row.name] = [];
+      if (row.value) optionsObj[row.name].push({ value: row.value, count: Number(row.count) });
     }
   }
 
+  for (const key in optionsObj) {
+    optionsObj[key].sort((a, b) => a.value.localeCompare(b.value));
+  }
+
   const storeData = {
-    totalProducts: allProducts.length,
+    totalProducts: Number(stockRaw[0]?.totalProducts || 0),
     stockStatusCounts: {
-      inStock: inStockCount,
-      stockOnHand: stockOnHandCount,
-      preOrder: preOrderCount,
-      outOfStock: outOfStockCount,
+      inStock: Number(stockRaw[0]?.inStockCount || 0),
+      stockOnHand: Number(stockRaw[0]?.stockOnHandCount || 0),
+      preOrder: Number(stockRaw[0]?.preOrderCount || 0),
+      outOfStock: Number(stockRaw[0]?.outOfStockCount || 0),
     },
     vendors: vendors
       .map((v) => ({ value: v.vendor, count: v._count.vendor }))
@@ -225,24 +221,15 @@ export const loader = async ({ request, params }) => {
     productTypes: productTypes
       .map((p) => ({ value: p.productType, count: p._count.productType }))
       .sort((a, b) => a.value.localeCompare(b.value)),
-    tags: Array.from(tagsMap.entries())
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => a.value.localeCompare(b.value)),
-    titles: Array.from(titleMap.entries())
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => a.value.localeCompare(b.value)),
+    tags: tagsRaw.map(t => ({ value: t.value, count: Number(t.count) })).sort((a, b) => a.value.localeCompare(b.value)),
+    titles: titlesRaw.map(t => ({ value: t.value, count: Number(t.count) })).sort((a, b) => a.value.localeCompare(b.value)),
     locations: shopifyLocations,
-    options: Array.from(optionsMap.entries()).reduce((acc, [name, valMap]) => {
-      acc[name] = Array.from(valMap.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => a.value.localeCompare(b.value));
-      return acc;
-    }, {}),
+    options: optionsObj,
   };
 
   return {
     group,
-    detectedOptions: Array.from(optionNames).sort(),
+    detectedOptions: Array.from(optionNamesSet).sort(),
     shopifyCollections,
     storeData,
   };

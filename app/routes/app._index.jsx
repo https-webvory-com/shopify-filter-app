@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncProducts } from "../services/sync.server";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -38,48 +39,7 @@ export const loader = async ({ request }) => {
       })
     : null;
 
-  // ── Fetch accurate Shopify store stats via REST Admin API ────────────────
-  // WHY REST: GraphQL productsCount caps at 10,000 — inaccurate for 49k+ stores
-  // We use session.accessToken + fetch to call REST directly
-  let shopifyStats = null;
-  try {
-    const shop = session.shop;
-    const token = session.accessToken;
-    const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
-    const apiBase = `https://${shop}/admin/api/2025-10`;
-
-    const [activeRes, draftRes, archivedRes] = await Promise.all([
-      fetch(`${apiBase}/products/count.json?status=active`, { headers }),
-      fetch(`${apiBase}/products/count.json?status=draft`,  { headers }),
-      fetch(`${apiBase}/products/count.json?status=archived`, { headers }),
-    ]);
-
-    const activeCount   = (await activeRes.json())?.count   ?? 0;
-    const draftCount    = (await draftRes.json())?.count    ?? 0;
-    const archivedCount = (await archivedRes.json())?.count ?? 0;
-
-    // Collections via GraphQL (no 10k cap issue for collections)
-    const colRes = await admin.graphql(`#graphql
-      query {
-        allCollections: collectionsCount { count }
-        publishedCollections: collectionsCount(query: "published_status:published") { count }
-        smartCollections: collectionsCount(query: "collection_type:smart") { count }
-      }
-    `);
-    const colData = (await colRes.json())?.data;
-
-    shopifyStats = {
-      activeProducts:       activeCount,
-      draftProducts:        draftCount,
-      archivedProducts:     archivedCount,
-      totalProducts:        activeCount + draftCount + archivedCount,
-      allCollections:       colData?.allCollections?.count       ?? 0,
-      publishedCollections: colData?.publishedCollections?.count ?? 0,
-      smartCollections:     colData?.smartCollections?.count     ?? 0,
-    };
-  } catch (e) {
-    console.error("CFP: Store stats fetch error:", e?.message);
-  }
+  // Shopify stats are now fetched asynchronously via the /app/api/stats route
 
   // Last completed sync job
   const lastCompletedJob = await prisma.syncJob.findFirst({
@@ -89,19 +49,17 @@ export const loader = async ({ request }) => {
 
   return {
     syncedProductsCount,
-    shopifyStats,
-    shopifyActiveCount: shopifyStats?.activeProducts ?? null,
     isSyncingBackground: !!activeSyncJob,
     lastSyncedAt: lastCompletedJob?.updatedAt ?? null,
     // Live progress during sync
     syncProgress: activeSyncJob ? {
       processed: activeSyncJob.productsProcessed ?? 0,
-      total: activeSyncJob.totalProducts ?? shopifyStats?.activeProducts ?? null,
+      total: activeSyncJob.totalProducts ?? null,
     } : null,
     // Resumable job info
     resumableJob: resumableJob ? {
       processed: resumableJob.productsProcessed ?? 0,
-      total: resumableJob.totalProducts ?? shopifyStats?.activeProducts ?? null,
+      total: resumableJob.totalProducts ?? null,
     } : null,
   };
 };
@@ -126,12 +84,22 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount, shopifyStats, shopifyActiveCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob } = useLoaderData();
+  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob } = useLoaderData();
   const syncFetcher = useFetcher();
+  const statsFetcher = useFetcher();
   const shopify = useAppBridge();
   const { revalidate } = useRevalidator();
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (statsFetcher.state === "idle" && !statsFetcher.data) {
+      statsFetcher.load("/app/api/stats");
+    }
+  }, [statsFetcher]);
+
+  const shopifyStats = statsFetcher.data || null;
+  const shopifyActiveCount = shopifyStats?.activeProducts ?? null;
 
   const isSyncing =
     (["loading", "submitting"].includes(syncFetcher.state) &&
@@ -397,6 +365,11 @@ export default function Index() {
         }}
       >
         {/* ———————————————————————————————————————————————— */}
+        {!shopifyStats && (
+          <div style={{ minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <LoadingSpinner text="Fetching store overview..." />
+          </div>
+        )}
         {shopifyStats && (
           <>
             <h2 className="dash-section-title" style={{ marginTop: "0" }}>Store Overview</h2>

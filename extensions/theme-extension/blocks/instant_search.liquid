@@ -1,4 +1,5 @@
 <script>
+  window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
   window.CFP_InstantSearchSettings = {
     customTriggerSelector: {{ block.settings.custom_trigger_selector | json }},
     primaryColor: {{ block.settings.primary_color | default: '#000000' | json }},

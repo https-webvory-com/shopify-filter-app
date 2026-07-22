@@ -303,13 +303,18 @@ document.addEventListener("DOMContentLoaded", function () {
         // ── GATE 0: Ignore events inside our own modal/overlay ───────────────
         if (e.target.closest('.cfp-search-modal') || e.target.closest('.cfp-search-modal-overlay')) return;
 
+        console.log(`[CFP-IS] Event triggered: ${e.type} on`, e.target);
+
         // ── GATE 1: Must be inside header ────────────────────────────────────
         const isCustomClick = CONFIG.customSelector && e.target.closest(CONFIG.customSelector);
         const headerContainer = e.target.closest(
           'header, sticky-header, .header, #header, .site-header, .masthead, ' +
           '#shopify-section-header, .shopify-section--header'
         );
-        if (!headerContainer && !isCustomClick) return;
+        if (!headerContainer && !isCustomClick) {
+          console.log(`[CFP-IS] GATE 1 Failed: Not inside header container. isCustomClick: ${!!isCustomClick}`);
+          return;
+        }
 
         // ── GATE 1.5: Explicitly EXCLUDE localization, cart, account, wishlist ────
         // This must run BEFORE any search selector matching because a broad custom selector
@@ -332,8 +337,6 @@ document.addEventListener("DOMContentLoaded", function () {
           '.language-selector',
           '.locale-selector',
           '.country-flag',
-          '.header__localization',
-          '.site-header__localization',
           '.flag-icon',
           '[data-country-selector]',
           '[data-currency-selector]',
@@ -368,23 +371,35 @@ document.addEventListener("DOMContentLoaded", function () {
           '.swym-wishlist'
         ].join(', ');
 
-        if (e.target.closest(IGNORE_SELECTORS)) return; // ← Ignore these UI elements completely
+        const ignoreMatch = e.target.closest(IGNORE_SELECTORS);
+        if (ignoreMatch) {
+          console.log(`[CFP-IS] GATE 1.5 Failed: Clicked element is inside IGNORE_SELECTORS:`, ignoreMatch);
+          return; // ← Ignore these UI elements completely
+        }
 
         // ── GATE 2: Find the actual search trigger element ────────────────────
         let trigger = e.target.closest ? e.target.closest(combinedSelector) : null;
+        console.log(`[CFP-IS] GATE 2 Check: trigger from combinedSelector =`, trigger);
 
         // TIER 2: strict aria-label fallback (already confirmed inside header)
         // But also ensure the aria-label element is NOT localization-related
         if (!trigger && isSearchByAriaLabel(e.target)) {
+          console.log(`[CFP-IS] GATE 2.5 Check: Found by aria-label fallback`);
           // Double-check the element itself isn't localization (aria-label="Change country" etc.)
           const ariaLabel = (e.target.getAttribute('aria-label') || '').toLowerCase();
           const isLocale = /\b(country|language|locale|currency|region|flag)\b/.test(ariaLabel);
           if (!isLocale) {
             trigger = e.target;
+            console.log(`[CFP-IS] GATE 2.5: Assigned trigger by aria-label:`, trigger);
+          } else {
+            console.log(`[CFP-IS] GATE 2.5: Rejected aria-label match because it's a locale element`);
           }
         }
 
-        if (!trigger) return; // Inside header but not a search element — skip
+        if (!trigger) {
+          console.log(`[CFP-IS] GATE 2 Failed: No search trigger matched.`);
+          return; // Inside header but not a search element — skip
+        }
 
         // ── GATE 3: Filter event types ────────────────────────────────────────
         if (e.type === 'keydown' && e.key !== 'Enter') return;
@@ -432,8 +447,7 @@ document.addEventListener("DOMContentLoaded", function () {
           '[data-disclosure-toggle]', '[aria-controls*="localization"]', '[aria-controls*="country"]',
           '[aria-controls*="currency"]', '[aria-controls*="locale"]', 'form[action="/localization"]',
           'form[action*="localization"]', '.country-selector', '.currency-selector', '.language-selector',
-          '.locale-selector', '.country-flag', '.header__localization', '.site-header__localization',
-          '.flag-icon', '[data-country-selector]', '[data-currency-selector]', '[data-locale-selector]',
+          '.locale-selector', '.country-flag', '.flag-icon', '[data-country-selector]', '[data-currency-selector]', '[data-locale-selector]',
           'details.localization-selector', 'details[id*="country"]', 'details[id*="locale"]', 'details[id*="currency"]',
           'weglot-switcher', '.weglot-container', 'ly-as-desktop', '.ly-custom-dropdown', '.doubly-wrapper',
           '.transcy-switcher', '.gtranslate_wrapper', '#gtranslate_wrapper', '.wg-default',
@@ -441,8 +455,14 @@ document.addEventListener("DOMContentLoaded", function () {
           '.header__icon--cart', '.site-header__cart', '[href*="/cart"]',
           '.header__icon--wishlist', '.site-header__wishlist', '[href*="wishlist"]', '.swym-button', '.swym-wishlist'
         ].join(', ');
-        if (el.closest(IGNORE_SELECTORS)) return;
+        
+        const focusIgnoreMatch = el.closest(IGNORE_SELECTORS);
+        if (focusIgnoreMatch) {
+           console.log(`[CFP-IS] Focus ignored because it matches IGNORE_SELECTORS:`, focusIgnoreMatch);
+           return;
+        }
 
+        console.log(`[CFP-IS] Focus SUCCESS: Intercepting search input focus!`);
         // Valid search input focused in header — intercept
         e.preventDefault();
         closeThemeSearch();
@@ -986,6 +1006,9 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
+    if (data && data.globalSettings) {
+      window.cfpGlobalSettings = data.globalSettings;
+    }
 
     const grid = document.getElementById("cfp-search-products");
     const products = data.products || [];
@@ -1103,7 +1126,7 @@ document.addEventListener("DOMContentLoaded", function () {
              const isActive = index === activeIndex ? 'cfp-swatch-active' : '';
              
              let hoverImgUrlForSwatch = '';
-             if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(p.images) && data.imgUrl) {
+             if (window.cfpGlobalSettings && window.cfpGlobalSettings.secondImageOnHover !== false && Array.isArray(p.images) && data.imgUrl) {
                  const targetUrlBase = data.imgUrl.split('?')[0].replace(/^https?:/, '');
                  let foundIdx = -1;
                  for (let i=0; i<p.images.length; i++) {
@@ -1248,7 +1271,9 @@ document.addEventListener("DOMContentLoaded", function () {
           <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
             <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
             ${swatchesHtml}
+            ${(data.globalSettings && data.globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
             <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${price}</div>
+            `}
           </a>
         </div>
       `;

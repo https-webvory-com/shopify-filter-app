@@ -49,6 +49,7 @@ export default function CreateRuleModal({
   const [openRuleDatePickerIndex, setOpenRuleDatePickerIndex] = useState(null);
   const [openVendorDropdownIndex, setOpenVendorDropdownIndex] = useState(null);
   const [dropdownSearch, setDropdownSearch] = useState("");
+  const [dropdownLimit, setDropdownLimit] = useState(50);
 
   const handleClose = () => {
     setRuleName("");
@@ -68,6 +69,7 @@ export default function CreateRuleModal({
     setOpenRuleDatePickerIndex(null);
     setOpenVendorDropdownIndex(null);
     setDropdownSearch("");
+    setDropdownLimit(50);
     onClose();
   };
 
@@ -855,13 +857,24 @@ export default function CreateRuleModal({
                                             type="text" 
                                             placeholder="Filter" 
                                             value={dropdownSearch}
-                                            onChange={e => setDropdownSearch(e.target.value)}
+                                            onChange={e => {
+                                              setDropdownSearch(e.target.value);
+                                              setDropdownLimit(50);
+                                            }}
                                             style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#1E1B4B", width: "100%" }}
                                             onClick={e => e.stopPropagation()}
                                           />
                                         </div>
                                       </div>
-                                    <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
+                                    <div 
+                                      style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}
+                                      onScroll={(e) => {
+                                        const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 50;
+                                        if (bottom) {
+                                          setDropdownLimit(prev => prev + 50);
+                                        }
+                                      }}
+                                    >
                                       {(() => {
                                         let currentOptions = [];
                                         if (r.field === "Vendor") currentOptions = shopifyVendors || [];
@@ -879,7 +892,7 @@ export default function CreateRuleModal({
                                         const filteredOptions = currentOptions.filter(v => {
                                           const text = typeof v === 'string' ? v : v.title;
                                           return text.toLowerCase().includes((dropdownSearch || "").toLowerCase());
-                                        });
+                                        }).slice(0, dropdownLimit);
                                         
                                         return (
                                           <>

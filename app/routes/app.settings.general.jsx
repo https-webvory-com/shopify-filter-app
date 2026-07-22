@@ -29,6 +29,7 @@ export const action = async ({ request }) => {
     showQuickViewInstantSearch:
       formData.get("showQuickViewInstantSearch") === "true",
     showQuickViewCollection: formData.get("showQuickViewCollection") === "true",
+    isWholesale: formData.get("isWholesale") === "true",
   };
 
   await updateFilterGlobalSettings(session.shop, payload);
@@ -52,6 +53,9 @@ export default function Settings() {
   const showQuickViewCollection = fetcher.formData
     ? fetcher.formData.get("showQuickViewCollection") === "true"
     : (settings?.showQuickViewCollection ?? true);
+  const isWholesale = fetcher.formData
+    ? fetcher.formData.get("isWholesale") === "true"
+    : (settings?.isWholesale ?? false);
 
   const toggleSetting = (key, currentValue) => {
     fetcher.submit(
@@ -72,6 +76,10 @@ export default function Settings() {
           key === "showQuickViewCollection"
             ? String(!currentValue)
             : String(showQuickViewCollection),
+        isWholesale:
+          key === "isWholesale"
+            ? String(!currentValue)
+            : String(isWholesale),
       },
       { method: "POST" },
     );
@@ -88,7 +96,8 @@ export default function Settings() {
     showOnlyInStock,
     secondImageOnHover,
     showQuickViewInstantSearch,
-    showQuickViewCollection
+    showQuickViewCollection,
+    isWholesale
   });
 
   return (
@@ -362,6 +371,33 @@ export default function Settings() {
                 <p className="int-desc">
                   Show a "Quick View" button on product cards in search and
                   collection pages.
+                </p>
+              </div>
+            </div>
+            {/* Card 5: Wholesale Mode */}
+            <div className="int-card">
+              <div className="int-header">
+                <span
+                  className="int-tag int-tag-inventory"
+                  style={{ backgroundColor: "#fee2e2", color: "#991b1b" }}
+                >
+                  ACCESS
+                </span>
+                <label className="int-toggle">
+                  <input
+                    type="checkbox"
+                    checked={isWholesale}
+                    onChange={() =>
+                      toggleSetting("isWholesale", isWholesale)
+                    }
+                  />
+                  <span className="int-slider"></span>
+                </label>
+              </div>
+              <div>
+                <h3 className="int-title">Wholesale Store (B2B)</h3>
+                <p className="int-desc">
+                  If enabled, customers must log in to view prices and add products to cart. Non-logged-in users will see a "Login To Add to Cart" button.
                 </p>
               </div>
             </div>

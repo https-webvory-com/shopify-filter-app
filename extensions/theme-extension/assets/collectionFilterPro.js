@@ -331,6 +331,7 @@
 
       if (data.globalSettings) {
         globalSettings = data.globalSettings;
+        window.cfpGlobalSettings = globalSettings;
         applyGlobalSettings(globalSettings);
       }
       
@@ -903,10 +904,12 @@
               <span class="cfp-product-card__vendor">${product.vendor}</span>
               <h3 class="cfp-product-card__title">${product.title}</h3>
               ${swatchesHtml}
+              ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
               <div class="cfp-product-card__price-row">
                 <span class="cfp-product-card__price">${symbol}${price}</span>
                 ${onSale ? `<span class="cfp-product-card__compare-price">${symbol}${comparePrice}</span>` : ''}
               </div>
+              `}
             </div>
           </a>
         </div>
