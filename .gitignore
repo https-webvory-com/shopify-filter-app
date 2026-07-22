@@ -32,4 +32,3 @@ meilisearch.exe
 meili_data/
    
 data.ms/
-/app/services/meiliClient.server.js
