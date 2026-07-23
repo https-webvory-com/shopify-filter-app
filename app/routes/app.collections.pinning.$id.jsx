@@ -1145,7 +1145,10 @@ export default function PinningEditor() {
                   className="custom-scrollbar"
                 >
                   {products
-                    .filter((p) => p.title.toLowerCase().includes(pinnedSearchQuery.toLowerCase()))
+                    .filter((p) => {
+                      const titleStr = p.title || p.Title || "";
+                      return titleStr.toLowerCase().includes((pinnedSearchQuery || "").toLowerCase());
+                    })
                     .map((prod, index) => (
                       <div
                         key={prod.id}
@@ -1202,7 +1205,7 @@ export default function PinningEditor() {
                         </div>
                         <div style={{ padding: "10px", display: "flex", flexDirection: "column", flex: 1 }}>
                           <span style={{ fontSize: "12px", fontWeight: "500", color: "#1E1B4B", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4" }}>
-                            {prod.title}
+                            {prod.title || prod.Title || "Unknown Product"}
                           </span>
                         </div>
                       </div>
