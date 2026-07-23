@@ -66,7 +66,14 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onSubmit, isSub
       if (row["Products"]) {
         const parsedProds = JSON.parse(row["Products"]);
         if (Array.isArray(parsedProds)) {
-          products = parsedProds;
+          products = parsedProds.map(p => {
+            const pid = p.id || p.Id;
+            const fullId = pid ? (String(pid).includes('gid://') ? String(pid) : `gid://shopify/Product/${pid}`) : undefined;
+            return {
+              ...p,
+              id: fullId
+            };
+          });
         }
       }
     } catch (e) {}

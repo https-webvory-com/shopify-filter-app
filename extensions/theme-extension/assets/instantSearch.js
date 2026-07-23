@@ -3,6 +3,8 @@
  * Hijacks the theme's default search input and displays a full-screen search modal.
  */
 
+const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
+
 document.addEventListener("DOMContentLoaded", function () {
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
@@ -11,7 +13,7 @@ document.addEventListener("DOMContentLoaded", function () {
     debounceTime: 300,
     productLimit: userSettings.productLimit || 6,
     customSelector: userSettings.customTriggerSelector || "",
-    apiUrl: "/apps/collection-filter-pro/api/search",
+    apiUrl: `${API_DOMAIN}/api/search`,
   };
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";

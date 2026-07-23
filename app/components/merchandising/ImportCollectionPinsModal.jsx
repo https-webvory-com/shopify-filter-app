@@ -71,7 +71,14 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onSubmit, i
       if (row["Products"]) {
         const parsedProds = JSON.parse(row["Products"]);
         if (Array.isArray(parsedProds)) {
-          products = parsedProds;
+          products = parsedProds.map(p => {
+            const pid = p.id || p.Id;
+            const fullId = pid ? (String(pid).includes('gid://') ? String(pid) : `gid://shopify/Product/${pid}`) : undefined;
+            return {
+              ...p,
+              id: fullId
+            };
+          });
         }
       }
     } catch (e) {}
@@ -97,14 +104,6 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onSubmit, i
       complete: function (results) {
         if (results.data && results.data.length > 0) {
           const fields = results.meta.fields || Object.keys(results.data[0] || {});
-          const hasName = fields.some(f => f.toLowerCase() === 'name');
-          
-          if (!hasName) {
-            if (window.shopify && window.shopify.toast) {
-              window.shopify.toast.show("Invalid CSV format: Missing 'Name' column", { isError: true });
-            }
-            return;
-          }
 
           const mapped = results.data.map(mapToOurFormat);
           setParsedRules(mapped);

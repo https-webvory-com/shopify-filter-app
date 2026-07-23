@@ -11,6 +11,7 @@ import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
+import { rateLimit } from "../services/rateLimiter.server";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -31,6 +32,18 @@ export const loader = async ({ request }) => {
 
     if (!shop) {
       return data({ error: "Missing shop parameter" }, { status: 400 });
+    }
+
+    const isAllowed = await rateLimit(request);
+    if (!isAllowed) {
+      return data({ error: "Too Many Requests" }, { 
+        status: 429, 
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
     }
 
     // ── 0. Parse ALL query parameters upfront ─────────────────────────
@@ -212,18 +225,18 @@ export const loader = async ({ request }) => {
       maxPrice < 9999999 ||
       sortBy !== "best-selling";
 
-    // ── 4. Parallel fetch: pinning + merchandising rules ───────────────
+    // ── 4. Parallel fetch: pinning + merchandising rules (NOW CACHED) ───────────────
     // These run at same time (independent of each other)
     const [activePinningRule, activeRule] = await Promise.all([
       userHasFilters
         ? Promise.resolve(null) // No pinning when user has active filters
         : isSearch && searchQuery
-        ? getActivePinningRuleForSearch(shop, searchQuery, searchType)
-        : getActivePinningRuleForCollection(shop, resolvedCollectionTitle),
+        ? getCached(`pinning:search:${shop}:${searchQuery}:${searchType}`, () => getActivePinningRuleForSearch(shop, searchQuery, searchType))
+        : getCached(`pinning:collection:${shop}:${resolvedCollectionTitle}`, () => getActivePinningRuleForCollection(shop, resolvedCollectionTitle)),
 
       isSearch && searchQuery
-        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags)
-        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags),
+        ? getCached(`merch:search:${shop}:${searchQuery}:${currentCustomerTags.join(',')}`, () => getActiveRuleForSearch(shop, searchQuery, currentCustomerTags))
+        : getCached(`merch:collection:${shop}:${resolvedCollectionTitle}:${currentCustomerTags.join(',')}`, () => getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags)),
     ]);
 
     // ── 5. Parse pinned IDs ────────────────────────────────────────────
@@ -750,6 +763,9 @@ export const loader = async ({ request }) => {
     // This avoids repeat API calls when user navigates back or re-renders
     const responseHeaders = {
       'Cache-Control': 'public, max-age=10, stale-while-revalidate=30',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
     return data({
@@ -830,7 +846,28 @@ export const loader = async ({ request }) => {
     console.error("API Filter Error: ", err);
     return data(
       { error: err.message, stack: err.stack, crash: true },
-      { status: 200 }
+      { 
+        status: 200, 
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      }
     );
   }
+};
+
+export const action = async ({ request }) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
+  return new Response("Method Not Allowed", { status: 405 });
 };

@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import {
   useLoaderData,
   useSubmit,
@@ -386,9 +387,7 @@ const AutocompleteInput = ({
     : [];
 
   const filteredSuggestions = suggestions.filter(
-    (s) =>
-      s.toLowerCase().includes(inputValue.toLowerCase()) &&
-      !selectedValues.includes(s),
+    (s) => s.toLowerCase().includes(inputValue.toLowerCase())
   );
 
   useEffect(() => {
@@ -405,12 +404,15 @@ const AutocompleteInput = ({
     setIsOpen(true);
   };
 
-  const handleSelect = (val) => {
-    if (!selectedValues.includes(val)) {
+  const handleToggle = (val) => {
+    if (selectedValues.includes(val)) {
+      const newValues = selectedValues.filter((v) => v !== val);
+      onChange(newValues.join(", "));
+    } else {
       const newValues = [...selectedValues, val];
       onChange(newValues.join(", "));
     }
-    setInputValue("");
+    // Keep input value if they are filtering, otherwise let them continue checking
   };
 
   const handleRemove = (valToRemove) => {
@@ -496,34 +498,58 @@ const AutocompleteInput = ({
             }}
           >
             {filteredSuggestions.length > 0 ? (
-              filteredSuggestions.map((s, i) => (
-                <div
-                  key={i}
-                  onClick={() => handleSelect(s)}
-                  style={{
-                    padding: "10px 20px",
-                    cursor: "pointer",
-                    fontSize: "13.5px",
-                    fontWeight: "600",
-                    color: "#1e1b4b",
-                    borderBottom:
-                      i < filteredSuggestions.length - 1
-                        ? "1px solid rgba(30, 27, 75, 0.04)"
-                        : "none",
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = "rgba(91, 33, 182, 0.05)";
-                    e.target.style.color = "#5B21B6";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = "transparent";
-                    e.target.style.color = "#1e1b4b";
-                  }}
-                >
-                  {s}
-                </div>
-              ))
+              filteredSuggestions.map((s, i) => {
+                const isSelected = selectedValues.includes(s);
+                return (
+                  <div
+                    key={i}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleToggle(s);
+                    }}
+                    style={{
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontSize: "13.5px",
+                      fontWeight: "600",
+                      color: "#1e1b4b",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      borderBottom:
+                        i < filteredSuggestions.length - 1
+                          ? "1px solid rgba(30, 27, 75, 0.04)"
+                          : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(91, 33, 182, 0.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    <div style={{
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "4px",
+                      border: isSelected ? "none" : "1px solid #d1d5db",
+                      background: isSelected ? "#5B21B6" : "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0
+                    }}>
+                      {isSelected && (
+                        <svg width="10" height="10" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" fill="white"/>
+                        </svg>
+                      )}
+                    </div>
+                    <span>{s}</span>
+                  </div>
+                );
+              })
             ) : (
               <div
                 style={{
@@ -698,7 +724,6 @@ export default function MergedValues() {
         { method: "POST" },
       );
     }
-    setShowModal(false);
   };
 
   const handleDelete = (id) => {
@@ -1013,9 +1038,11 @@ export default function MergedValues() {
           background: rgba(15, 23, 42, 0.6) !important;
           backdrop-filter: blur(4px) !important;
           display: flex !important;
-          align-items: center !important;
+          align-items: flex-start !important;
           justify-content: center !important;
           z-index: 99999 !important;
+          padding: 40px 20px !important;
+          overflow-y: auto !important;
         }
         .merged-modal-card {
           background: #ffffff !important;
@@ -1023,7 +1050,7 @@ export default function MergedValues() {
           padding: 26px !important;
           width: 100% !important;
           max-width: 800px !important;
-          max-height: 90vh !important;
+          margin: auto !important;
           overflow: visible !important;
           box-shadow: 0 24px 64px rgba(30, 27, 75, 0.12) !important;
           position: relative !important;
@@ -1131,37 +1158,7 @@ export default function MergedValues() {
         }
       ` }} />
 
-      {/* Global Spinner overlay for saving/loading */}
-      {isLoading && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(255,255,255,0.6)",
-            zIndex: 100000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #f3f3f3",
-              borderTop: "4px solid #5B21B6",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-            }}
-          />
-          <style>
-            {`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}
-          </style>
-        </div>
-      )}
+
 
       {/* Premium Header */}
       <div className="merged-values-header">

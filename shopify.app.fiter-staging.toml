@@ -1,16 +1,20 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f0784c29e822aa5959ef9f0417095b8c"
-name = "fiter-staging"
-application_url = "https://applicants-assign-basics-correlation.trycloudflare.com"
+application_url = "https://foster-classifieds-accept-southern.trycloudflare.com"
 embedded = true
+name = "fiter-staging"
 
 [webhooks]
 api_version = "2026-07"
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
-  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/collections"
+  topics = [
+  "collections/update",
+  "collections/create",
+  "collections/delete"
+]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
@@ -25,25 +29,21 @@ api_version = "2026-07"
   compliance_topics = [ "shop/redact" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/products"
-  topics = [ "products/update", "products/create", "products/delete" ]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/collections"
-  topics = [
-  "collections/delete",
-  "collections/create",
-  "collections/update"
-]
+  uri = "/webhooks/products"
+  topics = [ "products/delete", "products/create", "products/update" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
-[app_proxy]
-url = "https://applicants-assign-basics-correlation.trycloudflare.com"
-subpath = "collection-filter-pro"
-prefix = "apps"
+#[app_proxy]
+#url = "https://foster-classifieds-accept-southern.trycloudflare.com"
+#subpath = "collection-filter-pro"
+#prefix = "apps"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -51,7 +51,7 @@ scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions
 
 [auth]
 redirect_urls = [
-  "https://applicants-assign-basics-correlation.trycloudflare.com/api/auth"
+  "https://foster-classifieds-accept-southern.trycloudflare.com/api/auth"
 ]
 
 [build]

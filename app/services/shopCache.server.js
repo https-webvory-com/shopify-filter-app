@@ -1,20 +1,12 @@
 /**
  * shopCache.server.js
  * 
- * Safe in-memory cache for shop-level config data (filter groups, global settings, merged values).
- * These change rarely (only when admin saves settings), so caching them is perfectly safe.
- * 
- * Safety guarantees:
- *  ✅ MAX_SIZE limit → prevents memory leaks (oldest entries evicted automatically)
- *  ✅ TTL per entry → entries auto-expire, no stale data forever
- *  ✅ Crash-safe → if server restarts, cache is empty, falls back to DB (same as before)
- *  ✅ invalidateShop() → call this when admin saves settings to clear that shop's cache instantly
+ * Distributed Redis cache for shop-level config data (filter groups, global settings, merged values).
+ * Ensures multiple AWS instances share the same cache and don't overload PostgreSQL.
  */
+import redis from "./redis.server";
 
-const TTL_MS = 60_000; // 60 seconds
-const MAX_SIZE = 500;  // max 500 cache entries before evicting oldest (safe for 500+ shops)
-
-const cache = new Map();
+const TTL_SEC = 60; // 60 seconds
 
 /**
  * Get a value from cache, or fetch it if missing/expired.
@@ -23,22 +15,26 @@ const cache = new Map();
  * @returns {Promise<any>} Cached or freshly fetched data
  */
 export async function getCached(key, fetchFn) {
-  const entry = cache.get(key);
-
-  if (entry && Date.now() - entry.ts < TTL_MS) {
-    return entry.data; // Cache hit ✅
+  try {
+    const cached = await redis.get(key);
+    if (cached) {
+      return JSON.parse(cached); // Cache hit ✅
+    }
+  } catch (error) {
+    console.error("CFP Redis get error for key", key, error);
   }
 
   // Cache miss or expired — fetch fresh data
   const data = await fetchFn();
 
-  // Evict oldest entry if at max size (prevents memory leak)
-  if (cache.size >= MAX_SIZE) {
-    const oldestKey = cache.keys().next().value;
-    cache.delete(oldestKey);
+  try {
+    if (data !== undefined && data !== null) {
+      await redis.setex(key, TTL_SEC, JSON.stringify(data));
+    }
+  } catch (error) {
+    console.error("CFP Redis set error for key", key, error);
   }
 
-  cache.set(key, { data, ts: Date.now() });
   return data;
 }
 
@@ -47,24 +43,33 @@ export async function getCached(key, fetchFn) {
  * Call this when admin saves filter settings, merged values, or filter groups.
  * @param {string} shop - The shop domain
  */
-export function invalidateShop(shop) {
+export async function invalidateShop(shop) {
   const shopStr = String(shop);
-  for (const key of cache.keys()) {
-    if (key.includes(shopStr)) {
-      cache.delete(key);
+  try {
+    // Note: In a massive production environment, you might use SCAN instead of KEYS
+    const keys = await redis.keys(`*${shopStr}*`);
+    if (keys.length > 0) {
+      await redis.del(...keys);
     }
+    console.log(`CFP Cache: Invalidated ${keys.length} entries for ${shopStr}`);
+  } catch (error) {
+    console.error(`CFP Redis invalidate error for ${shopStr}:`, error);
   }
-  console.log(`CFP Cache: Invalidated all entries for ${shop}`);
 }
 
 /**
  * Get current cache stats (for debugging).
  */
-export function getCacheStats() {
-  return {
-    size: cache.size,
-    maxSize: MAX_SIZE,
-    ttlMs: TTL_MS,
-    keys: Array.from(cache.keys()),
-  };
+export async function getCacheStats() {
+  try {
+    const keys = await redis.keys("*");
+    return {
+      size: keys.length,
+      ttlSec: TTL_SEC,
+      keys: keys,
+    };
+  } catch (error) {
+    console.error("CFP Redis stats error:", error);
+    return {};
+  }
 }

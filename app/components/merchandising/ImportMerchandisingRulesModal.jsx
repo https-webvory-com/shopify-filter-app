@@ -158,14 +158,6 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
       complete: function (results) {
         if (results.data && results.data.length > 0) {
           const fields = results.meta.fields || Object.keys(results.data[0] || {});
-          const hasName = fields.some(f => f.toLowerCase() === 'name');
-          
-          if (!hasName) {
-            if (window.shopify && window.shopify.toast) {
-              window.shopify.toast.show("Invalid CSV format: Missing 'Name' column", { isError: true });
-            }
-            return;
-          }
 
           const mapped = results.data.map(mapToOurFormat);
           

@@ -4,6 +4,7 @@ import { getActivePinningRuleForSearch } from "../services/merchandising.server"
 import meiliClient from "../services/meiliClient.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import { getCached } from "../services/shopCache.server";
+import { rateLimit } from "../services/rateLimiter.server";
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -18,6 +19,18 @@ export const loader = async ({ request }) => {
 
   if (!shop) {
     return data({ error: "Missing shop parameter" }, { status: 400 });
+  }
+
+  const isAllowed = await rateLimit(request);
+  if (!isAllowed) {
+    return data({ error: "Too Many Requests" }, { 
+      status: 429, 
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   try {
@@ -310,10 +323,38 @@ export const loader = async ({ request }) => {
       didYouMean: didYouMean,
       contextualPricingApplied: contextualPricingApplied,
       globalSettings: globalSettings
+    }, {
+      headers: {
+        'Cache-Control': 'public, max-age=10, stale-while-revalidate=30',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
 
   } catch (error) {
     console.error("Error in api.search.jsx:", error);
-    return data({ error: "Internal Server Error" }, { status: 500 });
+    return data({ error: "Internal Server Error" }, { 
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
+};
+
+export const action = async ({ request }) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
+  return new Response("Method Not Allowed", { status: 405 });
 };

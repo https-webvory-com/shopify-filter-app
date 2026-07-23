@@ -2044,7 +2044,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
             variant="primary" 
             onClick={() => onSave({ 
               filterId: initialData?.id,
-              optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, useManualValues, excludedValues, manualValues, sortManualValues, advanced,
+              optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, 
+              useManualValues, 
+              excludedValues: useManualValues ? [] : excludedValues, 
+              manualValues: useManualValues ? manualValues : [], 
+              sortManualValues, advanced,
               displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig, swatchConfig
             })}
             style={{ borderRadius: "10px", padding: "8px 24px", background: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)" }}

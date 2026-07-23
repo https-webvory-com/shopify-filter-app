@@ -3,6 +3,8 @@
  * Dynamic UI Injection and Relative App Proxy Querying
  */ 
 
+const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
+
 (function () {
   'use strict';
   const customSettings = window.collectionFilterProSettings || {};
@@ -322,7 +324,7 @@
         if (!isLoadMore) {
           renderSkeleton();
         }
-        const response = await fetch(`/apps/collection-filter-pro/api/filter?${queryParams.toString()}`);
+        const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
       const data = await response.json();
 
       console.log('[CFP] API Response:', data);
@@ -1328,8 +1330,9 @@
         else if (resolvedMode === "Swatch") {
           const swatchConf = config.swatchConfig || {};
           const isCircle = swatchConf.circleSwatch !== false;
-          const showLabel = true;
+          const showLabel = swatchConf.showLabel !== false;
           const hasSearch = adv.desktopSearchBox;
+          const swatchLayout = swatchConf.layout || 'List';
 
           groupContent = `
             ${hasSearch ? `
@@ -1339,18 +1342,9 @@
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid cfp-color-grid--list">
+              <div class="cfp-color-grid ${swatchLayout === 'List' ? 'cfp-color-grid--list' : ''}" style="${showLabel ? 'grid-template-columns: 1fr 1fr !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
                 ${(() => {
-                  let hasAnyImage = false;
-                  if (swatchConf.colors) {
-                    for (const k in swatchConf.colors) {
-                      if (swatchConf.colors[k].type === 'image' && swatchConf.colors[k].value) {
-                        hasAnyImage = true;
-                        break;
-                      }
-                    }
-                  }
-                  
+
                   return items.map((item, idx) => {
                     let colorValue = getColorHex(item.value);
                     let isImageItem = false;
@@ -1381,42 +1375,13 @@
                     // Check if it's active
                     const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
                     
-                    const useImageLayout = hasAnyImage;
-                    
-                    let visualHtml = '';
-                    if (useImageLayout) {
-                      if (isImageItem) {
-                        visualHtml = `
-                          <div class="cfp-swatch-image-wrapper" style="position: relative; display: inline-flex; align-items: flex-end; justify-content: center; width: auto; height: 80px; margin-bottom: 0px;">
-                            <img src="${colorValue}" alt="${item.value}" style="width: auto; height: 80px; object-fit: contain; border-radius: 4px;">
-                            ${isActive ? `
-                              <span class="cfp-swatch-checked-badge" style="position: absolute; bottom: 8px; right: -4px; width: 18px; height: 18px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;">
-                                <svg viewBox="0 0 24 24" style="width: 10px; height: 10px; fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;"><polyline points="20 6 9 17 4 12"/></svg>
-                              </span>
-                            ` : ''}
-                          </div>
-                        `;
-                      } else {
-                        visualHtml = `
-                          <div class="cfp-swatch-image-wrapper" style="position: relative; display: inline-flex; align-items: flex-end; justify-content: center; width: auto; height: 80px; margin-bottom: 0px;">
-                            <div class="cfp-skeleton" style="width: 50px; height: 50px; border-radius: 4px;">&nbsp;</div>
-                            ${isActive ? `
-                              <span class="cfp-swatch-checked-badge" style="position: absolute; bottom: 8px; right: -4px; width: 18px; height: 18px; background: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;">
-                                <svg viewBox="0 0 24 24" style="width: 10px; height: 10px; fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round;"><polyline points="20 6 9 17 4 12"/></svg>
-                              </span>
-                            ` : ''}
-                          </div>
-                        `;
-                      }
-                    } else {
-                      visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: 22px; height: 22px; display: inline-block; ${isCircle ? 'border-radius: 50%;' : 'border-radius: 4px;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${isActive ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0;"></span>`;
-                    }
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${showLabel ? '22px' : '100%'} !important; height: ${showLabel ? '22px' : '36px'} !important; display: inline-block; ${isCircle ? (showLabel ? 'border-radius: 50% !important;' : 'border-radius: 36px !important;') : 'border-radius: 4px !important;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${isActive ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important;"></span>`;
                     
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''} ${useImageLayout ? 'cfp-swatch-is-image' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: ${useImageLayout ? '4px' : '8px'}; cursor: pointer; flex-direction: ${useImageLayout ? 'column' : 'row'}; justify-content: flex-start; text-align: center; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: 8px; cursor: pointer; flex-direction: row; justify-content: ${showLabel ? 'flex-start' : 'center'}; text-align: left; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${visualHtml}
-                        ${showLabel || useImageLayout ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: ${useImageLayout ? '14px' : '15px'}; text-align: ${useImageLayout ? 'center' : 'left'}; color: #202223;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display:none;">${getDisplayLabel(item.value, prefix)}</span>`}
+                        ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 14px; text-align: left; color: #202223; line-height: 1.2; word-break: break-word;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
                       </label>
                     `;
                   }).join('');
@@ -1517,8 +1482,8 @@
           <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="${groupId}">
             <div style="display: flex; align-items: center; gap: 6px;">
               <span>${setting.label}</span>
-              ${adv.displayTooltip ? `
-                <div class="cfp-tooltip-icon" data-tooltip="${(adv.tooltipContent || '').replace(/"/g, '&quot;')}">?</div>
+              ${adv.displayTooltip && adv.tooltipContent && adv.tooltipContent.trim() !== '' ? `
+                <div class="cfp-tooltip-icon" data-tooltip="${adv.tooltipContent.replace(/"/g, '&quot;')}">?</div>
               ` : ''}
             </div>
             <div style="display: flex; align-items: center;">
