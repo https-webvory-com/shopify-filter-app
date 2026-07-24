@@ -474,12 +474,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
     // Inject products into Wishlist App's global pageDataMap if it exists
     if (typeof window.pageDataMap !== 'undefined') {
       products.forEach(product => {
-        let variantId = product.variants?.[0]?.id;
-        if (variantId && typeof variantId === 'string') {
+        let variantId = product.variants?.[0]?.id || "";
+        if (typeof variantId === 'string') {
           variantId = variantId.replace('gid://shopify/ProductVariant/', '');
         }
-        let productId = product.id;
-        if (productId && typeof productId === 'string') {
+        let productId = product.id || "";
+        if (typeof productId === 'string') {
           productId = productId.replace('gid://shopify/Product/', '');
         }
         const firstVariant = product.variants?.[0] || {};
@@ -569,6 +569,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             const expandedLower = expandedSelectedValues.map(x => x.trim().toLowerCase());
             
             let bestScore = -1;
+            let currentBestIsAvailable = false;
             
             product.variants.forEach(v => {
                let score = 0;
@@ -580,9 +581,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                    if (vOpts.includes(val)) score++;
                });
                
-               if (score > bestScore) {
+               const isAvailable = v.availableForSale === true;
+
+               if (score > bestScore || (score === bestScore && score > 0 && !currentBestIsAvailable && isAvailable)) {
                    bestScore = score;
                    matchedVariant = v;
+                   currentBestIsAvailable = isAvailable;
                }
             });
             
@@ -595,6 +599,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             }
           }
         }
+
+        // Fallback: If no matched variant from filters (or no filters applied),
+        // try to select the first AVAILABLE variant so the PDP doesn't load a sold-out option by default.
+        if (!matchedVariantId && product.variants && product.variants.length > 0) {
+            const firstAvailable = product.variants.find(v => v.availableForSale === true);
+            if (firstAvailable) {
+                matchedVariantId = firstAvailable.id ? firstAvailable.id.replace('gid://shopify/ProductVariant/', '') : null;
+            }
+        }
+
         let customImage = null;
         const handle = collectionHandle || '';
         
