@@ -489,28 +489,47 @@ export const loader = async ({ request }) => {
       ? finalProducts.slice((page - 1) * limit, page * limit)
       : finalProducts; // Already paginated by Meilisearch
 
-    // ── 12.5 Fallback for missing options ──────────────────────────────
-    const productsMissingOptions = paginatedSlice.filter(p => !p.options || p.options.length === 0);
-    if (productsMissingOptions.length > 0) {
+    // ── 12.5 Fallback for missing data (injected pinned products & missing options) ──
+    const productsNeedingFallback = paginatedSlice.filter(p => !p.title || !p.options || p.options.length === 0);
+    if (productsNeedingFallback.length > 0) {
       try {
-        const missingIds = productsMissingOptions.map(p => p.id);
-        const dbOptions = await prisma.product.findMany({
+        const missingIds = productsNeedingFallback.map(p => p.id);
+        const dbProducts = await prisma.product.findMany({
           where: { id: { in: missingIds } },
-          select: { id: true, options: true }
+          select: { 
+            id: true, title: true, handle: true, vendor: true, productType: true,
+            tags: true, images: true, status: true, options: true, priceMin: true, priceMax: true
+          }
         });
         paginatedSlice.forEach(p => {
-          if (!p.options || p.options.length === 0) {
-            const dbMatch = dbOptions.find(dbP => dbP.id === p.id);
-            if (dbMatch && dbMatch.options) {
-              p.options = dbMatch.options.map(opt => ({
-                name: opt.name,
-                values: Array.isArray(opt.values) ? opt.values : [opt.values]
-              }));
+          const dbMatch = dbProducts.find(dbP => dbP.id === p.id);
+          if (dbMatch) {
+            // Fill missing basic info (mainly for injected pinned products)
+            if (!p.title) {
+              p.title = dbMatch.title || "";
+              p.handle = dbMatch.handle || "";
+              p.vendor = dbMatch.vendor || "";
+              p.productType = dbMatch.productType || "";
+              p.tags = dbMatch.tags || [];
+              p.images = dbMatch.images || [];
+              p.status = dbMatch.status || "active";
+              p.priceMin = dbMatch.priceMin ? parseFloat(dbMatch.priceMin) : 0;
+              p.priceMax = dbMatch.priceMax ? parseFloat(dbMatch.priceMax) : 0;
+            }
+            // Fill missing options
+            if (!p.options || p.options.length === 0) {
+              if (dbMatch.options) {
+                const opts = Array.isArray(dbMatch.options) ? dbMatch.options : [dbMatch.options];
+                p.options = opts.map(opt => ({
+                  name: opt.name,
+                  values: Array.isArray(opt.values) ? opt.values : [opt.values]
+                }));
+              }
             }
           }
         });
       } catch (e) {
-        console.error("CFP: Failed to fetch fallback options", e);
+        console.error("CFP: Failed to fetch fallback product data", e);
       }
     }
 
