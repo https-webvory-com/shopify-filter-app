@@ -392,14 +392,18 @@ export const loader = async ({ request }) => {
     if (searchQuery) mainQuery.attributesToHighlight = ["title"];
     queries.push(mainQuery);
 
-    // Query B: Facets only (no product data transferred)
+    // Query B: Facets + exact total count
+    // KEY: Using hitsPerPage+page (not limit+offset) makes Meilisearch return
+    // `totalHits` — an EXACT count with NO 1000-cap.
+    // `limit:0` only returns `estimatedTotalHits` which is capped at 1000.
     const facetQuery = {
       indexUid: "products",
       q: searchQuery,
       filter: allFiltersList,
       facets: ["*"],
-      limit: 0,
-      attributesToRetrieve: [],
+      hitsPerPage: 1,       // minimum valid value; actual hit data is dropped below
+      page: 1,
+      attributesToRetrieve: [], // no fields returned → minimal payload
     };
     queries.push(facetQuery);
 
@@ -485,9 +489,9 @@ export const loader = async ({ request }) => {
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
-    // Fix: meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch default.
-    // The facet query (limit:0) returns an accurate count — use it as the source of truth.
-    const totalCount = facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
+    // Fix: Use facetRes.totalHits (exact, returned when using hitsPerPage+page).
+    // meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch when using limit+offset.
+    const totalCount = facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
     let paginatedSlice = needsBroadFetch
       ? finalProducts.slice((page - 1) * limit, page * limit)
       : finalProducts; // Already paginated by Meilisearch

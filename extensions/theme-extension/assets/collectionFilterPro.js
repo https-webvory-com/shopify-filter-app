@@ -1568,7 +1568,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
     });
 
     
-    body.innerHTML = html;
+    const groupsContainer = body.querySelector('#cfp-sidebar__filter-groups');
+    if (groupsContainer) {
+      groupsContainer.innerHTML = html;
+    } else {
+      body.innerHTML = html;
+    }
     body.scrollTop = scrollTop;
 
     // Restore inner scroll areas
@@ -2324,9 +2329,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         topBar.style.display = 'flex';
       }
       if (breadcrumbs) {
-        sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
-        breadcrumbs.style.padding = '15px 20px 0';
+        // Move breadcrumbs INSIDE the scrollable body so they scroll with the filters!
+        const sidebarBody = sidebar.querySelector('.cfp-sidebar__body');
+        if (sidebarBody) {
+          sidebarBody.insertBefore(breadcrumbs, sidebarBody.firstChild);
+        } else {
+          sidebar.insertBefore(breadcrumbs, sidebar.querySelector('.cfp-sidebar__body'));
+        }
+        breadcrumbs.style.padding = '12px 18px';
         breadcrumbs.style.marginBottom = '0';
+        breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
       }
       wrapper.appendChild(sidebar);
 

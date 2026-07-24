@@ -180,7 +180,7 @@ if (typeof window.CfpQuickView === 'undefined') {
       if (product.variants && product.variants.length > 0) {
         initialVariant = product.variants.find(v => v.available) || product.variants[0];
       }
-      const initialVariantId = initialVariant ? initialVariant.id : '';
+      const initialVariantId = initialVariant ? initialVariant.id.toString().replace('gid://shopify/ProductVariant/', '') : '';
       const initialVariantUrl = `${product.url}${initialVariantId ? '?variant=' + initialVariantId : ''}`;
 
       let optionsHtml = '';
@@ -419,7 +419,8 @@ if (typeof window.CfpQuickView === 'undefined') {
         // Fix: update View Details link so PDP opens the selected variant
         const viewDetailsLink = this.modal.querySelector('#cfp-qv-view-details-anchor');
         if (viewDetailsLink && product.url) {
-          viewDetailsLink.href = `${product.url}?variant=${matchingVariant.id}`;
+          const cleanVariantId = matchingVariant.id.toString().replace('gid://shopify/ProductVariant/', '');
+          viewDetailsLink.href = `${product.url}?variant=${cleanVariantId}`;
         }
       } else {
         // If variant doesn't exist
