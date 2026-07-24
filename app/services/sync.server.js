@@ -148,6 +148,10 @@ async function updateMeiliSettings(shop) {
     await index.updateSearchableAttributes(searchableAttributes);
     await index.updateSortableAttributes(sortableAttributes);
     await index.updateFaceting({ maxValuesPerFacet: 100000 });
+    // ✅ FIX: Increase maxTotalHits from default 1000 → 100000
+    // Without this, estimatedTotalHits is capped at 1000 even with 48k+ products
+    // This is why storefront showed "X of 1000 products" instead of actual count
+    await index.updatePagination({ maxTotalHits: 100000 });
 
     if (process.env.GEMINI_API_KEY) {
       try {

@@ -237,6 +237,7 @@ model PinnedProductRule {
   ruleType          String   @default("collection")
   searchQueries     String[]
 
+  @@unique([shop, name, ruleType])
   @@index([shop])
 }
 

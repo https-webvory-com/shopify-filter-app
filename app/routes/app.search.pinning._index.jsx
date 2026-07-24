@@ -56,54 +56,6 @@ export const action = async ({ request }) => {
     return { success: true, action: "toggleStatus", status };
   }
 
-  if (actionType === "importRules") {
-    const rules = JSON.parse(formData.get("rules"));
-    let importedCount = 0;
-    
-    // 1. Gather all product IDs
-    const allProductIds = new Set();
-    for (const rule of rules) {
-      if (Array.isArray(rule.products)) {
-        for (const p of rule.products) {
-          if (p && p.id) allProductIds.add(p.id);
-        }
-      }
-    }
-
-    // 2. Fetch valid product IDs from DB
-    let validProductsSet = new Set();
-    if (allProductIds.size > 0) {
-      const validProducts = await prisma.product.findMany({
-        where: { shop, id: { in: Array.from(allProductIds) } },
-        select: { id: true }
-      });
-      validProductsSet = new Set(validProducts.map(p => p.id));
-    }
-
-    for (const rule of rules) {
-      const validRuleProducts = (rule.products || []).filter(p => p && p.id && validProductsSet.has(p.id));
-      
-      // Skip if rule has no valid products to pin
-      if (validRuleProducts.length === 0) continue;
-
-      await prisma.pinnedProductRule.create({
-        data: {
-          shop,
-          name: rule.name,
-          status: rule.status,
-          ruleType: rule.ruleType,
-          applyToAll: rule.applyToAll,
-          applyToSearchType: rule.applyToSearchType,
-          collections: rule.collections || [],
-          searchQueries: rule.searchQueries || [],
-          products: validRuleProducts,
-        },
-      });
-      importedCount++;
-    }
-    return { success: true, action: "importRules", count: importedCount, total: rules.length };
-  }
-
   return { success: false, message: "Unknown action" };
 };
 
@@ -152,12 +104,6 @@ export default function PinningIndex() {
         shopify.toast.show("Pin duplicated successfully");
       } else if (actionData.action === "toggleStatus") {
         shopify.toast.show(actionData.status ? "Pin enabled" : "Pin disabled");
-      } else if (actionData.action === "importRules") {
-        if (actionData.count === actionData.total) {
-          shopify.toast.show(`Successfully imported ${actionData.count} pins`);
-        } else {
-          shopify.toast.show(`Imported ${actionData.count} pins. Skipped ${actionData.total - actionData.count} rules due to invalid or missing products.`);
-        }
       }
     }
   }, [actionData, shopify]);
@@ -1553,13 +1499,9 @@ export default function PinningIndex() {
         <ImportSearchPinsModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
-          isSubmitting={navigation.state === "submitting"}
-          onSubmit={(rules) => {
-            const formData = new FormData();
-            formData.append("actionType", "importRules");
-            formData.append("rules", JSON.stringify(rules));
-            submit(formData, { method: "POST" });
+          onImportComplete={() => {
             setIsImportModalOpen(false);
+            window.location.reload();
           }}
         />
 

@@ -57,85 +57,6 @@ export const action = async ({ request }) => {
     return { success: true, action: "toggleStatus", status };
   }
 
-  if (actionType === "importRules") {
-    const rules = JSON.parse(formData.get("rules") || "[]");
-    let importedCount = 0;
-    
-    // 1. Gather all product IDs
-    const allProductIds = new Set();
-    for (const rule of rules) {
-      if (Array.isArray(rule.products)) {
-        for (const p of rule.products) {
-          if (p && p.id) allProductIds.add(p.id);
-        }
-      }
-    }
-
-    // 2. Fetch valid product IDs from DB
-    let validProductsSet = new Set();
-    if (allProductIds.size > 0) {
-      const validProducts = await prisma.product.findMany({
-        where: { shop, id: { in: Array.from(allProductIds) } },
-        select: { id: true }
-      });
-      validProductsSet = new Set(validProducts.map(p => p.id));
-    }
-
-    // 3. Gather all collection titles
-    const allCollectionTitles = new Set();
-    for (const rule of rules) {
-      if (Array.isArray(rule.collections)) {
-        for (const c of rule.collections) {
-          if (c) allCollectionTitles.add(c);
-        }
-      }
-    }
-
-    // 4. Fetch valid collection titles from DB
-    let validCollectionsSet = new Set();
-    if (allCollectionTitles.size > 0) {
-      const validCollections = await prisma.collection.findMany({
-        where: { shop, title: { in: Array.from(allCollectionTitles) } },
-        select: { title: true }
-      });
-      validCollectionsSet = new Set(validCollections.map(c => c.title));
-    }
-
-    for (const r of rules) {
-      const validRuleProducts = (r.products || []).filter(p => p && p.id && validProductsSet.has(p.id));
-      const validRuleCollections = (r.collections || []).filter(c => validCollectionsSet.has(c));
-
-      // Skip rule if it has no valid products
-      if (validRuleProducts.length === 0) continue;
-
-      const ruleName = r.name || "Imported Pin";
-      
-      const existingRule = await prisma.pinnedProductRule.findFirst({
-        where: { shop, name: ruleName, ruleType: "collection" }
-      });
-      
-      if (existingRule) {
-        await prisma.pinnedProductRule.delete({ where: { id: existingRule.id } });
-      }
-      
-      await prisma.pinnedProductRule.create({
-        data: {
-          shop,
-          name: ruleName,
-          status: r.status,
-          applyToAll: r.applyToAll,
-          collections: validRuleCollections,
-          products: validRuleProducts,
-          applyToSearchType: r.applyToSearchType || "both",
-          ruleType: "collection"
-        }
-      });
-      importedCount++;
-    }
-    
-    return { success: true, action: "importRules", count: importedCount, total: rules.length };
-  }
-
   return { success: false, message: "Unknown action" };
 };
 
@@ -184,12 +105,6 @@ export default function PinningIndex() {
         shopify.toast.show("Pin duplicated successfully");
       } else if (actionData.action === "toggleStatus") {
         shopify.toast.show(actionData.status ? "Pin enabled" : "Pin disabled");
-      } else if (actionData.action === "importRules") {
-        if (actionData.count === actionData.total) {
-          shopify.toast.show(`Successfully imported ${actionData.count} pins`);
-        } else {
-          shopify.toast.show(`Imported ${actionData.count} pins. Skipped ${actionData.total - actionData.count} rules due to invalid or missing products.`);
-        }
       }
     }
   }, [actionData, shopify]);
@@ -1825,13 +1740,10 @@ export default function PinningIndex() {
         <ImportCollectionPinsModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
-          isSubmitting={navigation.state !== "idle"}
-          onSubmit={(rules) => {
-            const formData = new FormData();
-            formData.append("actionType", "importRules");
-            formData.append("rules", JSON.stringify(rules));
-            submit(formData, { method: "POST" });
+          onImportComplete={() => {
             setIsImportModalOpen(false);
+            // Reload page to show newly imported rules
+            window.location.reload();
           }}
         />
         {isExportModalOpen && (

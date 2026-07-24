@@ -4,12 +4,15 @@ import Papa from "papaparse";
 export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRuleIds, allRules }) {
   const fields = [
     "Active",
-    "ApplyToAll",
+    "AppliedToInstantSearch",
+    "AppliedToSearch",
     "Brief",
     "CollectionTitles",
+    "Collections",
+    "ForCollections",
     "Id",
-    "Name",
     "Products",
+    "SearchQuery",
     "SiteId"
   ];
 
@@ -17,31 +20,49 @@ export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRul
 
   if (!isOpen) return null;
 
+  const extractNumericId = (gid) => {
+    if (!gid) return "";
+    const match = String(gid).match(/\/(\d+)$/);
+    return match ? match[1] : String(gid);
+  };
+
   const handleExport = () => {
     const rulesToExport = allRules.filter(r => selectedRuleIds.includes(r.id));
     
     const exportData = rulesToExport.map(rule => {
       const row = {};
       
-      if (selectedFields.includes("Active")) row["Active"] = rule.status ? "TRUE" : "FALSE";
-      if (selectedFields.includes("ApplyToAll")) row["ApplyToAll"] = rule.applyToAll ? "TRUE" : "FALSE";
+      if (selectedFields.includes("Active")) row["Active"] = rule.status ? "True" : "False";
+      if (selectedFields.includes("AppliedToInstantSearch")) row["AppliedToInstantSearch"] = "True";
+      if (selectedFields.includes("AppliedToSearch")) row["AppliedToSearch"] = "True";
       
       if (selectedFields.includes("Brief")) {
-        const total = (rule.products || []).length;
-        const brief = { Total: total, Items: rule.products || [] };
-        row["Brief"] = JSON.stringify(brief);
+        const products = (rule.products || []).slice(0, 4).map(p => ({
+          Id: extractNumericId(p.id),
+          ImageUrl: p.imageUrl || ""
+        }));
+        row["Brief"] = JSON.stringify({ Total: (rule.products || []).length, Items: products });
       }
       
       if (selectedFields.includes("CollectionTitles")) row["CollectionTitles"] = JSON.stringify(rule.collections || []);
-      
+      if (selectedFields.includes("Collections")) row["Collections"] = "[]";
+      if (selectedFields.includes("ForCollections")) row["ForCollections"] = "True";
       if (selectedFields.includes("Id")) row["Id"] = rule.id;
-      if (selectedFields.includes("Name")) row["Name"] = rule.name || "";
-      if (selectedFields.includes("Products")) row["Products"] = JSON.stringify(rule.products || []);
       
-      if (selectedFields.includes("SiteId")) row["SiteId"] = rule.shop;
+      if (selectedFields.includes("Products")) {
+        row["Products"] = JSON.stringify((rule.products || []).map(p => ({
+          Id: extractNumericId(p.id),
+          Title: p.title || "",
+          ImageUrl: p.imageUrl || ""
+        })));
+      }
+      
+      if (selectedFields.includes("SearchQuery")) row["SearchQuery"] = (rule.searchQueries || [])[0] || "";
+      if (selectedFields.includes("SiteId")) row["SiteId"] = rule.shop || "";
       
       return row;
     });
+
 
     const csv = Papa.unparse(exportData);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
