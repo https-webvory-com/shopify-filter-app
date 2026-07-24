@@ -699,11 +699,33 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       // Extract Color Swatches from Variants
       let colorOptionIndex = -1;
       let parsedOptions = [];
-      if (product.options) {
+      if (product.options && product.options.length > 0) {
         try {
           parsedOptions = typeof product.options === 'string' ? JSON.parse(product.options) : product.options;
           colorOptionIndex = parsedOptions.findIndex(o => o.name && (o.name.toLowerCase() === 'color' || o.name.toLowerCase() === 'colour'));
         } catch(e){}
+      }
+
+      // Fallback: If options are missing (e.g., Meilisearch sync issue) but variants exist
+      if (colorOptionIndex === -1 && product.variants && product.variants.length > 0) {
+         let knownColors = [];
+         if (typeof globalSettings !== 'undefined' && globalSettings?.swatchConfig?.colors) {
+             knownColors = Object.keys(globalSettings.swatchConfig.colors).map(k => k.toLowerCase().trim());
+         }
+         if (knownColors.length === 0) {
+             knownColors = ['black', 'white', 'ivory', 'red', 'blue', 'green', 'yellow', 'pink', 'purple', 'navy', 'burgundy', 'champagne', 'silver', 'gold', 'blush', 'dusty rose', 'hunter green', 'royal blue', 'emerald', 'mauve', 'lilac', 'sage'];
+         }
+
+         const sampleV = product.variants.find(v => v.option1 || v.option2) || product.variants[0];
+         if (sampleV) {
+             const opt1 = sampleV.option1 ? sampleV.option1.toLowerCase().trim() : '';
+             const opt2 = sampleV.option2 ? sampleV.option2.toLowerCase().trim() : '';
+             if (opt1 && knownColors.includes(opt1)) {
+                 colorOptionIndex = 0;
+             } else if (opt2 && knownColors.includes(opt2)) {
+                 colorOptionIndex = 1;
+             }
+         }
       }
 
       let swatchesHtml = "";
