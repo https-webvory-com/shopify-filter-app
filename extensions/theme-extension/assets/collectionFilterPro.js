@@ -1380,9 +1380,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                     let labelFlexDir, labelJustify, textAlign, gap;
                     
                     if (isGrid) {
-                      // Grid layout (Length, Sleeve type) - Large image, text below
-                      vWidth = '100%';
-                      vHeight = '65px';
+                      if (isColor) {
+                        vWidth = '40px';
+                        vHeight = '40px';
+                      } else {
+                        vWidth = '100%';
+                        vHeight = '65px';
+                      }
                       labelFlexDir = 'column';
                       labelJustify = 'center';
                       textAlign = 'center';
