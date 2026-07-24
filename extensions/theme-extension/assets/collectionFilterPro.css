@@ -241,7 +241,64 @@ facet-filters-form,
   }
 }
 
-/* â”€â”€â”€ Sidebar Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Active Filter Chips (inside scrollable body, top of filter list) ─────── */
+.cfp-active-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px 12px;
+  border-bottom: 1px solid var(--cfp-border);
+  background: var(--cfp-bg);
+  margin-bottom: 4px;
+}
+.cfp-active-chips__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  background: #f1f1f1;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 12px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cfp-active-chips__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #bbb;
+  color: #555;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.cfp-active-chips__chip-remove:hover { background: #777; color: #fff; }
+.cfp-active-chips__clear-all {
+  margin-left: auto;
+  font-size: 12px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  color: #8c9196;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.cfp-active-chips__clear-all:hover { color: #333; text-decoration: underline; }
+
+/* ─── Sidebar Body ──────────────────────────────────────────────────────────── */
 .cfp-sidebar__header {
   display: flex !important;
   align-items: center !important;

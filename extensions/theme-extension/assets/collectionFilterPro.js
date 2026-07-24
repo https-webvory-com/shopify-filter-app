@@ -368,6 +368,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         cfpLastTotalCount = data.totalCount;
         renderFilterSidebar(data.settings, data.facets, data.totalCount);
       }
+      renderActiveChips();
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
@@ -2146,6 +2147,87 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
     }
     activeFilters.page = 1;
     fetchAndRenderData();
+  }
+
+  // ── Active Filter Chips (inside scrollable body, at the top) ─────────────
+  function renderActiveChips() {
+    // The zone is now INSIDE body — find it after body.innerHTML is set
+    const zone = document.querySelector('.cfp-sidebar__body #cfp-active-chips');
+    if (!zone) {
+      // Re-inject the zone at the top of the sidebar body if missing
+      const body = sidebar ? sidebar.querySelector('.cfp-sidebar__body') : null;
+      if (!body) return;
+      const zoneEl = document.createElement('div');
+      zoneEl.id = 'cfp-active-chips';
+      zoneEl.className = 'cfp-active-chips';
+      zoneEl.style.display = 'none';
+      body.insertBefore(zoneEl, body.firstChild);
+    }
+    const activeZone = document.querySelector('.cfp-sidebar__body #cfp-active-chips') ||
+                       document.getElementById('cfp-active-chips');
+    if (!activeZone) return;
+
+    const chips = [];
+
+    const addChips = (values, type, key) => {
+      values.forEach(val => chips.push({ label: val, type, key }));
+    };
+
+    addChips(activeFilters.vendors,      'vendor',      null);
+    addChips(activeFilters.types,        'type',        null);
+    addChips(activeFilters.tags,         'tag',         null);
+    addChips(activeFilters.collections,  'collection',  null);
+    addChips(activeFilters.availability, 'availability', null);
+    addChips(activeFilters.priceRanges,  'price',       null);
+    Object.entries(activeFilters.options   || {}).forEach(([k, vals]) => addChips(vals, 'option',    k));
+    Object.entries(activeFilters.metafields|| {}).forEach(([k, vals]) => addChips(vals, 'metafield', k));
+
+    if (chips.length === 0) {
+      activeZone.style.display = 'none';
+      activeZone.innerHTML = '';
+      return;
+    }
+
+    const chipsHtml = chips.map(c => `
+      <span class="cfp-active-chips__chip" title="${c.label}">
+        ${c.label}
+        <span class="cfp-active-chips__chip-remove"
+              data-type="${c.type}" data-key="${c.key || ''}" data-val="${c.label.replace(/"/g,'&quot;')}"
+              aria-label="Remove ${c.label}">&#x2715;</span>
+      </span>
+    `).join('');
+
+    activeZone.innerHTML = chipsHtml +
+      `<span class="cfp-active-chips__clear-all" id="cfp-chips-clear-all">Clear All</span>`;
+    activeZone.style.display = 'flex';
+
+    // Remove single chip
+    activeZone.querySelectorAll('.cfp-active-chips__chip-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.type;
+        const key  = btn.dataset.key;
+        const val  = btn.dataset.val;
+        if      (type === 'vendor')       activeFilters.vendors       = activeFilters.vendors.filter(v => v !== val);
+        else if (type === 'type')         activeFilters.types         = activeFilters.types.filter(v => v !== val);
+        else if (type === 'tag')          activeFilters.tags          = activeFilters.tags.filter(v => v !== val);
+        else if (type === 'collection')   activeFilters.collections   = activeFilters.collections.filter(v => v !== val);
+        else if (type === 'availability') activeFilters.availability  = activeFilters.availability.filter(v => v !== val);
+        else if (type === 'price')        activeFilters.priceRanges   = activeFilters.priceRanges.filter(v => v !== val);
+        else if (type === 'option'    && key) {
+          activeFilters.options[key] = (activeFilters.options[key] || []).filter(v => v !== val);
+          if (!activeFilters.options[key].length) delete activeFilters.options[key];
+        } else if (type === 'metafield' && key) {
+          activeFilters.metafields[key] = (activeFilters.metafields[key] || []).filter(v => v !== val);
+          if (!activeFilters.metafields[key].length) delete activeFilters.metafields[key];
+        }
+        activeFilters.page = 1;
+        fetchAndRenderData();
+      });
+    });
+
+    // Clear all
+    const clearAllBtn = activeZone.querySelector('#cfp-chips-clear-all');
+    if (clearAllBtn) clearAllBtn.addEventListener('click', clearAllFilters);
   }
 
   function renderBreadcrumbs() {

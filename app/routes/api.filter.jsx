@@ -485,7 +485,9 @@ export const loader = async ({ request }) => {
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
-    const totalCount = meiliRes.estimatedTotalHits || 0;
+    // Fix: meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch default.
+    // The facet query (limit:0) returns an accurate count — use it as the source of truth.
+    const totalCount = facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
     let paginatedSlice = needsBroadFetch
       ? finalProducts.slice((page - 1) * limit, page * limit)
       : finalProducts; // Already paginated by Meilisearch

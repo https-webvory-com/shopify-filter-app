@@ -137,9 +137,28 @@ if (typeof window.CfpQuickView === 'undefined') {
       const formattedPrice = (product.price / 100).toFixed(2);
       const comparePrice = product.compare_at_price ? (product.compare_at_price / 100).toFixed(2) : null;
       const allImages = product.images && product.images.length > 0 ? product.images : (product.featured_image ? [product.featured_image] : []);
-      // Cap to first 8 images to avoid dot overflow
+
+      // Smart image ordering: put initial-variant image first so it's always visible in capped set
       const MAX_IMAGES = 8;
-      const images = allImages.slice(0, MAX_IMAGES);
+      let images = allImages;
+      const initialVariantForImages = product.variants && product.variants.length > 0
+        ? (product.variants.find(v => v.available) || product.variants[0])
+        : null;
+      if (initialVariantForImages && initialVariantForImages.featured_image) {
+        const heroSrc = initialVariantForImages.featured_image.src.split('?')[0];
+        const heroIdx = allImages.findIndex(img => img.split('?')[0] === heroSrc);
+        if (heroIdx > 0) {
+          // Move hero image to front so it shows first in the capped carousel
+          const reordered = [allImages[heroIdx], ...allImages.slice(0, heroIdx), ...allImages.slice(heroIdx + 1)];
+          images = reordered.slice(0, MAX_IMAGES);
+        } else {
+          images = allImages.slice(0, MAX_IMAGES);
+        }
+      } else {
+        images = allImages.slice(0, MAX_IMAGES);
+      }
+      // Store on instance so updateVariantDetails can search the same capped set
+      this.carouselImages = images;
       
       let imagesHtml = '';
       let dotsHtml = '';
@@ -359,19 +378,22 @@ if (typeof window.CfpQuickView === 'undefined') {
           skuEl.textContent = fullSku ? fullSku.split('-')[0] : '';
         }
 
-        // Update Image
+        // Update Image — search within the CAPPED carousel images, not the full product.images array
+        // Using full array index with a capped carousel causes translate to fly off-screen (blank white)
         if (matchingVariant.featured_image && goToSlide) {
-          let imgIndex = -1;
-          if (matchingVariant.featured_image.position) {
-            imgIndex = matchingVariant.featured_image.position - 1;
-          } else if (product.images) {
-            const featuredSrc = matchingVariant.featured_image.src.split('?')[0];
-            imgIndex = product.images.findIndex(img => img.split('?')[0] === featuredSrc);
+          const featuredSrc = matchingVariant.featured_image.src.split('?')[0];
+          const carouselImgs = this.carouselImages || [];
+          let imgIndex = carouselImgs.findIndex(img => img.split('?')[0] === featuredSrc);
+
+          if (imgIndex === -1 && matchingVariant.featured_image.position) {
+            // position is 1-indexed in full array — try to map into carousel if in range
+            const posIdx = matchingVariant.featured_image.position - 1;
+            imgIndex = posIdx < carouselImgs.length ? posIdx : 0; // clamp to avoid blank
           }
-          
-          if (imgIndex !== -1) {
-            goToSlide(imgIndex);
-          }
+
+          // Final clamp: never go out of bounds
+          if (imgIndex < 0 || imgIndex >= carouselImgs.length) imgIndex = 0;
+          goToSlide(imgIndex);
         }
         
         // Update Add to Cart Button state
