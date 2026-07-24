@@ -3,7 +3,7 @@
  * Dynamic UI Injection and Relative App Proxy Querying
  */ 
 
-const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
+var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
 
 (function () {
   'use strict';

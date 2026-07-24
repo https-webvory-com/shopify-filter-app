@@ -3,7 +3,7 @@
  * Hijacks the theme's default search input and displays a full-screen search modal.
  */
 
-const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
+var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
 
 document.addEventListener("DOMContentLoaded", function () {
   // Config
