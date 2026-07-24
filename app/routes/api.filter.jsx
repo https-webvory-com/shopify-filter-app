@@ -463,6 +463,7 @@ export const loader = async ({ request }) => {
         option1: v.option1,
         option2: v.option2,
         option3: v.option3,
+        imageUrl: v.imageUrl || null, // Fix: preserve imageUrl for swatch rendering
       })),
     }));
 
@@ -499,7 +500,19 @@ export const loader = async ({ request }) => {
           select: { 
             id: true, title: true, handle: true, vendor: true, productType: true,
             tags: true, images: true, status: true, options: true, priceMin: true, priceMax: true,
-            variants: { select: { available: true } }
+            // Fix: fetch full variant data so pinned products get swatches too
+            variants: {
+              select: {
+                id: true,
+                available: true,
+                price: true,
+                compareAtPrice: true,
+                option1: true,
+                option2: true,
+                option3: true,
+                imageUrl: true,
+              }
+            }
           }
         });
         paginatedSlice.forEach(p => {
@@ -517,6 +530,17 @@ export const loader = async ({ request }) => {
               p.priceMin = dbMatch.priceMin ? parseFloat(dbMatch.priceMin) : 0;
               p.priceMax = dbMatch.priceMax ? parseFloat(dbMatch.priceMax) : 0;
               p.isAvailable = dbMatch.variants.some(v => v.available === true);
+              // Fix: set variantPrices so Step 13 shape mapper includes imageUrl for pinned products
+              p.variantPrices = dbMatch.variants.map(v => ({
+                id: v.id,
+                available: v.available,
+                price: v.price,
+                compareAtPrice: v.compareAtPrice,
+                option1: v.option1,
+                option2: v.option2,
+                option3: v.option3,
+                imageUrl: v.imageUrl || null,
+              }));
             }
             // Fill missing options
             if (!p.options || p.options.length === 0) {
