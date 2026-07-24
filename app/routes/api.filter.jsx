@@ -355,19 +355,20 @@ export const loader = async ({ request }) => {
     // at the right positions. We fetch 1 extra page + pinned count in that case.
 
     const hasPinning = pinnedIds.length > 0;
-    const hasMerchandisingExclude =
-      activeRule?.conditions?.some((c) => c.action === "Exclude") ?? false;
+    const hasMerchandising = activeRule?.conditions?.length > 0;
+    const needsBroadFetch = hasPinning || hasMerchandising;
 
-    // If pinning or merchandising exclude is active, we need broader fetch
-    // to apply JS-side ordering correctly.
-    // ⚡ PERFORMANCE FIX: Instead of fetching 1000 docs from offset 0,
-    // fetch only current page + extra buffer for pinned products injection.
-    // This means ALL 50k products are accessible via pagination!
-    const needsBroadFetch = hasPinning || hasMerchandisingExclude;
     // Fetch current page window + pinned products count as buffer
     const pinnedBuffer = pinnedIds.length > 0 ? pinnedIds.length : 0;
-    const broadFetchLimit = limit + pinnedBuffer + 10; // e.g. 24 + pins + 10 safety buffer
-    const broadFetchOffset = Math.max(0, (page - 1) * limit - pinnedBuffer);
+    
+    // If merchandising is active, we MUST fetch from 0 to sort globally (e.g. Boost/Pin rules).
+    const broadFetchOffset = hasMerchandising 
+      ? 0 
+      : Math.max(0, (page - 1) * limit - pinnedBuffer);
+      
+    const broadFetchLimit = hasMerchandising 
+      ? Math.max(1000, page * limit) 
+      : limit + pinnedBuffer + 10;
 
     const queries = [];
 
@@ -493,7 +494,10 @@ export const loader = async ({ request }) => {
     // meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch when using limit+offset.
     const totalCount = facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
     let paginatedSlice = needsBroadFetch
-      ? finalProducts.slice((page - 1) * limit, page * limit)
+      ? finalProducts.slice(
+          (page - 1) * limit - broadFetchOffset,
+          page * limit - broadFetchOffset
+        )
       : finalProducts; // Already paginated by Meilisearch
 
     // ── 12.5 Fallback for missing data (injected pinned products & missing options) ──
