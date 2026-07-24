@@ -1342,7 +1342,7 @@ const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid ${swatchLayout === 'List' ? 'cfp-color-grid--list' : ''}" style="${showLabel ? 'grid-template-columns: 1fr 1fr !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
+              <div class="cfp-color-grid ${swatchLayout === 'List' ? 'cfp-color-grid--list' : ''}" style="${swatchLayout === 'List' ? (showLabel ? 'grid-template-columns: 1fr 1fr !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;') : 'grid-template-columns: 1fr 1fr !important; gap: 16px 8px !important;'}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -1375,13 +1375,31 @@ const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to
                     // Check if it's active
                     const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
                     
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${showLabel ? '22px' : '100%'} !important; height: ${showLabel ? '22px' : '36px'} !important; display: inline-block; ${isCircle ? (showLabel ? 'border-radius: 50% !important;' : 'border-radius: 36px !important;') : 'border-radius: 4px !important;'} border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'}; ${isActive ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important;"></span>`;
+                    const isList = swatchLayout === 'List';
                     
+                    let vWidth, vHeight;
+                    if (isList) {
+                      vWidth = showLabel ? '22px' : '100%';
+                      vHeight = showLabel ? '22px' : '36px';
+                    } else {
+                      vWidth = '100%';
+                      vHeight = '65px';
+                    }
+
+                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/contain no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
+                    
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle && !isImageItem ? 'border-radius: 50% !important;' : 'border-radius: 4px !important;'} ${isActive && !isImageItem ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important; ${isActive && isImageItem ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
+                    
+                    const labelFlexDir = isList ? 'row' : 'column';
+                    const labelJustify = isList ? (showLabel ? 'flex-start' : 'center') : 'center';
+                    const textAlign = isList ? 'left' : 'center';
+                    const gap = isList ? '8px' : '6px';
+
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: 8px; cursor: pointer; flex-direction: row; justify-content: ${showLabel ? 'flex-start' : 'center'}; text-align: left; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: ${gap}; cursor: pointer; flex-direction: ${labelFlexDir}; justify-content: ${labelJustify}; text-align: ${textAlign}; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${visualHtml}
-                        ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 14px; text-align: left; color: #202223; line-height: 1.2; word-break: break-word;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
+                        ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 13px; text-align: ${textAlign}; color: #202223; line-height: 1.2; word-break: break-word; width: 100%;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
                       </label>
                     `;
                   }).join('');
