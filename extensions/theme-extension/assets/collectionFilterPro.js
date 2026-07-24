@@ -1346,7 +1346,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid" style="${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
+              <div class="cfp-color-grid" style="padding: 2px !important; ${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -1660,26 +1660,52 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         const q = searchInput.value.toLowerCase().trim();
         const wrapper = searchInput.closest('.cfp-group');
         
+        let visibleCount = 0;
+
         // 1. Local filter
-        wrapper.querySelectorAll('.cfp-checkbox').forEach(label => {
-          const txt = label.querySelector('.cfp-checkbox__label');
-          const matches = !txt || txt.textContent.toLowerCase().includes(q);
+        wrapper.querySelectorAll('.cfp-checkbox, .cfp-button-chip, .cfp-color-swatch').forEach(label => {
+          let txtVal = '';
+          if (label.classList.contains('cfp-checkbox')) {
+            const txt = label.querySelector('.cfp-checkbox__label');
+            txtVal = txt ? txt.textContent : '';
+          } else if (label.classList.contains('cfp-button-chip')) {
+            const txt = label.querySelector('span');
+            txtVal = txt ? txt.textContent : '';
+          } else if (label.classList.contains('cfp-color-swatch')) {
+            const txt = label.querySelector('.cfp-swatch-label');
+            const titleVal = label.getAttribute('title') || '';
+            txtVal = (txt ? txt.textContent : '') + " " + titleVal;
+          }
+          
+          const matches = txtVal.toLowerCase().includes(q);
           label.classList.toggle('cfp-search-hidden', !matches);
+          if (matches) visibleCount++;
         });
-        
-        wrapper.querySelectorAll('.cfp-button-chip').forEach(label => {
-          const txt = label.querySelector('span');
-          const matches = !txt || txt.textContent.toLowerCase().includes(q);
-          label.classList.toggle('cfp-search-hidden', !matches);
-        });
-        
-        wrapper.querySelectorAll('.cfp-color-swatch').forEach(label => {
-          const txt = label.querySelector('.cfp-swatch-label');
-          const titleVal = label.getAttribute('title') || '';
-          const txtVal = txt ? txt.textContent : '';
-          const matches = titleVal.toLowerCase().includes(q) || txtVal.toLowerCase().includes(q);
-          label.classList.toggle('cfp-search-hidden', !matches);
-        });
+
+        let emptyState = wrapper.querySelector('.cfp-empty-state');
+        if (visibleCount === 0) {
+           if (!emptyState) {
+              const groupNameElement = wrapper.querySelector('.cfp-group-title');
+              const groupName = groupNameElement ? groupNameElement.textContent.trim().replace(/[-+]$/, '').trim() : 'Filter';
+              emptyState = document.createElement('div');
+              emptyState.className = 'cfp-empty-state';
+              emptyState.style.padding = '10px 0';
+              emptyState.style.color = '#6d7175';
+              emptyState.style.fontSize = '13px';
+              emptyState.style.textAlign = 'center';
+              emptyState.textContent = `${groupName} not available`;
+              
+              const scrollArea = wrapper.querySelector('.cfp-scroll-area') || wrapper.querySelector('.cfp-search-input-wrap').nextElementSibling;
+              if (scrollArea) {
+                  scrollArea.appendChild(emptyState);
+              } else {
+                  wrapper.appendChild(emptyState);
+              }
+           }
+           emptyState.style.display = 'block';
+        } else {
+           if (emptyState) emptyState.style.display = 'none';
+        }
 
         // 2. API fetch for facet search
         const inputName = searchInput.dataset.inputName;
