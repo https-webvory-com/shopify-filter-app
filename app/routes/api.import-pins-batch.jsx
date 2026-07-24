@@ -41,6 +41,8 @@ export const action = async ({ request }) => {
     });
     const validProductMap = new Map(validProductsInDB.map((p) => [p.id, p]));
 
+
+
     // ─── Batch-validate collection titles at once ─────────────────────────
     const allCollectionTitles = new Set();
     for (const row of rows) {
@@ -97,9 +99,17 @@ export const action = async ({ request }) => {
         }
 
         // Validate collections by title
-        const validCollections = (row.collectionTitles || []).filter((t) =>
-          validCollectionTitleSet.has(t)
-        );
+        let validCollections = row.collectionTitles || [];
+        if (ruleType === "collection" && validCollections.length > 0) {
+          validCollections = validCollections.filter((t) => validCollectionTitleSet.has(t));
+          if (validCollections.length === 0) {
+            skippedRows.push({
+              id: externalId,
+              reason: `Collection(s) not found in store: ${row.collectionTitles.join(", ")}`,
+            });
+            continue;
+          }
+        }
 
         // Determine applyToSearchType
         const applyToSearchType = row.applyToSearchType || "both";
