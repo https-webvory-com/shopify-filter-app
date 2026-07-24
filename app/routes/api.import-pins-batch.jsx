@@ -64,11 +64,7 @@ export const action = async ({ request }) => {
 
     for (const row of rows) {
       try {
-        const externalId = row.externalId;
-        if (!externalId) {
-          skippedRows.push({ id: "unknown", reason: "Missing Id field" });
-          continue;
-        }
+        const externalId = row.externalId || "imported-row";
 
         // Map and validate products
         const validProducts = [];
@@ -82,14 +78,12 @@ export const action = async ({ request }) => {
 
           if (validProductMap.has(gid)) {
             const dbProduct = validProductMap.get(gid);
+            const imgUrl = p.ImageUrl || p.imageUrl || (Array.isArray(dbProduct.images) && dbProduct.images[0]?.src) || "";
             validProducts.push({
               id: gid,
               title: p.Title || p.title || dbProduct.title || "",
-              imageUrl:
-                p.ImageUrl ||
-                p.imageUrl ||
-                (Array.isArray(dbProduct.images) && dbProduct.images[0]?.src) ||
-                "",
+              imageUrl: imgUrl,
+              image: imgUrl, // Added image field for UI rendering
             });
           }
         }
@@ -110,12 +104,29 @@ export const action = async ({ request }) => {
         // Determine applyToSearchType
         const applyToSearchType = row.applyToSearchType || "both";
 
-        // UPSERT — key for resume: (shop, name=externalId, ruleType)
+        // Determine rule name and applyToAll
+        let ruleName = "Imported Pin";
+        let applyToAll = false;
+        
+        if (ruleType === "collection") {
+          applyToAll = validCollections.length === 0;
+          ruleName = validCollections.length > 0 ? validCollections.join(", ") : "All Collections";
+        } else {
+          ruleName = row.searchQuery || "All Searches";
+        }
+        
+        // Ensure ruleName is not empty string
+        if (!ruleName.trim()) {
+          ruleName = `Imported ${ruleType === "collection" ? "Collection" : "Search"} Pin`;
+        }
+
+        // UPSERT — key for resume: (shop, name, ruleType)
+        // Deduplicates across stores by collection name or search query!
         await prisma.pinnedProductRule.upsert({
           where: {
             shop_name_ruleType: {
               shop,
-              name: externalId,
+              name: ruleName,
               ruleType,
             },
           },
@@ -125,12 +136,13 @@ export const action = async ({ request }) => {
             products: validProducts,
             searchQueries: row.searchQuery ? [row.searchQuery] : [],
             applyToSearchType,
+            applyToAll,
           },
           create: {
             shop,
-            name: externalId,
+            name: ruleName,
             status: row.active !== false,
-            applyToAll: false,
+            applyToAll,
             collections: validCollections,
             products: validProducts,
             searchQueries: row.searchQuery ? [row.searchQuery] : [],
