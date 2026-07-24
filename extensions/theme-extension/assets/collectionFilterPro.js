@@ -1403,7 +1403,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
 
                     const bgStyle = isImageItem ? `background: url('${colorValue}') center/${isGrid ? 'contain' : 'cover'} no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
                     
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle ? (showLabel && !isGrid ? 'border-radius: 50% !important;' : 'border-radius: 50% !important;') : 'border-radius: 4px !important;'} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle ? (showLabel && !isGrid ? 'border-radius: 50% !important;' : 'border-radius: 50% !important;') : 'border-radius: 4px !important;'} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
 
 
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
