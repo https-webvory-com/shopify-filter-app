@@ -1342,7 +1342,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid" style="${showLabel ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
+              <div class="cfp-color-grid" style="${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -1379,14 +1379,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                     let vWidth, vHeight;
                     let labelFlexDir, labelJustify, textAlign, gap;
                     
-                    if (isGrid) {
-                      if (isColor) {
-                        vWidth = '40px';
-                        vHeight = '40px';
-                      } else {
-                        vWidth = '100%';
-                        vHeight = '65px';
-                      }
+                    if (isGrid && !isColor) {
+                      // Grid layout (Length, Sleeve type) - Large image, text below
+                      vWidth = '100%';
+                      vHeight = '65px';
                       labelFlexDir = 'column';
                       labelJustify = 'center';
                       textAlign = 'center';
