@@ -485,7 +485,7 @@ export const loader = async ({ request }) => {
 
     // ── 12. Paginate results ───────────────────────────────────────────
     const totalCount = meiliRes.estimatedTotalHits || 0;
-    const paginatedSlice = needsBroadFetch
+    let paginatedSlice = needsBroadFetch
       ? finalProducts.slice((page - 1) * limit, page * limit)
       : finalProducts; // Already paginated by Meilisearch
 
@@ -498,7 +498,8 @@ export const loader = async ({ request }) => {
           where: { id: { in: missingIds } },
           select: { 
             id: true, title: true, handle: true, vendor: true, productType: true,
-            tags: true, images: true, status: true, options: true, priceMin: true, priceMax: true
+            tags: true, images: true, status: true, options: true, priceMin: true, priceMax: true,
+            variants: { select: { available: true } }
           }
         });
         paginatedSlice.forEach(p => {
@@ -515,6 +516,7 @@ export const loader = async ({ request }) => {
               p.status = dbMatch.status || "active";
               p.priceMin = dbMatch.priceMin ? parseFloat(dbMatch.priceMin) : 0;
               p.priceMax = dbMatch.priceMax ? parseFloat(dbMatch.priceMax) : 0;
+              p.isAvailable = dbMatch.variants.some(v => v.available === true);
             }
             // Fill missing options
             if (!p.options || p.options.length === 0) {
@@ -531,6 +533,16 @@ export const loader = async ({ request }) => {
       } catch (e) {
         console.error("CFP: Failed to fetch fallback product data", e);
       }
+    }
+
+    // ── 12.6 Remove Out-Of-Stock Pinned Products if needed ─────────────
+    if (globalSettings?.showOnlyInStock) {
+      paginatedSlice = paginatedSlice.filter(p => {
+        if (p.isAvailable !== undefined) {
+          return p.isAvailable; // Injected pinned products
+        }
+        return true; // Regular Meilisearch products are already filtered
+      });
     }
 
     // ── 13. Shape products for response ───────────────────────────────
