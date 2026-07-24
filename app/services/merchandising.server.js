@@ -272,9 +272,9 @@ function checkRuleMatch(product, condition) {
       product.variants &&
       product.variants.find(
         (v) =>
-          values.includes((v.option1 || "").toLowerCase()) ||
-          values.includes((v.option2 || "").toLowerCase()) ||
-          values.includes((v.option3 || "").toLowerCase()),
+          values.some((val) => (v.option1 || "").toLowerCase().trim().includes(val)) ||
+          values.some((val) => (v.option2 || "").toLowerCase().trim().includes(val)) ||
+          values.some((val) => (v.option3 || "").toLowerCase().trim().includes(val))
       )
     );
   }
