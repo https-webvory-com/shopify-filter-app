@@ -531,6 +531,7 @@ export default function PinningIndex() {
                 >
                   Export
                 </button>
+                </>
               )}
 
               <div style={{ position: "relative" }} className="create-pin-dropdown-inside">
