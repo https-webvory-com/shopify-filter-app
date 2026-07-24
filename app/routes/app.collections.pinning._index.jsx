@@ -26,6 +26,12 @@ export const action = async ({ request }) => {
     return { success: true, action: "deleteRule" };
   }
 
+  if (actionType === "bulkDeleteRules") {
+    const ids = JSON.parse(formData.get("ids") || "[]");
+    await prisma.pinnedProductRule.deleteMany({ where: { id: { in: ids }, shop } });
+    return { success: true, action: "bulkDeleteRules", count: ids.length };
+  }
+
   if (actionType === "duplicateRule") {
     const id = formData.get("id");
     const originalRule = await prisma.pinnedProductRule.findFirst({
@@ -105,6 +111,8 @@ export default function PinningIndex() {
         shopify.toast.show("Pin duplicated successfully");
       } else if (actionData.action === "toggleStatus") {
         shopify.toast.show(actionData.status ? "Pin enabled" : "Pin disabled");
+      } else if (actionData.action === "bulkDeleteRules") {
+        shopify.toast.show(`${actionData.count} pins deleted successfully`);
       }
     }
   }, [actionData, shopify]);
@@ -218,6 +226,19 @@ export default function PinningIndex() {
       formData.append("id", deleteRuleId);
       submit(formData, { method: "POST" });
       setDeleteRuleId(null);
+    }
+  };
+
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
+  const confirmBulkDelete = () => {
+    if (selectedRules.length > 0) {
+      const formData = new FormData();
+      formData.append("actionType", "bulkDeleteRules");
+      formData.append("ids", JSON.stringify(selectedRules.map(r => r.id)));
+      submit(formData, { method: "POST" });
+      setIsBulkDeleteModalOpen(false);
+      setSelectedRules([]);
     }
   };
 
@@ -587,8 +608,26 @@ export default function PinningIndex() {
             {/* Create rule button dropdown wrapper */}
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
               {pinningRules.length > 0 && selectedRules.length > 0 && (
-                <button
-                  onClick={() => setIsExportModalOpen(true)}
+                <>
+                  <button
+                    onClick={() => setIsBulkDeleteModalOpen(true)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      background: "#fff",
+                      border: "1px solid #fca5a5",
+                      padding: "8px 16px",
+                      borderRadius: "20px",
+                      cursor: "pointer",
+                      color: "#dc2626",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={() => setIsExportModalOpen(true)}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -945,6 +984,94 @@ export default function PinningIndex() {
                     }}
                   >
                     Delete
+                  </button>
+                </div>
+            </div>
+          )}
+
+          {isBulkDeleteModalOpen && (
+            <div
+              onClick={() => setIsBulkDeleteModalOpen(false)}
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                background: "rgba(0,0,0,0.5)",
+                zIndex: 100,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: "#fff",
+                  borderRadius: "8px",
+                  width: "400px",
+                  maxWidth: "90%",
+                  padding: "24px",
+                  boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                }}
+              >
+                <h2
+                  style={{
+                    margin: "0 0 16px 0",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                  }}
+                >
+                  Bulk Delete Pinning Rules
+                </h2>
+                <p
+                  style={{
+                    margin: "0 0 24px 0",
+                    color: "#475569",
+                    fontSize: "14px",
+                    lineHeight: "1.5",
+                  }}
+                >
+                  Are you sure you want to delete {selectedRules.length} rules? This action cannot be undone.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "12px",
+                  }}
+                >
+                  <button
+                    onClick={() => setIsBulkDeleteModalOpen(false)}
+                    style={{
+                      background: "#fff",
+                      border: "1px solid rgba(91, 33, 182, 0.2)",
+                      color: "#1E1B4B",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmBulkDelete}
+                    style={{
+                      background: "#ef4444",
+                      border: "none",
+                      color: "#fff",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete Rules
                   </button>
                 </div>
               </div>
