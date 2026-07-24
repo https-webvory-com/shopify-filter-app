@@ -199,6 +199,22 @@ export default function PinningIndex() {
   };
 
   const proceedToCreate = () => {
+    if (createApplyToAll) {
+      const existingAll = pinningRules.find(r => r.applyToAll);
+      if (existingAll) {
+        window.shopify?.toast?.show("A pinning rule already exists for All Collections. Please edit the existing rule.", { isError: true });
+        return;
+      }
+    } else if (createCollections.length > 0) {
+      for (const col of createCollections) {
+        const existing = pinningRules.find(r => r.collections && r.collections.includes(col));
+        if (existing) {
+          window.shopify?.toast?.show(`A pinning rule already exists for collection: ${col}. Please edit the existing rule.`, { isError: true });
+          return;
+        }
+      }
+    }
+
     const params = new URLSearchParams();
     if (createApplyToAll) params.append("applyToAll", "true");
     if (createCollections.length > 0)
