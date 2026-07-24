@@ -1,7 +1,7 @@
 import { data } from "react-router";
 import prisma from "../db.server";
 import meiliClient from "../services/meiliClient.server";
-import { unauthenticated } from "../shopify.server";
+
 import { rateLimit } from "../services/rateLimiter.server";
 
 export const loader = async ({ request }) => {
