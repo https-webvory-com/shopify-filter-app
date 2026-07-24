@@ -163,6 +163,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
 
   let globalSettings = {}; // Updated dynamically from product prices
   let cfpLastSettings = [];
+  let cfpLastFacets = {};
+  let cfpLastTotalCount = 0;
   let cfpGroupToggleState = {};
   let cfpGroupScrollState = {};
 
@@ -362,6 +364,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
+        cfpLastFacets = data.facets;
+        cfpLastTotalCount = data.totalCount;
         renderFilterSidebar(data.settings, data.facets, data.totalCount);
       }
       renderBreadcrumbs();
@@ -1338,7 +1342,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options" data-input-name="${inputName}">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -1405,7 +1409,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
                     
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex !important; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${visualHtml}
                         ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 13px; text-align: ${textAlign} !important; color: #202223; line-height: 1.2; word-break: break-word; ${spanWidthStyle} margin: 0 !important; padding: 0 !important;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
@@ -1424,7 +1428,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options" data-input-name="${inputName}">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -1449,7 +1453,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options">
+                <input type="text" class="cfp-search-input cfp-vendor-search" placeholder="Filter options" data-input-name="${inputName}">
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
@@ -1656,21 +1660,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         const q = searchInput.value.toLowerCase().trim();
         const wrapper = searchInput.closest('.cfp-group');
         
-        // Filter list items
+        // 1. Local filter
         wrapper.querySelectorAll('.cfp-checkbox').forEach(label => {
           const txt = label.querySelector('.cfp-checkbox__label');
           const matches = !txt || txt.textContent.toLowerCase().includes(q);
           label.classList.toggle('cfp-search-hidden', !matches);
         });
         
-        // Filter button chips
         wrapper.querySelectorAll('.cfp-button-chip').forEach(label => {
           const txt = label.querySelector('span');
           const matches = !txt || txt.textContent.toLowerCase().includes(q);
           label.classList.toggle('cfp-search-hidden', !matches);
         });
         
-        // Filter swatches
         wrapper.querySelectorAll('.cfp-color-swatch').forEach(label => {
           const txt = label.querySelector('.cfp-swatch-label');
           const titleVal = label.getAttribute('title') || '';
@@ -1678,6 +1680,98 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
           const matches = titleVal.toLowerCase().includes(q) || txtVal.toLowerCase().includes(q);
           label.classList.toggle('cfp-search-hidden', !matches);
         });
+
+        // 2. API fetch for facet search
+        const inputName = searchInput.dataset.inputName;
+        if (!inputName || q.length < 2) return;
+
+        let facetName = inputName;
+        if (facetName.startsWith('option-')) facetName = facetName.replace('option-', 'options.');
+        if (facetName.startsWith('metafield-')) facetName = facetName.replace('metafield-', 'metafields.');
+
+        if (window.cfpFacetSearchTimeout) clearTimeout(window.cfpFacetSearchTimeout);
+        
+        window.cfpFacetSearchTimeout = setTimeout(async () => {
+           try {
+              const queryParams = new URLSearchParams(window.location.search);
+              queryParams.append('shop', shop);
+              queryParams.append('facetName', facetName);
+              queryParams.append('facetQuery', q);
+              if (collectionHandle) queryParams.append('collectionHandle', collectionHandle);
+              else if (collectionId) queryParams.append('collectionId', collectionId);
+        
+              const response = await fetch(`${API_DOMAIN}/api/facet?${queryParams.toString()}`);
+              const data = await response.json();
+              
+              if (data && data.facetHits && data.facetHits.length > 0) {
+                 let hasNew = false;
+                 let targetFacetArray = null;
+                 if (facetName.startsWith('options.')) {
+                    const optName = facetName.replace('options.', '');
+                    if (!cfpLastFacets.options) cfpLastFacets.options = {};
+                    if (!cfpLastFacets.options[optName]) cfpLastFacets.options[optName] = [];
+                    targetFacetArray = cfpLastFacets.options[optName];
+                 } else if (facetName.startsWith('metafields.')) {
+                    const metaName = facetName.replace('metafields.', '');
+                    if (!cfpLastFacets.metafields) cfpLastFacets.metafields = {};
+                    if (!cfpLastFacets.metafields[metaName]) cfpLastFacets.metafields[metaName] = [];
+                    targetFacetArray = cfpLastFacets.metafields[metaName];
+                 } else if (facetName === 'vendor') {
+                    if (!cfpLastFacets.vendors) cfpLastFacets.vendors = [];
+                    targetFacetArray = cfpLastFacets.vendors;
+                 } else if (facetName === 'type') {
+                    if (!cfpLastFacets.productTypes) cfpLastFacets.productTypes = [];
+                    targetFacetArray = cfpLastFacets.productTypes;
+                 } else if (facetName === 'tags') {
+                    if (!cfpLastFacets.tags) cfpLastFacets.tags = [];
+                    targetFacetArray = cfpLastFacets.tags;
+                 }
+                 
+                 if (targetFacetArray) {
+                    data.facetHits.forEach(hit => {
+                       const exists = targetFacetArray.find(v => v.value.toLowerCase() === hit.value.toLowerCase());
+                       if (!exists) {
+                          targetFacetArray.push({ value: hit.value, count: hit.count });
+                          hasNew = true;
+                          
+                          // Also append to manualValues if this group uses it, so it can be rendered
+                          if (cfpLastSettings) {
+                             const groupSetting = cfpLastSettings.find(s => (s.filterType === 'option' && s.filterKey === inputName.replace('option-', '')) || (s.filterType === 'metafield' && s.filterKey === inputName.replace('metafield-', '')) || (s.filterType === inputName));
+                             if (groupSetting && groupSetting.config && groupSetting.config.useManualValues) {
+                                if (groupSetting.config.manualValues) {
+                                   if (!groupSetting.config.manualValues.toLowerCase().includes(hit.value.toLowerCase())) {
+                                      groupSetting.config.manualValues += `, ${hit.value}`;
+                                   }
+                                } else {
+                                   groupSetting.config.manualValues = hit.value;
+                                }
+                             }
+                          }
+                       }
+                    });
+                 }
+                 
+                 if (hasNew) {
+                    // Remember focus and value
+                    const activeSearchInputName = document.activeElement ? document.activeElement.dataset?.inputName : null;
+                    const activeSearchInputValue = document.activeElement ? document.activeElement.value : '';
+                    
+                    renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+                    
+                    if (activeSearchInputName) {
+                       const newSearchInput = sidebar.querySelector(`.cfp-search-input[data-input-name="${activeSearchInputName}"]`);
+                       if (newSearchInput) {
+                           newSearchInput.focus();
+                           newSearchInput.value = activeSearchInputValue;
+                           newSearchInput.dispatchEvent(new Event('input')); // re-trigger local filter
+                       }
+                    }
+                 }
+              }
+           } catch(e) {
+              console.error("CFP Facet API Error:", e);
+           }
+        }, 300);
       });
     });
 
