@@ -1370,7 +1370,6 @@ const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to
                     
                     const isWhite = !isImageItem && (colorValue.toLowerCase() === '#ffffff' || colorValue.toLowerCase() === 'white' || item.value.toLowerCase() === 'white');
                     const hide = isViewMore && idx >= limit;
-                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/cover;` : `background:${colorValue};`;
                     
                     // Check if it's active
                     const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
