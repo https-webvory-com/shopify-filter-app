@@ -1342,7 +1342,7 @@ const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid ${swatchLayout === 'List' ? 'cfp-color-grid--list' : ''}" style="${swatchLayout === 'List' ? (showLabel ? 'grid-template-columns: 1fr 1fr !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;') : 'grid-template-columns: 1fr 1fr !important; gap: 16px 8px !important;'}">
+              <div class="cfp-color-grid" style="${showLabel ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -1374,25 +1374,31 @@ const API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to
                     // Check if it's active
                     const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
                     
-                    const isList = swatchLayout === 'List';
-                    
                     let vWidth, vHeight;
-                    if (isList) {
-                      vWidth = showLabel ? '22px' : '100%';
-                      vHeight = showLabel ? '22px' : '36px';
-                    } else {
+                    let labelFlexDir, labelJustify, textAlign, gap;
+                    
+                    if (isImageItem) {
+                      // Image swatches (Length, Sleeve type) - Large image, text below
                       vWidth = '100%';
                       vHeight = '65px';
+                      labelFlexDir = 'column';
+                      labelJustify = 'center';
+                      textAlign = 'center';
+                      gap = '6px';
+                    } else {
+                      // Normal color swatches - small circle, text right
+                      vWidth = showLabel ? '22px' : '36px';
+                      vHeight = showLabel ? '22px' : '36px';
+                      labelFlexDir = showLabel ? 'row' : 'column';
+                      labelJustify = showLabel ? 'flex-start' : 'center';
+                      textAlign = showLabel ? 'left' : 'center';
+                      gap = '8px';
                     }
 
                     const bgStyle = isImageItem ? `background: url('${colorValue}') center/contain no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
                     
                     let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle && !isImageItem ? 'border-radius: 50% !important;' : 'border-radius: 4px !important;'} ${isActive && !isImageItem ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important; ${isActive && isImageItem ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
-                    
-                    const labelFlexDir = isList ? 'row' : 'column';
-                    const labelJustify = isList ? (showLabel ? 'flex-start' : 'center') : 'center';
-                    const textAlign = isList ? 'left' : 'center';
-                    const gap = isList ? '8px' : '6px';
+
 
                     return `
                       <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center; gap: ${gap}; cursor: pointer; flex-direction: ${labelFlexDir}; justify-content: ${labelJustify}; text-align: ${textAlign}; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
