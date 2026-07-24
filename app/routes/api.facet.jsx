@@ -62,9 +62,20 @@ export const loader = async ({ request }) => {
     const meiliIndex = meiliClient.index("products");
     
     // Check if the facetName is one of the filterable attributes in Meilisearch
-    // Usually it's like 'options.Color' or 'tags' or 'vendor'
+    // Frontend sends 'options.Color', meili expects 'option_Color'
+    let meiliFacetName = facetName;
+    if (facetName.startsWith("options.")) {
+      meiliFacetName = "option_" + facetName.replace("options.", "");
+    } else if (facetName.startsWith("metafields.")) {
+      meiliFacetName = "metafield_" + facetName.replace("metafields.", "");
+    } else if (facetName === "vendors") {
+      meiliFacetName = "vendor";
+    } else if (facetName === "productTypes") {
+      meiliFacetName = "productType";
+    }
+
     const searchResponse = await meiliIndex.searchForFacetValues({
-      facetName: facetName,
+      facetName: meiliFacetName,
       facetQuery: facetQuery,
       filter: filterString,
       maxFacetHits: 20
@@ -80,6 +91,11 @@ export const loader = async ({ request }) => {
 
   } catch (error) {
     console.error("Facet API Error:", error);
-    return data({ error: "Internal Server Error" }, { status: 500 });
+    return data({ error: "Internal Server Error", message: error.message, stack: error.stack }, { 
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
   }
 };
