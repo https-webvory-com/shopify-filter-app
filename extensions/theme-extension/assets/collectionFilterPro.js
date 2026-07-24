@@ -1374,11 +1374,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                     // Check if it's active
                     const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
                     
+                    const isGrid = swatchLayout === 'Grid';
+                    
                     let vWidth, vHeight;
                     let labelFlexDir, labelJustify, textAlign, gap;
                     
-                    if (isImageItem) {
-                      // Image swatches (Length, Sleeve type) - Large image, text below
+                    if (isGrid) {
+                      // Grid layout (Length, Sleeve type) - Large image, text below
                       vWidth = '100%';
                       vHeight = '65px';
                       labelFlexDir = 'column';
@@ -1386,7 +1388,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                       textAlign = 'center';
                       gap = '6px';
                     } else {
-                      // Normal color swatches - small circle, text right
+                      // Normal list layout (Colors) - small circle, text right
                       vWidth = showLabel ? '22px' : '36px';
                       vHeight = showLabel ? '22px' : '36px';
                       labelFlexDir = showLabel ? 'row' : 'column';
@@ -1395,9 +1397,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                       gap = '8px';
                     }
 
-                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/contain no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
+                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/${isGrid ? 'contain' : 'cover'} no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
                     
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle && !isImageItem ? 'border-radius: 50% !important;' : 'border-radius: 4px !important;'} ${isActive && !isImageItem ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important; ${isActive && isImageItem ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle ? (showLabel && !isGrid ? 'border-radius: 50% !important;' : 'border-radius: 50% !important;') : 'border-radius: 4px !important;'} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 0 !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
 
 
                     return `
