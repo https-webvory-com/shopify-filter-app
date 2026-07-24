@@ -1904,6 +1904,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         activeFilters.minPrice = minV / rate;
         activeFilters.maxPrice = maxV / rate;
         activeFilters.page = 1;
+        renderBreadcrumbs();
         fetchAndRenderData();
       };
 
@@ -1940,6 +1941,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         const rate = getGlobalCurrencyRate();
         activeFilters.minPrice = parseFloat(rangeMin.value) / rate;
         activeFilters.page = 1;
+        renderBreadcrumbs();
         fetchAndRenderData();
       });
 
@@ -1958,6 +1960,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         const rate = getGlobalCurrencyRate();
         activeFilters.maxPrice = parseFloat(rangeMax.value) / rate;
         activeFilters.page = 1;
+        renderBreadcrumbs();
         fetchAndRenderData();
       });
     }
@@ -1991,6 +1994,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         arr.length = 0;
         if (val) arr.push(val);
 
+        renderBreadcrumbs();
         fetchAndRenderData();
       });
     });
@@ -2072,6 +2076,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         }
 
         // Fetch storefront updates in real-time (instant changes on desktop)
+        renderBreadcrumbs();
         fetchAndRenderData();
       });
     });
@@ -2103,8 +2108,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       page: 1
     };
 
+    renderBreadcrumbs();
+    const sidebarElement = document.getElementById('cfp-filter-sidebar');
+    if (sidebarElement) {
+      sidebarElement.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(cb => cb.checked = false);
+    }
     fetchAndRenderData();
-    closeSidebar();
   }
 
   function clearGroupFilter(type, key) {
@@ -2126,6 +2135,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       activeFilters.metafields[key] = [];
     }
     activeFilters.page = 1;
+    renderBreadcrumbs();
+    if (typeof cfpLastSettings !== 'undefined' && cfpLastSettings) {
+      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+    }
     fetchAndRenderData();
   }
 
@@ -2154,6 +2167,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       activeFilters.metafields[k] = activeFilters.metafields[k].filter(x => x !== val);
     }
     activeFilters.page = 1;
+    renderBreadcrumbs();
+    if (typeof cfpLastSettings !== 'undefined' && cfpLastSettings) {
+      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+    }
     fetchAndRenderData();
   }
 
