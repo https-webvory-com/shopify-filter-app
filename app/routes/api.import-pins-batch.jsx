@@ -110,7 +110,10 @@ export const action = async ({ request }) => {
         
         if (ruleType === "collection") {
           applyToAll = validCollections.length === 0;
-          ruleName = validCollections.length > 0 ? validCollections.join(", ") : "All Collections";
+          const originalTitles = (row.collectionTitles && row.collectionTitles.length > 0) 
+            ? row.collectionTitles.join(", ") 
+            : "";
+          ruleName = originalTitles || "All Collections";
         } else {
           ruleName = row.searchQuery || "All Searches";
         }
