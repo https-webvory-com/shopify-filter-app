@@ -1034,7 +1034,7 @@ document.addEventListener("DOMContentLoaded", function () {
       products.forEach(product => {
         let variantId = product.variants?.[0]?.id;
         if (variantId && typeof variantId === 'string') {
-          variantId = variantId.replace('gid://shopify/ProductVariant/', '');
+          variantId = variantId.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '');
         }
         let productId = product.id;
         if (productId && typeof productId === 'string') {
@@ -1099,7 +1099,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const colorName = v[optionKey];
           // We only take variants with images for swatches
           if (colorName && !uniqueColors.has(colorName) && v.imageUrl) {
-            const numericId = v.id ? v.id.replace('gid://shopify/ProductVariant/', '') : '';
+            const numericId = v.id ? v.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : '';
             uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId });
           }
         });

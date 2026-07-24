@@ -476,7 +476,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       products.forEach(product => {
         let variantId = product.variants?.[0]?.id || "";
         if (typeof variantId === 'string') {
-          variantId = variantId.replace('gid://shopify/ProductVariant/', '');
+          variantId = variantId.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '');
         }
         let productId = product.id || "";
         if (typeof productId === 'string') {
@@ -595,7 +595,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
               if (matchedVariant.imageUrl) {
                 variantImg = matchedVariant.imageUrl;
               }
-              matchedVariantId = matchedVariant.id ? matchedVariant.id.replace('gid://shopify/ProductVariant/', '') : null;
+              matchedVariantId = matchedVariant.id ? matchedVariant.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : null;
             }
           }
         }
@@ -605,7 +605,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
             const firstAvailable = product.variants.find(v => v.available === true);
             if (firstAvailable) {
-                matchedVariantId = firstAvailable.id ? firstAvailable.id.replace('gid://shopify/ProductVariant/', '') : null;
+                matchedVariantId = firstAvailable.id ? firstAvailable.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : null;
             }
         }
 
@@ -752,7 +752,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         product.variants.forEach(v => {
           const colorName = v[optionKey];
           if (colorName && v.imageUrl) {
-            const numericId = v.id ? v.id.replace('gid://shopify/ProductVariant/', '') : '';
+            const numericId = v.id ? v.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : '';
             
             let score = 0;
             if (expandedLower.length > 0) {

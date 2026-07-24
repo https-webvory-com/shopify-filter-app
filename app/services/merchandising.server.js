@@ -245,19 +245,19 @@ function checkRuleMatch(product, condition) {
   const valueString = condition.value || "";
   const values = valueString
     .split(",")
-    .map((s) => s.trim())
+    .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  if (field === "Vendor") return values.includes(product.vendor);
-  if (field === "Product type") return values.includes(product.productType);
+  if (field === "Vendor") return values.includes((product.vendor || "").toLowerCase());
+  if (field === "Product type") return values.includes((product.productType || "").toLowerCase());
   if (field === "Tags")
-    return product.tags && values.some((v) => product.tags.includes(v));
-  if (field === "Product") return values.includes(product.title);
+    return product.tags && product.tags.some((v) => values.includes((v || "").toLowerCase()));
+  if (field === "Product") return values.includes((product.title || "").toLowerCase());
   if (field === "Collections") {
     return (
       product.collections &&
       product.collections.some(
-        (c) => c.collection && values.includes(c.collection.title),
+        (c) => c.collection && values.includes((c.collection.title || "").toLowerCase()),
       )
     );
   }
@@ -272,9 +272,9 @@ function checkRuleMatch(product, condition) {
       product.variants &&
       product.variants.find(
         (v) =>
-          values.includes(v.option1) ||
-          values.includes(v.option2) ||
-          values.includes(v.option3),
+          values.includes((v.option1 || "").toLowerCase()) ||
+          values.includes((v.option2 || "").toLowerCase()) ||
+          values.includes((v.option3 || "").toLowerCase()),
       )
     );
   }
