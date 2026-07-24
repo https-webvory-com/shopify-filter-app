@@ -136,7 +136,10 @@ if (typeof window.CfpQuickView === 'undefined') {
     renderProductDetails(product) {
       const formattedPrice = (product.price / 100).toFixed(2);
       const comparePrice = product.compare_at_price ? (product.compare_at_price / 100).toFixed(2) : null;
-      const images = product.images && product.images.length > 0 ? product.images : (product.featured_image ? [product.featured_image] : []);
+      const allImages = product.images && product.images.length > 0 ? product.images : (product.featured_image ? [product.featured_image] : []);
+      // Cap to first 8 images to avoid dot overflow
+      const MAX_IMAGES = 8;
+      const images = allImages.slice(0, MAX_IMAGES);
       
       let imagesHtml = '';
       let dotsHtml = '';
@@ -153,16 +156,19 @@ if (typeof window.CfpQuickView === 'undefined') {
         imagesHtml = '<div style="padding: 50px;">No Image</div>';
       }
 
+      // Determine initial variant (first available, fallback to first)
+      let initialVariant = null;
+      if (product.variants && product.variants.length > 0) {
+        initialVariant = product.variants.find(v => v.available) || product.variants[0];
+      }
+      const initialVariantId = initialVariant ? initialVariant.id : '';
+      const initialVariantUrl = `${product.url}${initialVariantId ? '?variant=' + initialVariantId : ''}`;
+
       let optionsHtml = '';
       if (product.options && product.options.length > 0) {
         let defaultSelectedOptions = [];
-        if (product.variants && product.variants.length > 0) {
-          const firstAvailable = product.variants.find(v => v.available);
-          if (firstAvailable) {
-            defaultSelectedOptions = firstAvailable.options;
-          } else {
-            defaultSelectedOptions = product.variants[0].options;
-          }
+        if (initialVariant) {
+          defaultSelectedOptions = initialVariant.options;
         }
 
         product.options.forEach(option => {
@@ -255,7 +261,7 @@ if (typeof window.CfpQuickView === 'undefined') {
              : `<button class="cfp-qv-add-to-cart-btn">ADD TO CART</button>`}
           
           <div class="cfp-qv-view-details-row">
-            <a href="${product.url}" class="cfp-qv-view-details-link">View details</a>
+            <a href="${initialVariantUrl}" class="cfp-qv-view-details-link" id="cfp-qv-view-details-anchor">View details</a>
           </div>
         </div>
       `;
@@ -387,6 +393,12 @@ if (typeof window.CfpQuickView === 'undefined') {
         }
 
         this.selectedVariantId = matchingVariant.id;
+
+        // Fix: update View Details link so PDP opens the selected variant
+        const viewDetailsLink = this.modal.querySelector('#cfp-qv-view-details-anchor');
+        if (viewDetailsLink && product.url) {
+          viewDetailsLink.href = `${product.url}?variant=${matchingVariant.id}`;
+        }
       } else {
         // If variant doesn't exist
         const addToCartBtn = this.modal.querySelector('.cfp-qv-add-to-cart-btn');

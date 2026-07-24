@@ -581,7 +581,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                    if (vOpts.includes(val)) score++;
                });
                
-               const isAvailable = v.availableForSale === true;
+               const isAvailable = v.available === true;
 
                if (score > bestScore || (score === bestScore && score > 0 && !currentBestIsAvailable && isAvailable)) {
                    bestScore = score;
@@ -603,7 +603,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         // Fallback: If no matched variant from filters (or no filters applied),
         // try to select the first AVAILABLE variant so the PDP doesn't load a sold-out option by default.
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
-            const firstAvailable = product.variants.find(v => v.availableForSale === true);
+            const firstAvailable = product.variants.find(v => v.available === true);
             if (firstAvailable) {
                 matchedVariantId = firstAvailable.id ? firstAvailable.id.replace('gid://shopify/ProductVariant/', '') : null;
             }
