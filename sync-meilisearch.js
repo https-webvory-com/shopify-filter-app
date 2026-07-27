@@ -56,6 +56,7 @@ async function main() {
       collections: p.collections.map((c) => c.collectionId),
       available,
       createdAt: p.createdAt.getTime(),
+      bestSellingRank: p.bestSellingRank || 999999,
       ...formattedOptions,
       ...formattedMetafields,
     };
@@ -107,7 +108,7 @@ async function main() {
   ];
   await index.updateSearchableAttributes(searchableAttributes);
 
-  const sortableAttributes = ["priceMin", "createdAt"];
+  const sortableAttributes = ["priceMin", "createdAt", "bestSellingRank"];
   await index.updateSortableAttributes(sortableAttributes);
 
   await index.updateFaceting({ maxValuesPerFacet: 100000 });

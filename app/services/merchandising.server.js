@@ -511,8 +511,10 @@ function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "created-descending")
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-  // default / best-selling: preserve native collection order (stable sort)
-  return 0;
+  // default / best-selling: sort by bestSellingRank
+  const rankA = a.bestSellingRank !== undefined ? a.bestSellingRank : 999999;
+  const rankB = b.bestSellingRank !== undefined ? b.bestSellingRank : 999999;
+  return rankA - rankB;
 }
 
 /**

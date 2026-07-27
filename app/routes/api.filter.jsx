@@ -256,6 +256,9 @@ export const loader = async ({ request }) => {
     // ── 6. Build Meilisearch sort ──────────────────────────────────────
     let meiliSort = null;
     switch (sortBy) {
+      case "best-selling":
+        meiliSort = ["bestSellingRank:asc"];
+        break;
       case "title-ascending":
         meiliSort = ["title:asc"];
         break;
@@ -273,6 +276,11 @@ export const loader = async ({ request }) => {
         break;
       case "created-ascending":
         meiliSort = ["createdAt:asc"];
+        break;
+      default:
+        if (!isSearch || !searchQuery) {
+          meiliSort = ["bestSellingRank:asc"];
+        }
         break;
     }
 
@@ -382,7 +390,7 @@ export const loader = async ({ request }) => {
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
         "priceMin", "priceMax", "tags", "images", "variantPrices",
-        "merchandisingImage", "options", "status", "available", "createdAt",
+        "merchandisingImage", "options", "status", "available", "createdAt", "bestSellingRank",
         "metafield_custom.plus_size_collection_image",
         "metafield_custom.mother_of_the_bride_collection_image",
         "metafield_custom.mob_collection_image",

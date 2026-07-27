@@ -45,6 +45,7 @@ export async function formatAndPushToMeili(products) {
       available,
       status: p.status ? p.status.toUpperCase() : "ACTIVE",
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
+      bestSellingRank: p.bestSellingRank !== undefined ? p.bestSellingRank : 999999,
       // ✅ All product images — no limit, full gallery
       images: Array.isArray(p.images) ? p.images : [],
       // ✅ Product options array for storefront swatch rendering
@@ -142,7 +143,7 @@ async function updateMeiliSettings(shop) {
       ...Array.from(dynamicKeys),
     ];
 
-    const sortableAttributes = ["priceMin", "createdAt", "title"];
+    const sortableAttributes = ["priceMin", "createdAt", "title", "bestSellingRank"];
 
     await index.updateFilterableAttributes(filterableAttributes);
     await index.updateSearchableAttributes(searchableAttributes);
@@ -357,7 +358,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   const query = `#graphql
     query getProducts($cursor: String) {
-      products(first: 50, after: $cursor, query: "status:active") {
+      products(first: 50, after: $cursor, query: "status:active", sortKey: BEST_SELLING) {
         pageInfo {
           hasNextPage
           endCursor
@@ -485,6 +486,12 @@ async function processSyncChunk(jobId, shop, admin) {
       // Filter: only ACTIVE status AND published to Online Store (publishedAt is not null)
       const products = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt !== null);
 
+      // Track global best selling rank based on GraphQL BEST_SELLING order
+      let currentRank = (job.productsProcessed || 0) + 1;
+      products.forEach((p) => {
+        p.bestSellingRank = currentRank++;
+      });
+
       // Handle products that are ACTIVE but removed from the Online Store (publishedAt is null)
       const unpublishedProducts = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt === null);
       if (unpublishedProducts.length > 0) {
@@ -563,6 +570,7 @@ async function processSyncChunk(jobId, shop, admin) {
           available,
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: Date.now(),
+          bestSellingRank: p.bestSellingRank || 999999,
           images: p.images.nodes.map((img) => img.url), // all images, no limit
           options: p.options
             ? p.options.map((opt) => ({
@@ -695,6 +703,7 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       images: imageUrls,
       options: optionsList,
       status: product.status.toLowerCase(),
+      bestSellingRank: product.bestSellingRank || 999999,
       updatedAt: new Date(),
     },
     create: {
@@ -710,6 +719,7 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       images: imageUrls,
       options: optionsList,
       status: product.status.toLowerCase(),
+      bestSellingRank: product.bestSellingRank || 999999,
     },
   });
 

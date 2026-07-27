@@ -39,16 +39,18 @@ model Product {
   tags        String[]
   images      Json?
   status      String              @default("active")
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  options     Json?
-  collections ProductCollection[]
-  metafields  ProductMetafield[]
-  variants    Variant[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  bestSellingRank Int                 @default(999999)
+  options         Json?
+  collections     ProductCollection[]
+  metafields      ProductMetafield[]
+  variants        Variant[]
 
   @@index([shop, vendor])
   @@index([shop, productType])
   @@index([shop, priceMin, priceMax])
+  @@index([shop, bestSellingRank])
   @@index([options], type: Gin)
   @@index([productType(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([tags], type: Gin)
