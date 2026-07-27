@@ -508,9 +508,11 @@ function defaultSortComparison(a, b, sortBy) {
     return (parseFloat(b.priceMin) || 0) - (parseFloat(a.priceMin) || 0);
   if (sortBy === "created-ascending")
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  if (sortBy === "created-descending")
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-  // default: created-descending
-  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  // default / best-selling: preserve native collection order (stable sort)
+  return 0;
 }
 
 /**
