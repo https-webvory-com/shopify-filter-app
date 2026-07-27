@@ -692,12 +692,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       const priceVal = parseFloat(basePrice) * rate;
       const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       
+      const hasSaleTag = Array.isArray(product.tags) && product.tags.some(t => typeof t === 'string' && t.toLowerCase().trim().includes('sale'));
       let comparePrice = null;
       let onSale = false;
-      if (baseComparePrice) {
+      if (baseComparePrice && hasSaleTag) {
         const compareVal = parseFloat(baseComparePrice) * rate;
-        comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        onSale = compareVal > priceVal;
+        if (compareVal > priceVal) {
+          comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          onSale = true;
+        }
       }
 
       // Extract Color Swatches from Variants
@@ -918,9 +921,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text); z-index: 2;">Sold out</span>`;
            }
       } else if (onSale) {
-         const pos = s.sale_label_position || 'top-right';
+         const pos = s.sale_label_position || 'top-left';
            if (pos !== 'none') {
-             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg); color: var(--cfp-sale-text); z-index: 2;">Sale</span>`;
+             badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg, #e11d48); color: var(--cfp-sale-text, #ffffff); z-index: 2;">ON SALE</span>`;
            }
       }
 
