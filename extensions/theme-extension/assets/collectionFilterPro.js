@@ -811,6 +811,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
                 activeIndex = foundIndex;
                 colorWasFiltered = true;
              }
+          } else if (product.merchandisingImage) {
+             const merchBase = product.merchandisingImage.split('?')[0].replace(/^https?:/, '');
+             const foundIndex = colorsArray.findIndex(c => {
+                 if (!c[1] || !c[1].imgUrl) return false;
+                 const swatchBase = c[1].imgUrl.split('?')[0].replace(/^https?:/, '');
+                 return swatchBase.includes(merchBase) || merchBase.includes(swatchBase);
+             });
+             if (foundIndex !== -1) {
+                activeIndex = foundIndex;
+                colorWasFiltered = true;
+             }
           }
            
            if (activeIndex === 0 && matchedVariant && typeof optionKey !== 'undefined') {
