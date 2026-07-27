@@ -379,6 +379,20 @@ export function applyMerchandisingRules(
           : pinningRule.products;
       if (Array.isArray(parsedPins)) {
         pinnedIds = parsedPins.map((p) => p.id);
+
+        // Assign pinned image/imageUrl to merchandisingImage for each pinned product
+        parsedPins.forEach((pinnedItem) => {
+          if (!pinnedItem || !pinnedItem.id) return;
+          const targetProd = products.find((p) => p.id === pinnedItem.id);
+          if (targetProd) {
+            const pinnedImg = pinnedItem.image || pinnedItem.imageUrl || pinnedItem.src;
+            if (pinnedImg && typeof pinnedImg === "string") {
+              targetProd.merchandisingImage = pinnedImg;
+            } else if (pinnedImg && typeof pinnedImg === "object" && (pinnedImg.src || pinnedImg.url)) {
+              targetProd.merchandisingImage = pinnedImg.src || pinnedImg.url;
+            }
+          }
+        });
       }
     } catch (e) {
       console.error("Error parsing pinned products:", e);
