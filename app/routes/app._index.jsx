@@ -17,15 +17,15 @@ export const loader = async ({ request }) => {
     where: { shop: session.shop, status: "IN_PROGRESS" },
   });
 
-  // Crash recovery: if the job hasn't been updated in 30 minutes, it's stuck â†’ mark FAILED (resumable)
+  // Crash recovery: if the job hasn't been updated in 1 minute, it's stuck -> mark FAILED (resumable)
   if (activeSyncJob) {
     const now = new Date();
     const lastUpdate = new Date(activeSyncJob.updatedAt);
     const diffMinutes = (now - lastUpdate) / 1000 / 60;
-    if (diffMinutes > 30) {
+    if (diffMinutes > 1) {
       await prisma.syncJob.update({
         where: { id: activeSyncJob.id },
-        data: { status: "FAILED" }   // FAILED = resumable, not lost
+        data: { status: "FAILED" }
       });
       activeSyncJob = null;
     }
@@ -70,9 +70,10 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const actionType = formData.get("actionType");
 
-  if (actionType === "sync") {
+  if (actionType === "sync" || actionType === "force_sync") {
     try {
-      const result = await syncProducts(session.shop, admin, session);
+      const forceFresh = actionType === "force_sync";
+      const result = await syncProducts(session.shop, admin, session, forceFresh);
       return { success: true, message: result.message, type: "sync" };
     } catch (e) {
       console.error("Sync error:", e);
@@ -137,6 +138,9 @@ export default function Index() {
 
   const triggerSync = () =>
     syncFetcher.submit({ actionType: "sync" }, { method: "POST" });
+
+  const triggerForceSync = () =>
+    syncFetcher.submit({ actionType: "force_sync" }, { method: "POST" });
 
   // Since sync is now background, we just show the initial loader count
   const currentCount = syncedProductsCount;
@@ -518,84 +522,108 @@ export default function Index() {
             )}
           </div>
 
-          <button
-            onClick={triggerSync}
-            disabled={isSyncing}
-            style={{
-              background: isSyncing ? "#9ca3af" : "#ffffff",
-              color: isSyncing ? "#ffffff" : "#5B21B6",
-              border: isSyncing ? "none" : "1px solid #d8b4fe",
-              padding: "10px 20px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: "600",
-              cursor: isSyncing ? "not-allowed" : "pointer",
-              boxShadow: isSyncing
-                ? "none"
-                : "0 2px 8px rgba(91, 33, 182, 0.08)",
-              transition: "all 0.2s ease",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-            onMouseEnter={(e) => {
-              if (!isSyncing) {
-                e.currentTarget.style.background = "#f3e8ff";
-                e.currentTarget.style.borderColor = "#c084fc";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isSyncing) {
-                e.currentTarget.style.background = "#ffffff";
-                e.currentTarget.style.borderColor = "#d8b4fe";
-              }
-            }}
-          >
-            {isSyncing ? (
-              <>
-                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={triggerSync}
+              disabled={isSyncing}
+              style={{
+                background: isSyncing ? "#9333ea" : "#ffffff",
+                color: isSyncing ? "#ffffff" : "#5B21B6",
+                border: isSyncing ? "none" : "1px solid #d8b4fe",
+                padding: "10px 20px",
+                borderRadius: "10px",
+                fontSize: "14px",
+                fontWeight: "600",
+                cursor: isSyncing ? "not-allowed" : "pointer",
+                boxShadow: isSyncing
+                  ? "none"
+                  : "0 2px 8px rgba(91, 33, 182, 0.08)",
+                transition: "all 0.2s ease",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+              onMouseEnter={(e) => {
+                if (!isSyncing) {
+                  e.currentTarget.style.background = "#f3e8ff";
+                  e.currentTarget.style.borderColor = "#c084fc";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSyncing) {
+                  e.currentTarget.style.background = "#ffffff";
+                  e.currentTarget.style.borderColor = "#d8b4fe";
+                }
+              }}
+            >
+              {isSyncing ? (
+                <>
+                  <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                  <svg
+                    style={{
+                      animation: "spin 1s linear infinite",
+                      width: "18px",
+                      height: "18px",
+                    }}
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      strokeOpacity="0.3"
+                    ></circle>
+                    <path
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </>
+              ) : (
                 <svg
-                  style={{
-                    animation: "spin 1s linear infinite",
-                    width: "18px",
-                    height: "18px",
-                  }}
-                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
                   fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    strokeOpacity="0.3"
-                  ></circle>
                   <path
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   ></path>
                 </svg>
-              </>
-            ) : (
-              <svg
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+              )}
+              {isSyncing ? "Syncing..." : resumableJob ? "▶ Resume Sync" : "Sync Products from Shopify"}
+            </button>
+
+            {resumableJob && !isSyncing && (
+              <button
+                onClick={triggerForceSync}
+                style={{
+                  background: "#7c3aed",
+                  color: "#ffffff",
+                  border: "none",
+                  padding: "10px 16px",
+                  borderRadius: "10px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                title="Start a fresh sync from product 1 (recommended after best-selling rank updates)"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                ></path>
-              </svg>
+                🔄 Restart Full Sync
+              </button>
             )}
-            {isSyncing ? "Syncing..." : resumableJob ? "▶ Resume Sync" : "Sync Products from Shopify"}
-          </button>
+          </div>
         </div>
 
         {/* Set Up Guide */}

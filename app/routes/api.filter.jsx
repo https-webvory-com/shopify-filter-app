@@ -257,7 +257,7 @@ export const loader = async ({ request }) => {
     let meiliSort = null;
     switch (sortBy) {
       case "best-selling":
-        meiliSort = ["bestSellingRank:asc"];
+        meiliSort = ["bestSellingRank:asc", "createdAt:desc"];
         break;
       case "title-ascending":
         meiliSort = ["title:asc"];
@@ -279,7 +279,7 @@ export const loader = async ({ request }) => {
         break;
       default:
         if (!isSearch || !searchQuery) {
-          meiliSort = ["bestSellingRank:asc"];
+          meiliSort = ["bestSellingRank:asc", "createdAt:desc"];
         }
         break;
     }

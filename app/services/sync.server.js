@@ -253,16 +253,17 @@ async function autoSeedOptionFilters(shop) {
  * @param {string} shop - The shop domain
  * @param {object} admin - The authenticated Shopify Admin API client
  */
-export async function syncProducts(shop, admin, session = null) {
-  console.log(`CFP: Initializing background product sync for ${shop}...`);
+export async function syncProducts(shop, admin, session = null, forceFresh = false) {
+  console.log(`CFP: Initializing background product sync for ${shop} (forceFresh=${forceFresh})...`);
 
   // ── Resume or Fresh Start ──────────────────────────────────────────
-  // Check if there's a previously FAILED job with a saved cursor → resume it
-  // Otherwise delete old jobs and start fresh
-  let job = await prisma.syncJob.findFirst({
-    where: { shop, status: "FAILED" },
-    orderBy: { createdAt: "desc" },
-  });
+  let job = null;
+  if (!forceFresh) {
+    job = await prisma.syncJob.findFirst({
+      where: { shop, status: "FAILED" },
+      orderBy: { createdAt: "desc" },
+    });
+  }
 
   if (job && job.cursor) {
     // Resume from where it stopped
@@ -276,7 +277,6 @@ export async function syncProducts(shop, admin, session = null) {
     await prisma.syncJob.deleteMany({ where: { shop } });
 
     // Fetch total active products count for progress display
-    // Using REST API — GraphQL productsCount caps at 10,000 (inaccurate for large stores)
     let totalProducts = null;
     try {
       const accessToken = session?.accessToken;
@@ -288,7 +288,7 @@ export async function syncProducts(shop, admin, session = null) {
         const countData = await countRes.json();
         totalProducts = countData?.count ?? null;
       }
-    } catch (e) { /* non-critical — progress bar will just not show total */ }
+    } catch (e) { /* non-critical */ }
 
     job = await prisma.syncJob.create({
       data: {
@@ -307,9 +307,9 @@ export async function syncProducts(shop, admin, session = null) {
 
   return {
     jobId: job.id,
-    message: job.cursor
+    message: !forceFresh && job.cursor
       ? `Resuming sync from product ${job.productsProcessed}...`
-      : "Sync started in background",
+      : "Full sync started in background",
   };
 }
 
@@ -358,7 +358,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   const query = `#graphql
     query getProducts($cursor: String) {
-      products(first: 50, after: $cursor, query: "status:active", sortKey: BEST_SELLING) {
+      products(first: 50, after: $cursor, query: "status:active") {
         pageInfo {
           hasNextPage
           endCursor
@@ -615,18 +615,17 @@ async function processSyncChunk(jobId, shop, admin) {
             await smartUpsertProduct(shop, product, prisma);
           }
         })(),
-        // Meili push (no DB re-read needed anymore!)
-        meiliClient
-          .index("products")
-          .addDocuments(meiliDocs)
-          .then((task) => {
+        // Meili push (gracefully handled if remote VPS disk is full)
+        (async () => {
+          try {
+            const task = await meiliClient.index("products").addDocuments(meiliDocs);
             console.log(
               `CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`,
             );
-          })
-          .catch((e) => {
-            console.error("CFP: Meilisearch push failed", e);
-          }),
+          } catch (e) {
+            console.error("CFP: Meilisearch push failed (check VPS disk space):", e.message || e);
+          }
+        })(),
       ]);
 
       // Update Job State
