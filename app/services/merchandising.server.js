@@ -185,8 +185,9 @@ export async function getActivePinningRuleForSearch(
 
 /**
  * Helper to check if a product matches a rule condition.
+ * Supports Merged Values rules expansion for options like Color/Size.
  */
-function checkRuleMatch(product, condition) {
+function checkRuleMatch(product, condition, mergedValues = []) {
   const field = condition.field || "";
 
   // Handle Min/Max Range conditions
@@ -243,23 +244,62 @@ function checkRuleMatch(product, condition) {
 
   // Handle Exact/Comma-separated values
   const valueString = condition.value || "";
-  const values = valueString
+  const rawValues = valueString
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  if (field === "Vendor") return values.includes((product.vendor || "").toLowerCase());
-  if (field === "Product type") return values.includes((product.productType || "").toLowerCase());
+  let mergedValuesExpanded = [];
+  if (
+    mergedValues &&
+    mergedValues.length > 0 &&
+    (field === "Color (product option)" ||
+      field === "Size (product option)" ||
+      field.includes("(product option)"))
+  ) {
+    for (const val of rawValues) {
+      const matchingRules = mergedValues.filter(
+        (m) => (m.targetValue || "").toLowerCase().trim() === val
+      );
+      for (const r of matchingRules) {
+        if (Array.isArray(r.sourceValues)) {
+          for (const sv of r.sourceValues) {
+            const svLower = (sv || "").toLowerCase().trim();
+            if (svLower && !rawValues.includes(svLower)) {
+              mergedValuesExpanded.push(svLower);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (field === "Vendor")
+    return rawValues.includes((product.vendor || "").toLowerCase())
+      ? { matchType: "exact" }
+      : false;
+  if (field === "Product type")
+    return rawValues.includes((product.productType || "").toLowerCase())
+      ? { matchType: "exact" }
+      : false;
   if (field === "Tags")
-    return product.tags && product.tags.some((v) => values.includes((v || "").toLowerCase()));
-  if (field === "Product") return values.includes((product.title || "").toLowerCase());
+    return product.tags &&
+      product.tags.some((v) => rawValues.includes((v || "").toLowerCase()))
+      ? { matchType: "exact" }
+      : false;
+  if (field === "Product")
+    return rawValues.includes((product.title || "").toLowerCase())
+      ? { matchType: "exact" }
+      : false;
   if (field === "Collections") {
-    return (
-      product.collections &&
+    return product.collections &&
       product.collections.some(
-        (c) => c.collection && values.includes((c.collection.title || "").toLowerCase()),
+        (c) =>
+          c.collection &&
+          rawValues.includes((c.collection.title || "").toLowerCase()),
       )
-    );
+      ? { matchType: "exact" }
+      : false;
   }
 
   if (
@@ -268,15 +308,50 @@ function checkRuleMatch(product, condition) {
     field === "Size (product option)" ||
     field.includes("(product option)")
   ) {
-    return (
-      product.variants &&
-      product.variants.find(
-        (v) =>
-          values.some((val) => (v.option1 || "").toLowerCase().trim().includes(val)) ||
-          values.some((val) => (v.option2 || "").toLowerCase().trim().includes(val)) ||
-          values.some((val) => (v.option3 || "").toLowerCase().trim().includes(val))
-      )
+    if (!product.variants || product.variants.length === 0) return false;
+
+    const matchesList = (v, list) =>
+      list.some(
+        (val) =>
+          (v.option1 || "").toLowerCase().trim() === val ||
+          (v.option1 || "").toLowerCase().trim().includes(val) ||
+          (v.option2 || "").toLowerCase().trim() === val ||
+          (v.option2 || "").toLowerCase().trim().includes(val) ||
+          (v.option3 || "").toLowerCase().trim() === val ||
+          (v.option3 || "").toLowerCase().trim().includes(val),
+      );
+
+    // Priority 1: Check for Exact Match (e.g. pure "Black")
+    let exactVariant = product.variants.find(
+      (v) => v.imageUrl && matchesList(v, rawValues),
     );
+    if (!exactVariant)
+      exactVariant = product.variants.find((v) => matchesList(v, rawValues));
+    if (exactVariant) {
+      return {
+        variant: exactVariant,
+        imageUrl: exactVariant.imageUrl,
+        matchType: "exact",
+      };
+    }
+
+    // Priority 2: Check for Merged Value Match (e.g. "Black/Gold", "Charcoal/Black")
+    if (mergedValuesExpanded.length > 0) {
+      let mergedVariant = product.variants.find(
+        (v) => v.imageUrl && matchesList(v, mergedValuesExpanded),
+      );
+      if (!mergedVariant)
+        mergedVariant = product.variants.find((v) =>
+          matchesList(v, mergedValuesExpanded),
+        );
+      if (mergedVariant) {
+        return {
+          variant: mergedVariant,
+          imageUrl: mergedVariant.imageUrl,
+          matchType: "merged",
+        };
+      }
+    }
   }
 
   return false;
@@ -285,7 +360,13 @@ function checkRuleMatch(product, condition) {
 /**
  * Applies merchandising rules and pinning rules to an array of products and returns the sorted array.
  */
-export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
+export function applyMerchandisingRules(
+  products,
+  rule,
+  sortBy,
+  pinningRule,
+  mergedValues = [],
+) {
   let filteredProducts = products;
 
   // Parse pinned product IDs early so we can protect them from being excluded
@@ -311,7 +392,8 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
       if (pinnedIds.includes(p.id)) return true;
 
       const matchesExclude = rule.conditions.some(
-        (cond) => cond.action === "Exclude" && checkRuleMatch(p, cond),
+        (cond) =>
+          cond.action === "Exclude" && checkRuleMatch(p, cond, mergedValues),
       );
       if (matchesExclude) return false;
 
@@ -324,20 +406,26 @@ export function applyMerchandisingRules(products, rule, sortBy, pinningRule) {
       rule.conditions.forEach((cond) => {
         if (cond.action === "Include" || cond.action === "Exclude") return;
 
-        const matchResult = checkRuleMatch(p, cond);
+        const matchResult = checkRuleMatch(p, cond, mergedValues);
         if (matchResult) {
-          if (
+          const isExact =
             typeof matchResult === "object" &&
-            matchResult.imageUrl &&
-            !p.merchandisingImage
-          ) {
-            p.merchandisingImage = matchResult.imageUrl;
+            matchResult.matchType === "exact";
+          const imageUrl =
+            typeof matchResult === "object" ? matchResult.imageUrl : null;
+
+          if (imageUrl && !p.merchandisingImage) {
+            p.merchandisingImage = imageUrl;
           }
 
-          if (cond.action === "Boost") p.merchandisingScore += 1000;
-          else if (cond.action === "Bury") p.merchandisingScore -= 1000;
-          else if (cond.action === "Pin") p.merchandisingScore += 5000;
-          else if (cond.action === "Dynamic") {
+          if (cond.action === "Boost") {
+            // Tier 1 Exact match gets higher score (+2000) than Tier 2 Merged match (+1000)
+            p.merchandisingScore += isExact ? 2000 : 1000;
+          } else if (cond.action === "Bury") {
+            p.merchandisingScore -= isExact ? 2000 : 1000;
+          } else if (cond.action === "Pin") {
+            p.merchandisingScore += 5000;
+          } else if (cond.action === "Dynamic") {
             const num = parseFloat(cond.operand);
             if (!isNaN(num)) {
               if (cond.operator === "Add") p.merchandisingScore += num;

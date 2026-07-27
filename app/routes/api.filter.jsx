@@ -487,6 +487,7 @@ export const loader = async ({ request }) => {
       activeRule,
       sortBy,
       activePinningRule,
+      mergedValues,
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
