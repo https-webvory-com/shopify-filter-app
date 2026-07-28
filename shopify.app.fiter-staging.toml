@@ -1,20 +1,23 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "f0784c29e822aa5959ef9f0417095b8c"
-application_url = "https://foster-classifieds-accept-southern.trycloudflare.com"
-embedded = true
 name = "fiter-staging"
+application_url = "https://aisearchfilter.webvory.com"
+embedded = true
 
 [webhooks]
 api_version = "2026-07"
+ [[webhooks.subscriptions]]
+  uri = "/webhooks/orders"
+  topics = [ "orders/paid", "orders/cancelled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/collections"
-  topics = [
-  "collections/update",
-  "collections/create",
-  "collections/delete"
-]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products"
+  topics = [ "products/delete", "products/create", "products/update" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
@@ -33,25 +36,20 @@ api_version = "2026-07"
   topics = [ "app/uninstalled" ]
 
   [[webhooks.subscriptions]]
-  uri = "/webhooks/products"
-  topics = [ "products/delete", "products/create", "products/update" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
-
-#[app_proxy]
-#url = "https://foster-classifieds-accept-southern.trycloudflare.com"
-#subpath = "collection-filter-pro"
-#prefix = "apps"
+  uri = "/webhooks/collections"
+  topics = [
+  "collections/create",
+  "collections/update",
+  "collections/delete"
+]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products,write_themes"
+scopes = "read_inventory,read_locations,read_themes,write_metaobject_definitions,write_metaobjects,write_products,write_themes,read_orders"
 
 [auth]
 redirect_urls = [
-  "https://foster-classifieds-accept-southern.trycloudflare.com/api/auth"
+  "https://aisearchfilter.webvory.com/api/auth"
 ]
 
 [build]

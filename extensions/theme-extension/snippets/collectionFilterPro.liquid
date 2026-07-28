@@ -250,6 +250,7 @@
       </div>
       <div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown">
         <div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div>
+        <div class="cfp-custom-sort__option" data-value="trending">Trending</div>
         <div class="cfp-custom-sort__option" data-value="price-ascending">Price: Low to High</div>
         <div class="cfp-custom-sort__option" data-value="price-descending">Price: High to Low</div>
         <div class="cfp-custom-sort__option" data-value="created-descending">Date: New to Old</div>
@@ -260,7 +261,7 @@
 
 <div id="cfp-breadcrumbs" class="cfp-breadcrumbs" style="display:none; width: 100%; margin-bottom: 20px;"></div>
 
-<!-- Static skeleton removed, will be rendered via JS into the products container -->
+<!-- Skeleton loader is managed dynamically inside product grid by JS -->
 
 {%- assign cfp_collection_handle = collection.handle | default: '' -%}
 {%- assign cfp_collection_id = collection.id | default: '' -%}
@@ -273,9 +274,9 @@
 <div id="cfp-sidebar" class="cfp-sidebar" data-shop="{{ shop.permanent_domain }}" data-template-name="{{ template.name }}" data-search-terms="{{ search.terms | escape }}" data-collection-id="{{ cfp_collection_id }}" data-collection-handle="{{ cfp_collection_handle }}" role="complementary" aria-label="Product Filters">
   <div class="cfp-sidebar__header">
     <div class="cfp-sidebar__header-info">
-      <span class="cfp-sidebar__title">
+      <h2 class="cfp-sidebar__title" style="font-size: 18px; margin: 0; font-weight: 600;">
         {{ filter_heading | default: 'Filters' }}
-      </span>
+      </h2>
     </div>
     <button id="cfp-close-btn" class="cfp-close-btn" aria-label="Close filters">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -321,7 +322,36 @@
     sold_out_bg_color: {{ sold_out_bg_color | default: "#000000" | json }},
     sold_out_text_color: {{ sold_out_text_color | default: "#FFFFFF" | json }}
   };
+
+  /* ⚡ LIGHTHOUSE OPTIMIZATION: Fire API request immediately in inline script */
+  (function() {
+    try {
+      var shop = "{{ shop.permanent_domain }}";
+      var collHandle = "{{ cfp_collection_handle }}";
+      var collId = "{{ cfp_collection_id }}";
+      var params = new URLSearchParams(window.location.search);
+      params.set('shop', shop);
+      if (collHandle) params.set('collectionHandle', collHandle);
+      if (collId && !collHandle) params.set('collectionId', collId);
+      if (window.Shopify && window.Shopify.country) params.set('country', window.Shopify.country);
+      
+      var apiDomain = 'https://aisearchfilter.webvory.com';
+        
+      window._cfpEarlyFetch = fetch(apiDomain + '/api/filter?' + params.toString())
+        .then(function(r) { return r.json(); })
+        .catch(function(e) { return null; });
+    } catch(e) {}
+  })();
 </script>
+
+<link rel="dns-prefetch" href="https://cdn.shopify.com" />
+
+{%- if collection and collection.products.first -%}
+  {%- assign cfp_lcp_img = collection.products.first.featured_image -%}
+  {%- if cfp_lcp_img -%}
+    <link rel="preload" as="image" href="{{ cfp_lcp_img | image_url: width: 360 }}" imagesrcset="{{ cfp_lcp_img | image_url: width: 180 }} 180w, {{ cfp_lcp_img | image_url: width: 360 }} 360w, {{ cfp_lcp_img | image_url: width: 540 }} 540w" imagesizes="(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw" fetchpriority="high">
+  {%- endif -%}
+{%- endif -%}
 
 <style>
   :root {

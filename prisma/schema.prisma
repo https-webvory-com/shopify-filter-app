@@ -41,7 +41,15 @@ model Product {
   status      String              @default("active")
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  bestSellingRank Int                 @default(999999)
+  
+  // Sales Metrics for Rankings
+  unitsSold60Days  Int      @default(0)
+  unitsSold7Days   Int      @default(0)
+  grossRevenue     Float    @default(0.0)
+  orderCount       Int      @default(0)
+  bestSellingScore Float    @default(0.0)
+  trendingScore    Float    @default(0.0)
+
   options         Json?
   collections     ProductCollection[]
   metafields      ProductMetafield[]
@@ -50,7 +58,6 @@ model Product {
   @@index([shop, vendor])
   @@index([shop, productType])
   @@index([shop, priceMin, priceMax])
-  @@index([shop, bestSellingRank])
   @@index([options], type: Gin)
   @@index([productType(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([tags], type: Gin)

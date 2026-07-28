@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import meiliClient from "./meiliClient.server";
+import { invalidateShop } from "./shopCache.server";
 
 /**
  * Format products and push to Meilisearch index.
@@ -90,7 +91,7 @@ export async function formatAndPushToMeili(products) {
 /**
  * Extract dynamic keys from Prisma and update Meilisearch index settings.
  */
-async function updateMeiliSettings(shop) {
+export async function updateMeiliSettings(shop) {
   try {
     const index = meiliClient.index("products");
     const dynamicKeys = new Set();
@@ -143,7 +144,7 @@ async function updateMeiliSettings(shop) {
       ...Array.from(dynamicKeys),
     ];
 
-    const sortableAttributes = ["priceMin", "createdAt", "title", "bestSellingRank"];
+    const sortableAttributes = ["priceMin", "createdAt", "title", "bestSellingScore", "trendingScore"];
 
     await index.updateFilterableAttributes(filterableAttributes);
     await index.updateSearchableAttributes(searchableAttributes);
@@ -486,12 +487,6 @@ async function processSyncChunk(jobId, shop, admin) {
       // Filter: only ACTIVE status AND published to Online Store (publishedAt is not null)
       const products = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt !== null);
 
-      // Track global best selling rank based on GraphQL BEST_SELLING order
-      let currentRank = (job.productsProcessed || 0) + 1;
-      products.forEach((p) => {
-        p.bestSellingRank = currentRank++;
-      });
-
       // Handle products that are ACTIVE but removed from the Online Store (publishedAt is null)
       const unpublishedProducts = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt === null);
       if (unpublishedProducts.length > 0) {
@@ -570,7 +565,8 @@ async function processSyncChunk(jobId, shop, admin) {
           available,
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: Date.now(),
-          bestSellingRank: p.bestSellingRank || 999999,
+          bestSellingScore: p.bestSellingScore || 0.0,
+          trendingScore: p.trendingScore || 0.0,
           images: p.images.nodes.map((img) => img.url), // all images, no limit
           options: p.options
             ? p.options.map((opt) => ({
@@ -658,6 +654,12 @@ async function processSyncChunk(jobId, shop, admin) {
     try {
       await autoSeedOptionFilters(shop);
       await updateMeiliSettings(shop);
+      
+      // Calculate and update Trending/BestSelling scores
+      const { syncHistoricalOrders } = await import("./orders.server.js");
+      await syncHistoricalOrders(shop);
+
+      await invalidateShop(shop);
       await prisma.syncJob.update({
         where: { id: jobId },
         data: { status: "COMPLETED" },
@@ -702,7 +704,6 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       images: imageUrls,
       options: optionsList,
       status: product.status.toLowerCase(),
-      bestSellingRank: product.bestSellingRank || 999999,
       updatedAt: new Date(),
     },
     create: {
@@ -718,7 +719,6 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       images: imageUrls,
       options: optionsList,
       status: product.status.toLowerCase(),
-      bestSellingRank: product.bestSellingRank || 999999,
     },
   });
 
@@ -1031,22 +1031,29 @@ export async function syncSingleProduct(shop, admin, productId) {
     });
   }
 
-  const meiliDoc = {
-    id: product.id.split("/").pop(),
-    shop,
-    title: product.title || "",
-    handle: product.handle || "",
-    vendor: product.vendor || "",
-    productType: product.productType || "",
-    priceMin,
-    priceMax,
-    tags: product.tags || [],
-    collections: product.collections.nodes.map((c) => c.id),
-    collection_titles: product.collections.nodes.map((c) => c.title),
-    available,
-    status: (product.status || "ACTIVE").toUpperCase(),
-    createdAt: Date.now(),
-    images: product.images.nodes.map((img) => img.url), // all images, no limit
+    const existingDbProduct = await prisma.product.findUnique({
+      where: { id: product.id },
+      select: { bestSellingScore: true, trendingScore: true }
+    });
+
+    const meiliDoc = {
+      id: product.id.split("/").pop(),
+      shop,
+      title: product.title || "",
+      handle: product.handle || "",
+      vendor: product.vendor || "",
+      productType: product.productType || "",
+      priceMin,
+      priceMax,
+      tags: product.tags || [],
+      collections: product.collections.nodes.map((c) => c.id),
+      collection_titles: product.collections.nodes.map((c) => c.title),
+      available,
+      status: (product.status || "ACTIVE").toUpperCase(),
+      createdAt: Date.now(),
+      bestSellingScore: existingDbProduct?.bestSellingScore || 0.0,
+      trendingScore: existingDbProduct?.trendingScore || 0.0,
+      images: product.images.nodes.map((img) => img.url), // all images, no limit
     options: product.options
       ? product.options.map((opt) => ({
           name: opt.name,

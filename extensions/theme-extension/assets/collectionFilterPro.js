@@ -3,7 +3,7 @@
  * Dynamic UI Injection and Relative App Proxy Querying
  */ 
 
-var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
+var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
 (function () {
   'use strict';
@@ -71,7 +71,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
   // Production build - debug logs removed
 
   // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const PAGE_SIZE = 28;
+  const PAGE_SIZE = 25;
+  let activeFetchController = null;
 
   let activeFilters = {
     vendors: [],
@@ -205,8 +206,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
 
   // â”€â”€ 2. Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let activeMerchandisingRule = null;
+  let isInitializing = false;
 
-    async function init() {
+  async function init() {
+    if (isInitializing || window._cfpInitStarted) return;
     if (!ensureSidebarReady()) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });
@@ -215,6 +218,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       console.warn('[CFP] Sidebar not found, aborting initialization');
       return;
     }
+
+    isInitializing = true;
+    window._cfpInitStarted = true;
     
     initDataVariables();
     parseURLState();
@@ -258,7 +264,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
   // â”€â”€ 3. Fetch data from Shopify App Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   
   async function fetchAndRenderData(isLoadMore = false) {
-      syncStateToURL(); // Sync URL
+    if (activeFetchController) {
+      activeFetchController.abort();
+    }
+    activeFetchController = new AbortController();
+    const fetchSignal = activeFetchController.signal;
+
+    syncStateToURL(); // Sync URL
 
     if (window._cfpInitialized && globalSettings && globalSettings.scrollUpOnFilterValuesChange && !globalSettings.horizontalFilters) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -326,8 +338,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
         if (!isLoadMore) {
           renderSkeleton();
         }
-        const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
-      const data = await response.json();
+        let data = null;
+        if (window._cfpEarlyFetch && !isLoadMore && activeFilters.page === 1) {
+          try {
+            data = await window._cfpEarlyFetch;
+            delete window._cfpEarlyFetch;
+          } catch(e) {}
+        }
+        if (!data) {
+          const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, { signal: fetchSignal });
+          data = await response.json();
+        }
 
       console.log('[CFP] API Response:', data);
 
@@ -409,29 +430,38 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
 
   // â”€â”€ 4. Render Products Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  function renderSkeleton() {
-    // Hide pagination during loading
-    const oldPagination = document.querySelector('.cfp-load-more-container');
-    if (oldPagination) oldPagination.style.display = 'none';
+  function getProductContainer() {
+    let mainContent = document.querySelector('.cfp-main-content');
+    if (!mainContent) {
+      if (typeof initLayoutWrapper === 'function') {
+        try { initLayoutWrapper(); } catch(e) {}
+      }
+      mainContent = document.querySelector('.cfp-main-content') || document.querySelector('.cfp-layout-wrapper');
+    }
 
-    // Ensure products container exists
     let productContainer = document.getElementById('cfp-products-container');
     if (!productContainer) {
       productContainer = document.createElement('div');
       productContainer.id = 'cfp-products-container';
       productContainer.className = 'cfp-products-grid';
-      
-      const wrapper = document.querySelector('.cfp-layout-wrapper');
-      if (wrapper) {
-        wrapper.appendChild(productContainer);
+      if (mainContent) {
+        mainContent.appendChild(productContainer);
       } else {
-        const main = document.querySelector('.cfp-v1-app-container') || document.body;
-        main.appendChild(productContainer);
+        const appMain = document.querySelector('.cfp-v1-app-container') || document.body;
+        appMain.appendChild(productContainer);
       }
     }
+    return productContainer;
+  }
 
-    // Inject the real skeleton using the exact same classes as real products
-    // This ensures the browser treats them exactly like real products and doesn't collapse them
+  function renderSkeleton() {
+    // Hide pagination during loading
+    const oldPagination = document.querySelector('.cfp-load-more-container');
+    if (oldPagination) oldPagination.style.display = 'none';
+
+    const productContainer = getProductContainer();
+
+    // Inject skeleton cards inside the exact container where products will load
     let skeletonHtml = '';
     for (let i = 0; i < 8; i++) {
       skeletonHtml += `
@@ -446,29 +476,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
       `;
     }
     productContainer.innerHTML = skeletonHtml;
-    
     productContainer.style.setProperty('display', 'grid', 'important');
   }
 
-
   function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
-    // Get or create our dedicated products container (a plain div, never Dawn's ul)
-    let productContainer = document.getElementById('cfp-products-container');
-    if (!productContainer) {
-      productContainer = document.createElement('div');
-      productContainer.id = 'cfp-products-container';
-      productContainer.className = 'cfp-products-grid';
-      const wrapper = document.querySelector('.cfp-layout-wrapper');
-      if (wrapper) {
-        wrapper.appendChild(productContainer);
-      } else {
-        const main = document.querySelector('.cfp-v1-app-container') || document.body;
-        main.appendChild(productContainer);
-      }
-    }
-    const grid = productContainer;
-    // Make products container visible (skeleton may have hidden it)
+    const grid = getProductContainer();
     grid.style.display = 'grid';
 
     // Inject products into Wishlist App's global pageDataMap if it exists
@@ -548,7 +561,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
     grid.classList.add('cfp-products-grid');
 
     
-    const productsHtml = products.map(product => {
+    const productsHtml = products.map((product, productIndex) => {
 
       let variantImg = null;
       let matchedVariantId = null;
@@ -641,17 +654,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
             }
         }
   
-        // Resize shopify image URL to avoid massive memory usage on storefront
-        const getResizedImageUrl = (url, size = '600x') => {
+        // Resize shopify image URL using modern Shopify CDN width query param (&width=360)
+        const getResizedImageUrl = (url, targetWidth = 360) => {
            if (!url || typeof url !== 'string') return url;
            if (url.indexOf('cdn.shopify.com') === -1) return url;
-           // If it already has size params, just return or handle safely. This basic regex appends _600x before extension.
-           return url.replace(/_(pico|icon|thumb|small|compact|medium|large|grande|original|1024x1024|2048x2048|master)+\./g, '.')
-                     .replace(/\.([a-zA-Z0-9]+)(\?.*)?$/, `_${size}.$1$2`);
+           const widthVal = typeof targetWidth === 'number' ? targetWidth : parseInt(targetWidth) || 360;
+           const finalWidth = isNaN(widthVal) ? 360 : widthVal;
+           const cleanUrl = url.replace(/([?&])width=\d+/g, '$1').replace(/&+/g, '&').replace(/\?&/, '?');
+           return `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}width=${finalWidth}`;
+        };
+
+        // Generate native Shopify-style responsive srcset & sizes
+        const getImageSrcset = (url) => {
+           if (!url || typeof url !== 'string' || url.indexOf('cdn.shopify.com') === -1) return '';
+           return `srcset="${getResizedImageUrl(url, 180)} 180w, ${getResizedImageUrl(url, 360)} 360w, ${getResizedImageUrl(url, 540)} 540w" sizes="(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw"`;
         };
   
         let primaryImg = customImage || variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
-        primaryImg = getResizedImageUrl(primaryImg, '600x');
+        primaryImg = getResizedImageUrl(primaryImg, 360);
         
         let productUrl = `/products/${product.handle}`;
         if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
@@ -904,7 +924,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
           swatchesHtml += `</div>`;
           
           if (matchedColorUrl && (!customImage || colorWasFiltered)) {
-             primaryImg = getResizedImageUrl(matchedColorUrl, '600x');
+             primaryImg = getResizedImageUrl(matchedColorUrl, 360);
              if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
                  productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
              }
@@ -937,12 +957,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
           </div>`;
       }
 
+      const isAboveTheFold = productIndex < 4;
+      const imgLoadingAttr = isAboveTheFold ? 'fetchpriority="high" decoding="async"' : 'loading="lazy" decoding="async"';
+
       let hoverImageHtml = '';
       if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(product.images) && product.images.length > 1) {
         let hoverImg = product.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
-           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, '600x')}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" />`;
+           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, 450)}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" decoding="async" width="450" height="600" />`;
         }
       }
 
@@ -951,7 +974,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
             <a href="${productUrl}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">
-                <img src="${primaryImg}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" loading="lazy" />
+                <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" ${imgLoadingAttr} width="360" height="480" />
                 ${hoverImageHtml}
                 ${badgesHtml}
                 ${wishlistHtml}
@@ -2307,18 +2330,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to y
   }
 
   function openSidebar() {
+    if (!sidebar) return;
     sidebar.classList.add('cfp-sidebar--open');
     if (overlay) overlay.classList.add('cfp-overlay--visible');
-    if (sidebar) sidebar.setAttribute('aria-hidden', 'false');
+    sidebar.removeAttribute('aria-hidden');
     if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
+    const closeBtn = document.getElementById('cfp-close-btn');
+    if (closeBtn) closeBtn.focus();
   }
 
   function closeSidebar() {
+    if (!sidebar) return;
+    if (document.activeElement && sidebar.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
-    if (sidebar) sidebar.setAttribute('aria-hidden', 'true');
-    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
+    sidebar.setAttribute('aria-hidden', 'true');
+    if (triggerBtn) {
+      triggerBtn.setAttribute('aria-expanded', 'false');
+      try { triggerBtn.focus(); } catch(e) {}
+    }
     document.body.style.overflow = '';
   }
 

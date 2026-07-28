@@ -4,17 +4,14 @@
  * Distributed Redis cache for shop-level config data (filter groups, global settings, merged values).
  * Ensures multiple AWS instances share the same cache and don't overload PostgreSQL.
  */
-import redis from "./redis.server";
+import redis from "./redis.server.js";
 
 const TTL_SEC = 60; // 60 seconds
 
 /**
- * Get a value from cache, or fetch it if missing/expired.
- * @param {string} key - Cache key (e.g. "globalSettings:myshop.myshopify.com")
- * @param {Function} fetchFn - Async function to fetch data if cache miss
- * @returns {Promise<any>} Cached or freshly fetched data
+ * Get a value from Redis cache, or fetch it if missing/expired.
  */
-export async function getCached(key, fetchFn) {
+export async function getCached(key, fetchFn, customTtlSec = TTL_SEC) {
   try {
     const cached = await redis.get(key);
     if (cached) {
@@ -29,7 +26,7 @@ export async function getCached(key, fetchFn) {
 
   try {
     if (data !== undefined && data !== null) {
-      await redis.setex(key, TTL_SEC, JSON.stringify(data));
+      await redis.setex(key, customTtlSec, JSON.stringify(data));
     }
   } catch (error) {
     console.error("CFP Redis set error for key", key, error);
@@ -39,14 +36,11 @@ export async function getCached(key, fetchFn) {
 }
 
 /**
- * Invalidate all cache entries for a specific shop.
- * Call this when admin saves filter settings, merged values, or filter groups.
- * @param {string} shop - The shop domain
+ * Invalidate all cache entries for a specific shop in Redis.
  */
 export async function invalidateShop(shop) {
   const shopStr = String(shop);
   try {
-    // Note: In a massive production environment, you might use SCAN instead of KEYS
     const keys = await redis.keys(`*${shopStr}*`);
     if (keys.length > 0) {
       await redis.del(...keys);

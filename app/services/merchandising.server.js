@@ -511,10 +511,20 @@ function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "created-descending")
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-  // default / best-selling: sort by bestSellingRank
-  const rankA = a.bestSellingRank !== undefined ? a.bestSellingRank : 999999;
-  const rankB = b.bestSellingRank !== undefined ? b.bestSellingRank : 999999;
-  return rankA - rankB;
+  // default / best-selling: sort by bestSellingScore DESC
+  if (!sortBy || sortBy === "best-selling") {
+    const scoreA = a.bestSellingScore !== undefined ? parseFloat(a.bestSellingScore) : 0;
+    const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
+    return scoreB - scoreA;
+  }
+  
+  if (sortBy === "trending") {
+    const scoreA = a.trendingScore !== undefined ? parseFloat(a.trendingScore) : 0;
+    const scoreB = b.trendingScore !== undefined ? parseFloat(b.trendingScore) : 0;
+    return scoreB - scoreA;
+  }
+
+  return 0;
 }
 
 /**

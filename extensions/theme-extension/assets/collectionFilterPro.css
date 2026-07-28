@@ -20,7 +20,14 @@
   --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* â”€â”€â”€ Theme Filter Kill Switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ⚡ LIGHTHOUSE CLS FIX: Reserve page container height so footer never shifts */
+.cfp-v1-app-container,
+#cfp-v1-app-container {
+  min-height: 1200px !important;
+  width: 100% !important;
+  display: block !important;
+  box-sizing: border-box !important;
+}
 /* This hides default Shopify theme filters automatically */
 .facets-container, 
 .facets-wrapper, 
@@ -871,7 +878,7 @@ facet-filters-form,
   border-radius: 99px; font-size: 11px; font-weight: 700;
 }
 
-/* â”€â”€â”€ Premium Product Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ──────────────────────────────────────────────────────────── */
 .cfp-products-grid,
 .cfp-product-grid {
   display: grid !important;
@@ -1051,7 +1058,7 @@ facet-filters-form,
 .cfp-product-card__vendor {
   font-size: 11px;
   text-transform: uppercase;
-  color: #969696;
+  color: #525252;
   font-weight: 600;
   letter-spacing: 0.12em;
   margin-bottom: 6px;
@@ -1089,7 +1096,7 @@ facet-filters-form,
 .cfp-product-card__compare-price {
   font-size: 13px;
   text-decoration: line-through;
-  color: #9ca3af;
+  color: #525252;
   font-weight: 500;
 }
 
@@ -1886,18 +1893,20 @@ facet-filters-form,
   padding: 16px !important;
 }
 
-/* Aspect Ratio */
+/* Aspect Ratio & CLS Prevention */
 .cfp-aspect-natural .cfp-product-card__image-container {
-  padding-top: 0 !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding-top: 140% !important;
+  position: relative !important;
+  background: #f3f4f6 !important;
+  min-height: 250px !important;
 }
 .cfp-aspect-natural .cfp-product-card__image {
-  position: static !important;
-  width: 100%;
-  height: auto;
-  aspect-ratio: auto;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
 }
 
 /* Image Size */
@@ -1914,7 +1923,7 @@ facet-filters-form,
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: #ff3333 !important;
+  background: #b91c1c !important;
   color: #ffffff !important;
   font-size: 11px !important;
   font-weight: 700;
