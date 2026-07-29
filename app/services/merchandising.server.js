@@ -349,10 +349,47 @@ function checkRuleMatch(product, condition, mergedValues = []) {
 
     const getVarImg = (v) => {
       const img = v.imageUrl || v.image;
-      if (typeof img === "string") return img;
+      if (typeof img === "string" && img.trim() !== "") return img;
       if (img && typeof img === "object" && (img.url || img.src)) {
         return img.url || img.src;
       }
+      return null;
+    };
+
+    // Multi-tier helper to ensure merchandisingImage is extracted cleanly
+    const getMerchandisingImageUrl = (matchedVariant, colorValues = []) => {
+      // Tier 1: Direct image on matched variant
+      const directImg = getVarImg(matchedVariant);
+      if (directImg) return directImg;
+
+      // Tier 2: Search sister variants of the exact same color that DO have an image
+      const matchedColor = (matchedVariant.option1 || matchedVariant.option2 || matchedVariant.option3 || "").toLowerCase().trim();
+      if (matchedColor && variants.length > 0) {
+        const sisterVariant = variants.find((v) => {
+          const vColor = (v.option1 || v.option2 || v.option3 || "").toLowerCase().trim();
+          return vColor === matchedColor && getVarImg(v);
+        });
+        if (sisterVariant) {
+          const sisterImg = getVarImg(sisterVariant);
+          if (sisterImg) return sisterImg;
+        }
+      }
+
+      // Tier 3: Search product gallery images for matching color in filename
+      const gallery = product.images || [];
+      if (gallery.length > 0 && colorValues.length > 0) {
+        for (const colorVal of colorValues) {
+          const cleanVal = colorVal.toLowerCase().trim();
+          if (!cleanVal) continue;
+          const matchingImg = gallery.find((imgUrl) => {
+            if (typeof imgUrl !== "string") return false;
+            const filename = imgUrl.split("/").pop().split("?")[0].toLowerCase();
+            return filename.includes(cleanVal);
+          });
+          if (matchingImg) return matchingImg;
+        }
+      }
+
       return null;
     };
 
@@ -374,9 +411,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     if (!exactVariant)
       exactVariant = variants.find((v) => matchesList(v, rawValues));
     if (exactVariant) {
+      const extractedImg = getMerchandisingImageUrl(exactVariant, rawValues);
       return {
         variant: exactVariant,
-        imageUrl: getVarImg(exactVariant),
+        imageUrl: extractedImg,
         matchType: "exact",
       };
     }
@@ -391,9 +429,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
           matchesList(v, mergedValuesExpanded),
         );
       if (mergedVariant) {
+        const extractedImg = getMerchandisingImageUrl(mergedVariant, mergedValuesExpanded);
         return {
           variant: mergedVariant,
-          imageUrl: getVarImg(mergedVariant),
+          imageUrl: extractedImg,
           matchType: "merged",
         };
       }
