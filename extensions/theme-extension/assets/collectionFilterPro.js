@@ -541,7 +541,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
          : `No products match your selected filters.`;
          
       if (totalCount > 0) {
-        emptyMsg = `Data not found.`;
+        emptyMsg = `Products not found.`;
       }
 
       grid.innerHTML = `

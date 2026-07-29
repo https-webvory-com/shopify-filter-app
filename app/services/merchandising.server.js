@@ -42,13 +42,13 @@ export async function getActiveRuleForCollection(
     });
   });
 
-  // Prioritize specific rules over global (apply to all) rules
+  // Prioritize specific rules over global (apply to all) rules, and sort by createdAt ASC (older rule created first runs first)
   matchingRules.sort((a, b) => {
     const aIsGlobal = !a.collections || a.collections.length === 0;
     const bIsGlobal = !b.collections || b.collections.length === 0;
     if (aIsGlobal && !bIsGlobal) return 1; // b comes first
     if (!aIsGlobal && bIsGlobal) return -1; // a comes first
-    return 0; // maintain createdAt desc order for same specificity
+    return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
   });
 
   const applicableRules = [];
@@ -72,7 +72,7 @@ export async function getActiveRuleForCollection(
   if (applicableRules.length === 0) return null;
   if (applicableRules.length === 1) return applicableRules[0];
 
-  // Merge conditions across all matching rules for the collection
+  // Merge conditions across all matching rules for the collection sequentially
   const combinedConditions = [];
   applicableRules.forEach((r) => {
     if (Array.isArray(r.conditions)) {
@@ -562,7 +562,7 @@ export function applyMerchandisingRules(
     filteredProducts.forEach((p) => {
       p.merchandisingScore = 0;
       rule.conditions.forEach((cond) => {
-        if (cond.action === "Include" || cond.action === "Exclude") return;
+        if (cond.action === "Exclude") return;
 
         const matchResult = checkRuleMatch(p, cond, mergedValues);
         if (matchResult) {
@@ -576,7 +576,7 @@ export function applyMerchandisingRules(
             p.merchandisingImage = imageUrl;
           }
 
-          if (cond.action === "Boost") {
+          if (cond.action === "Include" || cond.action === "Boost") {
             // Tier 1 Exact match gets higher score (+2000) than Tier 2 Merged match (+1000)
             p.merchandisingScore += isExact ? 2000 : 1000;
           } else if (cond.action === "Bury") {
