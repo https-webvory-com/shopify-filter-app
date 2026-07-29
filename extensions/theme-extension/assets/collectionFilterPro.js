@@ -675,7 +675,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             fallbackImg = fallbackImg.src || fallbackImg.url || '';
         }
         
-        let primaryImg = customImage || variantImg || product.merchandisingImage || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = customImage || product.merchandisingImage || variantImg || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
         
         let productUrl = `/products/${product.handle}`;
@@ -844,20 +844,26 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                 activeIndex = foundIndex;
                 colorWasFiltered = true;
              }
-          } else if (product.merchandisingImage) {
-             const merchBase = product.merchandisingImage.split('?')[0].replace(/^https?:/, '');
+         } else if (product.merchandisingImage) {
+             const merchBase = product.merchandisingImage.split('?')[0].replace(/^https?:/, '').toLowerCase();
              const foundIndex = colorsArray.findIndex(c => {
-                 if (!c[1] || !c[1].imgUrl) return false;
-                 const swatchBase = c[1].imgUrl.split('?')[0].replace(/^https?:/, '');
-                 return swatchBase.includes(merchBase) || merchBase.includes(swatchBase);
+                 if (!c[1]) return false;
+                 if (c[1].imgUrl) {
+                     const swatchBase = c[1].imgUrl.split('?')[0].replace(/^https?:/, '').toLowerCase();
+                     if (swatchBase.includes(merchBase) || merchBase.includes(swatchBase)) return true;
+                 }
+                 return c[0] && c[0].toLowerCase() === 'black';
              });
              if (foundIndex !== -1) {
                 activeIndex = foundIndex;
                 colorWasFiltered = true;
+                if (colorsArray[activeIndex][1].variantId) {
+                    matchedVariantId = colorsArray[activeIndex][1].variantId;
+                }
              }
           }
            
-           if (activeIndex === 0 && matchedVariant && typeof optionKey !== 'undefined') {
+           if (activeIndex === 0 && !product.merchandisingImage && matchedVariant && typeof optionKey !== 'undefined') {
               const matchedVariantColor = matchedVariant[optionKey];
               if (matchedVariantColor) {
                  const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase() === matchedVariantColor.toLowerCase());

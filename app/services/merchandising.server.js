@@ -386,25 +386,56 @@ function checkRuleMatch(product, condition, mergedValues = []) {
         }
       }
 
-      // Tier 3: Search product gallery images for matching color in filename
       const gallery = product.images || [];
-      if (gallery.length > 0 && colorValues.length > 0) {
-        for (const colorVal of colorValues) {
-          const cleanVal = colorVal.toLowerCase().trim();
-          if (!cleanVal) continue;
+
+      // Tier 3: Search product gallery images for matching color words in filename
+      if (gallery.length > 0 && (colorValues.length > 0 || matchedColor)) {
+        const searchTerms = [
+          ...colorValues,
+          matchedColor,
+          ...(matchedColor ? matchedColor.split(/[\s\/-]+/) : []),
+        ].map((s) => (s || "").toLowerCase().trim()).filter(Boolean);
+
+        for (const term of searchTerms) {
+          if (!term || term.length < 2) continue;
           const matchingImg = gallery.find((imgUrl) => {
             if (typeof imgUrl !== "string") return false;
             const filename = imgUrl.split("/").pop().split("?")[0].toLowerCase();
-            return filename.includes(cleanVal);
+            return filename.includes(term);
           });
           if (matchingImg) return matchingImg;
         }
       }
 
-      return null;
+      // Tier 4: Position-based fallback from product.options -> product.images
+      if (gallery.length > 0 && product.options) {
+        const colorOpt = (product.options || []).find(
+          (o) => o && o.name && o.name.toLowerCase().includes("color")
+        );
+        if (colorOpt && Array.isArray(colorOpt.values) && matchedColor) {
+          const colorIdx = colorOpt.values.findIndex(
+            (val) => (val || "").toLowerCase().trim() === matchedColor
+          );
+          if (colorIdx !== -1 && gallery[colorIdx]) {
+            const posImg = typeof gallery[colorIdx] === "string" ? gallery[colorIdx] : gallery[colorIdx].url || gallery[colorIdx].src;
+            if (posImg) return posImg;
+          }
+        }
+      }
+
+      // Tier 5: Fallback to first gallery image if nothing else matched
+      return gallery[0] || null;
     };
 
-    const matchesList = (v, list) =>
+    const exactMatchesList = (v, list) =>
+      list.some(
+        (val) =>
+          (v.option1 || "").toLowerCase().trim() === val ||
+          (v.option2 || "").toLowerCase().trim() === val ||
+          (v.option3 || "").toLowerCase().trim() === val,
+      );
+
+    const mergedMatchesList = (v, list) =>
       list.some(
         (val) =>
           (v.option1 || "").toLowerCase().trim() === val ||
@@ -415,12 +446,12 @@ function checkRuleMatch(product, condition, mergedValues = []) {
           (v.option3 || "").toLowerCase().trim().includes(val),
       );
 
-    // Priority 1: Check for Exact Match (e.g. pure "Black")
+    // Priority 1: Check for Exact Match (e.g. pure "Black" option) -> +2000 score
     let exactVariant = variants.find(
-      (v) => getVarImg(v) && matchesList(v, rawValues),
+      (v) => getVarImg(v) && exactMatchesList(v, rawValues),
     );
     if (!exactVariant)
-      exactVariant = variants.find((v) => matchesList(v, rawValues));
+      exactVariant = variants.find((v) => exactMatchesList(v, rawValues));
     if (exactVariant) {
       const extractedImg = getMerchandisingImageUrl(exactVariant, rawValues);
       return {
@@ -430,23 +461,22 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       };
     }
 
-    // Priority 2: Check for Merged Value Match (e.g. "Black/Gold", "Charcoal/Black")
-    if (mergedValuesExpanded.length > 0) {
-      let mergedVariant = variants.find(
-        (v) => getVarImg(v) && matchesList(v, mergedValuesExpanded),
+    // Priority 2: Check for Merged Value Match (e.g. "Black Nude", "Black/Gold") -> +1000 score
+    const mergedList = [...mergedValuesExpanded, ...rawValues];
+    let mergedVariant = variants.find(
+      (v) => getVarImg(v) && mergedMatchesList(v, mergedList),
+    );
+    if (!mergedVariant)
+      mergedVariant = variants.find((v) =>
+        mergedMatchesList(v, mergedList),
       );
-      if (!mergedVariant)
-        mergedVariant = variants.find((v) =>
-          matchesList(v, mergedValuesExpanded),
-        );
-      if (mergedVariant) {
-        const extractedImg = getMerchandisingImageUrl(mergedVariant, mergedValuesExpanded);
-        return {
-          variant: mergedVariant,
-          imageUrl: extractedImg,
-          matchType: "merged",
-        };
-      }
+    if (mergedVariant) {
+      const extractedImg = getMerchandisingImageUrl(mergedVariant, mergedList);
+      return {
+        variant: mergedVariant,
+        imageUrl: extractedImg,
+        matchType: "merged",
+      };
     }
   }
 
