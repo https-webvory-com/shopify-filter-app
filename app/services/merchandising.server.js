@@ -33,10 +33,10 @@ export async function getActiveRuleForCollection(
   const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const matchingRules = rules.filter((rule) => {
-    if (!rule.collections || rule.collections.length === 0) return true;
+    if (!rule.collections || !Array.isArray(rule.collections) || rule.collections.length === 0) return false;
     return rule.collections.some((c) => {
       if (!c) return false;
-      const cLower = c.toLowerCase().trim();
+      const cLower = String(c).toLowerCase().trim();
       const cHandle = cLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       return cLower === targetLower || cHandle === targetHandle || cLower === targetHandle || cHandle === targetLower;
     });
@@ -338,6 +338,12 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     }
   }
 
+  if (field === "Id" || field === "ID" || field === "id") {
+    const prodIdClean = String(product.id || "").replace("gid://shopify/Product/", "").toLowerCase().trim();
+    return rawValues.some((v) => v === prodIdClean || v === String(product.id).toLowerCase().trim())
+      ? { matchType: "exact" }
+      : false;
+  }
   if (field === "Vendor")
     return rawValues.includes((product.vendor || "").toLowerCase())
       ? { matchType: "exact" }
