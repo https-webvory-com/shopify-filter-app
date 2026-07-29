@@ -19,6 +19,7 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const actionType = formData.get("actionType");
+  const { invalidateShop } = await import("../services/shopCache.server");
 
   if (actionType === "createRule") {
     const name = formData.get("name") || "Untitled Rule";
@@ -62,6 +63,8 @@ export const action = async ({ request }) => {
         },
       },
     });
+
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "create", rule: newRule });
   }
 
@@ -113,12 +116,14 @@ export const action = async ({ request }) => {
         },
       },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "edit", rule: updatedRule });
   }
 
   if (actionType === "deleteRule") {
     const id = formData.get("id");
     await prisma.merchandisingRule.deleteMany({ where: { id, shop } });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "delete" });
   }
 
@@ -129,6 +134,7 @@ export const action = async ({ request }) => {
       where: { id, shop },
       data: { status },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "toggle" });
   }
 
@@ -164,7 +170,8 @@ export const action = async ({ request }) => {
         },
       },
     });
-    return Response.json({ success: true, intent: "duplicate" });
+    await invalidateShop(shop);
+    return Response.json({ success: true, intent: "duplicate", rule: newRule });
   }
 
   if (actionType === "importRules") {

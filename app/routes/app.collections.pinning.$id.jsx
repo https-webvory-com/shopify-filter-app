@@ -14,10 +14,10 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 export const action = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
-  const ruleId = params.id;
-
   const formData = await request.formData();
+  const ruleId = params.id;
   const intent = formData.get("intent");
+  const { invalidateShop } = await import("../services/shopCache.server");
 
   if (intent === "search") {
     const query = formData.get("q") || "";

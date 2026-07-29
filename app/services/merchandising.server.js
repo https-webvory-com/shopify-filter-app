@@ -1,4 +1,4 @@
-import prisma from "../db.server";
+import prisma from "../db.server.js";
 
 /**
  * Fetches the active merchandising rule for a given shop and collection.
