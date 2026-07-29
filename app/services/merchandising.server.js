@@ -349,11 +349,12 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       : false;
   }
 
+  const fieldLower = field.toLowerCase();
   if (
-    field === "Title (product option)" ||
-    field === "Color (product option)" ||
-    field === "Size (product option)" ||
-    field.includes("(product option)")
+    fieldLower.includes("option") ||
+    fieldLower.includes("color") ||
+    fieldLower.includes("size") ||
+    fieldLower.includes("title")
   ) {
     const variants = product.variantPrices || product.variants;
     if (!variants || variants.length === 0) return false;
