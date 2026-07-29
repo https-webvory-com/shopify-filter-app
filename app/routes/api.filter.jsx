@@ -311,7 +311,7 @@ export const loader = async ({ request }) => {
         break;
       default:
         if (!isSearch || !searchQuery) {
-          meiliSort = ["bestSellingRank:asc", "createdAt:desc"];
+          meiliSort = ["createdAt:desc"];
         }
         break;
     }
