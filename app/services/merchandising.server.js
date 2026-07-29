@@ -308,7 +308,8 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     field === "Size (product option)" ||
     field.includes("(product option)")
   ) {
-    if (!product.variants || product.variants.length === 0) return false;
+    const variants = product.variantPrices || product.variants;
+    if (!variants || variants.length === 0) return false;
 
     const matchesList = (v, list) =>
       list.some(
@@ -322,11 +323,11 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       );
 
     // Priority 1: Check for Exact Match (e.g. pure "Black")
-    let exactVariant = product.variants.find(
+    let exactVariant = variants.find(
       (v) => v.imageUrl && matchesList(v, rawValues),
     );
     if (!exactVariant)
-      exactVariant = product.variants.find((v) => matchesList(v, rawValues));
+      exactVariant = variants.find((v) => matchesList(v, rawValues));
     if (exactVariant) {
       return {
         variant: exactVariant,
@@ -337,11 +338,11 @@ function checkRuleMatch(product, condition, mergedValues = []) {
 
     // Priority 2: Check for Merged Value Match (e.g. "Black/Gold", "Charcoal/Black")
     if (mergedValuesExpanded.length > 0) {
-      let mergedVariant = product.variants.find(
+      let mergedVariant = variants.find(
         (v) => v.imageUrl && matchesList(v, mergedValuesExpanded),
       );
       if (!mergedVariant)
-        mergedVariant = product.variants.find((v) =>
+        mergedVariant = variants.find((v) =>
           matchesList(v, mergedValuesExpanded),
         );
       if (mergedVariant) {
