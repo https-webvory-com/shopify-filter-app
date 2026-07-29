@@ -22,6 +22,16 @@ redis.on('error', (err) => {
 
 redis.on('connect', () => {
   console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
+  // Auto-clear stale fullApiResponse keys on server process startup/restart
+  redis.keys('*fullApiResponse*').then((keys) => {
+    if (keys && keys.length > 0) {
+      redis.del(...keys).then((deletedCount) => {
+        console.log(`CFP Startup: Automatically purged ${deletedCount} stale fullApiResponse cache keys from Redis.`);
+      }).catch((e) => console.error("CFP Startup cache delete error:", e.message));
+    }
+  }).catch((err) => {
+    console.error('CFP Startup Redis keys search error:', err.message);
+  });
 });
 
 export default redis;
