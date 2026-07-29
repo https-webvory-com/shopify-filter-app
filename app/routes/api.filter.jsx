@@ -677,7 +677,7 @@ export const loader = async ({ request }) => {
         options: p.options || [],
         merchandisingImage: p.merchandisingImage || null,
         variants: variantPrices.map((v) => ({
-          id: `gid://shopify/ProductVariant/${v.id}`,
+          id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
           price: v.price,
           compareAtPrice: v.compareAtPrice,
           available: v.available,

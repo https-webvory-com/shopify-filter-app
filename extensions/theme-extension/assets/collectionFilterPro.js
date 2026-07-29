@@ -670,7 +670,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            return `srcset="${getResizedImageUrl(url, 180)} 180w, ${getResizedImageUrl(url, 360)} 360w, ${getResizedImageUrl(url, 540)} 540w" sizes="(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw"`;
         };
   
-        let primaryImg = customImage || variantImg || product.merchandisingImage || product.images?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let fallbackImg = product.images?.[0];
+        if (typeof fallbackImg === 'object' && fallbackImg !== null) {
+            fallbackImg = fallbackImg.src || fallbackImg.url || '';
+        }
+        
+        let primaryImg = customImage || variantImg || product.merchandisingImage || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
         
         let productUrl = `/products/${product.handle}`;

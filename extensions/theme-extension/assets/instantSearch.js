@@ -1049,6 +1049,11 @@ document.addEventListener("DOMContentLoaded", function () {
         const price = firstVariant.price !== undefined ? parseFloat(firstVariant.price) * 100 : (parseFloat(product.priceMin || 0) * 100);
         const compareAtPrice = firstVariant.compareAtPrice ? parseFloat(firstVariant.compareAtPrice) * 100 : null;
 
+        let fallbackImg = product.images?.[0];
+        if (typeof fallbackImg === 'object' && fallbackImg !== null) {
+            fallbackImg = fallbackImg.src || fallbackImg.url || '';
+        }
+        
         window.pageDataMap[product.handle] = {
            ...firstVariant,
            id: variantId,
@@ -1058,7 +1063,7 @@ document.addEventListener("DOMContentLoaded", function () {
            available: firstVariant.available !== false,
            product_id: productId,
            product_handle: product.handle,
-           product_image: product.merchandisingImage || product.images?.[0],
+           product_image: product.merchandisingImage || fallbackImg,
            product_title: product.title
         };
       });
