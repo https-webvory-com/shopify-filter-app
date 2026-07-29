@@ -940,6 +940,12 @@ export const loader = async ({ request }) => {
         pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: pinnedIds.length,
         hasMerchandisingRule: !!activeRule,
+        activeRuleName: activeRule?.name || null,
+        activeRuleConditions: activeRule?.conditions || [],
+        rawMeiliHitsCount: meiliRes.hits?.length || 0,
+        allMatchedCount: allMatchedProducts.length,
+        finalProductsCount: finalProducts.length,
+        paginatedSliceCount: paginatedSlice.length,
         activeGroupFiltersLength: activeGroupFilters
           ? activeGroupFilters.length
           : null,
