@@ -265,10 +265,24 @@ function checkRuleMatch(product, condition, mergedValues = []) {
   }
 
   // Handle Exact/Comma-separated values
-  const valueString = condition.value || "";
+  let valueString = condition.value || "";
+  if (
+    typeof valueString === "string" &&
+    (valueString.startsWith("[") || valueString.startsWith("{"))
+  ) {
+    try {
+      const parsed = JSON.parse(valueString);
+      if (Array.isArray(parsed)) {
+        valueString = parsed.join(",");
+      } else if (typeof parsed === "string") {
+        valueString = parsed;
+      }
+    } catch (e) {}
+  }
+
   const rawValues = valueString
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.replace(/[\[\]"']/g, "").trim().toLowerCase())
     .filter(Boolean);
 
   let mergedValuesExpanded = [];
@@ -333,6 +347,15 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     const variants = product.variantPrices || product.variants;
     if (!variants || variants.length === 0) return false;
 
+    const getVarImg = (v) => {
+      const img = v.imageUrl || v.image;
+      if (typeof img === "string") return img;
+      if (img && typeof img === "object" && (img.url || img.src)) {
+        return img.url || img.src;
+      }
+      return null;
+    };
+
     const matchesList = (v, list) =>
       list.some(
         (val) =>
@@ -346,14 +369,14 @@ function checkRuleMatch(product, condition, mergedValues = []) {
 
     // Priority 1: Check for Exact Match (e.g. pure "Black")
     let exactVariant = variants.find(
-      (v) => v.imageUrl && matchesList(v, rawValues),
+      (v) => getVarImg(v) && matchesList(v, rawValues),
     );
     if (!exactVariant)
       exactVariant = variants.find((v) => matchesList(v, rawValues));
     if (exactVariant) {
       return {
         variant: exactVariant,
-        imageUrl: exactVariant.imageUrl,
+        imageUrl: getVarImg(exactVariant),
         matchType: "exact",
       };
     }
@@ -361,7 +384,7 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     // Priority 2: Check for Merged Value Match (e.g. "Black/Gold", "Charcoal/Black")
     if (mergedValuesExpanded.length > 0) {
       let mergedVariant = variants.find(
-        (v) => v.imageUrl && matchesList(v, mergedValuesExpanded),
+        (v) => getVarImg(v) && matchesList(v, mergedValuesExpanded),
       );
       if (!mergedVariant)
         mergedVariant = variants.find((v) =>
@@ -370,7 +393,7 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       if (mergedVariant) {
         return {
           variant: mergedVariant,
-          imageUrl: mergedVariant.imageUrl,
+          imageUrl: getVarImg(mergedVariant),
           matchType: "merged",
         };
       }
