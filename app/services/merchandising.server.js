@@ -51,25 +51,42 @@ export async function getActiveRuleForCollection(
     return 0; // maintain createdAt desc order for same specificity
   });
 
+  const applicableRules = [];
   for (const rule of matchingRules) {
     if (!rule.customerTags || rule.customerTags.trim() === "") {
-      return rule; // Rule applies to everyone
-    }
+      applicableRules.push(rule);
+    } else {
+      const requiredTags = rule.customerTags
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
 
-    // Rule has specific customer tags, check if currentCustomerTags intersect
-    const requiredTags = rule.customerTags
-      .split(",")
-      .map((t) => t.trim().toLowerCase())
-      .filter(Boolean);
-    const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
-
-    const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
-    if (hasMatchingTag) {
-      return rule;
+      const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
+      if (hasMatchingTag) {
+        applicableRules.push(rule);
+      }
     }
   }
 
-  return null;
+  if (applicableRules.length === 0) return null;
+  if (applicableRules.length === 1) return applicableRules[0];
+
+  // Merge conditions across all matching rules for the collection
+  const combinedConditions = [];
+  applicableRules.forEach((r) => {
+    if (Array.isArray(r.conditions)) {
+      combinedConditions.push(...r.conditions);
+    }
+  });
+
+  return {
+    id: applicableRules[0].id,
+    shop: applicableRules[0].shop,
+    name: applicableRules.map((r) => r.name).join(" + "),
+    collections: applicableRules[0].collections,
+    conditions: combinedConditions,
+  };
 }
 
 /**
