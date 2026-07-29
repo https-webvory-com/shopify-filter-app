@@ -18,12 +18,6 @@ export async function getActiveRuleForCollection(
       status: true,
       AND: [
         {
-          OR: [
-            { collections: { has: collectionTitle } },
-            { collections: { equals: [] } },
-          ],
-        },
-        {
           OR: [{ startDate: null }, { startDate: { lte: now } }],
         },
         {
@@ -35,8 +29,21 @@ export async function getActiveRuleForCollection(
     orderBy: { createdAt: "desc" },
   });
 
+  const targetLower = collectionTitle.toLowerCase().trim();
+  const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const matchingRules = rules.filter((rule) => {
+    if (!rule.collections || rule.collections.length === 0) return true;
+    return rule.collections.some((c) => {
+      if (!c) return false;
+      const cLower = c.toLowerCase().trim();
+      const cHandle = cLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      return cLower === targetLower || cHandle === targetHandle || cLower === targetHandle || cHandle === targetLower;
+    });
+  });
+
   // Prioritize specific rules over global (apply to all) rules
-  rules.sort((a, b) => {
+  matchingRules.sort((a, b) => {
     const aIsGlobal = !a.collections || a.collections.length === 0;
     const bIsGlobal = !b.collections || b.collections.length === 0;
     if (aIsGlobal && !bIsGlobal) return 1; // b comes first
@@ -44,7 +51,7 @@ export async function getActiveRuleForCollection(
     return 0; // maintain createdAt desc order for same specificity
   });
 
-  for (const rule of rules) {
+  for (const rule of matchingRules) {
     if (!rule.customerTags || rule.customerTags.trim() === "") {
       return rule; // Rule applies to everyone
     }
@@ -141,15 +148,27 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
     });
   }
 
-  // Find a specific rule for this collection
-  const specificRule = await prisma.pinnedProductRule.findFirst({
+  // Find all collection-level pinning rules for this shop
+  const allRules = await prisma.pinnedProductRule.findMany({
     where: {
       shop,
       status: true,
       ruleType: "collection",
-      collections: { has: collectionTitle },
     },
     orderBy: { createdAt: "desc" },
+  });
+
+  const targetLower = collectionTitle.toLowerCase().trim();
+  const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  const specificRule = allRules.find((r) => {
+    if (!r.collections || r.collections.length === 0) return false;
+    return r.collections.some((c) => {
+      if (!c) return false;
+      const cLower = c.toLowerCase().trim();
+      const cHandle = cLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      return cLower === targetLower || cHandle === targetHandle || cLower === targetHandle || cHandle === targetLower;
+    });
   });
 
   if (specificRule) {
@@ -157,15 +176,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   }
 
   // Fallback to applyToAll rules
-  return await prisma.pinnedProductRule.findFirst({
-    where: {
-      shop,
-      status: true,
-      ruleType: "collection",
-      applyToAll: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  return allRules.find((r) => r.applyToAll === true) || null;
 }
 
 export async function getActivePinningRuleForSearch(

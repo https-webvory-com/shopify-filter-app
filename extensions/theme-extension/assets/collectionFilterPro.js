@@ -783,7 +783,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
         product.variants.forEach(v => {
           const colorName = v[optionKey];
-          if (colorName && v.imageUrl) {
+          const vImg = v.imageUrl || (typeof v.image === 'string' ? v.image : v.image?.url || v.image?.src || null);
+          if (colorName) {
             const numericId = v.id ? v.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : '';
             
             let score = 0;
@@ -793,11 +794,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             }
 
             if (!uniqueColors.has(colorName)) {
-                uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId, score: score });
+                uniqueColors.set(colorName, { imgUrl: vImg || '', variantId: numericId, score: score });
             } else {
-                // Keep the variant that matches the active filters (like size) better!
-                if (score > uniqueColors.get(colorName).score) {
-                    uniqueColors.set(colorName, { imgUrl: v.imageUrl, variantId: numericId, score: score });
+                const existing = uniqueColors.get(colorName);
+                if (!existing.imgUrl && vImg) {
+                    existing.imgUrl = vImg;
+                    existing.variantId = numericId;
+                }
+                if (score > existing.score && vImg) {
+                    uniqueColors.set(colorName, { imgUrl: vImg, variantId: numericId, score: score });
                 }
             }
           }
@@ -897,7 +902,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
              const secondaryImgJS = `
                const secImg = card.querySelector('.cfp-product-card__image--secondary');
                if (secImg) {
-                   ${hoverImgUrlForSwatch ? `secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
+                   ${hoverImgUrlForSwatch ? `secImg.removeAttribute('srcset'); secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
                }
              `;
              
@@ -905,7 +910,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                   data-tooltip="${colorName}" 
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
-                           card.querySelector('.cfp-product-card__image--primary').src='${getResizedImageUrl(data.imgUrl, '600x')}';
+                           const pImg = card.querySelector('.cfp-product-card__image--primary');
+                           if (pImg) { pImg.removeAttribute('srcset'); pImg.src='${getResizedImageUrl(data.imgUrl, '600x')}'; }
                            ${secondaryImgJS.replace(/\n/g, ' ')}
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
