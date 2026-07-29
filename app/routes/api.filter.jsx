@@ -254,18 +254,18 @@ export const loader = async ({ request }) => {
       maxPrice < 9999999 ||
       sortBy !== "best-selling";
 
-    // ── 4. Parallel fetch: pinning + merchandising rules (NOW CACHED) ───────────────
-    // These run at same time (independent of each other)
+    // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
+    // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
     const [activePinningRule, activeRule] = await Promise.all([
       userHasFilters
         ? Promise.resolve(null) // No pinning when user has active filters
         : isSearch && searchQuery
-        ? getCached(`pinning:search:${shop}:${searchQuery}:${searchType}`, () => getActivePinningRuleForSearch(shop, searchQuery, searchType))
-        : getCached(`pinning:collection:${shop}:${resolvedCollectionTitle}`, () => getActivePinningRuleForCollection(shop, resolvedCollectionTitle)),
+        ? getActivePinningRuleForSearch(shop, searchQuery, searchType)
+        : getActivePinningRuleForCollection(shop, resolvedCollectionTitle),
 
       isSearch && searchQuery
-        ? getCached(`merch:search:${shop}:${searchQuery}:${currentCustomerTags.join(',')}`, () => getActiveRuleForSearch(shop, searchQuery, currentCustomerTags))
-        : getCached(`merch:collection:${shop}:${resolvedCollectionTitle}:${currentCustomerTags.join(',')}`, () => getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags)),
+        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags)
+        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags),
     ]);
 
     // ── 5. Parse pinned IDs ────────────────────────────────────────────

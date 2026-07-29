@@ -22,11 +22,16 @@ redis.on('error', (err) => {
 
 redis.on('connect', () => {
   console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
-  // Auto-clear stale fullApiResponse keys on server process startup/restart
-  redis.keys('*fullApiResponse*').then((keys) => {
-    if (keys && keys.length > 0) {
-      redis.del(...keys).then((deletedCount) => {
-        console.log(`CFP Startup: Automatically purged ${deletedCount} stale fullApiResponse cache keys from Redis.`);
+  // Auto-clear all stale fullApiResponse, merch, and pinning cache keys on server process startup/restart
+  Promise.all([
+    redis.keys('*fullApiResponse*'),
+    redis.keys('*merch:*'),
+    redis.keys('*pinning:*')
+  ]).then(([fullKeys, merchKeys, pinKeys]) => {
+    const allKeys = [...(fullKeys || []), ...(merchKeys || []), ...(pinKeys || [])];
+    if (allKeys.length > 0) {
+      redis.del(...allKeys).then((deletedCount) => {
+        console.log(`CFP Startup: Automatically purged ${deletedCount} stale Redis cache keys (fullApiResponse/merch/pinning).`);
       }).catch((e) => console.error("CFP Startup cache delete error:", e.message));
     }
   }).catch((err) => {
