@@ -35,6 +35,15 @@ export async function getActiveRuleForCollection(
     orderBy: { createdAt: "desc" },
   });
 
+  // Prioritize specific rules over global (apply to all) rules
+  rules.sort((a, b) => {
+    const aIsGlobal = !a.collections || a.collections.length === 0;
+    const bIsGlobal = !b.collections || b.collections.length === 0;
+    if (aIsGlobal && !bIsGlobal) return 1; // b comes first
+    if (!aIsGlobal && bIsGlobal) return -1; // a comes first
+    return 0; // maintain createdAt desc order for same specificity
+  });
+
   for (const rule of rules) {
     if (!rule.customerTags || rule.customerTags.trim() === "") {
       return rule; // Rule applies to everyone
@@ -132,7 +141,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
     });
   }
 
-  // Find a specific rule for this collection (do not fallback to applyToAll)
+  // Find a specific rule for this collection
   const specificRule = await prisma.pinnedProductRule.findFirst({
     where: {
       shop,
@@ -143,7 +152,20 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
     orderBy: { createdAt: "desc" },
   });
 
-  return specificRule;
+  if (specificRule) {
+    return specificRule;
+  }
+
+  // Fallback to applyToAll rules
+  return await prisma.pinnedProductRule.findFirst({
+    where: {
+      shop,
+      status: true,
+      ruleType: "collection",
+      applyToAll: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function getActivePinningRuleForSearch(
