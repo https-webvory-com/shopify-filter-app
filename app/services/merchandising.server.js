@@ -602,16 +602,15 @@ export function applyMerchandisingRules(
           } else if (cond.action === "Pin") {
             p.merchandisingScore += 5000;
           } else if (cond.action === "Dynamic") {
-            const num = parseFloat(cond.operand);
+            const numStr = cond.operand || cond.value || "";
+            const num = parseFloat(numStr);
             if (!isNaN(num)) {
-              if (cond.operator === "Add") p.merchandisingScore += num;
-              else if (cond.operator === "Subtract")
-                p.merchandisingScore -= num;
-              else if (cond.operator === "Set") p.merchandisingScore = num;
-              else if (cond.operator === "Multiply")
-                p.merchandisingScore *= num;
-              else if (cond.operator === "Divide" && num !== 0)
-                p.merchandisingScore /= num;
+              const op = (cond.operator || "Add").trim();
+              if (op === "Add" || !op || op === "Operator") p.merchandisingScore += num;
+              else if (op === "Subtract") p.merchandisingScore -= num;
+              else if (op === "Set") p.merchandisingScore = num;
+              else if (op === "Multiply") p.merchandisingScore *= num;
+              else if (op === "Divide" && num !== 0) p.merchandisingScore /= num;
             }
           }
         }
