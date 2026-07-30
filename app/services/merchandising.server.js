@@ -579,7 +579,7 @@ export function applyMerchandisingRules(
           const imageUrl =
             typeof matchResult === "object" ? matchResult.imageUrl : null;
 
-          if (imageUrl && !p.merchandisingImage) {
+          if (imageUrl && !p.merchandisingImage && (cond.action === "Boost" || cond.action === "Pin")) {
             p.merchandisingImage = imageUrl;
           }
 
@@ -669,13 +669,25 @@ function defaultSortComparison(a, b, sortBy) {
   if (!sortBy || sortBy === "best-selling") {
     const scoreA = a.bestSellingScore !== undefined ? parseFloat(a.bestSellingScore) : 0;
     const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
-    return scoreB - scoreA;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    if (a._originalIndex !== undefined && b._originalIndex !== undefined) {
+      return a._originalIndex - b._originalIndex;
+    }
+    return 0;
   }
   
   if (sortBy === "trending") {
     const scoreA = a.trendingScore !== undefined ? parseFloat(a.trendingScore) : 0;
     const scoreB = b.trendingScore !== undefined ? parseFloat(b.trendingScore) : 0;
-    return scoreB - scoreA;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    if (a._originalIndex !== undefined && b._originalIndex !== undefined) {
+      return a._originalIndex - b._originalIndex;
+    }
+    return 0;
+  }
+
+  if (a._originalIndex !== undefined && b._originalIndex !== undefined) {
+    return a._originalIndex - b._originalIndex;
   }
 
   return 0;

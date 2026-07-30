@@ -548,8 +548,9 @@ export const loader = async ({ request }) => {
     const meiliTime = Date.now() - meiliStart;
 
     // ── 10. Map Meilisearch hits → product objects ─────────────────────
-    let allMatchedProducts = (meiliRes.hits || []).map((h) => ({
+    let allMatchedProducts = (meiliRes.hits || []).map((h, idx) => ({
       ...h,
+      _originalIndex: idx,
       id: `gid://shopify/Product/${h.id}`,
       variants: (h.variantPrices || []).map((v) => ({
         available: v.available,
