@@ -657,17 +657,9 @@ export function applyMerchandisingRules(
   const prioritizeSortOverPinning = globalSettings?.prioritizeSortOverPinning ?? false;
   const prioritizeSortOverMerchandising = globalSettings?.prioritizeSortOverMerchandising ?? false;
 
-  // Pre-compute O(1) maps for fast sorting of 1000+ items
+  // Pre-compute O(1) pin map for fast sorting
   const pinMap = new Map();
   pinnedIds.forEach((id, idx) => pinMap.set(id, idx));
-
-  const customTopMap = new Map([
-    ["gid://shopify/Product/15136882327923", 0], ["15136882327923", 0],
-    ["gid://shopify/Product/15139131425139", 1], ["15139131425139", 1],
-    ["gid://shopify/Product/15138618343795", 2], ["15138618343795", 2],
-    ["gid://shopify/Product/15194254836083", 3], ["15194254836083", 3],
-    ["gid://shopify/Product/15138537898355", 4], ["15138537898355", 4]
-  ]);
 
   // Fast O(1) Sort logic
   filteredProducts.sort((a, b) => {
@@ -692,7 +684,7 @@ export function applyMerchandisingRules(
     }
 
     // 3. Fallback to default / selected sort order tie-breaker
-    return defaultSortComparison(a, b, sortBy, customTopMap);
+    return defaultSortComparison(a, b, sortBy);
   });
 
   return filteredProducts;
@@ -702,10 +694,10 @@ export function applyMerchandisingRules(
  * Default sorting mechanism used as a fallback or when no rules exist.
  */
 export function sortProductsByDefault(products, sortBy) {
-  return products.sort((a, b) => defaultSortComparison(a, b, sortBy, null));
+  return products.sort((a, b) => defaultSortComparison(a, b, sortBy));
 }
 
-function defaultSortComparison(a, b, sortBy, customTopMap) {
+function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "title-ascending")
     return (a.title || "").localeCompare(b.title || "");
   if (sortBy === "title-descending")
