@@ -459,16 +459,27 @@ function checkRuleMatch(product, condition, mergedValues = []) {
           (v.option3 || "").toLowerCase().trim() === val,
       );
 
+    const containsWholeWord = (text, word) => {
+      if (!text || !word) return false;
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`(?:^|[\\s\\/\\-\\_,.])${escaped}(?:$|[\\s\\/\\-\\_,.])`, "i");
+      return regex.test(text);
+    };
+
     const mergedMatchesList = (v, list) =>
-      list.some(
-        (val) =>
-          (v.option1 || "").toLowerCase().trim() === val ||
-          (v.option1 || "").toLowerCase().trim().includes(val) ||
-          (v.option2 || "").toLowerCase().trim() === val ||
-          (v.option2 || "").toLowerCase().trim().includes(val) ||
-          (v.option3 || "").toLowerCase().trim() === val ||
-          (v.option3 || "").toLowerCase().trim().includes(val),
-      );
+      list.some((val) => {
+        const opt1 = (v.option1 || "").toLowerCase().trim();
+        const opt2 = (v.option2 || "").toLowerCase().trim();
+        const opt3 = (v.option3 || "").toLowerCase().trim();
+        return (
+          opt1 === val ||
+          opt2 === val ||
+          opt3 === val ||
+          containsWholeWord(opt1, val) ||
+          containsWholeWord(opt2, val) ||
+          containsWholeWord(opt3, val)
+        );
+      });
 
     // Priority 1: Check for Exact Match (e.g. pure "Black" option) -> +2000 score
     let exactVariant = variants.find(
