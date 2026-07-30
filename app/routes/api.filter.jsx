@@ -6,6 +6,7 @@ import {
   applyMerchandisingRules,
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
+  buildMeiliIncludeFilters,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -319,8 +320,19 @@ export const loader = async ({ request }) => {
     if (globalSettings?.showOnlyInStock) {
       baseFilters.push(`available = true`);
     }
+
+    // Build Include rules filters (if any)
+    const includeConditions = activeRule?.conditions?.filter((c) => c.action === "Include") || [];
+    const includeMeiliFilters = buildMeiliIncludeFilters(includeConditions);
+
     if (resolvedCollectionId) {
-      baseFilters.push(`collections = '${resolvedCollectionId}'`);
+      if (includeMeiliFilters.length > 0) {
+        baseFilters.push(`(collections = '${resolvedCollectionId}' OR ${includeMeiliFilters.join(" OR ")})`);
+      } else {
+        baseFilters.push(`collections = '${resolvedCollectionId}'`);
+      }
+    } else if (includeMeiliFilters.length > 0) {
+      baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
     const categoryFilters = {};
     if (minPrice > 0 || maxPrice < 9999999) {

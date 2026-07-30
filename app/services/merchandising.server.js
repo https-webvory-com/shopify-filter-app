@@ -583,7 +583,7 @@ export function applyMerchandisingRules(
             p.merchandisingImage = imageUrl;
           }
 
-          if (cond.action === "Include" || cond.action === "Boost") {
+          if (cond.action === "Boost") {
             // Tier 1 Exact match gets higher score (+2000) than Tier 2 Merged match (+1000)
             p.merchandisingScore += isExact ? 2000 : 1000;
           } else if (cond.action === "Bury") {
@@ -749,3 +749,41 @@ export function buildIncludeWhereClause(includeConditions) {
   if (OR.length === 0) return null;
   return { OR };
 }
+
+/**
+ * Builds Meilisearch filter array for 'Include' rules to pull external products into search results.
+ */
+export function buildMeiliIncludeFilters(includeConditions) {
+  if (!includeConditions || includeConditions.length === 0) return [];
+  const meiliFilters = [];
+
+  for (const cond of includeConditions) {
+    if (cond.action !== "Include") continue;
+    const field = cond.field || "";
+    const valueString = cond.value || "";
+    const values = valueString
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (values.length === 0) continue;
+
+    if (field === "Vendor") {
+      meiliFilters.push(`vendor IN [${values.map((v) => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Product type") {
+      meiliFilters.push(`productType IN [${values.map((t) => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Tags") {
+      meiliFilters.push(`tags IN [${values.map((t) => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Product") {
+      meiliFilters.push(`title IN [${values.map((t) => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Collections") {
+      meiliFilters.push(`collection_titles IN [${values.map((c) => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field.includes("(product option)")) {
+      const optName = field.replace(" (product option)", "");
+      meiliFilters.push(`option_${optName} IN [${values.map((v) => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`);
+    }
+  }
+
+  return meiliFilters;
+}
+
