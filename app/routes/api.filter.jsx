@@ -961,7 +961,13 @@ export const loader = async ({ request }) => {
         activeGroupFiltersLength: activeGroupFilters
           ? activeGroupFilters.length
           : null,
-        needsBroadFetch,
+        topProductScores: finalProducts.slice(0, 25).map(p => ({
+          title: p.title,
+          id: p.id,
+          merchandisingScore: p.merchandisingScore,
+          bestSellingScore: p.bestSellingScore,
+          isPinned: pinnedIds.includes(p.id)
+        })),
         timing: {
           meiliMs: meiliTime,
           totalMs,
