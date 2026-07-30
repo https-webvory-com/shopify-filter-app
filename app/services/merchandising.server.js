@@ -477,20 +477,23 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       return gallery[0] || null;
     };
 
-    const exactMatchesList = (v, list) =>
-      list.some(
-        (val) =>
-          (v.option1 || "").toLowerCase().trim() === val ||
-          (v.option2 || "").toLowerCase().trim() === val ||
-          (v.option3 || "").toLowerCase().trim() === val,
-      );
-
     const containsWholeWord = (text, word) => {
       if (!text || !word) return false;
       const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(?:^|[\\s\\/\\-\\_,.])${escaped}(?:$|[\\s\\/\\-\\_,.])`, "i");
       return regex.test(text);
     };
+
+    const exactMatchesList = (v, list) =>
+      list.some(
+        (val) =>
+          (v.option1 || "").toLowerCase().trim() === val ||
+          (v.option2 || "").toLowerCase().trim() === val ||
+          (v.option3 || "").toLowerCase().trim() === val ||
+          containsWholeWord(v.option1, val) ||
+          containsWholeWord(v.option2, val) ||
+          containsWholeWord(v.option3, val)
+      );
 
     const mergedMatchesList = (v, list) =>
       list.some((val) => {
