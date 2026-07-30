@@ -60,7 +60,7 @@ export const loader = async ({ request }) => {
     const isSearch = url.searchParams.get("isSearch") === "true";
     const searchQuery = url.searchParams.get("q") || "";
     const searchType = url.searchParams.get("searchType") || "page";
-    const sortBy = url.searchParams.get("sortBy") || "manual";
+    const sortBy = url.searchParams.get("sortBy") || "best-selling";
     const page = parseInt(url.searchParams.get("page") || "1");
     const limit = parseInt(url.searchParams.get("limit") || "25");
     const country = url.searchParams.get("country");
