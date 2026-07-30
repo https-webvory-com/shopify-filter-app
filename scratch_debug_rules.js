@@ -28,40 +28,42 @@ async function runTest() {
     const index = client.index("products");
     const res = await index.search("", {
       filter: [`collection_titles IN ['Red Formal Dresses']`],
-      limit: 500,
+      sort: ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"],
+      limit: 1000,
     });
 
+    // Only allow IN-STOCK red variants
     let mappedProducts = res.hits.map((h, idx) => ({
       ...h,
       _originalIndex: idx,
       id: `gid://shopify/Product/${h.id}`,
-      variants: (h.variantPrices || []).map((v) => ({
-        available: v.available,
-        price: v.price,
-        compareAtPrice: v.compareAtPrice,
-        option1: v.option1,
-        option2: v.option2,
-        option3: v.option3,
-        imageUrl: v.imageUrl || null,
-      })),
+      variants: (h.variantPrices || [])
+        .filter(v => v.available !== false)
+        .map((v) => ({
+          available: v.available,
+          price: v.price,
+          compareAtPrice: v.compareAtPrice,
+          option1: v.option1,
+          option2: v.option2,
+          option3: v.option3,
+          imageUrl: v.imageUrl || null,
+        })),
     }));
 
     const finalProducts = applyMerchandisingRules(
       mappedProducts,
       activeRule,
-      "manual", // DEFAULT COLLECTION SORT (MANUAL / ORIGINAL INDEX)
+      "best-selling",
       null,
       [],
       {}
     );
 
-    console.log("\n--- TOP 10 PRODUCTS WITH 'manual' SORT ---");
+    console.log("\n--- TOP 10 PRODUCTS WITH ONLY IN-STOCK VARIANTS ---");
     finalProducts.slice(0, 10).forEach((p, idx) => {
-      console.log(`Pos ${idx + 1}: [Score: ${p.merchandisingScore}] [OriginalIndex: ${p._originalIndex}] ID: ${p.id} | ${p.title}`);
+      console.log(`Pos ${idx + 1}: ID ${p.id} | ${p.title}`);
     });
 
-    const pos = finalProducts.findIndex(p => p.id.includes("15136882327923"));
-    console.log(`\nCD0186 position with 'manual' sort: ${pos !== -1 ? pos + 1 : 'NOT FOUND'}`);
   } catch (err) {
     console.error("Error:", err);
   }
