@@ -662,6 +662,12 @@ export function sortProductsByDefault(products, sortBy) {
 }
 
 function defaultSortComparison(a, b, sortBy) {
+  if (sortBy === "manual" || sortBy === "collection-default") {
+    if (a._originalIndex !== undefined && b._originalIndex !== undefined) {
+      return a._originalIndex - b._originalIndex;
+    }
+    return 0;
+  }
   if (sortBy === "title-ascending")
     return (a.title || "").localeCompare(b.title || "");
   if (sortBy === "title-descending")
@@ -676,7 +682,7 @@ function defaultSortComparison(a, b, sortBy) {
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
   // default / best-selling: sort by bestSellingScore DESC
-  if (!sortBy || sortBy === "best-selling") {
+  if (sortBy === "best-selling") {
     const scoreA = a.bestSellingScore !== undefined ? parseFloat(a.bestSellingScore) : 0;
     const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
     if (scoreB !== scoreA) return scoreB - scoreA;
