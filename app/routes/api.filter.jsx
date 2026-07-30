@@ -285,8 +285,7 @@ export const loader = async ({ request }) => {
     let meiliSort = null;
     switch (sortBy) {
       case "best-selling":
-        // meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
-        meiliSort = null;
+        meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
         break;
       case "trending":
         meiliSort = ["trendingScore:desc", "bestSellingScore:desc", "createdAt:desc"];

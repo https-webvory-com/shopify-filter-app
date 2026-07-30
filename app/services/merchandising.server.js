@@ -683,15 +683,13 @@ function defaultSortComparison(a, b, sortBy) {
     return a._originalIndex - b._originalIndex;
   }
 
-  // Commented out bestSellingScore sort as requested by user
-  /*
+  // default / best-selling: sort by bestSellingScore DESC
   if (sortBy === "best-selling") {
     const scoreA = a.bestSellingScore !== undefined ? parseFloat(a.bestSellingScore) : 0;
     const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
     if (scoreB !== scoreA) return scoreB - scoreA;
     return 0;
   }
-  */
   
   if (sortBy === "trending") {
     const scoreA = a.trendingScore !== undefined ? parseFloat(a.trendingScore) : 0;
