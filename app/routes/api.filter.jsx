@@ -257,9 +257,7 @@ export const loader = async ({ request }) => {
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
     const [activePinningRule, activeRule] = await Promise.all([
-      userHasFilters
-        ? Promise.resolve(null) // No pinning when user has active filters
-        : isSearch && searchQuery
+      isSearch && searchQuery
         ? getActivePinningRuleForSearch(shop, searchQuery, searchType)
         : getActivePinningRuleForCollection(shop, resolvedCollectionTitle),
 
@@ -552,8 +550,8 @@ export const loader = async ({ request }) => {
       })),
     }));
 
-    // Inject pinned products that might not appear in the current filter result
-    if (pinnedIds.length > 0) {
+    // Inject pinned products that might not appear in the current filter result (only when no active filters)
+    if (pinnedIds.length > 0 && !userHasFilters) {
       pinnedIds.forEach((id) => {
         if (!allMatchedProducts.some((p) => p.id === id)) {
           allMatchedProducts.push({ id, variants: [] });
@@ -568,6 +566,7 @@ export const loader = async ({ request }) => {
       sortBy,
       activePinningRule,
       mergedValues,
+      globalSettings,
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────

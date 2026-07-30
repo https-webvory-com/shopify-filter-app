@@ -516,6 +516,7 @@ export function applyMerchandisingRules(
   sortBy,
   pinningRule,
   mergedValues = [],
+  globalSettings = null,
 ) {
   let filteredProducts = products;
 
@@ -610,9 +611,9 @@ export function applyMerchandisingRules(
     filteredProducts.forEach((p) => (p.merchandisingScore = 0));
   }
 
-  // Determine if a custom sort is applied
-  const isCustomSort =
-    sortBy && sortBy !== "best-selling" && sortBy !== "relevance";
+  // Priority toggles (SoBooster defaults: false -> rules and pinning have priority)
+  const prioritizeSortOverPinning = globalSettings?.prioritizeSortOverPinning ?? false;
+  const prioritizeSortOverMerchandising = globalSettings?.prioritizeSortOverMerchandising ?? false;
 
   // Sort logic
   filteredProducts.sort((a, b) => {
@@ -622,18 +623,21 @@ export function applyMerchandisingRules(
     const aIsPinned = aPinIndex !== -1;
     const bIsPinned = bPinIndex !== -1;
 
-    // Both pinned: order by pin index
-    if (aIsPinned && bIsPinned) {
-      return aPinIndex - bPinIndex;
+    // 1. Pinned items priority (unless prioritizeSortOverPinning is true)
+    if (!prioritizeSortOverPinning && (aIsPinned || bIsPinned)) {
+      if (aIsPinned && bIsPinned) {
+        return aPinIndex - bPinIndex;
+      }
+      if (aIsPinned) return -1;
+      if (bIsPinned) return 1;
     }
-    // One pinned: pinned always goes first
-    if (aIsPinned) return -1;
-    if (bIsPinned) return 1;
 
-    // Neither pinned: sort by score ONLY if no custom sort is applied
-    if (!isCustomSort && a.merchandisingScore !== b.merchandisingScore) {
+    // 2. Merchandising score priority (unless prioritizeSortOverMerchandising is true)
+    if (!prioritizeSortOverMerchandising && a.merchandisingScore !== b.merchandisingScore) {
       return b.merchandisingScore - a.merchandisingScore;
     }
+
+    // 3. Fallback to default / selected sort order tie-breaker
     return defaultSortComparison(a, b, sortBy);
   });
 
