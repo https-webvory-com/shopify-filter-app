@@ -481,12 +481,17 @@ function checkRuleMatch(product, condition, mergedValues = []) {
         );
       });
 
-    // Priority 1: Check for Exact Match (e.g. pure "Black" option) -> +2000 score
+    // Priority 1: Check for Exact Match (e.g. pure "Black" option) -> +2000 score (only in-stock variants)
     let exactVariant = variants.find(
-      (v) => getVarImg(v) && exactMatchesList(v, rawValues),
+      (v) => v.available !== false && getVarImg(v) && exactMatchesList(v, rawValues),
     );
     if (!exactVariant)
+      exactVariant = variants.find((v) => v.available !== false && exactMatchesList(v, rawValues));
+    if (!exactVariant)
+      exactVariant = variants.find((v) => getVarImg(v) && exactMatchesList(v, rawValues));
+    if (!exactVariant)
       exactVariant = variants.find((v) => exactMatchesList(v, rawValues));
+
     if (exactVariant) {
       const extractedImg = getMerchandisingImageUrl(exactVariant, rawValues);
       return {
@@ -499,12 +504,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     // Priority 2: Check for Merged Value Match (e.g. "Black Nude", "Black/Gold") -> +1000 score
     const mergedList = [...mergedValuesExpanded, ...rawValues];
     let mergedVariant = variants.find(
-      (v) => getVarImg(v) && mergedMatchesList(v, mergedList),
+      (v) => v.available !== false && getVarImg(v) && mergedMatchesList(v, mergedList),
     );
     if (!mergedVariant)
-      mergedVariant = variants.find((v) =>
-        mergedMatchesList(v, mergedList),
-      );
+      mergedVariant = variants.find((v) => v.available !== false && mergedMatchesList(v, mergedList));
     if (mergedVariant) {
       const extractedImg = getMerchandisingImageUrl(mergedVariant, mergedList);
       return {
@@ -606,9 +609,9 @@ export function applyMerchandisingRules(
             const num = parseFloat(numStr);
             if (!isNaN(num)) {
               const op = (cond.operator || "Add").trim();
-              if (op === "Add" || !op || op === "Operator") p.merchandisingScore += num;
+              if (op === "Add" || !op || op === "Operator" || op === "Set")
+                p.merchandisingScore += num;
               else if (op === "Subtract") p.merchandisingScore -= num;
-              else if (op === "Set") p.merchandisingScore = num;
               else if (op === "Multiply") p.merchandisingScore *= num;
               else if (op === "Divide" && num !== 0) p.merchandisingScore /= num;
             }
