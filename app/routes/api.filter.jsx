@@ -417,7 +417,7 @@ export const loader = async ({ request }) => {
       : Math.max(0, (page - 1) * limit - pinnedBuffer);
       
     const broadFetchLimit = hasMerchandising 
-      ? Math.max(1000, page * limit) 
+      ? Math.max(150, page * limit + 50) 
       : limit + pinnedBuffer + 10;
 
     const queries = [];
