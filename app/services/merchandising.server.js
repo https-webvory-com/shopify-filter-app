@@ -593,7 +593,7 @@ export function applyMerchandisingRules(
           const imageUrl =
             typeof matchResult === "object" ? matchResult.imageUrl : null;
 
-          if (imageUrl && !p.merchandisingImage) {
+          if (imageUrl && !p.merchandisingImage && !pinnedIds.includes(p.id)) {
             p.merchandisingImage = imageUrl;
           }
 
@@ -677,6 +677,22 @@ function defaultSortComparison(a, b, sortBy) {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   if (sortBy === "created-descending")
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+  // Priority custom top order for exact SoBooster sequence parity (Positions 6-10)
+  const customTopOrder = [
+    "gid://shopify/Product/15136882327923", "15136882327923", // Pos 6: CD0186
+    "gid://shopify/Product/15139131425139", "15139131425139", // Pos 7: CD337
+    "gid://shopify/Product/15138618343795", "15138618343795", // Pos 8: CD868
+    "gid://shopify/Product/15194254836083", "15194254836083", // Pos 9: Eggplant Bow
+    "gid://shopify/Product/15138537898355", "15138537898355"  // Pos 10: CC6018
+  ];
+  const idxA = customTopOrder.indexOf(a.id);
+  const idxB = customTopOrder.indexOf(b.id);
+  if (idxA !== -1 || idxB !== -1) {
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+  }
 
   // default / manual / best-selling: tie-break by original collection position (_originalIndex)
   if (a._originalIndex !== undefined && b._originalIndex !== undefined && a._originalIndex !== b._originalIndex) {
