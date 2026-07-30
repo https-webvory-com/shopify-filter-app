@@ -338,6 +338,32 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     }
   }
 
+  // Color Family Synonyms (SoBooster standard rule expansion for Color option rules)
+  if (field === "Color (product option)" || field.toLowerCase().includes("color")) {
+    const STANDARD_COLOR_SYNONYMS = {
+      red: ["red", "burgundy", "wine", "crimson", "maroon", "ruby", "rose", "rust", "terracotta", "claret", "brick", "sangria", "deep red", "dark red"],
+      blue: ["blue", "navy", "royal blue", "light blue", "sky blue", "powder blue", "slate", "cobalt", "indigo"],
+      green: ["green", "emerald", "sage", "olive", "mint", "forest green", "hunter green", "jade"],
+      pink: ["pink", "blush", "mauve", "fuchsia", "magenta", "hot pink", "coral", "dusty rose", "rosewood"],
+      purple: ["purple", "plum", "lavender", "eggplant", "violet", "lilac", "grape"],
+      black: ["black", "ebony", "onyx", "midnight"],
+      white: ["white", "ivory", "cream", "off white", "champagne", "nude"],
+      gold: ["gold", "champagne", "bronze", "copper"],
+      silver: ["silver", "grey", "gray", "charcoal", "pewter", "gunmetal"],
+      yellow: ["yellow", "mustard", "gold"],
+      orange: ["orange", "peach", "rust", "terracotta"]
+    };
+    for (const val of rawValues) {
+      if (STANDARD_COLOR_SYNONYMS[val]) {
+        STANDARD_COLOR_SYNONYMS[val].forEach((syn) => {
+          if (!rawValues.includes(syn) && !mergedValuesExpanded.includes(syn)) {
+            mergedValuesExpanded.push(syn);
+          }
+        });
+      }
+    }
+  }
+
   if (field === "Id" || field === "ID" || field === "id") {
     const prodIdClean = String(product.id || "").replace("gid://shopify/Product/", "").toLowerCase().trim();
     return rawValues.some((v) => v === prodIdClean || v === String(product.id).toLowerCase().trim())
