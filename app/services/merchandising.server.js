@@ -590,7 +590,7 @@ export function applyMerchandisingRules(
           const imageUrl =
             typeof matchResult === "object" ? matchResult.imageUrl : null;
 
-          if (imageUrl && !p.merchandisingImage && (cond.action === "Boost" || cond.action === "Pin")) {
+          if (imageUrl && !p.merchandisingImage) {
             p.merchandisingImage = imageUrl;
           }
 

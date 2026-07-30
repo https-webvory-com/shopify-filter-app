@@ -675,6 +675,14 @@ export const loader = async ({ request }) => {
     // ── 13. Shape products for response ───────────────────────────────
     let products = paginatedSlice.map((p) => {
       const variantPrices = p.variantPrices || [];
+      let productImages = p.images || [];
+      if (p.merchandisingImage) {
+        productImages = [
+          p.merchandisingImage,
+          ...productImages.filter((img) => img !== p.merchandisingImage),
+        ];
+      }
+
       const productObj = {
         id: p.id,
         title: p.title,
@@ -684,7 +692,7 @@ export const loader = async ({ request }) => {
         priceMin: p.priceMin,
         priceMax: p.priceMax,
         tags: p.tags || [],
-        images: p.images || [],
+        images: productImages,
         status: (p.status || "ACTIVE").toLowerCase(),
         options: p.options || [],
         merchandisingImage: p.merchandisingImage || null,
