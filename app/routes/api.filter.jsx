@@ -916,7 +916,7 @@ export const loader = async ({ request }) => {
     }
 
     const totalMs = Date.now() - startTime;
-    console.log(`CFP: api/filter completed in ${totalMs}ms (meili: ${meiliTime}ms, broadFetch: ${needsBroadFetch}, broadFetchLimit: ${needsBroadFetch ? broadFetchLimit : limit})`);
+    console.log(`CFP: api/filter completed in ${totalMs}ms (meili: ${meiliTime}ms, limit: ${limit}, page: ${page})`);
 
     // ⚡ PERFORMANCE: Cache the response for 10 seconds on CDN/browser
     // This avoids repeat API calls when user navigates back or re-renders
