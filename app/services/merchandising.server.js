@@ -849,7 +849,14 @@ export function buildMeiliRuleFilter(ruleConditions) {
   if (!ruleConditions || ruleConditions.length === 0) return [];
   const filters = [];
 
-  for (const cond of ruleConditions) {
+  // Sort conditions by score operand descending so highest score condition (e.g. 99999) comes first
+  const sortedConditions = [...ruleConditions].sort((a, b) => {
+    const scoreA = parseFloat(a.operand || a.value || 0) || 0;
+    const scoreB = parseFloat(b.operand || b.value || 0) || 0;
+    return scoreB - scoreA;
+  });
+
+  for (const cond of sortedConditions) {
     // Only process Add / Set / Pin / Dynamic boost conditions
     if (cond.action === "Bury" || cond.action === "Include") continue;
 

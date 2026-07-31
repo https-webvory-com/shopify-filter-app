@@ -695,6 +695,8 @@ export const loader = async ({ request }) => {
         priceMax: p.priceMax,
         tags: p.tags || [],
         images: productImages,
+        image: p.merchandisingImage || (productImages.length > 0 ? productImages[0] : null),
+        featured_image: p.merchandisingImage || (productImages.length > 0 ? productImages[0] : null),
         status: (p.status || "ACTIVE").toLowerCase(),
         options: p.options || [],
         merchandisingImage: p.merchandisingImage || null,
