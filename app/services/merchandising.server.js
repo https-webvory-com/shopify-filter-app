@@ -711,17 +711,6 @@ function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "created-descending")
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-  // O(1) Priority custom top order for exact SoBooster sequence parity (Positions 6-10)
-  if (customTopMap) {
-    const idxA = customTopMap.has(a.id) ? customTopMap.get(a.id) : -1;
-    const idxB = customTopMap.has(b.id) ? customTopMap.get(b.id) : -1;
-    if (idxA !== -1 || idxB !== -1) {
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-    }
-  }
-
   // default / manual / best-selling: tie-break by original collection position (_originalIndex)
   if (a._originalIndex !== undefined && b._originalIndex !== undefined && a._originalIndex !== b._originalIndex) {
     return a._originalIndex - b._originalIndex;
