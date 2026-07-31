@@ -7,6 +7,7 @@ import {
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
   buildMeiliIncludeFilters,
+  buildMeiliRuleFilter,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -401,17 +402,21 @@ export const loader = async ({ request }) => {
     // Previously: limit:1000 fetched 1000 full docs (with variants!) for JS-side pagination
     // Now: Only 24 docs are transferred per request
     //
-    // Merchandising Rules are applied for scoring/ranking in applyMerchandisingRules.
-    // mainQueryFilter must strictly use allFiltersList so Meilisearch returns all collection products for smooth pagination.
-    const mainQueryFilter = allFiltersList;
+    // ── 8. Build Meilisearch queries (Native 2-Tier Merchandising Query Architecture) ──
+    const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
+    const hasMerchandisingMeiliFilters = ruleMeiliFilters.length > 0;
 
     const queries = [];
 
-    // Query A: Main paginated product data (Native 2-Tier Query Architecture)
+    // Query A1: Tier 1 Boosted Rule Products (e.g. 3,595 Red dresses in Red Formal Dresses collection)
+    const tier1Filter = hasMerchandisingMeiliFilters 
+      ? [...allFiltersList, ...ruleMeiliFilters]
+      : allFiltersList;
+
     const mainQuery = {
       indexUid: "products",
       q: searchQuery,
-      filter: mainQueryFilter,
+      filter: tier1Filter,
       limit: limit,
       offset: (page - 1) * limit,
       attributesToRetrieve: [
@@ -428,9 +433,17 @@ export const loader = async ({ request }) => {
     if (searchQuery) mainQuery.attributesToHighlight = ["title"];
     queries.push(mainQuery);
 
-    // ── 8.5 Build targeted facets list (Huge Performance Optimization) ────
-    // Wildcard facets: ["*"] calculates counts for ALL 200+ tag attributes in Meilisearch (1.1s + 200KB JSON payload)
-    // Targeting ONLY enabled filter group attributes cuts meiliMs to < 30ms and payload size to < 10KB!
+    // Query A2: Tier 2 General Collection Products (Fallback if Tier 1 runs out of hits)
+    let tier2QueryIndex = -1;
+    if (hasMerchandisingMeiliFilters) {
+      tier2QueryIndex = queries.length;
+      queries.push({
+        ...mainQuery,
+        filter: allFiltersList,
+      });
+    }
+
+    // ── 8.5 Build targeted facets list ────
     const neededFacetKeys = ["vendor", "productType"];
     if (activeGroupFilters && Array.isArray(activeGroupFilters)) {
       for (const f of activeGroupFilters) {
@@ -451,18 +464,20 @@ export const loader = async ({ request }) => {
     const targetFacets = [...new Set(neededFacetKeys)];
 
     // Query B: Facets + exact total count
+    const facetQueryIndex = queries.length;
     const facetQuery = {
       indexUid: "products",
       q: searchQuery,
       filter: allFiltersList,
       facets: targetFacets,
-      hitsPerPage: 1,       // minimum valid value; actual hit data is dropped below
+      hitsPerPage: 1,
       page: 1,
-      attributesToRetrieve: [], // no fields returned → minimal payload
+      attributesToRetrieve: [],
     };
     queries.push(facetQuery);
 
     // Query C: Per active-category queries for disjunctive faceting
+    const categoryQueryStartIndex = queries.length;
     for (const cat of activeCategories) {
       const filterForThisCat = [
         ...baseFilters,
@@ -488,14 +503,29 @@ export const loader = async ({ request }) => {
 
     try {
       const multiSearchRes = await meiliClient.multiSearch({ queries });
-      meiliRes = multiSearchRes.results[0]; // Main paginated results
-      facetRes = multiSearchRes.results[1]; // Facet-only result
+      const tier1Res = multiSearchRes.results[0];
+      facetRes = multiSearchRes.results[facetQueryIndex];
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };
+
+      let combinedHits = [...(tier1Res?.hits || [])];
+
+      // If Tier 1 hits didn't fill the page, append items from Tier 2 (excluding duplicates)
+      if (tier2QueryIndex !== -1 && combinedHits.length < limit) {
+        const tier2Res = multiSearchRes.results[tier2QueryIndex];
+        const existingIds = new Set(combinedHits.map((h) => h.id));
+        const fillHits = (tier2Res?.hits || []).filter((h) => !existingIds.has(h.id));
+        combinedHits = [...combinedHits, ...fillHits].slice(0, limit);
+      }
+
+      meiliRes = {
+        hits: combinedHits,
+        estimatedTotalHits: tier1Res?.estimatedTotalHits || 0,
+      };
 
       // Merge disjunctive facet counts
       for (let i = 0; i < activeCategories.length; i++) {
         const cat = activeCategories[i];
-        const catRes = multiSearchRes.results[i + 2];
+        const catRes = multiSearchRes.results[categoryQueryStartIndex + i];
         if (catRes?.facetDistribution?.[cat]) {
           facetDistribution[cat] = catRes.facetDistribution[cat];
         }
@@ -507,27 +537,6 @@ export const loader = async ({ request }) => {
       }
     } catch (e) {
       console.error("CFP: Meilisearch MultiSearch failed:", e);
-
-      // Fallback: If sort was invalid (e.g. bestSellingRank not sortable in Meili yet), retry without sort
-      if (mainQuery.sort && (e?.cause?.code === "invalid_search_sort" || String(e).includes("not sortable"))) {
-        console.log("CFP: Retrying MultiSearch without unconfigured sort field...");
-        delete mainQuery.sort;
-        try {
-          const retryRes = await meiliClient.multiSearch({ queries });
-          meiliRes = retryRes.results[0];
-          facetRes = retryRes.results[1];
-          facetDistribution = { ...(facetRes?.facetDistribution || {}) };
-          for (let i = 0; i < activeCategories.length; i++) {
-            const cat = activeCategories[i];
-            const catRes = retryRes.results[i + 2];
-            if (catRes?.facetDistribution?.[cat]) {
-              facetDistribution[cat] = catRes.facetDistribution[cat];
-            }
-          }
-        } catch (retryErr) {
-          console.error("CFP: Retry MultiSearch failed:", retryErr);
-        }
-      }
     }
 
     const meiliTime = Date.now() - meiliStart;
