@@ -882,7 +882,9 @@ export function buildMeiliRuleFilter(ruleConditions) {
     }
   }
 
-  return filters;
+  if (filters.length === 0) return [];
+  // Return an array with a single OR-joined filter string so Meilisearch fetches ALL boosted products across all rules
+  return [`(${filters.join(" OR ")})`];
 }
 
 
