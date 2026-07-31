@@ -7,7 +7,6 @@ import {
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
   buildMeiliIncludeFilters,
-  buildMeiliRuleFilter,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -402,11 +401,9 @@ export const loader = async ({ request }) => {
     // Previously: limit:1000 fetched 1000 full docs (with variants!) for JS-side pagination
     // Now: Only 24 docs are transferred per request
     //
-    // Build Native Meilisearch filter for Merchandising Boost conditions (only when no manual filters selected)
-    const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
-    const mainQueryFilter = ruleMeiliFilters.length > 0 
-      ? [...allFiltersList, ...ruleMeiliFilters]
-      : allFiltersList;
+    // Merchandising Rules are applied for scoring/ranking in applyMerchandisingRules.
+    // mainQueryFilter must strictly use allFiltersList so Meilisearch returns all collection products for smooth pagination.
+    const mainQueryFilter = allFiltersList;
 
     const queries = [];
 
