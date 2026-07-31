@@ -77,13 +77,7 @@ export async function getActiveRuleForCollection(
   }
 
   if (applicableRules.length === 0) return null;
-
-  // If a specific single-collection rule exists (collections.length === 1), use it exclusively
-  // to prevent broad multi-collection rules (e.g. Include TopFormal) from leaking irrelevant products
-  const specificSingleCollectionRule = applicableRules.find((r) => Array.isArray(r.collections) && r.collections.length === 1);
-  if (specificSingleCollectionRule) {
-    return specificSingleCollectionRule;
-  }
+  if (applicableRules.length === 1) return applicableRules[0];
 
   // Merchandising rules are calculated from bottom to top.
   // The lower rule (bottom rule / older) runs first, and its result is then adjusted by the upper rule (top rule / newer).
@@ -630,9 +624,7 @@ export function applyMerchandisingRules(
             const num = parseFloat(numStr);
             if (!isNaN(num)) {
               const op = (cond.operator || "Add").trim();
-              if (op === "Set") {
-                p.merchandisingScore = num;
-              } else if (op === "Add" || !op || op === "Operator") {
+              if (op === "Set" || op === "Add" || !op || op === "Operator") {
                 p.merchandisingScore += num;
               } else if (op === "Subtract") {
                 p.merchandisingScore -= num;
