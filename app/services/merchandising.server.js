@@ -848,22 +848,24 @@ export function buildMeiliIncludeFilters(includeConditions) {
 export function buildMeiliRuleFilter(ruleConditions) {
   if (!ruleConditions || ruleConditions.length === 0) return [];
 
-  // Sort conditions by score operand descending so highest score condition (e.g. 99999) comes first
+  const getCondScore = (cond) => {
+    if (!cond) return 0;
+    if (cond.action === "Pin") return 5000;
+    if (cond.action === "Boost") return 2000;
+    return parseFloat(cond.operand || cond.value || 0) || 0;
+  };
+
+  // Sort conditions by score operand descending so highest score condition comes first
   const sortedConditions = [...ruleConditions]
     .filter((cond) => cond.action !== "Bury" && cond.action !== "Include")
-    .sort((a, b) => {
-      const scoreA = parseFloat(a.operand || a.value || 0) || 0;
-      const scoreB = parseFloat(b.operand || b.value || 0) || 0;
-      return scoreB - scoreA;
-    });
+    .sort((a, b) => getCondScore(b) - getCondScore(a));
 
   if (sortedConditions.length === 0) return [];
 
   // Focus Tier 1 Meilisearch filter on the highest-scoring boost condition(s)
-  // so Page 1 to Page 140 are 100% filled with top-scoring products (e.g. Red Dresses)
-  const maxScore = parseFloat(sortedConditions[0].operand || sortedConditions[0].value || 0) || 0;
+  const maxScore = getCondScore(sortedConditions[0]);
   const topConditions = maxScore > 0 
-    ? sortedConditions.filter((c) => (parseFloat(c.operand || c.value || 0) || 0) >= maxScore * 0.5)
+    ? sortedConditions.filter((c) => getCondScore(c) >= maxScore * 0.9)
     : [sortedConditions[0]];
 
   const filters = [];
