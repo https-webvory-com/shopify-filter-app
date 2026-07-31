@@ -338,31 +338,7 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     }
   }
 
-  // Color Family Synonyms (SoBooster standard rule expansion for Color option rules)
-  if (field === "Color (product option)" || field.toLowerCase().includes("color")) {
-    const STANDARD_COLOR_SYNONYMS = {
-      red: ["red", "burgundy", "wine", "crimson", "maroon", "ruby", "rose", "rust", "terracotta", "claret", "brick", "sangria", "deep red", "dark red"],
-      blue: ["blue", "navy", "royal blue", "light blue", "sky blue", "powder blue", "slate", "cobalt", "indigo"],
-      green: ["green", "emerald", "sage", "olive", "mint", "forest green", "hunter green", "jade"],
-      pink: ["pink", "blush", "mauve", "fuchsia", "magenta", "hot pink", "coral", "dusty rose", "rosewood"],
-      purple: ["purple", "plum", "lavender", "eggplant", "violet", "lilac", "grape"],
-      black: ["black", "ebony", "onyx", "midnight"],
-      white: ["white", "ivory", "cream", "off white", "champagne", "nude"],
-      gold: ["gold", "champagne", "bronze", "copper"],
-      silver: ["silver", "grey", "gray", "charcoal", "pewter", "gunmetal"],
-      yellow: ["yellow", "mustard", "gold"],
-      orange: ["orange", "peach", "rust", "terracotta"]
-    };
-    for (const val of rawValues) {
-      if (STANDARD_COLOR_SYNONYMS[val]) {
-        STANDARD_COLOR_SYNONYMS[val].forEach((syn) => {
-          if (!rawValues.includes(syn) && !mergedValuesExpanded.includes(syn)) {
-            mergedValuesExpanded.push(syn);
-          }
-        });
-      }
-    }
-  }
+
 
   if (field === "Id" || field === "ID" || field === "id") {
     const prodIdClean = String(product.id || "").replace("gid://shopify/Product/", "").toLowerCase().trim();
@@ -510,19 +486,20 @@ function checkRuleMatch(product, condition, mergedValues = []) {
         );
       });
 
-    // Priority 1: Check for Exact Match (e.g. pure "Black" option) -> +2000 score (only in-stock variants)
+    // Priority 1: Check for Exact Match (e.g. "Red", "Burgundy", "Wine", "Deep Red") -> +2000 score (only in-stock variants)
+    const mergedList = [...mergedValuesExpanded, ...rawValues];
     let exactVariant = variants.find(
-      (v) => v.available !== false && getVarImg(v) && exactMatchesList(v, rawValues),
+      (v) => v.available !== false && getVarImg(v) && exactMatchesList(v, mergedList),
     );
     if (!exactVariant)
-      exactVariant = variants.find((v) => v.available !== false && exactMatchesList(v, rawValues));
+      exactVariant = variants.find((v) => v.available !== false && exactMatchesList(v, mergedList));
     if (!exactVariant)
-      exactVariant = variants.find((v) => getVarImg(v) && exactMatchesList(v, rawValues));
+      exactVariant = variants.find((v) => getVarImg(v) && exactMatchesList(v, mergedList));
     if (!exactVariant)
-      exactVariant = variants.find((v) => exactMatchesList(v, rawValues));
+      exactVariant = variants.find((v) => exactMatchesList(v, mergedList));
 
     if (exactVariant) {
-      const extractedImg = getMerchandisingImageUrl(exactVariant, rawValues);
+      const extractedImg = getMerchandisingImageUrl(exactVariant, mergedList);
       return {
         variant: exactVariant,
         imageUrl: extractedImg,
@@ -531,7 +508,6 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     }
 
     // Priority 2: Check for Merged Value Match (e.g. "Black Nude", "Black/Gold") -> +1000 score
-    const mergedList = [...mergedValuesExpanded, ...rawValues];
     let mergedVariant = variants.find(
       (v) => v.available !== false && getVarImg(v) && mergedMatchesList(v, mergedList),
     );
