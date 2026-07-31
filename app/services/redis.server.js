@@ -20,8 +20,11 @@ redis.on('error', (err) => {
   console.error('CFP Redis Error:', err.message);
 });
 
+import { initWebhookWorker } from "../workers/webhookWorker.server.js";
+
 redis.on('connect', () => {
   console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
+  initWebhookWorker();
   // Auto-clear all stale fullApiResponse, merch, and pinning cache keys on server process startup/restart
   Promise.all([
     redis.keys('*fullApiResponse*'),

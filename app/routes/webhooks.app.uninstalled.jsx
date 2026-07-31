@@ -1,16 +1,17 @@
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
+import { enqueueWebhookJob } from "../services/queue.server";
 
 export const action = async ({ request }) => {
   const { shop, session, topic } = await authenticate.webhook(request);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
+  console.log(`CFP: Received ${topic} webhook for ${shop}. Enqueuing to BullMQ...`);
 
-  // Webhook requests can trigger multiple times and after an app has already been uninstalled.
-  // If this webhook already ran, the session may have been deleted previously.
-  if (session) {
-    await db.session.deleteMany({ where: { shop } });
+  try {
+    await enqueueWebhookJob(topic, { shop, payload: {} });
+  } catch (error) {
+    console.error(`CFP: Error enqueuing ${topic} webhook for ${shop}:`, error);
+    return new Response("Error", { status: 500 });
   }
 
-  return new Response();
+  return new Response("Success", { status: 200 });
 };

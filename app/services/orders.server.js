@@ -1,6 +1,6 @@
-import prisma from "../db.server";
-import { unauthenticated } from "../shopify.server";
-import meiliClient from "./meiliClient.server";
+import prisma from "../db.server.js";
+import { unauthenticated } from "../shopify.server.js";
+import meiliClient from "./meiliClient.server.js";
 
 const SCORE_WEIGHTS = {
   bestSellingLifetime: 0.7,

@@ -551,13 +551,28 @@ export const loader = async ({ request }) => {
       })),
     }));
 
-    // Inject pinned products that might not appear in the current filter result (only when no active filters)
-    if (pinnedIds.length > 0 && !userHasFilters) {
-      pinnedIds.forEach((id) => {
-        if (!allMatchedProducts.some((p) => p.id === id)) {
-          allMatchedProducts.push({ id, variants: [] });
-        }
+    // ── 10.5 Unified Multi-Page Pinning Architecture (Supports 50+ Pinned Products) ────
+    const activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
+    const totalPinned = activePinnedList.length;
+
+    let pagePinnedIds = [];
+    if (totalPinned > 0) {
+      const pinStart = (page - 1) * limit;
+      const pinEnd = page * limit;
+      if (pinStart < totalPinned) {
+        pagePinnedIds = activePinnedList.slice(pinStart, pinEnd);
+      }
+      // Always exclude ALL pinned IDs from general Meilisearch results to prevent duplicates across pages
+      allMatchedProducts = allMatchedProducts.filter((p) => !activePinnedList.includes(p.id));
+    }
+
+    // Inject this page's slice of pinned IDs at the front
+    if (pagePinnedIds.length > 0) {
+      const unshiftedPinned = [];
+      pagePinnedIds.forEach((id) => {
+        unshiftedPinned.push({ id, variants: [] });
       });
+      allMatchedProducts = [...unshiftedPinned, ...allMatchedProducts];
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
@@ -571,10 +586,8 @@ export const loader = async ({ request }) => {
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
-    // Fix: Use facetRes.totalHits (exact, returned when using hitsPerPage+page).
-    // meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch when using limit+offset.
-    const totalCount = facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
-    let paginatedSlice = finalProducts.slice(0, limit); // Always return exactly 25 items per page (e.g. 4 pinned + 21 merchandising = 25)
+    const totalCount = (facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned;
+    let paginatedSlice = finalProducts.slice(0, limit); // Strictly 25 items per page
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
