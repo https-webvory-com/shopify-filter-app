@@ -42,12 +42,19 @@ export async function getActiveRuleForCollection(
     });
   });
 
-  // Prioritize specific rules over global (apply to all) rules, and sort by createdAt ASC (older rule created first runs first)
+  // Prioritize specific single-collection rules over broad multi-collection rules
   matchingRules.sort((a, b) => {
-    const aIsGlobal = !a.collections || a.collections.length === 0;
-    const bIsGlobal = !b.collections || b.collections.length === 0;
-    if (aIsGlobal && !bIsGlobal) return 1; // b comes first
-    if (!aIsGlobal && bIsGlobal) return -1; // a comes first
+    const aCount = Array.isArray(a.collections) ? a.collections.length : 0;
+    const bCount = Array.isArray(b.collections) ? b.collections.length : 0;
+
+    const aIsGlobal = aCount === 0;
+    const bIsGlobal = bCount === 0;
+    if (aIsGlobal && !bIsGlobal) return 1;
+    if (!aIsGlobal && bIsGlobal) return -1;
+
+    // More specific rule (fewer assigned collections) takes priority
+    if (aCount !== bCount) return aCount - bCount;
+
     return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
   });
 
@@ -70,11 +77,20 @@ export async function getActiveRuleForCollection(
   }
 
   if (applicableRules.length === 0) return null;
-  if (applicableRules.length === 1) return applicableRules[0];
 
-  // Merge conditions across all matching rules for the collection sequentially
+  // If a specific single-collection rule exists (collections.length === 1), use it exclusively
+  // to prevent broad multi-collection rules (e.g. Include TopFormal) from leaking irrelevant products
+  const specificSingleCollectionRule = applicableRules.find((r) => Array.isArray(r.collections) && r.collections.length === 1);
+  if (specificSingleCollectionRule) {
+    return specificSingleCollectionRule;
+  }
+
+  // Merchandising rules are calculated from bottom to top.
+  // The lower rule (bottom rule / older) runs first, and its result is then adjusted by the upper rule (top rule / newer).
+  const rulesBottomToTop = [...applicableRules].reverse();
+
   const combinedConditions = [];
-  applicableRules.forEach((r) => {
+  rulesBottomToTop.forEach((r) => {
     if (Array.isArray(r.conditions)) {
       combinedConditions.push(...r.conditions);
     }
@@ -614,11 +630,17 @@ export function applyMerchandisingRules(
             const num = parseFloat(numStr);
             if (!isNaN(num)) {
               const op = (cond.operator || "Add").trim();
-              if (op === "Add" || !op || op === "Operator" || op === "Set")
+              if (op === "Set") {
+                p.merchandisingScore = num;
+              } else if (op === "Add" || !op || op === "Operator") {
                 p.merchandisingScore += num;
-              else if (op === "Subtract") p.merchandisingScore -= num;
-              else if (op === "Multiply") p.merchandisingScore *= num;
-              else if (op === "Divide" && num !== 0) p.merchandisingScore /= num;
+              } else if (op === "Subtract") {
+                p.merchandisingScore -= num;
+              } else if (op === "Multiply") {
+                p.merchandisingScore *= num;
+              } else if (op === "Divide" && num !== 0) {
+                p.merchandisingScore /= num;
+              }
             }
           }
         }
