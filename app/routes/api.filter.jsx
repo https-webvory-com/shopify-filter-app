@@ -574,7 +574,7 @@ export const loader = async ({ request }) => {
     // Fix: Use facetRes.totalHits (exact, returned when using hitsPerPage+page).
     // meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch when using limit+offset.
     const totalCount = facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
-    let paginatedSlice = finalProducts; // Already paginated by native Meilisearch query
+    let paginatedSlice = finalProducts.slice(0, limit); // Always return exactly 25 items per page (e.g. 4 pinned + 21 merchandising = 25)
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
