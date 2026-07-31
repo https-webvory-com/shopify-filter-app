@@ -714,7 +714,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
          }
       }
 
-      const priceVal = parseFloat(basePrice) * rate;
+      let priceVal = parseFloat(basePrice) * rate;
+      const currencyActive = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) ? window.Shopify.currency.active : '';
+      if (currencyActive === 'INR' || symbol === '₹') {
+         priceVal = Math.round(priceVal / 100) * 100;
+      }
       const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       
       const hasSaleTag = Array.isArray(product.tags) && product.tags.some(t => typeof t === 'string' && t.toLowerCase().trim().includes('sale'));

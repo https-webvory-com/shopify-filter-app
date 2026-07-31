@@ -1236,7 +1236,11 @@ document.addEventListener("DOMContentLoaded", function () {
       
       let price = "";
       if (p.priceMin !== undefined) {
-         const priceVal = parseFloat(p.priceMin) * rate;
+         let priceVal = parseFloat(p.priceMin) * rate;
+         const currencyActive = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) ? window.Shopify.currency.active : '';
+         if (currencyActive === 'INR' || symbol === '₹') {
+            priceVal = Math.round(priceVal / 100) * 100;
+         }
          price = `${symbol}${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       }
       let productUrl = `/products/${p.handle}`;

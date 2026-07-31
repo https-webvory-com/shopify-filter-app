@@ -402,8 +402,8 @@ export const loader = async ({ request }) => {
     // Previously: limit:1000 fetched 1000 full docs (with variants!) for JS-side pagination
     // Now: Only 24 docs are transferred per request
     //
-    // Build Native Meilisearch filter for Merchandising Boost conditions (e.g. Color = Red)
-    const ruleMeiliFilters = buildMeiliRuleFilter(activeRule?.conditions);
+    // Build Native Meilisearch filter for Merchandising Boost conditions (only when no manual filters selected)
+    const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
     const mainQueryFilter = ruleMeiliFilters.length > 0 
       ? [...allFiltersList, ...ruleMeiliFilters]
       : allFiltersList;
