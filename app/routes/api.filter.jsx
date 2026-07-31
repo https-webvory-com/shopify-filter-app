@@ -91,35 +91,6 @@ export const loader = async ({ request }) => {
       }
     }
 
-    // ── 0.5 Full Response Redis Cache Check (Fast-Path) ───────────────
-    const sortedParams = new URLSearchParams([...url.searchParams.entries()].sort((a, b) => a[0].localeCompare(b[0])));
-    const responseCacheKey = `fullApiResponse:${shop}:${sortedParams.toString()}`;
-    const cachedApiResponse = await getCached(responseCacheKey, async () => null, 30);
-    if (cachedApiResponse) {
-      const cachedTotalMs = Date.now() - startTime;
-      return data(
-        {
-          ...cachedApiResponse,
-          debug: {
-            ...(cachedApiResponse.debug || {}),
-            redisCached: true,
-            timing: {
-              ...(cachedApiResponse.debug?.timing || {}),
-              totalMs: cachedTotalMs,
-            },
-          },
-        },
-        {
-          headers: {
-            'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          },
-        }
-      );
-    }
-
     // ── 1. Parallel fetch: stable shop config (all cached) ─────────────
     // These 3 change only when admin saves settings → safe to cache 60s
     const [globalSettings, mergedValues, resolvedGroup] = await Promise.all([
