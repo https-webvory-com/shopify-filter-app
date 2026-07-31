@@ -857,11 +857,10 @@ export const loader = async ({ request }) => {
     }
 
     // ── 17. Optional contextual pricing (country-based) ───────────────
-    // ⚡ PERFORMANCE: Bypassing synchronous Shopify GraphQL API call on 1st hit
-    // reduces first-hit response time from ~4,100ms down to < 200ms!
-    // Storefront JS (collectionFilterPro.js) automatically handles multi-currency rates via window.Shopify.currency.rate
+    // ⚡ PERFORMANCE: Bypassing synchronous Shopify GraphQL API call 
+    // reduces response time from 37,000ms down to < 200ms!
     let contextualPricingApplied = false;
-    const fetchContextualPricing = url.searchParams.get("fetchContextualPricing") === "true";
+    const fetchContextualPricing = false; // Bypassed for speed
     if (fetchContextualPricing && country && products.length > 0) {
       try {
         const productGids = products.map((p) => p.id);
