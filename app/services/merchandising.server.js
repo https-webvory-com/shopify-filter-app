@@ -639,6 +639,14 @@ export function applyMerchandisingRules(
 
   // Fast O(1) Sort logic
   filteredProducts.sort((a, b) => {
+    // When a customer explicitly selects a manual sort order (e.g. Price: Low to High, Price: High to Low),
+    // customer sort takes precedence over default rules so price sorting is 100% accurate.
+    const isCustomSortSelected = sortBy && sortBy !== "best-selling" && sortBy !== "manual";
+    if (isCustomSortSelected) {
+      const customComparison = defaultSortComparison(a, b, sortBy);
+      if (customComparison !== 0) return customComparison;
+    }
+
     const aPinIndex = pinMap.has(a.id) ? pinMap.get(a.id) : -1;
     const bPinIndex = pinMap.has(b.id) ? pinMap.get(b.id) : -1;
 
@@ -659,7 +667,7 @@ export function applyMerchandisingRules(
       return b.merchandisingScore - a.merchandisingScore;
     }
 
-    // 3. Fallback to default / selected sort order tie-breaker
+    // 3. Fallback to default sort comparison
     return defaultSortComparison(a, b, sortBy);
   });
 
