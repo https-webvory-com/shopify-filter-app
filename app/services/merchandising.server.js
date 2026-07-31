@@ -820,3 +820,47 @@ export function buildMeiliIncludeFilters(includeConditions) {
   return meiliFilters;
 }
 
+/**
+ * Builds native Meilisearch filter list for Merchandising Boost conditions (e.g. Color = Red).
+ */
+export function buildMeiliRuleFilter(ruleConditions) {
+  if (!ruleConditions || ruleConditions.length === 0) return [];
+  const filters = [];
+
+  for (const cond of ruleConditions) {
+    // Only process Add / Set / Pin / Dynamic boost conditions
+    if (cond.action === "Bury" || cond.action === "Include") continue;
+
+    const field = cond.field || "";
+    const valueString = cond.value || "";
+    const values = valueString
+      .split(",")
+      .map((s) => s.replace(/[\[\]"']/g, "").trim())
+      .filter(Boolean);
+
+    if (values.length === 0) continue;
+
+    if (field === "Color (product option)" || field.toLowerCase().includes("color")) {
+      const colorValues = [];
+      values.forEach((v) => {
+        colorValues.push(v, v.toUpperCase(), v.toLowerCase());
+        colorValues.push(`${v} Multi`, `Deep ${v}`, `Dark ${v}`, `Bright ${v}`, `Ruby ${v}`);
+      });
+      const uniqueColors = [...new Set(colorValues)];
+      filters.push(`option_Color IN [${uniqueColors.map((c) => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Vendor") {
+      filters.push(`vendor IN [${values.map((v) => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Product type") {
+      filters.push(`productType IN [${values.map((t) => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field === "Tags") {
+      filters.push(`tags IN [${values.map((t) => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`);
+    } else if (field.includes("(product option)")) {
+      const optName = field.replace(" (product option)", "");
+      filters.push(`option_${optName} IN [${values.map((v) => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`);
+    }
+  }
+
+  return filters;
+}
+
+

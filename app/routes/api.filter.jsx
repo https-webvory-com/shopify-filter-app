@@ -7,6 +7,7 @@ import {
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
   buildMeiliIncludeFilters,
+  buildMeiliRuleFilter,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -401,34 +402,21 @@ export const loader = async ({ request }) => {
     // Previously: limit:1000 fetched 1000 full docs (with variants!) for JS-side pagination
     // Now: Only 24 docs are transferred per request
     //
-    // EXCEPTION: When pinning is active, we need a broader fetch to inject pinned products
-    // at the right positions. We fetch 1 extra page + pinned count in that case.
-
-    const hasPinning = pinnedIds.length > 0;
-    const hasMerchandising = activeRule?.conditions?.length > 0;
-    const needsBroadFetch = hasPinning || hasMerchandising;
-
-    // Fetch current page window + pinned products count as buffer
-    const pinnedBuffer = pinnedIds.length > 0 ? pinnedIds.length : 0;
-    
-    // If merchandising is active, we MUST fetch from 0 to sort globally (e.g. Boost/Pin rules).
-    const broadFetchOffset = hasMerchandising 
-      ? 0 
-      : Math.max(0, (page - 1) * limit - pinnedBuffer);
-      
-    const broadFetchLimit = hasMerchandising 
-      ? (page + 12) * limit + 150 
-      : limit + pinnedBuffer + 10;
+    // Build Native Meilisearch filter for Merchandising Boost conditions (e.g. Color = Red)
+    const ruleMeiliFilters = buildMeiliRuleFilter(activeRule?.conditions);
+    const mainQueryFilter = ruleMeiliFilters.length > 0 
+      ? [...allFiltersList, ...ruleMeiliFilters]
+      : allFiltersList;
 
     const queries = [];
 
-    // Query A: Main product data
+    // Query A: Main paginated product data (Native 2-Tier Query Architecture)
     const mainQuery = {
       indexUid: "products",
       q: searchQuery,
-      filter: allFiltersList,
-      limit: needsBroadFetch ? broadFetchLimit : limit,
-      offset: needsBroadFetch ? broadFetchOffset : (page - 1) * limit,
+      filter: mainQueryFilter,
+      limit: limit,
+      offset: (page - 1) * limit,
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
         "priceMin", "priceMax", "tags", "images", "variantPrices",
@@ -586,12 +574,7 @@ export const loader = async ({ request }) => {
     // Fix: Use facetRes.totalHits (exact, returned when using hitsPerPage+page).
     // meiliRes.estimatedTotalHits is capped at 1000 by Meilisearch when using limit+offset.
     const totalCount = facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0;
-    let paginatedSlice = needsBroadFetch
-      ? finalProducts.slice(
-          (page - 1) * limit - broadFetchOffset,
-          page * limit - broadFetchOffset
-        )
-      : finalProducts; // Already paginated by Meilisearch
+    let paginatedSlice = finalProducts; // Already paginated by native Meilisearch query
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
