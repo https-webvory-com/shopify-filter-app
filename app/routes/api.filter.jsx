@@ -61,7 +61,13 @@ export const loader = async ({ request }) => {
     const isSearch = url.searchParams.get("isSearch") === "true";
     const searchQuery = url.searchParams.get("q") || "";
     const searchType = url.searchParams.get("searchType") || "page";
-    const sortBy = url.searchParams.get("sortBy") || "best-selling";
+    const rawSort =
+      url.searchParams.get("sortBy") ||
+      url.searchParams.get("sort_by") ||
+      url.searchParams.get("sort") ||
+      url.searchParams.get("usf_sort") ||
+      "best-selling";
+    const sortBy = rawSort.toLowerCase().replace(/_/g, "-");
     const page = parseInt(url.searchParams.get("page") || "1");
     const limit = parseInt(url.searchParams.get("limit") || "25");
     const country = url.searchParams.get("country");
@@ -341,33 +347,39 @@ export const loader = async ({ request }) => {
     let meiliSort = null;
     switch (sortBy) {
       case "best-selling":
+      case "bestselling":
+      case "manual":
         meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
         break;
       case "trending":
         meiliSort = ["trendingScore:desc", "bestSellingScore:desc", "createdAt:desc"];
         break;
       case "title-ascending":
+      case "title-asc":
         meiliSort = ["title:asc"];
         break;
       case "title-descending":
+      case "title-desc":
         meiliSort = ["title:desc"];
         break;
       case "price-ascending":
+      case "price-asc":
         meiliSort = ["priceMin:asc"];
         break;
       case "price-descending":
+      case "price-desc":
         meiliSort = ["priceMin:desc"];
         break;
       case "created-descending":
+      case "created-desc":
         meiliSort = ["createdAt:desc"];
         break;
       case "created-ascending":
+      case "created-asc":
         meiliSort = ["createdAt:asc"];
         break;
       default:
-        if (!isSearch || !searchQuery) {
-          meiliSort = ["createdAt:desc"];
-        }
+        meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
         break;
     }
 
