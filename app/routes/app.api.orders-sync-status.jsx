@@ -15,6 +15,7 @@ export const loader = async ({ request }) => {
       where: {
         shop,
         status: { in: ["IN_PROGRESS", "COMPLETED", "FAILED"] },
+        totalProducts: null // ONLY ORDERS SYNC JOBS HAVE THIS NULL
       },
       orderBy: { createdAt: "desc" },
     });

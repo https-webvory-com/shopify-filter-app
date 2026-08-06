@@ -164,7 +164,7 @@ export async function getActiveRuleForSearch(
 export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   if (!shop || !collectionTitle) return null;
 
-  if (collectionTitle === "all") {
+  if (collectionTitle.toLowerCase() === "all") {
     return await prisma.pinnedProductRule.findFirst({
       where: {
         shop,
@@ -181,6 +181,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
       shop,
       status: true,
       ruleType: "collection",
+      applyToAll: false, // Ensure we don't accidentally match the 'all' rule
     },
     orderBy: { createdAt: "desc" },
   });
@@ -198,12 +199,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
     });
   });
 
-  if (specificRule) {
-    return specificRule;
-  }
-
-  // Fallback to applyToAll rules
-  return allRules.find((r) => r.applyToAll === true) || null;
+  return specificRule || null;
 }
 
 export async function getActivePinningRuleForSearch(

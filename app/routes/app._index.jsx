@@ -15,7 +15,11 @@ export const loader = async ({ request }) => {
   });
 
   let activeSyncJob = await prisma.syncJob.findFirst({
-    where: { shop: session.shop, status: "IN_PROGRESS" },
+    where: { 
+      shop: session.shop, 
+      status: "IN_PROGRESS",
+      totalProducts: { not: null }
+    },
   });
 
   // Crash recovery: if the job hasn't been updated in 1 minute, it's stuck -> mark FAILED (resumable)
@@ -35,7 +39,11 @@ export const loader = async ({ request }) => {
   // Check if a FAILED (resumable) job exists
   const resumableJob = !activeSyncJob
     ? await prisma.syncJob.findFirst({
-        where: { shop: session.shop, status: "FAILED" },
+        where: { 
+          shop: session.shop, 
+          status: "FAILED",
+          totalProducts: { not: null }
+        },
         orderBy: { createdAt: "desc" },
       })
     : null;
@@ -44,7 +52,11 @@ export const loader = async ({ request }) => {
 
   // Last completed sync job
   const lastCompletedJob = await prisma.syncJob.findFirst({
-    where: { shop: session.shop, status: "COMPLETED" },
+    where: { 
+      shop: session.shop, 
+      status: "COMPLETED",
+      totalProducts: { not: null }
+    },
     orderBy: { updatedAt: "desc" },
   });
 

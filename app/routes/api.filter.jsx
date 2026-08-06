@@ -635,12 +635,29 @@ export const loader = async ({ request }) => {
         option1: v.option1,
         option2: v.option2,
         option3: v.option3,
-        imageUrl: v.imageUrl || null, // Fix: preserve imageUrl for swatch rendering
+        imageUrl: v.imageUrl || (h.images && h.images.length > 0 ? h.images[0] : null), // Fallback to main product image for swatches
       })),
     }));
 
     // ── 10.5 Unified Multi-Page Pinning Architecture (Supports 50+ Pinned Products) ────
-    const activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
+    let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
+    
+    // Fix: Filter out out-of-stock pinned products BEFORE pagination to prevent empty slots on pages
+    if (activePinnedList.length > 0 && globalSettings?.showOnlyInStock) {
+      try {
+        const dbStock = await prisma.product.findMany({
+          where: { id: { in: activePinnedList } },
+          select: { id: true, variants: { select: { available: true } } }
+        });
+        activePinnedList = activePinnedList.filter(id => {
+          const match = dbStock.find(p => p.id === id);
+          return match && match.variants.some(v => v.available === true);
+        });
+      } catch (e) {
+        console.error("CFP: Failed to check pinned stock", e);
+      }
+    }
+
     const totalPinned = activePinnedList.length;
 
     let pagePinnedIds = [];
@@ -746,21 +763,38 @@ export const loader = async ({ request }) => {
       }
     }
 
-    // ── 12.6 Remove Out-Of-Stock Pinned Products if needed ─────────────
-    if (globalSettings?.showOnlyInStock) {
-      paginatedSlice = paginatedSlice.filter(p => {
-        if (p.isAvailable !== undefined) {
-          return p.isAvailable; // Injected pinned products
-        }
-        return true; // Regular Meilisearch products are already filtered
-      });
-    }
+    // Out-of-stock pinned products are now filtered BEFORE pagination.
 
     // ── 13. Shape products for response ───────────────────────────────
     let products = paginatedSlice.map((p) => {
       const variantPrices = p.variantPrices || [];
       let productImages = p.images || [];
-      if (p.merchandisingImage) {
+      
+      // Dynamic variant image swapping based on active filters
+      let filterVariantImage = null;
+      if (Object.keys(expandedOptionsFilters).length > 0 && p.options && variantPrices.length > 0) {
+        const matchingVariant = variantPrices.find(v => {
+          return Object.keys(expandedOptionsFilters).some(filterName => {
+            const filterValues = expandedOptionsFilters[filterName].map(val => val.toLowerCase());
+            const optIndex = p.options.findIndex(opt => opt.name.toLowerCase() === filterName.toLowerCase());
+            if (optIndex === 0 && v.option1 && filterValues.includes(v.option1.toLowerCase())) return true;
+            if (optIndex === 1 && v.option2 && filterValues.includes(v.option2.toLowerCase())) return true;
+            if (optIndex === 2 && v.option3 && filterValues.includes(v.option3.toLowerCase())) return true;
+            return false;
+          });
+        });
+        
+        if (matchingVariant && matchingVariant.imageUrl) {
+          filterVariantImage = matchingVariant.imageUrl;
+        }
+      }
+
+      if (filterVariantImage) {
+        productImages = [
+          filterVariantImage,
+          ...productImages.filter((img) => img !== filterVariantImage),
+        ];
+      } else if (p.merchandisingImage) {
         productImages = [
           p.merchandisingImage,
           ...productImages.filter((img) => img !== p.merchandisingImage),
@@ -777,8 +811,8 @@ export const loader = async ({ request }) => {
         priceMax: p.priceMax,
         tags: p.tags || [],
         images: productImages,
-        image: p.merchandisingImage || (productImages.length > 0 ? productImages[0] : null),
-        featured_image: p.merchandisingImage || (productImages.length > 0 ? productImages[0] : null),
+        image: productImages.length > 0 ? productImages[0] : null,
+        featured_image: productImages.length > 0 ? productImages[0] : null,
         status: (p.status || "ACTIVE").toLowerCase(),
         options: p.options || [],
         merchandisingImage: p.merchandisingImage || null,
@@ -790,7 +824,7 @@ export const loader = async ({ request }) => {
           option1: v.option1,
           option2: v.option2,
           option3: v.option3,
-          imageUrl: v.imageUrl,
+          imageUrl: v.imageUrl || (productImages.length > 0 ? productImages[0] : null), // Fallback to main product image for swatches
         })),
       };
 
