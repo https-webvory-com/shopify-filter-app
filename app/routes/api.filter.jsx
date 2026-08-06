@@ -393,11 +393,24 @@ export const loader = async ({ request }) => {
     const includeConditions = activeRule?.conditions?.filter((c) => c.action === "Include") || [];
     const includeMeiliFilters = buildMeiliIncludeFilters(includeConditions);
 
-    if (resolvedCollectionId) {
+    if (resolvedCollectionId || (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all")) {
+      const collClauseParts = [];
+      if (resolvedCollectionId) {
+        collClauseParts.push(`collections = '${resolvedCollectionId}'`);
+        if (!resolvedCollectionId.includes("gid://")) {
+          collClauseParts.push(`collections = 'gid://shopify/Collection/${resolvedCollectionId}'`);
+        }
+      }
+      if (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all") {
+        collClauseParts.push(`collection_titles IN ['${resolvedCollectionTitle.replace(/'/g, "\\'")}']`);
+      }
+
+      const collClause = collClauseParts.join(" OR ");
+
       if (includeMeiliFilters.length > 0) {
-        baseFilters.push(`(collections = '${resolvedCollectionId}' OR ${includeMeiliFilters.join(" OR ")})`);
+        baseFilters.push(`((${collClause}) OR ${includeMeiliFilters.join(" OR ")})`);
       } else {
-        baseFilters.push(`collections = '${resolvedCollectionId}'`);
+        baseFilters.push(`(${collClause})`);
       }
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
