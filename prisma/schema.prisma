@@ -43,6 +43,7 @@ model Product {
   updatedAt       DateTime            @updatedAt
   
   // Sales Metrics for Rankings
+  unitsLifetime    Int      @default(0)   // All-time lifetime units sold
   unitsSold60Days  Int      @default(0)
   unitsSold7Days   Int      @default(0)
   grossRevenue     Float    @default(0.0)

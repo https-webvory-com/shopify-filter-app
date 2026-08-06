@@ -210,6 +210,7 @@ export async function syncHistoricalOrders(shop) {
     await prisma.product.updateMany({
       where: { shop },
       data: {
+        unitsLifetime: 0,
         unitsSold60Days: 0,
         unitsSold7Days: 0,
         grossRevenue: 0.0,
@@ -248,6 +249,7 @@ export async function syncHistoricalOrders(shop) {
         await prisma.product.update({
           where: { id: productId },
           data: {
+            unitsLifetime: stats.unitsLifetime,
             unitsSold60Days: stats.unitsSold60Days,
             unitsSold7Days: stats.unitsSold7Days,
             grossRevenue: stats.revenueLifetime,
@@ -294,15 +296,16 @@ export async function syncHistoricalOrders(shop) {
 /**
  * Calculates Best Selling Score and Trending Score based on advanced metrics.
  * Uses lifetime sales data for bestSellingScore to get accurate ranking.
+ * Pure volume-based (units sold only) to match SoBooster's approach.
  */
 export function calculateProductScores(unitsLifetime, unitsSold7Days, revenueLifetime, orderCount) {
-  // Best Selling Score = (Lifetime Units × 0.6) + (Lifetime Revenue / 100 × 0.4)
-  // Using lifetime data gives true bestseller ranking
-  const bestSellingScore = (unitsLifetime * 0.6) + ((revenueLifetime / 100) * 0.4);
+  // Best Selling Score = pure lifetime units sold (volume-based, matches SoBooster)
+  // NOT weighted by revenue - revenue-weighting unfairly boosts expensive low-volume products
+  const bestSellingScore = unitsLifetime;
 
-  // Trending Score = (Lifetime Units × 0.3) + (Revenue / 100 × 0.2) + (Order Count × 0.1) + (Recent 7-day Sales × 0.4)
-  // Higher weight on recent sales for trending
-  const trendingScore = (unitsLifetime * 0.3) + ((revenueLifetime / 100) * 0.2) + (orderCount * 0.1) + (unitsSold7Days * 0.4);
+  // Trending Score = recency-weighted: recent 7-day sales get 60% weight, lifetime 40%
+  // Higher weight on recent sales for trending to surface newly popular items
+  const trendingScore = (unitsLifetime * 0.4) + (unitsSold7Days * 0.6);
 
   return {
     bestSellingScore: parseFloat(bestSellingScore.toFixed(2)),
