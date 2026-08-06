@@ -772,10 +772,10 @@ export const loader = async ({ request }) => {
       
       // Dynamic variant image swapping based on active filters
       let filterVariantImage = null;
-      if (Object.keys(expandedOptionsFilters).length > 0 && p.options && variantPrices.length > 0) {
+      if (Object.keys(optionsFilters).length > 0 && p.options && variantPrices.length > 0) {
         const matchingVariant = variantPrices.find(v => {
-          return Object.keys(expandedOptionsFilters).some(filterName => {
-            const filterValues = expandedOptionsFilters[filterName].map(val => val.toLowerCase());
+          return Object.keys(optionsFilters).some(filterName => {
+            const filterValues = optionsFilters[filterName].map(val => val.toLowerCase());
             const optIndex = p.options.findIndex(opt => opt.name.toLowerCase() === filterName.toLowerCase());
             if (optIndex === 0 && v.option1 && filterValues.includes(v.option1.toLowerCase())) return true;
             if (optIndex === 1 && v.option2 && filterValues.includes(v.option2.toLowerCase())) return true;

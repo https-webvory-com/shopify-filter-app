@@ -37,7 +37,7 @@ export const loader = async ({ request }) => {
   }
 
   // Check if a FAILED (resumable) job exists
-  const resumableJob = !activeSyncJob
+  let resumableJob = !activeSyncJob
     ? await prisma.syncJob.findFirst({
         where: { 
           shop: session.shop, 
@@ -59,6 +59,11 @@ export const loader = async ({ request }) => {
     },
     orderBy: { updatedAt: "desc" },
   });
+
+  // If a completed job exists that is newer than the failed job, then the failed job is obsolete
+  if (resumableJob && lastCompletedJob && new Date(lastCompletedJob.createdAt) > new Date(resumableJob.createdAt)) {
+    resumableJob = null;
+  }
 
   return {
     syncedProductsCount,
