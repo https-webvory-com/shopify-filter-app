@@ -246,12 +246,25 @@ export const loader = async ({ request }) => {
           expanded.push(...r.sourceValues);
         }
 
-        // Smart synonym/tag variation generator (e.g. "Back Zip" -> "BackZip", "Back-Zip", "Back Zipper", "Zip Back", "Zipper Back")
+        // Smart synonym/tag variation generator (e.g. "Back Zip" -> "Back Style_Back Zip", "Length_Floor Length")
         if (type.toLowerCase() === "tags") {
           const clean = val.trim();
           expanded.push(clean.toLowerCase(), clean.toUpperCase());
           expanded.push(clean.replace(/\s+/g, ""));
           expanded.push(clean.replace(/\s+/g, "-"));
+
+          // Shopify tag group prefixes (Group_Value, Group: Value)
+          const commonPrefixes = [
+            "Back Style_", "Back_", "Style_", "Length_", "Neckline_", "Silhouette_",
+            "Embellishment_", "Fabric_", "Occasion_", "Ocassion_", "Pattern_", "Skirt Details_",
+            "Sleeve Type_", "Waistline_", "Straps & Sleeves_", "Fit Details_", "Color_"
+          ];
+
+          for (const prefix of commonPrefixes) {
+            expanded.push(`${prefix}${clean}`);
+            expanded.push(`${prefix}${clean.replace(/\s+/g, "")}`);
+            expanded.push(`${prefix.replace("_", ": ")}${clean}`);
+          }
 
           if (clean.toLowerCase().includes("zip") && !clean.toLowerCase().includes("zipper")) {
             expanded.push(clean.replace(/zip/i, "Zipper"));
@@ -265,9 +278,11 @@ export const loader = async ({ request }) => {
           const lowerClean = clean.toLowerCase();
           if (lowerClean.includes("back") && lowerClean.includes("zip")) {
             expanded.push(
+              "Back Style_Back Zip", "Back Style_BackZip", "Back Style: Back Zip",
               "Back Zip", "BackZip", "Back-Zip", "back zip", "backzip",
               "Back Zipper", "Back zipper", "Zip Back", "Zipper Back",
-              "Back Zip Closure", "Center Back Zip", "Back: Zip", "Back Closure: Zip"
+              "Back Zip Closure", "Center Back Zip", "Back: Zip", "Back Closure: Zip",
+              "Zipper", "Zip", "ZipperBack", "Zipper Back"
             );
           }
         }
