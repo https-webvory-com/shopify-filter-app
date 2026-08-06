@@ -564,7 +564,7 @@ async function processSyncChunk(jobId, shop, admin) {
             .map((c) => c.title),
           available,
           status: (p.status || "ACTIVE").toUpperCase(),
-          createdAt: Date.now(),
+          createdAt: p.publishedAt ? new Date(p.publishedAt).getTime() : Date.now(),
           bestSellingScore: p.bestSellingScore || 0.0,
           trendingScore: p.trendingScore || 0.0,
           images: p.images.nodes.map((img) => img.url), // all images, no limit
@@ -1050,7 +1050,7 @@ export async function syncSingleProduct(shop, admin, productId) {
       collection_titles: product.collections.nodes.map((c) => c.title),
       available,
       status: (product.status || "ACTIVE").toUpperCase(),
-      createdAt: Date.now(),
+      createdAt: product.publishedAt ? new Date(product.publishedAt).getTime() : Date.now(),
       bestSellingScore: existingDbProduct?.bestSellingScore || 0.0,
       trendingScore: existingDbProduct?.trendingScore || 0.0,
       images: product.images.nodes.map((img) => img.url), // all images, no limit

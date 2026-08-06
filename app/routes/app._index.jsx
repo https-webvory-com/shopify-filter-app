@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncProducts } from "../services/sync.server";
+import { syncHistoricalOrders } from "../services/orders.server";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 export const loader = async ({ request }) => {
@@ -81,6 +82,21 @@ export const action = async ({ request }) => {
     }
   }
 
+  if (actionType === "sync_orders") {
+    try {
+      // Run orders sync in background (don't await fully)
+      syncHistoricalOrders(session.shop).then(() => {
+        console.log("Orders sync completed for", session.shop);
+      }).catch(err => {
+        console.error("Orders sync failed:", err);
+      });
+      return { success: true, message: "Orders sync started in background! This may take a few minutes.", type: "sync_orders" };
+    } catch (e) {
+      console.error("Orders sync error:", e);
+      return { error: e.message, type: "sync_orders" };
+    }
+  }
+
   return null;
 };
 
@@ -108,8 +124,8 @@ export default function Index() {
     isSyncingBackground;
 
   useEffect(() => {
-    if (syncFetcher.data?.success && syncFetcher.data?.type === "sync") {
-      shopify.toast.show(syncFetcher.data.message || "Sync started in background!");
+    if (syncFetcher.data?.success && (syncFetcher.data?.type === "sync" || syncFetcher.data?.type === "sync_orders")) {
+      shopify.toast.show(syncFetcher.data.message || "Sync started in background!", { duration: 6000 });
     } else if (syncFetcher.data?.error) {
       shopify.toast.show(`Sync failed: ${syncFetcher.data.error}`, {
         isError: true,
@@ -623,6 +639,29 @@ export default function Index() {
                 🔄 Restart Full Sync
               </button>
             )}
+
+            {/* Sync Sales Data Button */}
+            <button
+              onClick={() => syncFetcher.submit({ actionType: "sync_orders" }, { method: "POST" })}
+              disabled={isSyncing}
+              style={{
+                background: "#059669",
+                color: "#ffffff",
+                border: "none",
+                padding: "10px 16px",
+                borderRadius: "10px",
+                fontSize: "14px",
+                fontWeight: "600",
+                cursor: isSyncing ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                opacity: isSyncing ? 0.6 : 1,
+              }}
+              title="Sync ALL-TIME sales data from Shopify Orders to calculate accurate Best Selling scores (may take 5-15 mins)"
+            >
+              📊 Sync Sales Data (Best Selling)
+            </button>
           </div>
         </div>
 

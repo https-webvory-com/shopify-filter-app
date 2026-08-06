@@ -2,13 +2,9 @@ import prisma from "../db.server.js";
 import { unauthenticated } from "../shopify.server.js";
 import meiliClient from "./meiliClient.server.js";
 
-const SCORE_WEIGHTS = {
-  bestSellingLifetime: 0.7,
-  bestSellingRecent: 0.3,
-};
-
 /**
- * Syncs the last 60 days of orders for the shop and updates unitsSold metrics.
+ * Syncs ALL historical orders (all-time) for the shop and updates bestSellingScore metrics.
+ * Uses read_all_orders scope for complete lifetime sales data.
  */
 export async function syncHistoricalOrders(shop) {
   try {
@@ -18,25 +14,26 @@ export async function syncHistoricalOrders(shop) {
       return false;
     }
 
-    console.log(`OrdersSync: Starting historical order sync for ${shop}...`);
+    console.log(`OrdersSync: Starting ALL-TIME historical order sync for ${shop}...`);
 
     let cursor = null;
     let hasNextPage = true;
     let processedOrders = 0;
-    
-    // Using a map to aggregate data per product
+    let pageCount = 0;
+
+    // Using a map to aggregate data per product (all-time lifetime)
     const productAggregations = {};
 
-    // Calculate dates
+    // Calculate date thresholds for trending scores
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    // Use only YYYY-MM-DD to prevent colons from breaking Shopify GraphQL search syntax
-    const sixtyDaysAgoStr = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
+    // Fetch ALL orders (no date filter) using read_all_orders scope
     while (hasNextPage) {
       const query = `
         query getOrders($cursor: String) {
-          orders(first: 50, after: $cursor, sortKey: CREATED_AT, reverse: true, query: "created_at:>=${sixtyDaysAgoStr}") {
+          orders(first: 100, after: $cursor, sortKey: CREATED_AT, reverse: true) {
             pageInfo {
               hasNextPage
               endCursor
@@ -91,10 +88,16 @@ export async function syncHistoricalOrders(shop) {
 
       const orders = json.data?.orders?.nodes || [];
       const pageInfo = json.data?.orders?.pageInfo;
+      pageCount++;
+
+      if (pageCount % 10 === 0) {
+        console.log(`OrdersSync: Processed ${processedOrders} orders so far (page ${pageCount})...`);
+      }
 
       for (const order of orders) {
         const orderDate = new Date(order.createdAt);
-        const isRecent = orderDate >= sevenDaysAgo;
+        const isRecent7Days = orderDate >= sevenDaysAgo;
+        const isRecent60Days = orderDate >= sixtyDaysAgo;
 
         // Track unique products in this order
         const uniqueProductsInOrder = new Set();
@@ -105,16 +108,32 @@ export async function syncHistoricalOrders(shop) {
           if (!productId) continue;
 
           if (!productAggregations[productId]) {
-            productAggregations[productId] = { unitsSold60Days: 0, unitsSold7Days: 0, grossRevenue: 0.0, orderCount: 0 };
+            productAggregations[productId] = {
+              unitsLifetime: 0,
+              unitsSold60Days: 0,
+              unitsSold7Days: 0,
+              revenueLifetime: 0.0,
+              grossRevenue: 0.0,
+              orderCount: 0,
+            };
           }
 
-          productAggregations[productId].unitsSold60Days += lineItem.quantity;
-          
+          const qty = lineItem.quantity || 0;
           const lineRevenue = parseFloat(lineItem.originalTotalSet?.shopMoney?.amount || "0");
-          productAggregations[productId].grossRevenue += lineRevenue;
 
-          if (isRecent) {
-            productAggregations[productId].unitsSold7Days += lineItem.quantity;
+          // Lifetime totals
+          productAggregations[productId].unitsLifetime += qty;
+          productAggregations[productId].revenueLifetime += lineRevenue;
+
+          // 60-day window
+          if (isRecent60Days) {
+            productAggregations[productId].unitsSold60Days += qty;
+            productAggregations[productId].grossRevenue += lineRevenue;
+          }
+
+          // 7-day window (trending)
+          if (isRecent7Days) {
+            productAggregations[productId].unitsSold7Days += qty;
           }
 
           uniqueProductsInOrder.add(productId);
@@ -130,21 +149,22 @@ export async function syncHistoricalOrders(shop) {
           for (const refund of order.refunds) {
             for (const rli of refund.refundLineItems.nodes) {
               const productId = rli.lineItem?.product?.id;
-              if (!productId) continue;
+              if (!productId || !productAggregations[productId]) continue;
 
-              if (!productAggregations[productId]) {
-                productAggregations[productId] = { unitsSold60Days: 0, unitsSold7Days: 0, grossRevenue: 0.0, orderCount: 0 };
-              }
-
-              // Safely deduct units without going below 0
-              productAggregations[productId].unitsSold60Days = Math.max(0, productAggregations[productId].unitsSold60Days - rli.quantity);
-              
+              const refundQty = rli.quantity || 0;
               const refundUnitAmount = parseFloat(rli.lineItem?.originalUnitPriceSet?.shopMoney?.amount || "0");
-              const refundTotal = refundUnitAmount * rli.quantity;
+              const refundTotal = refundUnitAmount * refundQty;
+
+              // Deduct from lifetime
+              productAggregations[productId].unitsLifetime = Math.max(0, productAggregations[productId].unitsLifetime - refundQty);
+              productAggregations[productId].revenueLifetime = Math.max(0, productAggregations[productId].revenueLifetime - refundTotal);
+
+              // Deduct from 60-day if applicable
+              productAggregations[productId].unitsSold60Days = Math.max(0, productAggregations[productId].unitsSold60Days - refundQty);
               productAggregations[productId].grossRevenue = Math.max(0, productAggregations[productId].grossRevenue - refundTotal);
 
-              if (isRecent) {
-                productAggregations[productId].unitsSold7Days = Math.max(0, productAggregations[productId].unitsSold7Days - rli.quantity);
+              if (isRecent7Days) {
+                productAggregations[productId].unitsSold7Days = Math.max(0, productAggregations[productId].unitsSold7Days - refundQty);
               }
             }
           }
@@ -156,9 +176,9 @@ export async function syncHistoricalOrders(shop) {
       cursor = pageInfo?.endCursor || null;
     }
 
-    console.log(`OrdersSync: Fetched ${processedOrders} orders. Updating products...`);
+    console.log(`OrdersSync: Fetched ALL ${processedOrders} orders across ${pageCount} pages. Updating ${Object.keys(productAggregations).length} products...`);
 
-    // Reset metrics for all products before applying the new 60-day aggregations
+    // Reset metrics for all products before applying fresh aggregations
     await prisma.product.updateMany({
       where: { shop },
       data: {
@@ -171,40 +191,54 @@ export async function syncHistoricalOrders(shop) {
       }
     });
 
-    // Update Prisma and calculate scores
+    // Update Prisma and calculate scores using LIFETIME data
     let updatedCount = 0;
-    for (const [productId, stats] of Object.entries(productAggregations)) {
-      const product = await prisma.product.findUnique({
-        where: { id: productId },
-        select: { id: true, createdAt: true }
-      });
+    const productIds = Object.keys(productAggregations);
 
-      if (!product) continue;
+    // Process in batches of 50 for efficiency
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < productIds.length; i += BATCH_SIZE) {
+      const batch = productIds.slice(i, i + BATCH_SIZE);
 
-      const scores = calculateProductScores(
-        stats.unitsSold60Days,
-        stats.unitsSold7Days,
-        stats.grossRevenue,
-        stats.orderCount
-      );
+      await Promise.all(batch.map(async (productId) => {
+        const stats = productAggregations[productId];
 
-      await prisma.product.update({
-        where: { id: productId },
-        data: {
-          unitsSold60Days: stats.unitsSold60Days,
-          unitsSold7Days: stats.unitsSold7Days,
-          grossRevenue: stats.grossRevenue,
-          orderCount: stats.orderCount,
-          bestSellingScore: scores.bestSellingScore,
-          trendingScore: scores.trendingScore,
-        }
-      });
-      updatedCount++;
+        const product = await prisma.product.findUnique({
+          where: { id: productId },
+          select: { id: true }
+        });
+
+        if (!product) return;
+
+        const scores = calculateProductScores(
+          stats.unitsLifetime,   // Use lifetime units for bestSellingScore
+          stats.unitsSold7Days,
+          stats.revenueLifetime, // Use lifetime revenue for bestSellingScore
+          stats.orderCount
+        );
+
+        await prisma.product.update({
+          where: { id: productId },
+          data: {
+            unitsSold60Days: stats.unitsSold60Days,
+            unitsSold7Days: stats.unitsSold7Days,
+            grossRevenue: stats.revenueLifetime,
+            orderCount: stats.orderCount,
+            bestSellingScore: scores.bestSellingScore,
+            trendingScore: scores.trendingScore,
+          }
+        });
+        updatedCount++;
+      }));
+
+      if (i % 500 === 0 && i > 0) {
+        console.log(`OrdersSync: Updated ${updatedCount} products so far...`);
+      }
     }
 
-    console.log(`OrdersSync: Updated ${updatedCount} products with order metrics.`);
-    
-    // We should ideally sync these score updates to Meilisearch now
+    console.log(`OrdersSync: Updated ${updatedCount} products with ALL-TIME order metrics.`);
+
+    // Push updated scores to Meilisearch immediately
     await pushScoresToMeili(shop);
 
     return true;
@@ -216,13 +250,16 @@ export async function syncHistoricalOrders(shop) {
 
 /**
  * Calculates Best Selling Score and Trending Score based on advanced metrics.
+ * Uses lifetime sales data for bestSellingScore to get accurate ranking.
  */
-export function calculateProductScores(unitsSold60Days, unitsSold7Days, grossRevenue, orderCount) {
-  // Best Selling Score = (Units Sold × 0.7) + (Gross Revenue / 100 × 0.3)
-  const bestSellingScore = (unitsSold60Days * 0.7) + ((grossRevenue / 100) * 0.3);
+export function calculateProductScores(unitsLifetime, unitsSold7Days, revenueLifetime, orderCount) {
+  // Best Selling Score = (Lifetime Units × 0.6) + (Lifetime Revenue / 100 × 0.4)
+  // Using lifetime data gives true bestseller ranking
+  const bestSellingScore = (unitsLifetime * 0.6) + ((revenueLifetime / 100) * 0.4);
 
-  // Trending Score = (Units Sold × 0.5) + (Revenue / 100 × 0.2) + (Order Count × 0.2) + (Recent Sales × 0.1)
-  const trendingScore = (unitsSold60Days * 0.5) + ((grossRevenue / 100) * 0.2) + (orderCount * 0.2) + (unitsSold7Days * 0.1);
+  // Trending Score = (Lifetime Units × 0.3) + (Revenue / 100 × 0.2) + (Order Count × 0.1) + (Recent 7-day Sales × 0.4)
+  // Higher weight on recent sales for trending
+  const trendingScore = (unitsLifetime * 0.3) + ((revenueLifetime / 100) * 0.2) + (orderCount * 0.1) + (unitsSold7Days * 0.4);
 
   return {
     bestSellingScore: parseFloat(bestSellingScore.toFixed(2)),
@@ -232,11 +269,13 @@ export function calculateProductScores(unitsSold60Days, unitsSold7Days, grossRev
 
 /**
  * Pushes updated scores to Meilisearch for the given shop.
+ * Uses batch updates for efficiency.
  */
 export async function pushScoresToMeili(shop) {
   try {
+    // Fetch all products with their scores
     const products = await prisma.product.findMany({
-      where: { shop, status: "active" },
+      where: { shop },
       select: {
         id: true,
         bestSellingScore: true,
@@ -246,15 +285,22 @@ export async function pushScoresToMeili(shop) {
 
     if (products.length === 0) return;
 
+    // Meilisearch uses numeric ID (last part of GID)
     const meiliDocs = products.map(p => ({
-      id: p.id,
+      id: p.id.includes("/") ? p.id.split("/").pop() : p.id,
       bestSellingScore: p.bestSellingScore,
       trendingScore: p.trendingScore,
     }));
 
-    // Update documents in Meilisearch
-    await meiliClient.index("products").updateDocuments(meiliDocs);
-    console.log(`OrdersSync: Pushed score updates to Meilisearch for ${meiliDocs.length} products.`);
+    // Push in batches of 1000 to avoid timeouts
+    const MEILI_BATCH = 1000;
+    for (let i = 0; i < meiliDocs.length; i += MEILI_BATCH) {
+      const batch = meiliDocs.slice(i, i + MEILI_BATCH);
+      await meiliClient.index("products").updateDocuments(batch);
+      console.log(`OrdersSync: Pushed batch ${Math.floor(i / MEILI_BATCH) + 1} to Meilisearch (${batch.length} products).`);
+    }
+
+    console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);
   } catch (error) {
     console.error("OrdersSync: Failed to push scores to Meilisearch:", error);
   }
