@@ -593,7 +593,9 @@ export function applyMerchandisingRules(
     // 2. Scoring Phase: Assign scores based on conditions
     filteredProducts.forEach((p) => {
       p.merchandisingScore = 0;
-      rule.conditions.forEach((cond) => {
+      const totalConds = rule.conditions.length;
+      
+      rule.conditions.forEach((cond, index) => {
         if (cond.action === "Exclude") return;
 
         const matchResult = checkRuleMatch(p, cond, mergedValues);
@@ -608,13 +610,17 @@ export function applyMerchandisingRules(
             p.merchandisingImage = imageUrl;
           }
 
+          // Positional weight: Top condition (index 0) gets the highest power of 10.
+          // This mathematically ensures the "bottom to top" prioritization requested by SoBooster logic.
+          const tierBaseWeight = Math.pow(10, totalConds - index + 3);
+          const positionalWeight = isExact ? tierBaseWeight * 2 : tierBaseWeight;
+
           if (cond.action === "Boost") {
-            // Tier 1 Exact match gets higher score (+2000) than Tier 2 Merged match (+1000)
-            p.merchandisingScore += isExact ? 2000 : 1000;
+            p.merchandisingScore += positionalWeight;
           } else if (cond.action === "Bury") {
-            p.merchandisingScore -= isExact ? 2000 : 1000;
+            p.merchandisingScore -= positionalWeight;
           } else if (cond.action === "Pin") {
-            p.merchandisingScore += 5000;
+            p.merchandisingScore += 100000000;
           } else if (cond.action === "Dynamic") {
             const numStr = cond.operand || cond.value || "";
             const num = parseFloat(numStr);
@@ -673,8 +679,23 @@ export function applyMerchandisingRules(
     }
 
     // 2. Merchandising score priority (unless prioritizeSortOverMerchandising is true)
-    if (!prioritizeSortOverMerchandising && a.merchandisingScore !== b.merchandisingScore) {
-      return b.merchandisingScore - a.merchandisingScore;
+    // We add the base sorting score (bestSellingScore) to the merchandising score.
+    // This allows Dynamic (+50) rules to correctly tweak the base score and compete, 
+    // while Boost/Bury (which use millions of points) will completely override the base score.
+    if (!prioritizeSortOverMerchandising) {
+      const aBaseScore = sortBy === "price-ascending" ? -parseFloat(a.priceMin || 0) : 
+                         sortBy === "price-descending" ? parseFloat(a.priceMin || 0) : 
+                         (a.bestSellingScore || 0);
+      const bBaseScore = sortBy === "price-ascending" ? -parseFloat(b.priceMin || 0) : 
+                         sortBy === "price-descending" ? parseFloat(b.priceMin || 0) : 
+                         (b.bestSellingScore || 0);
+                         
+      const aTotalScore = a.merchandisingScore + aBaseScore;
+      const bTotalScore = b.merchandisingScore + bBaseScore;
+      
+      if (aTotalScore !== bTotalScore) {
+        return bTotalScore - aTotalScore;
+      }
     }
 
     // 3. Fallback to default sort comparison

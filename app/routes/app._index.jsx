@@ -518,7 +518,7 @@ export default function Index() {
             </h2>
 
             {/* Resumable job banner */}
-            {resumableJob && !isSyncing && (
+            {resumableJob && !isSyncing && (!resumableJob.total || currentCount < resumableJob.total) && (
               <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "13px", color: "#854d0e", display: "flex", alignItems: "center", gap: "8px" }}>
                 ⚠️ Previous sync stopped at <strong>{resumableJob.processed.toLocaleString()}</strong>
                 {resumableJob.total ? <> / {resumableJob.total.toLocaleString()}</> : ""} products.
