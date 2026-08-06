@@ -66,28 +66,70 @@ export const loader = async ({ request }) => {
     const limit = parseInt(url.searchParams.get("limit") || "25");
     const country = url.searchParams.get("country");
 
-    let vendors = url.searchParams.getAll("vendor[]");
-    let types = url.searchParams.getAll("type[]");
-    const collections = url.searchParams.getAll("collection[]");
-    let tags = url.searchParams.getAll("tags[]");
-    const availability = url.searchParams.getAll("availability[]");
-    const titles = url.searchParams.getAll("title[]");
+    let vendors = [
+      ...url.searchParams.getAll("vendor[]"),
+      ...url.searchParams.getAll("vendor"),
+      ...url.searchParams.getAll("vendors[]"),
+      ...url.searchParams.getAll("vendors"),
+    ].filter(Boolean);
+
+    let types = [
+      ...url.searchParams.getAll("type[]"),
+      ...url.searchParams.getAll("type"),
+      ...url.searchParams.getAll("types[]"),
+      ...url.searchParams.getAll("types"),
+      ...url.searchParams.getAll("product_type[]"),
+      ...url.searchParams.getAll("product_type"),
+    ].filter(Boolean);
+
+    const collections = [
+      ...url.searchParams.getAll("collection[]"),
+      ...url.searchParams.getAll("collection"),
+      ...url.searchParams.getAll("collections[]"),
+      ...url.searchParams.getAll("collections"),
+    ].filter(Boolean);
+
+    let tags = [
+      ...url.searchParams.getAll("tags[]"),
+      ...url.searchParams.getAll("tags"),
+      ...url.searchParams.getAll("tag[]"),
+      ...url.searchParams.getAll("tag"),
+    ].filter(Boolean);
+
+    const availability = [
+      ...url.searchParams.getAll("availability[]"),
+      ...url.searchParams.getAll("availability"),
+    ].filter(Boolean);
+
+    const titles = [
+      ...url.searchParams.getAll("title[]"),
+      ...url.searchParams.getAll("title"),
+      ...url.searchParams.getAll("titles[]"),
+      ...url.searchParams.getAll("titles"),
+    ].filter(Boolean);
 
     const optionsFilters = {};
     const metafieldsFilters = {};
+
     for (const [key, value] of url.searchParams.entries()) {
-      const optionMatch = key.match(/^options\[([^\]]+)\](?:\[\])?$/);
+      if (!value) continue;
+
+      // 1. Check options[OptionName] or options[OptionName][] or option_OptionName
+      const optionMatch = key.match(/^(?:options\[([^\]]+)\](?:\[\])?|option_(.+))$/i);
       if (optionMatch) {
-        const optionName = optionMatch[1];
+        const optionName = optionMatch[1] || optionMatch[2];
         if (!optionsFilters[optionName]) optionsFilters[optionName] = [];
         optionsFilters[optionName].push(value);
+        continue;
       }
-      const metafieldMatch = key.match(/^metafields\[([^\]]+)\](?:\[\])?$/);
+
+      // 2. Check metafields[Key] or metafields[Key][] or metafield_Key
+      const metafieldMatch = key.match(/^(?:metafields\[([^\]]+)\](?:\[\])?|metafield_(.+))$/i);
       if (metafieldMatch) {
-        const metafieldKey = metafieldMatch[1];
-        if (!metafieldsFilters[metafieldKey])
-          metafieldsFilters[metafieldKey] = [];
+        const metafieldKey = metafieldMatch[1] || metafieldMatch[2];
+        if (!metafieldsFilters[metafieldKey]) metafieldsFilters[metafieldKey] = [];
         metafieldsFilters[metafieldKey].push(value);
+        continue;
       }
     }
 
@@ -190,10 +232,11 @@ export const loader = async ({ request }) => {
     const { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters } =
       resolvedGroup;
 
-    // ── 2. Expand merged values ────────────────────────────────────────
+    // ── 2. Expand merged values & smart tag variations ────────────────────────
     const expandFilterValues = (type, values) => {
       let expanded = [...values];
       for (const val of values) {
+        if (!val) continue;
         const rules = mergedValues.filter(
           (m) =>
             m.filterType.toLowerCase() === type.toLowerCase() &&
@@ -202,8 +245,34 @@ export const loader = async ({ request }) => {
         for (const r of rules) {
           expanded.push(...r.sourceValues);
         }
+
+        // Smart synonym/tag variation generator (e.g. "Back Zip" -> "BackZip", "Back-Zip", "Back Zipper", "Zip Back", "Zipper Back")
+        if (type.toLowerCase() === "tags") {
+          const clean = val.trim();
+          expanded.push(clean.toLowerCase(), clean.toUpperCase());
+          expanded.push(clean.replace(/\s+/g, ""));
+          expanded.push(clean.replace(/\s+/g, "-"));
+
+          if (clean.toLowerCase().includes("zip") && !clean.toLowerCase().includes("zipper")) {
+            expanded.push(clean.replace(/zip/i, "Zipper"));
+            expanded.push(clean.replace(/zip/i, "zipper"));
+          }
+          if (clean.toLowerCase().includes("zipper")) {
+            expanded.push(clean.replace(/zipper/i, "Zip"));
+            expanded.push(clean.replace(/zipper/i, "zip"));
+          }
+
+          const lowerClean = clean.toLowerCase();
+          if (lowerClean.includes("back") && lowerClean.includes("zip")) {
+            expanded.push(
+              "Back Zip", "BackZip", "Back-Zip", "back zip", "backzip",
+              "Back Zipper", "Back zipper", "Zip Back", "Zipper Back",
+              "Back Zip Closure", "Center Back Zip", "Back: Zip", "Back Closure: Zip"
+            );
+          }
+        }
       }
-      return [...new Set(expanded)];
+      return [...new Set(expanded.filter(Boolean))];
     };
 
     vendors = expandFilterValues("vendor", vendors);
