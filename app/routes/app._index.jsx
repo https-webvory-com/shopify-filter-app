@@ -104,6 +104,7 @@ export default function Index() {
   const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
+  const ordersSyncStatusFetcher = useFetcher();
   const shopify = useAppBridge();
   const { revalidate } = useRevalidator();
 
@@ -123,9 +124,47 @@ export default function Index() {
       syncFetcher.formData?.get("actionType") === "sync") ||
     isSyncingBackground;
 
+  // Orders sync status from polling
+  const ordersSyncStatus = ordersSyncStatusFetcher.data?.status || "IDLE";
+  const ordersProcessed = ordersSyncStatusFetcher.data?.ordersProcessed || 0;
+  const isOrdersSyncing = ordersSyncStatus === "IN_PROGRESS" ||
+    (["loading", "submitting"].includes(syncFetcher.state) &&
+      syncFetcher.formData?.get("actionType") === "sync_orders");
+
+  // Poll orders sync status every 3 seconds while syncing
+  useEffect(() => {
+    // Load initial status
+    if (ordersSyncStatusFetcher.state === "idle" && !ordersSyncStatusFetcher.data) {
+      ordersSyncStatusFetcher.load("/app/api/orders-sync-status");
+    }
+
+    if (isOrdersSyncing || ordersSyncStatus === "IN_PROGRESS") {
+      const interval = setInterval(() => {
+        ordersSyncStatusFetcher.load("/app/api/orders-sync-status");
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [isOrdersSyncing, ordersSyncStatus, ordersSyncStatusFetcher]);
+
+  // Toast when orders sync completes
+  const wasOrdersSyncingRef = useRef(false);
+  useEffect(() => {
+    if (wasOrdersSyncingRef.current === true && ordersSyncStatus === "COMPLETED") {
+      shopify.toast.show("✅ Sales data synced! Best Selling scores updated for all products.", { duration: 6000 });
+    }
+    if (wasOrdersSyncingRef.current === true && ordersSyncStatus === "FAILED") {
+      shopify.toast.show("❌ Sales data sync failed. Please try again.", { isError: true, duration: 5000 });
+    }
+    wasOrdersSyncingRef.current = ordersSyncStatus === "IN_PROGRESS";
+  }, [ordersSyncStatus, shopify]);
+
   useEffect(() => {
     if (syncFetcher.data?.success && (syncFetcher.data?.type === "sync" || syncFetcher.data?.type === "sync_orders")) {
       shopify.toast.show(syncFetcher.data.message || "Sync started in background!", { duration: 6000 });
+      // Start polling immediately when sync_orders is triggered
+      if (syncFetcher.data?.type === "sync_orders") {
+        setTimeout(() => ordersSyncStatusFetcher.load("/app/api/orders-sync-status"), 1000);
+      }
     } else if (syncFetcher.data?.error) {
       shopify.toast.show(`Sync failed: ${syncFetcher.data.error}`, {
         isError: true,
@@ -133,7 +172,7 @@ export default function Index() {
     }
   }, [syncFetcher.data, shopify]);
 
-  // Show toast when background sync COMPLETES (isSyncingBackground goes true â†’ false)
+  // Show toast when background sync COMPLETES (isSyncingBackground goes true → false)
   const wasSyncingRef = useRef(false);
   useEffect(() => {
     if (wasSyncingRef.current === true && isSyncingBackground === false) {
@@ -664,6 +703,74 @@ export default function Index() {
             </button>
           </div>
         </div>
+
+        {/* Orders Sync Progress Card */}
+        {(isOrdersSyncing || ordersSyncStatus === "COMPLETED" || ordersSyncStatus === "FAILED") && (
+          <div style={{
+            background: isOrdersSyncing ? "linear-gradient(135deg, #ecfdf5, #d1fae5)" :
+                        ordersSyncStatus === "COMPLETED" ? "linear-gradient(135deg, #ecfdf5, #d1fae5)" :
+                        "linear-gradient(135deg, #fef2f2, #fee2e2)",
+            border: `1px solid ${isOrdersSyncing ? "#6ee7b7" : ordersSyncStatus === "COMPLETED" ? "#10b981" : "#fca5a5"}`,
+            borderRadius: "16px",
+            padding: "20px 24px",
+            marginTop: "16px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+              {isOrdersSyncing ? (
+                <div style={{
+                  width: "32px", height: "32px", borderRadius: "50%",
+                  border: "3px solid #10b981", borderTopColor: "transparent",
+                  animation: "spin 1s linear infinite",
+                  flexShrink: 0,
+                }} />
+              ) : ordersSyncStatus === "COMPLETED" ? (
+                <span style={{ fontSize: "28px" }}>✅</span>
+              ) : (
+                <span style={{ fontSize: "28px" }}>❌</span>
+              )}
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "15px", color: "#065f46" }}>
+                  {isOrdersSyncing ? "Syncing Sales Data..." : ordersSyncStatus === "COMPLETED" ? "Sales Data Synced!" : "Sync Failed"}
+                </div>
+                <div style={{ fontSize: "13px", color: "#047857", marginTop: "2px" }}>
+                  {isOrdersSyncing
+                    ? `📦 ${ordersProcessed.toLocaleString()} orders processed so far... Please wait`
+                    : ordersSyncStatus === "COMPLETED"
+                    ? `✓ ${ordersProcessed.toLocaleString()} orders processed — Best Selling scores updated!`
+                    : "Something went wrong. Please try again."}
+                </div>
+              </div>
+            </div>
+
+            {/* Animated progress bar */}
+            {isOrdersSyncing && (
+              <div style={{ background: "#a7f3d0", borderRadius: "999px", height: "8px", overflow: "hidden" }}>
+                <div style={{
+                  height: "100%",
+                  borderRadius: "999px",
+                  background: "linear-gradient(90deg, #10b981, #059669)",
+                  width: "100%",
+                  animation: "ordersSyncPulse 2s ease-in-out infinite",
+                }} />
+              </div>
+            )}
+
+            {/* Progress: completed bar */}
+            {ordersSyncStatus === "COMPLETED" && (
+              <div style={{ background: "#a7f3d0", borderRadius: "999px", height: "8px" }}>
+                <div style={{ height: "100%", borderRadius: "999px", background: "#10b981", width: "100%" }} />
+              </div>
+            )}
+
+            <style dangerouslySetInnerHTML={{ __html: `
+              @keyframes spin { to { transform: rotate(360deg); } }
+              @keyframes ordersSyncPulse {
+                0%, 100% { opacity: 0.6; transform: scaleX(0.7); transform-origin: left; }
+                50% { opacity: 1; transform: scaleX(1); transform-origin: left; }
+              }
+            `}} />
+          </div>
+        )}
 
         {/* Set Up Guide */}
         <h2 className="dash-section-title">Set up guide</h2>

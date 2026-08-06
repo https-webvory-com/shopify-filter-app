@@ -389,8 +389,10 @@ export const loader = async ({ request }) => {
       baseFilters.push(`available = true`);
     }
 
-    // Build Include rules filters (if any)
-    const includeConditions = activeRule?.conditions?.filter((c) => c.action === "Include") || [];
+    // Build Include rules filters (only when user has NO active filters)
+    // When user has active filters (color, price, tag etc.), bypass merchandising Include rules
+    // so the full filtered catalog is shown, not just merchandised products
+    const includeConditions = (!userHasFilters && activeRule?.conditions?.filter((c) => c.action === "Include")) || [];
     const includeMeiliFilters = buildMeiliIncludeFilters(includeConditions);
 
     if (resolvedCollectionId || (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all")) {

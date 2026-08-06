@@ -5,16 +5,29 @@ import meiliClient from "./meiliClient.server.js";
 /**
  * Syncs ALL historical orders (all-time) for the shop and updates bestSellingScore metrics.
  * Uses read_all_orders scope for complete lifetime sales data.
+ * Tracks progress in DB so UI can poll for real-time updates.
  */
 export async function syncHistoricalOrders(shop) {
+  // Create a job record for progress tracking
+  const job = await prisma.syncJob.create({
+    data: {
+      shop,
+      status: "IN_PROGRESS",
+      productsProcessed: 0,
+      totalProducts: null,
+    }
+  });
+  const jobId = job.id;
+
   try {
     const { admin } = await unauthenticated.admin(shop);
     if (!admin) {
+      await prisma.syncJob.update({ where: { id: jobId }, data: { status: "FAILED" } });
       console.error(`OrdersSync: Unauthenticated admin failed for ${shop}`);
       return false;
     }
 
-    console.log(`OrdersSync: Starting ALL-TIME historical order sync for ${shop}...`);
+    console.log(`OrdersSync [${jobId}]: Starting ALL-TIME historical order sync for ${shop}...`);
 
     let cursor = null;
     let hasNextPage = true;
@@ -91,7 +104,12 @@ export async function syncHistoricalOrders(shop) {
       pageCount++;
 
       if (pageCount % 10 === 0) {
-        console.log(`OrdersSync: Processed ${processedOrders} orders so far (page ${pageCount})...`);
+        console.log(`OrdersSync [${jobId}]: Processed ${processedOrders} orders so far (page ${pageCount})...`);
+        // Update progress in DB every 10 pages (~1000 orders)
+        await prisma.syncJob.update({
+          where: { id: jobId },
+          data: { productsProcessed: processedOrders, updatedAt: new Date() }
+        });
       }
 
       for (const order of orders) {
@@ -176,7 +194,17 @@ export async function syncHistoricalOrders(shop) {
       cursor = pageInfo?.endCursor || null;
     }
 
-    console.log(`OrdersSync: Fetched ALL ${processedOrders} orders across ${pageCount} pages. Updating ${Object.keys(productAggregations).length} products...`);
+    console.log(`OrdersSync [${jobId}]: Fetched ALL ${processedOrders} orders across ${pageCount} pages. Updating ${Object.keys(productAggregations).length} products...`);
+
+    // Update job status to show we're now in the DB update phase
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: {
+        productsProcessed: processedOrders,
+        totalProducts: processedOrders, // use orders count as total for display
+        status: "IN_PROGRESS",
+      }
+    });
 
     // Reset metrics for all products before applying fresh aggregations
     await prisma.product.updateMany({
@@ -231,19 +259,34 @@ export async function syncHistoricalOrders(shop) {
         updatedCount++;
       }));
 
-      if (i % 500 === 0 && i > 0) {
-        console.log(`OrdersSync: Updated ${updatedCount} products so far...`);
+      if ((i / BATCH_SIZE) % 10 === 0 && i > 0) {
+        console.log(`OrdersSync [${jobId}]: Updated ${updatedCount} products so far...`);
       }
     }
 
-    console.log(`OrdersSync: Updated ${updatedCount} products with ALL-TIME order metrics.`);
+    console.log(`OrdersSync [${jobId}]: Updated ${updatedCount} products with ALL-TIME order metrics.`);
 
     // Push updated scores to Meilisearch immediately
     await pushScoresToMeili(shop);
 
+    // Mark job as COMPLETED
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: {
+        status: "COMPLETED",
+        productsProcessed: processedOrders,
+        totalProducts: processedOrders,
+      }
+    });
+
     return true;
   } catch (error) {
-    console.error(`OrdersSync: Error syncing historical orders for ${shop}:`, error);
+    console.error(`OrdersSync [${jobId}]: Error syncing historical orders for ${shop}:`, error);
+    // Mark job as FAILED
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: { status: "FAILED" }
+    }).catch(() => {}); // Ignore if DB is also down
     return false;
   }
 }
