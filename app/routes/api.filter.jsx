@@ -671,6 +671,7 @@ export const loader = async ({ request }) => {
     let meiliRes = { hits: [], estimatedTotalHits: 0 };
     let facetDistribution = {};
     let facetRes = null;
+    let meiliError = null;
 
     try {
       const multiSearchRes = await meiliClient.multiSearch({ queries });
@@ -718,6 +719,7 @@ export const loader = async ({ request }) => {
         }
       }
     } catch (e) {
+      meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
     }
 
@@ -1281,6 +1283,7 @@ export const loader = async ({ request }) => {
         activeGroupFiltersLength: activeGroupFilters
           ? activeGroupFilters.length
           : null,
+        meiliError,
         topProductScores: finalProducts.slice(0, 25).map(p => ({
           title: p.title,
           id: p.id,
