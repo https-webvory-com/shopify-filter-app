@@ -809,13 +809,15 @@ export const loader = async ({ request }) => {
           if (vTokens.length === 0) return;
 
           let intersectionCount = 0;
+          let intersectionWeight = 0;
           let lastIndex = -1;
           let orderPreserved = true;
 
-          searchTokens.forEach(st => {
+          searchTokens.forEach((st, stIndex) => {
             const idx = vTokens.indexOf(st);
             if (idx !== -1) {
               intersectionCount++;
+              intersectionWeight += (searchTokens.length - stIndex);
               if (idx < lastIndex) orderPreserved = false;
               lastIndex = idx;
             }
@@ -823,7 +825,7 @@ export const loader = async ({ request }) => {
 
           if (intersectionCount > 0) {
             const orderBonus = (orderPreserved && intersectionCount > 1) ? 10 : 0;
-            const totalScore = intersectionCount + orderBonus;
+            const totalScore = intersectionWeight + orderBonus;
             const ratio = intersectionCount / vTokens.length;
 
             if (totalScore > highestScore || (totalScore === highestScore && ratio > highestRatio)) {
