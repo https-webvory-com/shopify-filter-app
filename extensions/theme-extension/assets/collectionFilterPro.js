@@ -821,15 +821,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           let matchedColorUrl = "";
           let colorWasFiltered = false;
 
-          // 1. Check if there's a search query matching a color
-          if (activeFilters.q && activeFilters.q.trim() !== "") {
-             const qLower = activeFilters.q.toLowerCase().trim();
-             const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase().includes(qLower) || qLower.includes(c[0].toLowerCase()));
-             if (foundIndex !== -1) {
-                activeIndex = foundIndex;
-                colorWasFiltered = true;
-             }
-          } else if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
+          // 1. (REMOVED) We no longer match the search query directly on the frontend
+          // because the backend api.filter.jsx already uses a sophisticated token matching algorithm
+          // to reorder the variants array so that the best matching variant is always at index 0.
+          
+          if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
              // 2. Check if there's an active color filter matching a color
              let selectedValues = [];
              Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
