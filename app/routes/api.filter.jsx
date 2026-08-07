@@ -780,6 +780,7 @@ export const loader = async ({ request }) => {
       let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
       
       let activeVariant = null;
+      let matchScore = 0;
 
       // Dynamic variant image swapping based on active filters
       if (Object.keys(optionsFilters).length > 0 && p.options && localVariantPrices.length > 0) {
@@ -793,6 +794,7 @@ export const loader = async ({ request }) => {
             return false;
           });
         });
+        if (activeVariant) matchScore = 100;
       }
 
       // If no explicit filter match, try smart token matching against search query
@@ -835,6 +837,8 @@ export const loader = async ({ request }) => {
             }
           }
         });
+        
+        if (activeVariant) matchScore = highestScore;
       }
 
       if (activeVariant) {
@@ -899,6 +903,7 @@ export const loader = async ({ request }) => {
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
         merchandisingImage: p.merchandisingImage || null,
+        _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
           price: v.price,
@@ -920,6 +925,11 @@ export const loader = async ({ request }) => {
 
       return productObj;
     });
+
+    // Sort products by match score so the most relevant colors appear first on the page
+    if (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0) {
+      products.sort((a, b) => b._matchScore - a._matchScore);
+    }
 
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
     let didYouMean = null;
