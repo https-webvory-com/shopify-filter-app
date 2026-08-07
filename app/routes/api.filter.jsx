@@ -146,24 +146,10 @@ export const loader = async ({ request }) => {
     if (searchQuery) {
       parsedQuery = await parseQuery(searchQuery);
       if (parsedQuery && parsedQuery.hasFilters) {
-        // Build Meili filters for detected entities
         if (parsedQuery.filters.colors.length > 0) {
-          queryParserMeiliFilters.push(
-            `option_Color IN [${parsedQuery.filters.colors.map(c => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`
-          );
+          // Temporarily store parsed colors to expand them after mergedValues are loaded
+          // We must do this AFTER step 1 (where mergedValues are fetched)
         }
-        if (parsedQuery.filters.vendors.length > 0) {
-          queryParserMeiliFilters.push(
-            `vendor IN [${parsedQuery.filters.vendors.map(v => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`
-          );
-        }
-        if (parsedQuery.filters.types.length > 0) {
-          queryParserMeiliFilters.push(
-            `productType IN [${parsedQuery.filters.types.map(t => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`
-          );
-        }
-        
-        // We use remainingQuery for Tier 1 to avoid double filtering which forces text matches
         // For example, if "red" is parsed to a filter, tier1SearchQuery becomes "" (empty).
         // If it's empty, Meilisearch will sort by meiliSort (bestselling) instead of text relevance!
       }
@@ -333,6 +319,37 @@ export const loader = async ({ request }) => {
     tags = expandFilterValues("tags", tags);
     for (const key of Object.keys(optionsFilters)) {
       optionsFilters[key] = expandFilterValues(key, optionsFilters[key]);
+    }
+
+    // Now that mergedValues is loaded, build queryParserMeiliFilters with expanded values!
+    if (parsedQuery && parsedQuery.hasFilters) {
+      if (parsedQuery.filters.colors.length > 0) {
+        // Here we expand against "Color" which matches the Option type in Merged Values
+        // But wait, what if the user searched "red"? parsedQuery.filters.colors will contain "Red".
+        // The expandFilterValues function matches exact strings.
+        // We also want to manually inject the exact base colors (like "Red", "Black") 
+        // to ensure they map perfectly to merged values.
+        let colorsToExpand = [...parsedQuery.filters.colors];
+        if (parsedQuery.queryColorWords) {
+          colorsToExpand.push(...parsedQuery.queryColorWords);
+        }
+        let expandedColors = expandFilterValues("Color", colorsToExpand);
+        queryParserMeiliFilters.push(
+          `option_Color IN [${[...new Set(expandedColors)].map(c => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`
+        );
+      }
+      if (parsedQuery.filters.vendors.length > 0) {
+        let expandedVendors = expandFilterValues("vendor", parsedQuery.filters.vendors);
+        queryParserMeiliFilters.push(
+          `vendor IN [${[...new Set(expandedVendors)].map(v => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`
+        );
+      }
+      if (parsedQuery.filters.types.length > 0) {
+        let expandedTypes = expandFilterValues("product_type", parsedQuery.filters.types);
+        queryParserMeiliFilters.push(
+          `productType IN [${[...new Set(expandedTypes)].map(t => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`
+        );
+      }
     }
 
     // ── 3. Determine if user has active filters ────────────────────────
