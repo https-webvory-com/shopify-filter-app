@@ -586,12 +586,17 @@ export const loader = async ({ request }) => {
     let tier2QueryIndex = -1;
     if (hasTier1StrictFilters) {
       tier2QueryIndex = queries.length;
-      queries.push({
+      const tier2MainQuery = {
         ...mainQuery,
         q: searchQuery, // fallback ALWAYS uses the full original search text
-        sort: meiliSort, // fallback uses the original relevance sort
         filter: allFiltersList,
-      });
+      };
+      if (meiliSort) {
+        tier2MainQuery.sort = meiliSort;
+      } else {
+        delete tier2MainQuery.sort;
+      }
+      queries.push(tier2MainQuery);
     }
 
     // ── 8.5 Build targeted facets list ────
