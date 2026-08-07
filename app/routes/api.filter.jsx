@@ -163,12 +163,13 @@ export const loader = async ({ request }) => {
           );
         }
         
-        // Remove the detected color words from the raw query to avoid double filtering, 
-        // which could unnecessarily constrain the exact filter match.
-        // Wait, if we keep them, it ensures the title/text also matches the keywords, which is usually fine.
-        // Let's keep `searchQuery` as is for the broad search fallback, but for Tier 1 we will rely on the filter.
+        // We use remainingQuery for Tier 1 to avoid double filtering which forces text matches
+        // For example, if "red" is parsed to a filter, tier1SearchQuery becomes "" (empty).
+        // If it's empty, Meilisearch will sort by meiliSort (bestselling) instead of text relevance!
       }
     }
+    
+    let tier1SearchQuery = parsedQuery && parsedQuery.hasFilters ? parsedQuery.remainingQuery : searchQuery;
 
     // ── 1. Parallel fetch: stable shop config (all cached) ─────────────
     // These 3 change only when admin saves settings → safe to cache 60s
@@ -538,7 +539,7 @@ export const loader = async ({ request }) => {
 
     const mainQuery = {
       indexUid: "products",
-      q: searchQuery,
+      q: tier1SearchQuery,
       filter: tier1Filter,
       limit: limit,
       offset: (page - 1) * limit,
@@ -552,8 +553,16 @@ export const loader = async ({ request }) => {
         "metafield_custom.wedding_collection_image"
       ],
     };
-    if (meiliSort) mainQuery.sort = meiliSort;
-    if (searchQuery) mainQuery.attributesToHighlight = ["title"];
+    
+    // If Tier 1 query is empty (e.g. they only searched "red"), we MUST provide a sort array 
+    // because Meilisearch text relevance won't apply to an empty query.
+    let tier1Sort = meiliSort;
+    if (!tier1SearchQuery && !tier1Sort) {
+      tier1Sort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
+    }
+    if (tier1Sort) mainQuery.sort = tier1Sort;
+    if (tier1SearchQuery) mainQuery.attributesToHighlight = ["title"];
+    
     queries.push(mainQuery);
 
     // Query A2: Tier 2 General Collection Products (Fallback if Tier 1 runs out of hits)
@@ -562,9 +571,9 @@ export const loader = async ({ request }) => {
       tier2QueryIndex = queries.length;
       queries.push({
         ...mainQuery,
+        q: searchQuery, // fallback ALWAYS uses the full original search text
+        sort: meiliSort, // fallback uses the original relevance sort
         filter: allFiltersList,
-        // For fallback tier 2, we must keep the original search query
-        // so that it behaves like standard Meilisearch.
       });
     }
 

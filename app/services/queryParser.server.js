@@ -99,8 +99,32 @@ export async function parseQuery(query) {
     }
   }
 
+  let remainingQuery = lowerQuery;
+
+  if (queryColorWords.length > 0) {
+    for (const cw of queryColorWords) {
+      remainingQuery = remainingQuery.replace(new RegExp(`(^|\\s)${cw}(\\s|$)`, 'ig'), ' ').trim();
+    }
+  }
+
+  if (detectedVendors.length > 0) {
+    for (const v of detectedVendors) {
+      remainingQuery = remainingQuery.replace(new RegExp(`(^|\\s)${escapeRegExp(v)}(\\s|$)`, 'ig'), ' ').trim();
+    }
+  }
+
+  if (detectedTypes.length > 0) {
+    for (const t of detectedTypes) {
+      remainingQuery = remainingQuery.replace(new RegExp(`(^|\\s)${escapeRegExp(t)}(\\s|$)`, 'ig'), ' ').trim();
+    }
+  }
+
+  // Clean up any double spaces left behind
+  remainingQuery = remainingQuery.replace(/\s+/g, ' ').trim();
+
   return {
     originalQuery: query,
+    remainingQuery,
     hasFilters: detectedColors.length > 0 || detectedVendors.length > 0 || detectedTypes.length > 0,
     filters: {
       colors: detectedColors,
