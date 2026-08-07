@@ -101,7 +101,7 @@ export async function parseQuery(query) {
 
   let remainingQuery = lowerQuery;
 
-  if (queryColorWords.length > 0) {
+  if (queryColorWords.length === 1) {
     for (const cw of queryColorWords) {
       remainingQuery = remainingQuery.replace(new RegExp(`(^|\\s)${cw}(\\s|$)`, 'ig'), ' ').trim();
     }
