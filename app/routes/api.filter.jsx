@@ -588,18 +588,33 @@ export const loader = async ({ request }) => {
     }
     const targetFacets = [...new Set(neededFacetKeys)];
 
-    // Query B: Facets + exact total count
+    // Query B: Facets + exact total count for Tier 1
     const facetQueryIndex = queries.length;
     const facetQuery = {
       indexUid: "products",
       q: searchQuery,
-      filter: allFiltersList,
+      filter: tier1Filter,
       facets: targetFacets,
       hitsPerPage: 1,
       page: 1,
       attributesToRetrieve: [],
     };
     queries.push(facetQuery);
+
+    // Query B2: Facets + exact total count for Tier 2 (if active)
+    let tier2FacetQueryIndex = -1;
+    if (hasTier1StrictFilters) {
+      tier2FacetQueryIndex = queries.length;
+      queries.push({
+        indexUid: "products",
+        q: searchQuery,
+        filter: allFiltersList,
+        facets: targetFacets,
+        hitsPerPage: 1,
+        page: 1,
+        attributesToRetrieve: [],
+      });
+    }
 
     // Query C: Per active-category queries for disjunctive faceting
     const categoryQueryStartIndex = queries.length;
@@ -633,6 +648,7 @@ export const loader = async ({ request }) => {
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };
 
       let combinedHits = [...(tier1Res?.hits || [])];
+      let activeEstimatedTotalHits = tier1Res?.estimatedTotalHits || 0;
 
       // If Tier 1 hits didn't fill the page, append items from Tier 2 (excluding duplicates)
       if (tier2QueryIndex !== -1 && combinedHits.length < limit) {
@@ -640,11 +656,21 @@ export const loader = async ({ request }) => {
         const existingIds = new Set(combinedHits.map((h) => h.id));
         const fillHits = (tier2Res?.hits || []).filter((h) => !existingIds.has(h.id));
         combinedHits = [...combinedHits, ...fillHits].slice(0, limit);
+        
+        // If Tier 1 is completely empty or very small, we might want to use Tier 2's counts entirely
+        // But for total count, if Tier 1 had ANY hits, should we show tier1 count or combined?
+        // Since the user expects strict matches to dictate the total, we use tier1 count if it has hits,
+        // otherwise we fallback to tier 2. Let's use tier2 count if tier1 has 0 hits.
+        if (tier1Res?.estimatedTotalHits === 0) {
+           activeEstimatedTotalHits = tier2Res?.estimatedTotalHits || 0;
+           facetRes = multiSearchRes.results[tier2FacetQueryIndex];
+           facetDistribution = { ...(facetRes?.facetDistribution || {}) };
+        }
       }
 
       meiliRes = {
         hits: combinedHits,
-        estimatedTotalHits: tier1Res?.estimatedTotalHits || 0,
+        estimatedTotalHits: activeEstimatedTotalHits,
       };
 
       // Merge disjunctive facet counts
