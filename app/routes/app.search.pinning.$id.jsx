@@ -28,7 +28,11 @@ export const action = async ({ request, params }) => {
     const whereClause = { shop, status: "active" };
 
     if (query.trim() !== "") {
-      whereClause.title = { contains: query, mode: "insensitive" };
+      whereClause.OR = [
+        { title: { contains: query, mode: "insensitive" } },
+        { vendor: { contains: query, mode: "insensitive" } },
+        { tags: { has: query } }
+      ];
     }
 
 
