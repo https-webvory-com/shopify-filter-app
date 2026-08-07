@@ -766,6 +766,14 @@ export const loader = async ({ request }) => {
     // Out-of-stock pinned products are now filtered BEFORE pagination.
 
     // ── 13. Shape products for response ───────────────────────────────
+    
+    // Helper for smart search query -> variant image swapping
+    const normalizeTokens = (str) => {
+      if (!str) return [];
+      return str.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+    };
+    const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
+
     let products = paginatedSlice.map((p) => {
       const variantPrices = p.variantPrices || [];
       let productImages = p.images || [];
@@ -786,6 +794,40 @@ export const loader = async ({ request }) => {
         
         if (matchingVariant && matchingVariant.imageUrl) {
           filterVariantImage = matchingVariant.imageUrl;
+        }
+      }
+
+      // If no explicit filter match, try smart token matching against search query
+      if (!filterVariantImage && searchTokens.length > 0 && p.options && variantPrices.length > 0) {
+        let bestVariant = null;
+        let highestScore = 0;
+        let highestRatio = 0;
+
+        variantPrices.forEach(v => {
+          if (!v.imageUrl) return; // Only score variants with images
+          
+          // Combine all options for this variant into one searchable string
+          const variantStr = [v.option1, v.option2, v.option3].filter(Boolean).join(" ");
+          const vTokens = normalizeTokens(variantStr);
+          if (vTokens.length === 0) return;
+
+          let intersectionCount = 0;
+          searchTokens.forEach(st => {
+            if (vTokens.includes(st)) intersectionCount++;
+          });
+
+          if (intersectionCount > 0) {
+            const ratio = intersectionCount / vTokens.length;
+            if (intersectionCount > highestScore || (intersectionCount === highestScore && ratio > highestRatio)) {
+              highestScore = intersectionCount;
+              highestRatio = ratio;
+              bestVariant = v;
+            }
+          }
+        });
+
+        if (bestVariant) {
+          filterVariantImage = bestVariant.imageUrl;
         }
       }
 
@@ -1153,6 +1195,7 @@ export const loader = async ({ request }) => {
 
     // Save in Redis Cache for 30s
     try {
+      const responseCacheKey = `api_filter_res_${shop}_${encodeURIComponent(request.url)}`;
       await getCached(responseCacheKey, async () => responsePayload, 30);
     } catch (e) {}
 
