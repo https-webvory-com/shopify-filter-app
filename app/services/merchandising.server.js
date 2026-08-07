@@ -231,7 +231,7 @@ export async function getActivePinningRuleForSearch(
       continue;
     }
 
-    if (rule.searchQueries.some((q) => q.toLowerCase() === queryLower)) {
+    if (rule.searchQueries.some((q) => q.toLowerCase().trim() === queryLower.trim())) {
       return rule;
     }
   }

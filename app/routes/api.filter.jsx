@@ -364,7 +364,7 @@ export const loader = async ({ request }) => {
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
       maxPrice < 9999999 ||
-      sortBy !== "best-selling";
+      (isSearch ? (sortBy !== "relevance" && sortBy !== "best-selling") : (sortBy !== "best-selling" && sortBy !== "manual"));
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
