@@ -58,7 +58,9 @@ export const loader = async ({ request }) => {
     const currentCustomerTags = customerTagsStr.split(",").filter(Boolean);
     const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
     const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
-    const isSearch = url.searchParams.get("isSearch") === "true";
+    const isSearch =
+      url.searchParams.get("isSearch") === "true" ||
+      (collectionHandle && collectionHandle.toLowerCase() === "search");
     let searchQuery = url.searchParams.get("q") || "";
     const searchType = url.searchParams.get("searchType") || "page";
     const rawSort =
