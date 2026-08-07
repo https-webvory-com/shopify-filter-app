@@ -775,13 +775,15 @@ export const loader = async ({ request }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      const variantPrices = p.variantPrices || [];
-      let productImages = p.images || [];
+      let localVariantPrices = [...(p.variantPrices || [])];
+      let productImages = [...(p.images || [])];
+      let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
       
+      let activeVariant = null;
+
       // Dynamic variant image swapping based on active filters
-      let filterVariantImage = null;
-      if (Object.keys(optionsFilters).length > 0 && p.options && variantPrices.length > 0) {
-        const matchingVariant = variantPrices.find(v => {
+      if (Object.keys(optionsFilters).length > 0 && p.options && localVariantPrices.length > 0) {
+        activeVariant = localVariantPrices.find(v => {
           return Object.keys(optionsFilters).some(filterName => {
             const filterValues = optionsFilters[filterName].map(val => val.toLowerCase());
             const optIndex = p.options.findIndex(opt => opt.name.toLowerCase() === filterName.toLowerCase());
@@ -791,19 +793,14 @@ export const loader = async ({ request }) => {
             return false;
           });
         });
-        
-        if (matchingVariant && matchingVariant.imageUrl) {
-          filterVariantImage = matchingVariant.imageUrl;
-        }
       }
 
       // If no explicit filter match, try smart token matching against search query
-      if (!filterVariantImage && searchTokens.length > 0 && p.options && variantPrices.length > 0) {
-        let bestVariant = null;
+      if (!activeVariant && searchTokens.length > 0 && p.options && localVariantPrices.length > 0) {
         let highestScore = 0;
         let highestRatio = 0;
 
-        variantPrices.forEach(v => {
+        localVariantPrices.forEach(v => {
           if (!v.imageUrl) return; // Only score variants with images
           
           // Combine all options for this variant into one searchable string
@@ -812,30 +809,72 @@ export const loader = async ({ request }) => {
           if (vTokens.length === 0) return;
 
           let intersectionCount = 0;
+          let lastIndex = -1;
+          let orderPreserved = true;
+
           searchTokens.forEach(st => {
-            if (vTokens.includes(st)) intersectionCount++;
+            const idx = vTokens.indexOf(st);
+            if (idx !== -1) {
+              intersectionCount++;
+              if (idx < lastIndex) orderPreserved = false;
+              lastIndex = idx;
+            }
           });
 
           if (intersectionCount > 0) {
+            const orderBonus = (orderPreserved && intersectionCount > 1) ? 10 : 0;
+            const totalScore = intersectionCount + orderBonus;
             const ratio = intersectionCount / vTokens.length;
-            if (intersectionCount > highestScore || (intersectionCount === highestScore && ratio > highestRatio)) {
-              highestScore = intersectionCount;
+
+            if (totalScore > highestScore || (totalScore === highestScore && ratio > highestRatio)) {
+              highestScore = totalScore;
               highestRatio = ratio;
-              bestVariant = v;
+              activeVariant = v;
             }
           }
         });
-
-        if (bestVariant) {
-          filterVariantImage = bestVariant.imageUrl;
-        }
       }
 
-      if (filterVariantImage) {
-        productImages = [
-          filterVariantImage,
-          ...productImages.filter((img) => img !== filterVariantImage),
-        ];
+      if (activeVariant) {
+        if (activeVariant.imageUrl) {
+          const filterVariantImage = activeVariant.imageUrl;
+          productImages = [
+            filterVariantImage,
+            ...productImages.filter((img) => img !== filterVariantImage),
+          ];
+        }
+        
+        // Move activeVariant to the front so frontend selects it by default
+        const activeIdx = localVariantPrices.indexOf(activeVariant);
+        if (activeIdx > 0) {
+          localVariantPrices.splice(activeIdx, 1);
+          localVariantPrices.unshift(activeVariant);
+        }
+
+        // Also reorder the options values so the frontend swatch selects the matched color by default
+        if (localOptions.length > 0) {
+          if (activeVariant.option1 && localOptions[0]) {
+            const valIdx = localOptions[0].values.indexOf(activeVariant.option1);
+            if (valIdx > 0) {
+              localOptions[0].values.splice(valIdx, 1);
+              localOptions[0].values.unshift(activeVariant.option1);
+            }
+          }
+          if (activeVariant.option2 && localOptions[1]) {
+            const valIdx = localOptions[1].values.indexOf(activeVariant.option2);
+            if (valIdx > 0) {
+              localOptions[1].values.splice(valIdx, 1);
+              localOptions[1].values.unshift(activeVariant.option2);
+            }
+          }
+          if (activeVariant.option3 && localOptions[2]) {
+            const valIdx = localOptions[2].values.indexOf(activeVariant.option3);
+            if (valIdx > 0) {
+              localOptions[2].values.splice(valIdx, 1);
+              localOptions[2].values.unshift(activeVariant.option3);
+            }
+          }
+        }
       } else if (p.merchandisingImage) {
         productImages = [
           p.merchandisingImage,
@@ -856,9 +895,9 @@ export const loader = async ({ request }) => {
         image: productImages.length > 0 ? productImages[0] : null,
         featured_image: productImages.length > 0 ? productImages[0] : null,
         status: (p.status || "ACTIVE").toLowerCase(),
-        options: p.options || [],
+        options: localOptions,
         merchandisingImage: p.merchandisingImage || null,
-        variants: variantPrices.map((v) => ({
+        variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
           price: v.price,
           compareAtPrice: v.compareAtPrice,
