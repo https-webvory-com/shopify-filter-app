@@ -65,25 +65,13 @@ export async function parseQuery(query) {
   const queryColorWords = tokens.filter(t => basicColorTerms.includes(t));
   
   if (queryColorWords.length > 0) {
-    // Find all exact option_Color values that contain ALL of the detected color words
-    // For example, if words are ["royal", "black"], this matches "Royal/Black", "Black Royal", etc.
+    // Find all exact option_Color values that contain ANY of the detected color words
+    // For example, if words are ["royal", "black"], this matches "Royal/Black", "Royal Blue", "Black", etc.
     detectedColors = cache.colors.filter(c => {
       const cLower = c.toLowerCase();
-      // Only match if the exact string contains all color words
-      // To prevent "black" matching "blackberry", we can check word boundaries, 
-      // but simple .includes() is usually safe enough for these specific terms in color lists.
-      return queryColorWords.every(cw => {
+      // Only match if the exact string contains ANY color words
+      return queryColorWords.some(cw => {
         // Enforce word boundaries roughly so "red" doesn't match "textured"
-        const regex = new RegExp(`\\b${cw}\\b`);
-        return regex.test(cLower) || cLower.includes(cw); // Fallback to includes if regex fails? Regex is better.
-      });
-    });
-    
-    // Better regex enforcement for exact color words
-    detectedColors = cache.colors.filter(c => {
-      const cLower = c.toLowerCase();
-      return queryColorWords.every(cw => {
-        // match word boundaries, allowing for slashes, hyphens, etc.
         const regex = new RegExp(`(^|[^a-z])${cw}([^a-z]|$)`);
         return regex.test(cLower);
       });
