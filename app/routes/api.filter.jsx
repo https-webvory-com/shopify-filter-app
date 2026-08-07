@@ -323,7 +323,7 @@ export const loader = async ({ request }) => {
 
     // Now that mergedValues is loaded, build queryParserMeiliFilters with expanded values!
     if (parsedQuery && parsedQuery.hasFilters) {
-      if (parsedQuery.filters.colors.length > 0) {
+      if ((parsedQuery.filters.colors && parsedQuery.filters.colors.length > 0) || (parsedQuery.queryColorWords && parsedQuery.queryColorWords.length > 0)) {
         // Here we expand against "Color" which matches the Option type in Merged Values
         // But wait, what if the user searched "red"? parsedQuery.filters.colors will contain "Red".
         // The expandFilterValues function matches exact strings.
