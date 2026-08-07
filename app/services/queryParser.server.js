@@ -125,7 +125,7 @@ export async function parseQuery(query) {
   return {
     originalQuery: query,
     remainingQuery,
-    hasFilters: detectedColors.length > 0 || detectedVendors.length > 0 || detectedTypes.length > 0,
+    hasFilters: detectedColors.length > 0 || detectedVendors.length > 0 || detectedTypes.length > 0 || queryColorWords.length > 0,
     filters: {
       colors: detectedColors,
       vendors: detectedVendors,
