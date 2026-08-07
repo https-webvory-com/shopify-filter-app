@@ -2400,7 +2400,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            const themeContainer = wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');
            if (themeContainer) {
               themeContainer.style.maxWidth = '100%';
-              themeContainer.style.padding = window.innerWidth <= 768 ? '0 15px' : '0 40px';
+              themeContainer.style.padding = '0 15px';
            }
         }
       }

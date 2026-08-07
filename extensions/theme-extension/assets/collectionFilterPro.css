@@ -163,7 +163,7 @@ facet-filters-form,
 .wrapper:has(.cfp-full-width-mode),
 .site-wrapper:has(.cfp-full-width-mode) {
   max-width: 100% !important;
-  padding: 0 40px !important;
+  padding: 0 15px !important;
 }
 
 @media (max-width: 768px) {
