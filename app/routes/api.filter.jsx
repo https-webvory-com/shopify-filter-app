@@ -59,7 +59,7 @@ export const loader = async ({ request }) => {
     const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
     const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
     const isSearch = url.searchParams.get("isSearch") === "true";
-    const searchQuery = url.searchParams.get("q") || "";
+    let searchQuery = url.searchParams.get("q") || "";
     const searchType = url.searchParams.get("searchType") || "page";
     const rawSort =
       url.searchParams.get("sortBy") ||
@@ -136,6 +136,37 @@ export const loader = async ({ request }) => {
         if (!metafieldsFilters[metafieldKey]) metafieldsFilters[metafieldKey] = [];
         metafieldsFilters[metafieldKey].push(value);
         continue;
+      }
+    }
+
+    // ── 0.5 Run dynamic query parser for precise exact matching (Sobooster-like) ──
+    const { parseQuery } = await import("../services/queryParser.server.js");
+    let parsedQuery = null;
+    let queryParserMeiliFilters = [];
+    if (searchQuery) {
+      parsedQuery = await parseQuery(searchQuery);
+      if (parsedQuery && parsedQuery.hasFilters) {
+        // Build Meili filters for detected entities
+        if (parsedQuery.filters.colors.length > 0) {
+          queryParserMeiliFilters.push(
+            `option_Color IN [${parsedQuery.filters.colors.map(c => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`
+          );
+        }
+        if (parsedQuery.filters.vendors.length > 0) {
+          queryParserMeiliFilters.push(
+            `vendor IN [${parsedQuery.filters.vendors.map(v => `'${v.replace(/'/g, "\\'")}'`).join(",")}]`
+          );
+        }
+        if (parsedQuery.filters.types.length > 0) {
+          queryParserMeiliFilters.push(
+            `productType IN [${parsedQuery.filters.types.map(t => `'${t.replace(/'/g, "\\'")}'`).join(",")}]`
+          );
+        }
+        
+        // Remove the detected color words from the raw query to avoid double filtering, 
+        // which could unnecessarily constrain the exact filter match.
+        // Wait, if we keep them, it ensures the title/text also matches the keywords, which is usually fine.
+        // Let's keep `searchQuery` as is for the broad search fallback, but for Tier 1 we will rely on the filter.
       }
     }
 
@@ -378,6 +409,14 @@ export const loader = async ({ request }) => {
       case "created-asc":
         meiliSort = ["createdAt:asc"];
         break;
+      case "relevance":
+      case "r":
+        if (searchQuery) {
+          meiliSort = null; // Let Meilisearch sort by relevance
+        } else {
+          meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
+        }
+        break;
       default:
         meiliSort = ["bestSellingScore:desc", "trendingScore:desc", "createdAt:desc"];
         break;
@@ -486,13 +525,15 @@ export const loader = async ({ request }) => {
     //
     // ── 8. Build Meilisearch queries (Native 2-Tier Merchandising Query Architecture) ──
     const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
-    const hasMerchandisingMeiliFilters = ruleMeiliFilters.length > 0;
+    
+    // We activate Tier 1 strict filtering if we have Merchandising Rules OR Query Parser Filters
+    const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || queryParserMeiliFilters.length > 0;
 
     const queries = [];
 
-    // Query A1: Tier 1 Boosted Rule Products (e.g. 3,595 Red dresses in Red Formal Dresses collection)
-    const tier1Filter = hasMerchandisingMeiliFilters 
-      ? [...allFiltersList, ...ruleMeiliFilters]
+    // Query A1: Tier 1 Boosted Rule Products OR Strict Parsed Query Products
+    const tier1Filter = hasTier1StrictFilters 
+      ? [...allFiltersList, ...ruleMeiliFilters, ...queryParserMeiliFilters]
       : allFiltersList;
 
     const mainQuery = {
@@ -517,11 +558,13 @@ export const loader = async ({ request }) => {
 
     // Query A2: Tier 2 General Collection Products (Fallback if Tier 1 runs out of hits)
     let tier2QueryIndex = -1;
-    if (hasMerchandisingMeiliFilters) {
+    if (hasTier1StrictFilters) {
       tier2QueryIndex = queries.length;
       queries.push({
         ...mainQuery,
         filter: allFiltersList,
+        // For fallback tier 2, we must keep the original search query
+        // so that it behaves like standard Meilisearch.
       });
     }
 
