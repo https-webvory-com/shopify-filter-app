@@ -86,7 +86,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     priceRanges: [], // selected price range strings
     minPrice: 0,
     maxPrice: 999999,
-    sortBy: 'best-selling',
+    sortBy: window.location.pathname.includes('/search') ? 'relevance' : 'best-selling',
     page: 1
   };
 

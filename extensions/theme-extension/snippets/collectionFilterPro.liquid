@@ -245,10 +245,13 @@
   <div class="cfp-top-bar__right">
     <div class="cfp-custom-sort" id="cfp-custom-sort">
       <div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger">
-        <span id="cfp-custom-sort-label">Best selling</span>
+        <span id="cfp-custom-sort-label">{% if template.name == 'search' %}Relevance{% else %}Best selling{% endif %}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </div>
       <div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown">
+        {% if template.name == 'search' %}
+        <div class="cfp-custom-sort__option" data-value="relevance">Relevance</div>
+        {% endif %}
         <div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div>
         <div class="cfp-custom-sort__option" data-value="trending">Trending</div>
         <div class="cfp-custom-sort__option" data-value="price-ascending">Price: Low to High</div>
