@@ -195,6 +195,11 @@
 }
 
 .cfp-qv-size-chart {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
   color: #333;
   text-decoration: underline;
   font-size: 13px;
@@ -206,6 +211,12 @@
   width: 16px;
   height: 16px;
 }
+
+.cfp-qv-size-chart[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+.cfp-qv-size-chart:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.cfp-qv-chart-modal { z-index: 2147483647 !important; }
+.cfp-qv-chart-status { margin: 8px 0; font-size: 13px; }
+.cfp-qv-chart-status a { text-decoration: underline; }
 
 .cfp-qv-option-values {
   display: flex;

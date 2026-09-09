@@ -103,6 +103,8 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     async openModal(handle) {
+      this.clearSizeChart();
+      const requestId = this.productRequestId = (this.productRequestId || 0) + 1;
       this.modal.innerHTML = `
         <button class="cfp-quick-view-close" aria-label="Close" onclick="window.cfpQuickViewInstance.closeModal()">&times;</button>
         <div class="cfp-quick-view-image-container cfp-qv-skeleton-bg" style="min-height: 100%; width: 50%;">&nbsp;</div>
@@ -122,12 +124,14 @@ if (typeof window.CfpQuickView === 'undefined') {
         if (!response.ok) throw new Error('Product not found');
         
         const product = await response.json();
+        if (requestId !== this.productRequestId) return;
         console.log('--- QUICK VIEW PRODUCT DETAILS ---');
         console.log(product);
         console.log('----------------------------------');
         
         this.renderProductDetails(product);
       } catch (error) {
+        if (requestId !== this.productRequestId) return;
         console.error('Error fetching product for quick view:', error);
         this.modal.innerHTML = '<div style="padding: 40px; text-align: center; color: red;">Error loading product details.</div>';
       }
@@ -232,7 +236,7 @@ if (typeof window.CfpQuickView === 'undefined') {
             <div class="cfp-qv-option-group">
               <div class="cfp-qv-option-header">
                 <span class="cfp-qv-option-name">${option.name}: <span class="cfp-qv-option-selected">${selectedValueForOption}</span></span>
-                ${option.name.toLowerCase().includes('size') ? `<a href="#" class="cfp-qv-size-chart"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 12v-2M12 12v-2M16 12v-2"></path></svg> Size chart</a>` : ''}
+                ${option.name.toLowerCase().includes('size') ? `<button type="button" class="cfp-qv-size-chart" aria-haspopup="dialog" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 12v-2M12 12v-2M16 12v-2"></path></svg> Size chart</button>` : ''}
               </div>
               <div class="cfp-qv-option-values">
                 ${valuesHtml}
@@ -287,6 +291,13 @@ if (typeof window.CfpQuickView === 'undefined') {
 
       const closeBtn = this.modal.querySelector('.cfp-quick-view-close');
       closeBtn.addEventListener('click', () => this.closeModal());
+      this.modal.querySelectorAll('.cfp-qv-size-chart').forEach(trigger => {
+        trigger.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this.openSizeChart(product, trigger);
+        });
+      });
 
       // Carousel Logic
       let currentImageIndex = 0;
@@ -456,7 +467,147 @@ if (typeof window.CfpQuickView === 'undefined') {
       });
     }
 
+    async openSizeChart(product, trigger) {
+      if (this.sizeChartRequest) return;
+      if (this.sizeChart) {
+        trigger.setAttribute('aria-expanded', 'true');
+        this.sizeChart.show();
+        return;
+      }
+
+      const controller = new AbortController();
+      this.sizeChartRequest = controller;
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      trigger.disabled = true;
+      trigger.setAttribute('aria-busy', 'true');
+      this.modal.querySelector('.cfp-qv-chart-status')?.remove();
+      const root = window.Shopify?.routes?.root || '/';
+      const productUrl = new URL(`${root}products/${encodeURIComponent(product.handle)}`, location.origin);
+      if (this.selectedVariantId) productUrl.searchParams.set('variant', this.selectedVariantId);
+      // Keep requests in the unpublished theme when testing a theme preview.
+      if (window.Shopify?.theme?.role === 'unpublished') {
+        productUrl.searchParams.set('preview_theme_id', window.Shopify.theme.id);
+      }
+
+      try {
+        const response = await fetch(productUrl, { signal: controller.signal, credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Unable to load the product size chart');
+        const html = await response.text();
+        if (controller !== this.sizeChartRequest) return;
+        const page = new DOMParser().parseFromString(html, 'text/html');
+        const source = page.querySelector('x-modal.custom-size-chart-modal, x-modal[id^="size-chart"]');
+        if (!source || !window.customElements.get('x-modal')) {
+          throw new Error('No compatible product size chart found');
+        }
+
+        // Import only the chart, never the product page's scripts or other dialogs.
+        const chart = document.importNode(source, true);
+        chart.querySelectorAll('script').forEach(script => script.remove());
+        chart.removeAttribute('open');
+        const ids = new Map();
+        [chart, ...chart.querySelectorAll('[id]')].forEach(element => {
+          if (!element.id) return;
+          const id = `cfp-qv-${element.id}`;
+          ids.set(element.id, id);
+          element.id = id;
+        });
+        chart.querySelectorAll('*').forEach(element => {
+          ['aria-controls', 'aria-labelledby', 'aria-describedby', 'for'].forEach(attribute => {
+            if (!element.hasAttribute(attribute)) return;
+            element.setAttribute(attribute, element.getAttribute(attribute).split(' ').map(id => ids.get(id) || id).join(' '));
+          });
+        });
+        chart.classList.add('cfp-qv-chart-modal');
+        chart.style.setProperty('z-index', '2147483647', 'important');
+        this.bindSizeChartControls(chart);
+        chart.addEventListener('dialog:before-show', () => { this.overlay.inert = true; });
+        chart.addEventListener('dialog:after-hide', () => {
+          this.overlay.inert = Boolean(this.sizeChart?.open);
+          trigger.setAttribute('aria-expanded', 'false');
+          if (!this.overlay.inert && trigger.isConnected && this.overlay.classList.contains('cfp-active')) trigger.focus();
+        });
+        this.sizeChart = chart;
+        trigger.setAttribute('aria-controls', chart.id);
+        trigger.setAttribute('aria-expanded', 'true');
+        document.body.appendChild(chart);
+        await chart.show();
+      } catch (error) {
+        // Closing quick view or switching products cancels the request silently.
+        if (controller !== this.sizeChartRequest) return;
+        this.clearSizeChart();
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.removeAttribute('aria-controls');
+        const status = document.createElement('p');
+        status.className = 'cfp-qv-chart-status';
+        status.setAttribute('role', 'status');
+        status.append('Size chart could not be loaded. ');
+        const link = document.createElement('a');
+        link.href = productUrl.href;
+        link.textContent = 'View it on the product page';
+        status.appendChild(link);
+        trigger.closest('.cfp-qv-option-group').appendChild(status);
+      } finally {
+        clearTimeout(timeout);
+        if (this.sizeChartRequest === controller) this.sizeChartRequest = null;
+        trigger.disabled = false;
+        trigger.removeAttribute('aria-busy');
+      }
+    }
+
+    bindSizeChartControls(chart) {
+      // Scope controls to this chart; theme scripts may initialize only on page load
+      // or use document-wide tab selectors that would affect other product dialogs.
+      chart.querySelectorAll('.sc-units .unit, .sc-tab').forEach(control => {
+        control.setAttribute('role', 'button');
+        control.tabIndex = 0;
+        control.setAttribute('aria-pressed', String(control.classList.contains('active')));
+      });
+      chart.addEventListener('keydown', event => {
+        if (['Enter', ' '].includes(event.key) && event.target.matches('.sc-units .unit, .sc-tab')) {
+          event.preventDefault();
+          event.target.click();
+        }
+      });
+      chart.addEventListener('click', event => {
+        const control = event.target.closest('.sc-units .unit, .sc-tab');
+        if (!control) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const wrap = control.closest('.sc-wrap') || chart;
+        const isUnit = control.matches('.unit');
+        wrap.querySelectorAll(isUnit ? '.sc-units .unit' : '.sc-tab').forEach(item => {
+          item.classList.toggle('active', item === control);
+          item.setAttribute('aria-pressed', String(item === control));
+        });
+        if (isUnit) {
+          if (!['in', 'cm'].includes(control.dataset.unit)) return;
+          wrap.querySelectorAll('.sc-dynamic-table td[data-cm][data-in]').forEach(cell => {
+            cell.textContent = cell.dataset[control.dataset.unit];
+          });
+        } else {
+          wrap.querySelectorAll('.sc-tab-content').forEach(panel => {
+            panel.classList.toggle('active', panel.dataset.tabContent === control.dataset.tab);
+          });
+        }
+      });
+    }
+
+    clearSizeChart() {
+      this.sizeChartRequest?.abort();
+      this.sizeChartRequest = null;
+      const chart = this.sizeChart;
+      this.sizeChart = null;
+      this.overlay.inert = false;
+      if (chart) {
+        // Let the theme release its focus trap and scroll lock before removing it.
+        if (chart.open) chart.hide().then(() => chart.remove());
+        else chart.remove();
+      }
+    }
+
     closeModal() {
+      this.productRequestId = (this.productRequestId || 0) + 1;
+      this.clearSizeChart();
       this.overlay.classList.remove('cfp-active');
     }
 
