@@ -64,6 +64,26 @@ window.runPrestigeQuickViewTests = async () => {
     mode({ showQuickViewSizeChart: true }); await qv.openModal('multi', app);
     assert(modal().querySelector('x-modal table'), 'chart removed');
   });
+  await test('Prestige size chart stays above Quick Buy when moved to body', async () => {
+    mode({ showQuickViewSizeChart: true }); await qv.openModal('multi', app);
+    const chart = modal().querySelector('x-modal');
+    const parent = chart.parentElement;
+    try {
+      // Prestige Modal.shouldAppendToBody moves an open chart out of Quick Buy.
+      document.body.append(chart);
+      chart.style.cssText = 'display:block;position:fixed;inset:20%;background:white';
+      await chart.show();
+      const bounds = chart.getBoundingClientRect();
+      const front = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      assert(chart.contains(front), 'Quick Buy covers the size chart');
+      assert(Number(getComputedStyle(chart).zIndex) > Number(getComputedStyle(modal()).zIndex), 'chart layer is not above Quick Buy');
+      await chart.hide();
+      assert(modal().open && modal().querySelector('form'), 'closing chart dismissed Quick Buy');
+    } finally { parent.append(chart); }
+    modal().insertAdjacentHTML('beforeend', '<x-modal id="size-chart-rerender">Chart</x-modal>');
+    await tick();
+    assert(modal().querySelector('#size-chart-rerender').classList.contains('cfp-native-size-chart'), 'rerendered chart lost its layer');
+  });
   await test('Prestige chart policy survives product rerender', async () => {
     await qv.openModal('multi', app);
     modal().insertAdjacentHTML('beforeend', '<button aria-controls="size-chart-new">Chart</button><x-modal id="size-chart-new">Chart</x-modal>');

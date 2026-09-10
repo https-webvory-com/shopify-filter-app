@@ -152,7 +152,12 @@ if (!window.CfpQuickViewAdapters) {
           throw new Error('Unsupported Prestige Quick Buy template');
         }
         const pruneCharts = root => {
-          if (settings.showQuickViewSizeChart) return;
+          if (settings.showQuickViewSizeChart) {
+            // Keep the chart above Quick Buy after Prestige reparents it to body.
+            root.querySelectorAll('x-modal[id^="size-chart"], x-modal.custom-size-chart-modal')
+              .forEach(chart => chart.classList.add('cfp-native-size-chart'));
+            return;
+          }
           root.querySelectorAll('x-modal[id^="size-chart"], x-modal.custom-size-chart-modal').forEach(chart => {
             root.querySelectorAll('[aria-controls]').forEach(button => {
               if (button.getAttribute('aria-controls') === chart.id) button.remove();
