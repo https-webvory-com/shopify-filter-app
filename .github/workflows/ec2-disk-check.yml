@@ -19,3 +19,4 @@ jobs:
             docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'
             docker ps -a --format '{{.Names}} {{.Image}} {{.Status}}'
             sudo -n du -xhd1 /var/log /var/lib /home/ubuntu 2>/dev/null | sort -h
+            sudo -n du -xhd1 /var/lib/docker 2>/dev/null | sort -h

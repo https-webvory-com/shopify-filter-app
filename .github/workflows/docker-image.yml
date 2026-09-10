@@ -80,10 +80,12 @@ jobs:
             docker builder prune -f
             # Remove old images for this app only, never an image used by any
             # running or stopped container (including the current release).
-            docker image ls --format '{{.Repository}}:{{.Tag}}' "$ECR_REGISTRY/$ECR_REPOSITORY" | while read -r image_ref; do
-              if [ -z "$(docker ps -aq --filter ancestor="$image_ref")" ]; then
-                docker image rm "$image_ref"
-              fi
+            for app_repository in "$ECR_REGISTRY/$ECR_REPOSITORY" shopify-filter-app 450367038243.dkr.ecr.ap-south-1.amazonaws.com/shopify_filter; do
+              docker image ls --format '{{.Repository}}:{{.Tag}}' "$app_repository" | while read -r image_ref; do
+                if [ -z "$(docker ps -aq --filter ancestor="$image_ref")" ]; then
+                  docker image rm "$image_ref"
+                fi
+              done
             done
             df -h /var/lib/containerd
 
@@ -108,6 +110,8 @@ jobs:
             --env-file .env \
             -p 3005:3005 \
             --restart always \
+            --log-opt max-size=10m \
+            --log-opt max-file=3 \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
             # Container startup includes schema sync; wait for the HTTP server.
