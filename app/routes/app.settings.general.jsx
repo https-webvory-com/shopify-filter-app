@@ -408,7 +408,7 @@ export default function Settings() {
               <p className="int-desc" id="quick-view-style-help">
                 Theme mode uses a compatible theme Quick View and automatically falls back to App default when unavailable.
                 App default replaces supported theme Quick View buttons so only one opens. Applies to collection and instant search.
-                Currently supports compatible Dawn-based themes.
+                Currently supports compatible Dawn-based themes and Prestige 10.11.0. Keep collection Quick View enabled to show buttons on app product cards.
               </p>
               <label>
                 <input type="checkbox" checked={showQuickViewSizeChart}

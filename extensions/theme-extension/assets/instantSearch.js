@@ -475,7 +475,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
     overlay.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e) => {
-      if (document.querySelector('quick-add-modal.cfp-native-quick-view[open]')) return;
+      if (document.querySelector('.cfp-native-quick-view[open]')) return;
       if (e.key === "Escape" && modal.classList.contains("cfp-open")) {
         closeModal();
       }

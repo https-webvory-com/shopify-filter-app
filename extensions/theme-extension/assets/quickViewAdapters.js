@@ -6,8 +6,24 @@ if (!window.CfpQuickViewAdapters) {
   let configuration = null;
   let scheduled = false;
   const nativeOwners = new WeakMap();
+  const prestigeHides = new WeakMap();
+  const prestigeBase = () => {
+    const quickBuy = customElements.get('quick-buy-modal');
+    const modal = customElements.get('x-modal');
+    return window.Shopify?.theme?.schema_name === 'Prestige' &&
+      window.Shopify?.theme?.schema_version === '10.11.0' && quickBuy && modal &&
+      Object.getPrototypeOf(quickBuy.prototype) === modal.prototype &&
+      typeof modal.prototype.show === 'function' && typeof modal.prototype.hide === 'function' &&
+      document.querySelector('template#modal-default-template') ? modal.prototype : null;
+  };
+  const prestigeModal = trigger => {
+    const modal = document.getElementById(trigger?.getAttribute('aria-controls'));
+    return prestigeBase() && modal?.matches('quick-buy-modal[handle]') ? modal : null;
+  };
 
   const handleFrom = button => {
+    const prestige = prestigeModal(button);
+    if (prestige) return prestige.getAttribute('handle');
     try {
       const url = new URL(button.getAttribute('data-product-url'), location.origin);
       if (url.origin !== location.origin) return null;
@@ -62,10 +78,10 @@ if (!window.CfpQuickViewAdapters) {
       }
     });
     if (!configuration || !appMode) return;
-    document.querySelectorAll(nativeSelector).forEach(button => {
+    document.querySelectorAll(`${nativeSelector}, button[aria-controls]`).forEach(button => {
       if (replacements.has(button) || button.hidden || getComputedStyle(button).display === 'none' || !handleFrom(button)) return;
       // Only replace actual Quick Add dialog openers, never one-click Add to Cart.
-      if (!nativeModal(button)?.matches('quick-add-modal')) return;
+      if (!nativeModal(button)?.matches('quick-add-modal') && !prestigeModal(button)) return;
       const replacement = document.createElement('button');
       replacement.type = 'button';
       replacement.className = button.className;
@@ -88,6 +104,92 @@ if (!window.CfpQuickViewAdapters) {
     queueMicrotask(reconcile);
   };
   const observer = new MutationObserver(schedule);
+
+  const prestigeAdapter = () => {
+    const base = prestigeBase();
+    const owner = Symbol('prestige-quick-buy');
+    // Reuse one native instance: Prestige installs a document cart listener in
+    // its constructor, so creating a new instance on every click would leak it.
+    let modal = document.getElementById('cfp-prestige-quick-buy');
+    if (!modal) {
+      modal = document.createElement('quick-buy-modal');
+      modal.id = 'cfp-prestige-quick-buy';
+      modal.className = 'quick-buy-modal modal';
+      modal.addEventListener('dialog:before-hide', () => {
+        const hidden = new Promise(resolve => modal.addEventListener('dialog:after-hide', resolve, { once: true }));
+        prestigeHides.set(modal, hidden);
+        hidden.then(() => { if (prestigeHides.get(modal) === hidden) prestigeHides.delete(modal); });
+      });
+      document.body.appendChild(modal);
+    }
+    let contentObserver;
+    let opener;
+    const reset = () => {
+      contentObserver?.disconnect();
+      modal.removeEventListener('dialog:after-hide', reset);
+      if (nativeOwners.get(modal) !== owner) return;
+      modal.classList.remove('cfp-native-quick-view');
+      nativeOwners.delete(modal);
+      if (opener?.isConnected && document.activeElement === document.body) opener.focus();
+    };
+    return {
+      id: 'prestige-10.11-quick-buy',
+      async open({ handle, trigger, settings, signal }) {
+        nativeOwners.set(modal, owner);
+        await prestigeHides.get(modal);
+        signal.throwIfAborted();
+        const url = new URL(`${window.Shopify.routes.root}products/${encodeURIComponent(handle)}`, location.origin);
+        if (window.Shopify.theme.role === 'unpublished') url.searchParams.set('preview_theme_id', window.Shopify.theme.id);
+        const response = await fetch(url, { signal, credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Prestige Quick Buy could not load the product');
+        const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+        signal.throwIfAborted();
+        if (nativeOwners.get(modal) !== owner) throw new DOMException('Superseded', 'AbortError');
+        const content = page.querySelector('template#quick-buy-content')?.content;
+        const formId = content?.querySelector('product-rerender')?.getAttribute('observe-form');
+        const form = formId && content.getElementById(formId);
+        if (!form?.matches('form') || !form.querySelector('input[name="id"]') || !form.querySelector('buy-buttons')) {
+          throw new Error('Unsupported Prestige Quick Buy template');
+        }
+        const pruneCharts = root => {
+          if (settings.showQuickViewSizeChart) return;
+          root.querySelectorAll('x-modal[id^="size-chart"], x-modal.custom-size-chart-modal').forEach(chart => {
+            root.querySelectorAll('[aria-controls]').forEach(button => {
+              if (button.getAttribute('aria-controls') === chart.id) button.remove();
+            });
+            chart.remove();
+          });
+          root.querySelectorAll('[aria-controls^="size-chart"], [data-size-chart], .size-chart-link').forEach(node => node.remove());
+        };
+        content.querySelectorAll('noscript').forEach(node => node.remove());
+        pruneCharts(content);
+        opener = trigger;
+        modal.setAttribute('handle', handle);
+        modal.setAttribute('aria-label', content.querySelector('.product-title')?.textContent.trim() || 'Product quick view');
+        modal.classList.add('cfp-native-quick-view');
+        modal.replaceChildren(content);
+        contentObserver = new MutationObserver(() => pruneCharts(modal));
+        contentObserver.observe(modal, { childList: true, subtree: true });
+        modal.addEventListener('dialog:after-hide', reset);
+        window.Shopify.PaymentButton?.init();
+        trigger?.focus();
+        // Use Prestige's base modal lifecycle after our abortable template load.
+        // Calling QuickBuyModal.show() would fetch again without cancellation.
+        await base.show.call(modal);
+        signal.throwIfAborted();
+        return true;
+      },
+      close() {
+        if (nativeOwners.get(modal) !== owner) return;
+        contentObserver?.disconnect();
+        modal.removeEventListener('dialog:after-hide', reset);
+        nativeOwners.delete(modal);
+        modal.classList.remove('cfp-native-quick-view');
+        const hidden = base.hide.call(modal);
+        return prestigeHides.get(modal) || hidden;
+      },
+    };
+  };
 
   const dawnAdapter = modal => {
     const owner = Symbol('quick-view');
@@ -179,6 +281,9 @@ if (!window.CfpQuickViewAdapters) {
   };
   window.CfpQuickViewAdapters = {
     closeOpenNative() {
+      if (prestigeBase()) document.querySelectorAll('quick-buy-modal[open]').forEach(modal => {
+        modal.hide();
+      });
       document.querySelectorAll('quick-add-modal[open]').forEach(modal => {
         if (hasDawnContract(modal)) modal.hide(true);
       });
@@ -187,15 +292,18 @@ if (!window.CfpQuickViewAdapters) {
       configuration = settings;
       observer.disconnect();
       reconcile();
-      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-product-url', 'disabled'] });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-product-url', 'aria-controls', 'handle', 'disabled'] });
     },
     getNativeTrigger(target) {
+      const prestigeButton = target.closest('button[aria-controls]');
+      if (prestigeButton && prestigeModal(prestigeButton)) return { button: prestigeButton, handle: handleFrom(prestigeButton) };
       const button = target.closest(nativeSelector);
       return button && handleFrom(button) && nativeModal(button)?.matches('quick-add-modal') ? { button, handle: handleFrom(button) } : null;
     },
     getQuickView({ trigger, settings }) {
       // App-owned wholesale gating must not be bypassed by a retail theme form.
       if (settings.isWholesale && !window.cfpCustomerLoggedIn) return null;
+      if (prestigeBase()) return prestigeAdapter();
       const modal = ensureNativeModal(trigger);
       return hasDawnContract(modal) ? dawnAdapter(modal) : null;
     },

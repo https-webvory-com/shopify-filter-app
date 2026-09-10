@@ -17,9 +17,19 @@ The adapter reuses an existing Quick Add modal or constructs Dawn's documented e
 
 In App mode, supported native modal-opener buttons are hidden and replaced with App Quick View buttons in the same position. A scoped capability check and mutation observer cover re-rendered cards. Switching to Theme mode restores the original buttons and inline display state. A capture listener ensures one handler owns each Quick View click. Ordinary one-click Add to Cart buttons and Shopify's saved theme settings are untouched. Native takeover follows `showQuickViewCollection`; instant-search cards follow their existing independent enable flag. This works on pages where the app's extension scripts are loaded.
 
-Other native interfaces, such as commercial themes' `quick-buy-modal`, are not yet integrated. They use App Quick View on app-rendered cards; their unknown native controls are not guessed at or hidden. The existing `x-modal` size-chart bridge is separate from native Quick View capability.
+Prestige 10.11.0 is also supported through its `quick-buy-modal` / `x-modal` inheritance contract and `template#quick-buy-content`. Other unverified themes and versions use App Quick View; their unknown native controls are not guessed at or hidden. The existing `x-modal` size-chart bridge is separate from native Quick View capability.
 
 The configured development store, `collection-filter-pro.myshopify.com`, redirects to its password page. Tests use real Dawn JavaScript with synthetic HTML/API responses, not this store's theme. No live-store changes or purchases were made.
+
+### Prestige 10.11.0 integration
+
+The public Dress Outlet storefront confirms `Shopify.theme.schema_name = Prestige` and `schema_version = 10.11.0`. Its product cards control `quick-buy-modal[handle]` through `aria-controls`. The adapter fetches the locale-aware product page with cancellation and imports only `template#quick-buy-content`, matching Prestige's native loader. It then calls the inherited `x-modal` show lifecycle, avoiding the native loader's duplicate, uncancellable fetch. Native product rerendering, variant selection, gallery, form submission, focus trapping and cart events remain theme-owned.
+
+A single app-owned native modal is reused because Prestige installs a document cart listener in its constructor. Reopening waits for a preceding hide animation so its content cleanup cannot erase a newer product. Request ownership rejects stale responses. The chart toggle removes native chart dialogs and matching buttons when disabled, including after product rerenders. The exact version and component contract are checked before selecting this adapter.
+
+On app-rendered collection cards, enable **Quick View on Collection** and choose **Theme Quick View when available**. The theme's **Show quick buy** setting can remain enabled. Disabling the collection toggle removes app-card buttons and restores supported native card controls; it does not enable native controls on app-generated cards. App mode replaces supported Prestige dialog buttons in place, preserving their display classes, while leaving direct cart controls alone.
+
+Verification: the local browser runner includes 12 Prestige contract tests covering native template extraction, locale, chart policy and rerenders, native control replacement/restoration, collection disable, HTTP/template failure fallback, cancelled responses, animated close/reopen, native dismissal, version fallback, and wholesale gating. These are purpose-built doubles; commercial theme source is not redistributed. An isolated browser on the live Dress Outlet collection also exercised the actual Prestige popup, product form, native variant ID changes, and size-chart visibility with the local adapter injected only into that browser. No store settings, cart submissions, purchases or deployments were made. All 28 App tests, 18 Dawn tests, four layout checks, three server tests, targeted lint and production build passed after the integration.
 
 ## Implemented changes
 

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Prestige adapter contract tests</title>
+<link rel="stylesheet" href="/extensions/theme-extension/assets/quickView.css">
+<style>quick-buy-modal { display:none; } quick-buy-modal[open] { display:block; position:fixed; inset:10%; background:white; }</style>
+</head><body>
+<template id="modal-default-template"></template>
+<button id="native-trigger" aria-controls="native-prestige">Quick buy</button>
+<quick-buy-modal id="native-prestige" handle="multi" class="quick-buy-modal modal"></quick-buy-modal>
+<button id="app-trigger" class="cfp-quick-view-btn" data-product-handle="multi">Quick View</button>
+<script src="/tests/quick-view/fixtures.js"></script>
+<script src="/tests/quick-view/prestige-tests.js"></script>
+<script src="/extensions/theme-extension/assets/quickViewAdapters.js"></script>
+<script src="/extensions/theme-extension/assets/quickView.js"></script>
+</body></html>

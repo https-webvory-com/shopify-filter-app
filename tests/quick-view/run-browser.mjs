@@ -32,6 +32,10 @@ try {
   const nativeResults = JSON.parse(await command('eval', 'window.runNativeQuickViewTests()'));
   for (const result of nativeResults) console.log(`${result.passed ? 'PASS' : 'FAIL'} ${result.name}${result.error ? `: ${result.error}` : ''}`);
   assert.equal(nativeResults.filter(result => !result.passed).length, 0, 'Native Quick View regressions failed');
+  await command('open', 'http://127.0.0.1:4179/tests/quick-view/prestige.html');
+  const prestigeResults = JSON.parse(await command('eval', 'window.runPrestigeQuickViewTests()'));
+  for (const result of prestigeResults) console.log(`${result.passed ? 'PASS' : 'FAIL'} ${result.name}${result.error ? `: ${result.error}` : ''}`);
+  assert.equal(prestigeResults.filter(result => !result.passed).length, 0, 'Prestige Quick View regressions failed');
 } finally {
   await command('close').catch(() => {});
   server.close();
