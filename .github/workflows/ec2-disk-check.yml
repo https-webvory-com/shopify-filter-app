@@ -1,0 +1,21 @@
+name: Inspect EC2 deployment disk
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect disk and Docker storage
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+            df -h /
+            docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'
+            docker ps -a --format '{{.Names}} {{.Image}} {{.Status}}'
+            sudo -n du -xhd1 /var/log /var/lib /home/ubuntu 2>/dev/null | sort -h
