@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useFetcher, useRouteError } from "react-router";
@@ -29,6 +29,12 @@ export const action = async ({ request }) => {
     showQuickViewInstantSearch:
       formData.get("showQuickViewInstantSearch") === "true",
     showQuickViewCollection: formData.get("showQuickViewCollection") === "true",
+    ...(formData.has("quickViewStyle")
+      ? { quickViewStyle: formData.get("quickViewStyle") === "theme" ? "theme" : "app" }
+      : {}),
+    ...(formData.has("showQuickViewSizeChart")
+      ? { showQuickViewSizeChart: formData.get("showQuickViewSizeChart") === "true" }
+      : {}),
     isWholesale: formData.get("isWholesale") === "true",
   };
 
@@ -56,10 +62,19 @@ export default function Settings() {
   const isWholesale = fetcher.formData
     ? fetcher.formData.get("isWholesale") === "true"
     : (settings?.isWholesale ?? false);
+  const showQuickViewSizeChart = fetcher.formData
+    ? fetcher.formData.get("showQuickViewSizeChart") === "true"
+    : (settings?.showQuickViewSizeChart ?? false);
+  const quickViewStyle = (fetcher.formData?.get("quickViewStyle") ?? settings?.quickViewStyle) === "theme" ? "theme" : "app";
 
   const toggleSetting = (key, currentValue) => {
     fetcher.submit(
       {
+        quickViewStyle: key === "quickViewStyle" ? currentValue : quickViewStyle,
+        showQuickViewSizeChart:
+          key === "showQuickViewSizeChart"
+            ? String(!currentValue)
+            : String(showQuickViewSizeChart),
         showOnlyInStock:
           key === "showOnlyInStock"
             ? String(!currentValue)
@@ -254,7 +269,7 @@ export default function Settings() {
         <s-section heading="Product Display Settings">
           <s-paragraph>
             Manage exactly which products are visible to your customers across
-            your store's search and filtering widgets.
+            your store&apos;s search and filtering widgets.
           </s-paragraph>
 
           <div className="int-grid">
@@ -262,9 +277,11 @@ export default function Settings() {
             <div className="int-card">
               <div className="int-header">
                 <span className="int-tag int-tag-inventory">INVENTORY</span>
-                <label className="int-toggle">
+                <label className="int-toggle" aria-label="Toggle setting">
                   <input
                     type="checkbox"
+                    aria-label="Show only in-stock products"
+                    disabled={fetcher.state !== "idle"}
                     checked={showOnlyInStock}
                     onChange={() =>
                       toggleSetting("showOnlyInStock", showOnlyInStock)
@@ -291,9 +308,11 @@ export default function Settings() {
                 >
                   DISPLAY
                 </span>
-                <label className="int-toggle">
+                <label className="int-toggle" aria-label="Toggle setting">
                   <input
                     type="checkbox"
+                    aria-label="Second image on hover"
+                    disabled={fetcher.state !== "idle"}
                     checked={secondImageOnHover}
                     onChange={() =>
                       toggleSetting("secondImageOnHover", secondImageOnHover)
@@ -320,9 +339,11 @@ export default function Settings() {
                 >
                   FEATURES
                 </span>
-                <label className="int-toggle">
+                <label className="int-toggle" aria-label="Toggle setting">
                   <input
                     type="checkbox"
+                    aria-label="Quick View in instant search"
+                    disabled={fetcher.state !== "idle"}
                     checked={showQuickViewInstantSearch}
                     onChange={() =>
                       toggleSetting(
@@ -337,7 +358,7 @@ export default function Settings() {
               <div>
                 <h3 className="int-title">Quick View (Instant Search)</h3>
                 <p className="int-desc">
-                  Show a "Quick View" button on product cards inside the instant
+                  Show a &quot;Quick View&quot; button on product cards inside the instant
                   search dropdown.
                 </p>
               </div>
@@ -352,9 +373,11 @@ export default function Settings() {
                 >
                   FEATURES
                 </span>
-                <label className="int-toggle">
+                <label className="int-toggle" aria-label="Toggle setting">
                   <input
                     type="checkbox"
+                    aria-label="Quick View in collections"
+                    disabled={fetcher.state !== "idle"}
                     checked={showQuickViewCollection}
                     onChange={() =>
                       toggleSetting(
@@ -369,10 +392,31 @@ export default function Settings() {
               <div>
                 <h3 className="int-title">Quick View (Collection/Search)</h3>
                 <p className="int-desc">
-                  Show a "Quick View" button on product cards in search and
+                  Show a &quot;Quick View&quot; button on product cards in search and
                   collection pages.
                 </p>
               </div>
+            </div>
+            <div className="int-card">
+              <h3 className="int-title">Quick View</h3>
+              <label htmlFor="quick-view-style">Quick View style</label>
+              <select id="quick-view-style" value={quickViewStyle} disabled={fetcher.state !== "idle"}
+                onChange={event => toggleSetting("quickViewStyle", event.target.value)} aria-describedby="quick-view-style-help">
+                <option value="app">App default</option>
+                <option value="theme">Theme Quick View when available</option>
+              </select>
+              <p className="int-desc" id="quick-view-style-help">
+                Theme mode uses a compatible theme Quick View and automatically falls back to App default when unavailable.
+                App default replaces supported theme Quick View buttons so only one opens. Applies to collection and instant search.
+                Currently supports compatible Dawn-based themes.
+              </p>
+              <label>
+                <input type="checkbox" checked={showQuickViewSizeChart}
+                  disabled={fetcher.state !== "idle"}
+                  onChange={() => toggleSetting("showQuickViewSizeChart", showQuickViewSizeChart)} />
+                {" "}Show size chart
+              </label>
+              <p className="int-desc">Enable to show the size chart link in Quick View. Your theme must have a compatible size chart.</p>
             </div>
             {/* Card 5: Wholesale Mode */}
             <div className="int-card">
@@ -383,9 +427,11 @@ export default function Settings() {
                 >
                   ACCESS
                 </span>
-                <label className="int-toggle">
+                <label className="int-toggle" aria-label="Toggle setting">
                   <input
                     type="checkbox"
+                    aria-label="Wholesale mode"
+                    disabled={fetcher.state !== "idle"}
                     checked={isWholesale}
                     onChange={() =>
                       toggleSetting("isWholesale", isWholesale)
@@ -397,7 +443,7 @@ export default function Settings() {
               <div>
                 <h3 className="int-title">Wholesale Store (B2B)</h3>
                 <p className="int-desc">
-                  If enabled, customers must log in to view prices and add products to cart. Non-logged-in users will see a "Login To Add to Cart" button.
+                  If enabled, customers must log in to view prices and add products to cart. Non-logged-in users will see a &quot;Login To Add to Cart&quot; button.
                 </p>
               </div>
             </div>

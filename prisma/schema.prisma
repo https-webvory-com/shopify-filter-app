@@ -267,6 +267,8 @@ model FilterGlobalSetting {
   secondImageOnHover                  Boolean  @default(true)
   showQuickViewInstantSearch          Boolean  @default(true)
   showQuickViewCollection             Boolean  @default(true)
+  quickViewStyle                     String   @default("app")
+  showQuickViewSizeChart              Boolean  @default(false)
   isWholesale                         Boolean  @default(false)
   integrations                        Json?
   createdAt                           DateTime @default(now())

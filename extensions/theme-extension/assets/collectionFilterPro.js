@@ -357,6 +357,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (data.globalSettings) {
         globalSettings = data.globalSettings;
         window.cfpGlobalSettings = globalSettings;
+        window.cfpQuickViewInstance?.configure(globalSettings);
         applyGlobalSettings(globalSettings);
       }
       

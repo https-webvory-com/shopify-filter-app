@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native theme Quick View tests</title>
+  <link rel="stylesheet" href="/tests/quick-view/vendor/dawn/quick-add.css">
+  <link rel="stylesheet" href="/extensions/theme-extension/assets/quickView.css">
+  <style>:root{--color-foreground:0,0,0;--color-background:255,255,255;--page-width:1000px}body{font-family:system-ui}.hidden,[hidden]{display:none!important}.overflow-hidden{overflow:hidden}.quick-add-modal__content{padding:24px}.quick-add-modal__content-info{padding:16px}button{min-height:44px}</style>
+</head><body>
+  <h1>Native theme integration fixture</h1>
+  <section class="shopify-section" id="shopify-section-fixture">
+    <modal-opener data-modal="#QuickAdd-11"><button id="native-trigger" class="theme-button" data-product-url="/fr/products/multi">Choose options<span class="loading__spinner hidden">Loading</span></button></modal-opener>
+    <quick-add-modal id="QuickAdd-11" class="quick-add-modal"><div role="dialog" aria-modal="true" aria-label="Choose options" tabindex="-1" class="quick-add-modal__content">
+      <button type="button" id="ModalClose-11" class="quick-add-modal__toggle" aria-label="Close">Close</button><div id="QuickAddInfo-11" class="quick-add-modal__content-info"></div>
+    </div></quick-add-modal>
+  </section>
+  <button id="app-trigger" class="cfp-quick-view-btn" data-product-handle="multi">Quick View</button>
+  <button id="direct-add">Add to cart directly</button>
+  <cart-drawer></cart-drawer>
+  <script src="/tests/quick-view/fixtures.js"></script>
+  <script src="/tests/quick-view/native-fixtures.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/constants.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/pubsub.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/global.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/product-info.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/product-form.js"></script>
+  <script src="/tests/quick-view/vendor/dawn/quick-add.js"></script>
+  <script src="/extensions/theme-extension/assets/quickViewAdapters.js"></script>
+  <script src="/extensions/theme-extension/assets/quickView.js"></script>
+  <script src="/tests/quick-view/native-tests.js"></script>
+</body></html>

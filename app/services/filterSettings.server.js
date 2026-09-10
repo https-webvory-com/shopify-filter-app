@@ -32,6 +32,6 @@ export async function updateFilterGlobalSettings(shop, data) {
     },
   });
   
-  invalidateShop(shop);
+  await invalidateShop(shop);
   return settings;
 }

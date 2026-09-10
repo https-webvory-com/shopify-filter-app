@@ -1,5 +1,7 @@
 <script>
   window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
+  window.cfpCurrencySymbol = {{ cart.currency.symbol | json }};
+  window.cfpCurrencyCode = {{ cart.currency.iso_code | json }};
   window.CFP_InstantSearchSettings = {
     customTriggerSelector: {{ block.settings.custom_trigger_selector | json }},
     primaryColor: {{ block.settings.primary_color | default: '#000000' | json }},
@@ -8,6 +10,7 @@
 </script>
 <script src="{{ 'instantSearch.js' | asset_url }}" defer="defer"></script>
 {{ 'instantSearch.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'quickViewAdapters.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'quickView.js' | asset_url }}" defer="defer"></script>
 {{ 'quickView.css' | asset_url | stylesheet_tag }}
 

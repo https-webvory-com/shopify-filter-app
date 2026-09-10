@@ -475,6 +475,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
     overlay.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e) => {
+      if (document.querySelector('quick-add-modal.cfp-native-quick-view[open]')) return;
       if (e.key === "Escape" && modal.classList.contains("cfp-open")) {
         closeModal();
       }
@@ -1010,6 +1011,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
     if (data && data.globalSettings) {
       window.cfpGlobalSettings = data.globalSettings;
+      window.cfpQuickViewInstance?.configure(data.globalSettings);
     }
 
     const grid = document.getElementById("cfp-search-products");

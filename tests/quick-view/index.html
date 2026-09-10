@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick View regression fixtures</title>
+  <link rel="stylesheet" href="/extensions/theme-extension/assets/quickView.css">
+  <style>
+    body { font-family: system-ui; margin: 24px; }
+    .fixture-card { display: inline-block; width: 200px; height: 100px; position: relative; background: #ddd; }
+    x-modal { display: none; } x-modal[open] { display: block; position: fixed; inset: 10%; background: white; overflow: auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Quick View fixtures</h1>
+  <div class="fixture-card cfp-product-card__image-wrapper"><a href="#collection">Collection product</a><button class="cfp-quick-view-btn" id="collection" data-product-handle="single">Quick View</button></div>
+  <div class="fixture-card cfp-search-product-image-wrapper"><a href="#search">Search product</a><button class="cfp-quick-view-btn" id="search" data-product-handle="multi">Quick View</button></div>
+  <button id="outside">Outside focus target</button>
+  <pre id="results"></pre>
+  <script src="/tests/quick-view/fixtures.js"></script>
+  <script src="/extensions/theme-extension/assets/quickViewAdapters.js"></script>
+  <script src="/extensions/theme-extension/assets/quickView.js"></script>
+  <script src="/tests/quick-view/browser-tests.js"></script>
+</body>
+</html>
