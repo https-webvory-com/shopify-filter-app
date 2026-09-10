@@ -78,6 +78,14 @@ jobs:
             docker system df
             docker image prune -f
             docker builder prune -f
+            # Remove old images for this app only, never an image used by any
+            # running or stopped container (including the current release).
+            docker image ls --format '{{.Repository}}:{{.Tag}}' "$ECR_REGISTRY/$ECR_REPOSITORY" | while read -r image_ref; do
+              if [ -z "$(docker ps -aq --filter ancestor="$image_ref")" ]; then
+                docker image rm "$image_ref"
+              fi
+            done
+            df -h /var/lib/containerd
 
             docker pull \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
