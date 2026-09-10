@@ -73,6 +73,12 @@ jobs:
             --password-stdin $ECR_REGISTRY
 
 
+            # Reclaim only unused Docker data; keep containers and volumes.
+            df -h /var/lib/docker /var/lib/containerd
+            docker system df
+            docker image prune -f
+            docker builder prune -f
+
             docker pull \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
