@@ -58,6 +58,8 @@ Verification: the local browser runner includes 12 Prestige contract tests cover
 
 No database migration was run in this workspace; `DATABASE_URL` is not configured.
 
+The EC2 workflow now runs `scripts/prepare-quick-view.sql` before stopping the existing container. Docker startup repeats this idempotent preparation before `setup`, so the existing db-push deployment path preserves old-row defaults and merchant choices across restarts. It skips a missing table on fresh installations. The original migration remains available for installations with migration tracking. The workflow also waits for the new container's HTTP health check before reporting success.
+
 Apply the **new additive SQL migration before the existing `setup` / `prisma db push` workflow**. The order matters: running db push first would create the new Boolean with false for existing stores, losing the intended old-store behavior. The SQL first adds the column with true for existing records, then changes its default to false for newly created settings records. Existing merchant choices must never be overwritten on subsequent deployments.
 
 Use the deployment's established migration tracking. This repository has a history of db-push changes, so check the existing migration baseline before running all historical migrations. For an installation managed by db push, apply only the supplied new SQL to the existing schema through the deployment process; do not blindly replay historical migrations. Regenerate Prisma Client, deploy the app and theme extension together, and allow existing 60-second settings cache entries to expire or invalidate them.
