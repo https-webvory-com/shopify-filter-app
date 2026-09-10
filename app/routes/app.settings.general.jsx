@@ -396,9 +396,6 @@ export default function Settings() {
                   collection pages.
                 </p>
               </div>
-            </div>
-            <div className="int-card">
-              <h3 className="int-title">Quick View</h3>
               <label htmlFor="quick-view-style">Quick View style</label>
               <select id="quick-view-style" value={quickViewStyle} disabled={fetcher.state !== "idle"}
                 onChange={event => toggleSetting("quickViewStyle", event.target.value)} aria-describedby="quick-view-style-help">
