@@ -1,0 +1,38 @@
+name: Clear explicitly authorized EC2 container log
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Enter clear-wishlist-growth-log to erase only this container log'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  clear-log:
+    if: inputs.confirmation == 'clear-wishlist-growth-log'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear the authorized log without restarting containers
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+            container_id=$(docker inspect --format '{{.Id}}' wishlist-growth)
+            container_name=$(docker inspect --format '{{.Name}}' "$container_id")
+            log_type=$(docker inspect --format '{{.HostConfig.LogConfig.Type}}' "$container_id")
+            log_path=$(docker inspect --format '{{.LogPath}}' "$container_id")
+            test "$container_name" = /wishlist-growth
+            test "$log_type" = json-file
+            test "$log_path" = "/var/lib/docker/containers/$container_id/$container_id-json.log"
+            test "$(sudo -n readlink -f "$log_path")" = "$log_path"
+            sudo -n test -f "$log_path"
+            df -h /
+            sudo -n du -h "$log_path"
+            sudo -n truncate -s 0 -- "$log_path"
+            sudo -n du -h "$log_path"
+            df -h /
+            docker ps --format '{{.Names}} {{.Status}}'
