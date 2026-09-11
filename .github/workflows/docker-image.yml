@@ -67,12 +67,6 @@ jobs:
             ECR_REPOSITORY=shopify
 
 
-            aws ecr get-login-password --region $AWS_REGION | \
-            docker login \
-            --username AWS \
-            --password-stdin $ECR_REGISTRY
-
-
             # Reclaim only unused Docker data; keep containers and volumes.
             df -h /var/lib/docker /var/lib/containerd
             docker system df
@@ -88,6 +82,12 @@ jobs:
               done
             done
             df -h /var/lib/containerd
+
+            # Login writes Docker credentials, so reclaim space first.
+            aws ecr get-login-password --region $AWS_REGION | \
+            docker login \
+            --username AWS \
+            --password-stdin $ECR_REGISTRY
 
             docker pull \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
