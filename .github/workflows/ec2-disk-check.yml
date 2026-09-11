@@ -18,5 +18,10 @@ jobs:
             df -h /
             docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'
             docker ps -a --format '{{.Names}} {{.Image}} {{.Status}}'
+            docker ps -aq | while read -r container_id; do
+              docker inspect --format '{{.Name}} {{.HostConfig.LogConfig.Type}} {{json .HostConfig.LogConfig.Config}} {{.LogPath}}' "$container_id"
+              log_path=$(docker inspect --format '{{.LogPath}}' "$container_id")
+              if [ -n "$log_path" ]; then sudo -n du -h "$log_path"; fi
+            done
             sudo -n du -xhd1 /var/log /var/lib /home/ubuntu 2>/dev/null | sort -h
             sudo -n du -xhd1 /var/lib/docker 2>/dev/null | sort -h
