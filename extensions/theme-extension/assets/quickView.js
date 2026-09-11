@@ -16,7 +16,8 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     configure(settings) {
-      if (window.cfpGlobalSettings?.quickViewStyle !== settings.quickViewStyle &&
+      if ((window.cfpGlobalSettings?.quickViewStyle !== settings.quickViewStyle ||
+           window.cfpGlobalSettings?.quickViewInstantSearchStyle !== settings.quickViewInstantSearchStyle) &&
           (this.nativeAdapter || this.overlay.classList.contains('cfp-active'))) this.closeModal();
       this.configurationVersion = (this.configurationVersion || 0) + 1;
       window.cfpGlobalSettings = { ...window.cfpGlobalSettings, ...settings };
@@ -234,7 +235,12 @@ if (typeof window.CfpQuickView === 'undefined') {
       this.selectedVariant = null;
       this.currentProduct = null;
       this.settings = { ...window.cfpGlobalSettings };
-      window.CfpQuickViewAdapters?.configure(this.settings);
+      // Native collection buttons must retain the collection configuration.
+      window.CfpQuickViewAdapters?.configure(window.cfpGlobalSettings);
+      if (trigger?.getAttribute('data-cfp-quick-view-context') === 'instant-search') {
+        this.settings.quickViewStyle = this.settings.quickViewInstantSearchStyle ?? this.settings.quickViewStyle;
+        this.settings.showQuickViewSizeChart = this.settings.showQuickViewInstantSearchSizeChart ?? this.settings.showQuickViewSizeChart;
+      }
       const adapter = this.settings.quickViewStyle === 'theme'
         ? window.CfpQuickViewAdapters?.getQuickView({ theme: window.Shopify?.theme, settings: this.settings, trigger }) : null;
       if (adapter) {

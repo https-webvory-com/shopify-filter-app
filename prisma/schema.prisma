@@ -269,6 +269,8 @@ model FilterGlobalSetting {
   showQuickViewCollection             Boolean  @default(true)
   quickViewStyle                     String   @default("app")
   showQuickViewSizeChart              Boolean  @default(false)
+  quickViewInstantSearchStyle        String?
+  showQuickViewInstantSearchSizeChart Boolean?
   isWholesale                         Boolean  @default(false)
   integrations                        Json?
   createdAt                           DateTime @default(now())

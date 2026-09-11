@@ -16,6 +16,24 @@ window.runQuickViewTests = async () => {
     try { await body(); results.push({ name, passed: true }); }
     catch (error) { results.push({ name, passed: false, error: error.message }); }
   };
+  await test('instant search resolves style and chart independently without changing collection settings', async () => {
+    const trigger = document.createElement('button');
+    trigger.setAttribute('data-cfp-quick-view-context', 'instant-search');
+    document.body.appendChild(trigger);
+    try {
+      for (const enabled of [true, false]) {
+        await open('single', { quickViewStyle: enabled ? 'app' : 'theme', showQuickViewSizeChart: !enabled,
+          quickViewInstantSearchStyle: enabled ? 'theme' : 'app', showQuickViewInstantSearchSizeChart: enabled });
+        const collectionStyle = qv.settings.quickViewStyle;
+        await qv.openModal('single', trigger);
+        assert(qv.settings.quickViewStyle === (enabled ? 'theme' : 'app'), 'instant style ignored');
+        assert(qv.settings.showQuickViewSizeChart === enabled, 'instant chart ignored');
+        assert(window.cfpGlobalSettings.quickViewStyle === collectionStyle, 'collection configuration changed');
+        await qv.openModal('single', document.querySelector('#collection'));
+        assert(qv.settings.quickViewStyle === collectionStyle && qv.settings.showQuickViewSizeChart === !enabled, 'instant choices leaked into collection');
+      }
+    } finally { qv.closeModal(); trigger.remove(); }
+  });
   await test('single default variant is purchasable and preserves full SKU', async () => {
     await open(); assert(qv.selectedVariantId === 1 && !button().disabled, 'default variant unavailable');
     assert(qv.modal.querySelector('.cfp-qv-sku').textContent === 'SKU-1', 'SKU truncated');

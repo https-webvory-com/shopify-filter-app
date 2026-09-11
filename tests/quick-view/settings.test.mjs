@@ -22,10 +22,13 @@ test('General Settings persists chart visibility and both Quick View modes', asy
   for (const enabled of [true, false]) {
     const request = new Request('https://fixture.test/settings', { method: 'POST', body: new URLSearchParams({
       showQuickViewSizeChart: String(enabled), quickViewStyle: 'theme', showQuickViewInstantSearch: 'true', showQuickViewCollection: 'false',
+      quickViewInstantSearchStyle: 'app', showQuickViewInstantSearchSizeChart: String(!enabled),
     }) });
     assert.equal((await route.action({ request })).status, 200);
     assert.equal(saved.showQuickViewSizeChart, enabled);
     assert.equal(saved.quickViewStyle, 'theme');
+    assert.equal(saved.quickViewInstantSearchStyle, 'app');
+    assert.equal(saved.showQuickViewInstantSearchSizeChart, !enabled);
     assert.equal(saved.showQuickViewInstantSearch, true);
     assert.equal(saved.showQuickViewCollection, false);
     assert.equal(saved.shop, 'fixture.myshopify.com');
@@ -34,6 +37,8 @@ test('General Settings persists chart visibility and both Quick View modes', asy
   await route.action({ request: new Request('https://fixture.test/settings', { method: 'POST', body: new URLSearchParams({ showQuickViewInstantSearch: 'true' }) }) });
   assert.equal(Object.hasOwn(saved, 'showQuickViewSizeChart'), false);
   assert.equal(Object.hasOwn(saved, 'quickViewStyle'), false);
+  assert.equal(Object.hasOwn(saved, 'quickViewInstantSearchStyle'), false);
+  assert.equal(Object.hasOwn(saved, 'showQuickViewInstantSearchSizeChart'), false);
   for (const style of ['app', 'invalid']) {
     await route.action({ request: new Request('https://fixture.test/settings', { method: 'POST', body: new URLSearchParams({ quickViewStyle: style }) }) });
     assert.equal(saved.quickViewStyle, 'app');
@@ -69,8 +74,10 @@ test('public Quick View configuration exposes only flags and never creates shops
   const response = await load('fixture.myshopify.com');
   const flags = await response.json();
   assert.equal(flags.quickViewStyle, 'theme');
+  assert.equal(flags.quickViewInstantSearchStyle, 'theme');
+  assert.equal(flags.showQuickViewInstantSearchSizeChart, true);
   assert.equal(flags.showQuickViewCollection, false);
-  assert.deepEqual(Object.keys(flags).sort(), ['isWholesale', 'quickViewStyle', 'showQuickViewCollection', 'showQuickViewInstantSearch', 'showQuickViewSizeChart'].sort());
+  assert.deepEqual(Object.keys(flags).sort(), ['isWholesale', 'quickViewStyle', 'quickViewInstantSearchStyle', 'showQuickViewInstantSearchSizeChart', 'showQuickViewCollection', 'showQuickViewInstantSearch', 'showQuickViewSizeChart'].sort());
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), '*');
   allowed = false;
   assert.equal((await load('fixture.myshopify.com')).status, 429);

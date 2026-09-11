@@ -15,6 +15,8 @@ export const loader = async ({ request }) => {
   return Response.json({
     quickViewStyle: settings?.quickViewStyle === "theme" ? "theme" : "app",
     showQuickViewSizeChart: settings?.showQuickViewSizeChart === true,
+    quickViewInstantSearchStyle: (settings?.quickViewInstantSearchStyle ?? settings?.quickViewStyle) === "theme" ? "theme" : "app",
+    showQuickViewInstantSearchSizeChart: (settings?.showQuickViewInstantSearchSizeChart ?? settings?.showQuickViewSizeChart) === true,
     showQuickViewCollection: settings?.showQuickViewCollection !== false,
     showQuickViewInstantSearch: settings?.showQuickViewInstantSearch !== false,
     isWholesale: settings?.isWholesale === true,

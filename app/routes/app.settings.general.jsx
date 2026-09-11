@@ -35,6 +35,12 @@ export const action = async ({ request }) => {
     ...(formData.has("showQuickViewSizeChart")
       ? { showQuickViewSizeChart: formData.get("showQuickViewSizeChart") === "true" }
       : {}),
+    ...(formData.has("quickViewInstantSearchStyle")
+      ? { quickViewInstantSearchStyle: formData.get("quickViewInstantSearchStyle") === "theme" ? "theme" : "app" }
+      : {}),
+    ...(formData.has("showQuickViewInstantSearchSizeChart")
+      ? { showQuickViewInstantSearchSizeChart: formData.get("showQuickViewInstantSearchSizeChart") === "true" }
+      : {}),
     isWholesale: formData.get("isWholesale") === "true",
   };
 
@@ -66,11 +72,24 @@ export default function Settings() {
     ? fetcher.formData.get("showQuickViewSizeChart") === "true"
     : (settings?.showQuickViewSizeChart ?? false);
   const quickViewStyle = (fetcher.formData?.get("quickViewStyle") ?? settings?.quickViewStyle) === "theme" ? "theme" : "app";
+  const quickViewInstantSearchStyle = (
+    fetcher.formData?.get("quickViewInstantSearchStyle") ??
+    settings?.quickViewInstantSearchStyle ?? settings?.quickViewStyle
+  ) === "theme" ? "theme" : "app";
+  const showQuickViewInstantSearchSizeChart = fetcher.formData
+    ? fetcher.formData.get("showQuickViewInstantSearchSizeChart") === "true"
+    : (settings?.showQuickViewInstantSearchSizeChart ?? settings?.showQuickViewSizeChart ?? false);
 
   const toggleSetting = (key, currentValue) => {
     fetcher.submit(
       {
         quickViewStyle: key === "quickViewStyle" ? currentValue : quickViewStyle,
+        quickViewInstantSearchStyle:
+          key === "quickViewInstantSearchStyle" ? currentValue : quickViewInstantSearchStyle,
+        showQuickViewInstantSearchSizeChart:
+          key === "showQuickViewInstantSearchSizeChart"
+            ? String(!currentValue)
+            : String(showQuickViewInstantSearchSizeChart),
         showQuickViewSizeChart:
           key === "showQuickViewSizeChart"
             ? String(!currentValue)
@@ -106,6 +125,55 @@ export default function Settings() {
     }
   }, [fetcher.data]);
 
+  const renderQuickViewOptions = (instantSearch) => {
+    const id = instantSearch ? "instant-quick-view" : "collection-quick-view";
+    const style = instantSearch ? quickViewInstantSearchStyle : quickViewStyle;
+    const sizeChart = instantSearch ? showQuickViewInstantSearchSizeChart : showQuickViewSizeChart;
+    return (
+      <div className="quick-view-options">
+        <div className="quick-view-field">
+          <label className="quick-view-label" htmlFor={`${id}-style`}>Quick View style</label>
+          <div className="quick-view-select-wrap">
+            <select
+              className="quick-view-select"
+              id={`${id}-style`}
+              value={style}
+              disabled={fetcher.state !== "idle"}
+              onChange={(event) => toggleSetting(instantSearch ? "quickViewInstantSearchStyle" : "quickViewStyle", event.target.value)}
+              aria-describedby={`${id}-style-help`}
+            >
+              <option value="app">App default</option>
+              <option value="theme">Theme Quick View when available</option>
+            </select>
+            <svg className="quick-view-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className="int-desc" id={`${id}-style-help`}>
+            {style === "theme"
+              ? "Uses your theme’s Quick View when supported; otherwise, uses App default."
+              : "Uses the app’s Quick View for a consistent product preview."}
+            {" "}{instantSearch ? "Applies only to instant search." : "Applies only to collection and search results."}
+          </p>
+        </div>
+        <div className="quick-view-field">
+          <label className="quick-view-checkbox" htmlFor={`${id}-size-chart`}>
+            <input
+              id={`${id}-size-chart`}
+              type="checkbox"
+              checked={sizeChart}
+              disabled={fetcher.state !== "idle"}
+              aria-describedby={`${id}-size-chart-help`}
+              onChange={() => toggleSetting(instantSearch ? "showQuickViewInstantSearchSizeChart" : "showQuickViewSizeChart", sizeChart)}
+            />
+            Show size chart
+          </label>
+          <p className="int-desc" id={`${id}-size-chart-help`}>Show a size chart link in this Quick View. Requires a compatible theme size chart.</p>
+        </div>
+      </div>
+    );
+  };
+
   console.log("Settings rendering with settings data:", settings);
   console.log("Derived values:", {
     showOnlyInStock,
@@ -128,7 +196,7 @@ export default function Settings() {
           __html: `
           .int-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 24px;
             margin-top: 24px;
           }
@@ -219,6 +287,87 @@ export default function Settings() {
           }
           .int-toggle input:checked + .int-slider:before {
             transform: translateX(20px);
+          }
+          .int-toggle input:focus-visible + .int-slider {
+            outline: 2px solid #7c3aed;
+            outline-offset: 3px;
+          }
+          .int-toggle input:disabled + .int-slider {
+            cursor: wait;
+            opacity: 0.6;
+          }
+          .quick-view-options {
+            display: grid;
+            gap: 20px;
+            border-top: 1px solid #ede9fe;
+            padding-top: 20px;
+          }
+          .quick-view-field {
+            display: grid;
+            gap: 8px;
+          }
+          .quick-view-label, .quick-view-checkbox {
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #374151;
+          }
+          .quick-view-select-wrap {
+            position: relative;
+            min-width: 0;
+          }
+          .quick-view-select {
+            appearance: none;
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 44px;
+            padding: 11px 40px 11px 12px;
+            border: 1px solid #cbd0d8;
+            border-radius: 8px;
+            background: #fff;
+            color: #1f2937;
+            font: inherit;
+            font-size: 13.5px;
+            line-height: 20px;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            transition: border-color 150ms ease, box-shadow 150ms ease;
+          }
+          .quick-view-select:hover:not(:disabled) { border-color: #8b5cf6; }
+          .quick-view-select:focus-visible {
+            outline: 2px solid #7c3aed;
+            outline-offset: 2px;
+            border-color: #7c3aed;
+          }
+          .quick-view-select:disabled {
+            background: #f3f4f6;
+            color: #6b7280;
+            cursor: wait;
+          }
+          .quick-view-chevron {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
+            pointer-events: none;
+          }
+          .quick-view-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-height: 24px;
+            cursor: pointer;
+          }
+          .quick-view-checkbox input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: #7c3aed;
+          }
+          .quick-view-checkbox input:focus-visible {
+            outline: 2px solid #7c3aed;
+            outline-offset: 3px;
           }
           `,
         }}
@@ -362,6 +511,7 @@ export default function Settings() {
                   search dropdown.
                 </p>
               </div>
+              {showQuickViewInstantSearch && renderQuickViewOptions(true)}
             </div>
 
             {/* Card 4: Quick View (Collection & Search) */}
@@ -396,24 +546,7 @@ export default function Settings() {
                   collection pages.
                 </p>
               </div>
-              <label htmlFor="quick-view-style">Quick View style</label>
-              <select id="quick-view-style" value={quickViewStyle} disabled={fetcher.state !== "idle"}
-                onChange={event => toggleSetting("quickViewStyle", event.target.value)} aria-describedby="quick-view-style-help">
-                <option value="app">App default</option>
-                <option value="theme">Theme Quick View when available</option>
-              </select>
-              <p className="int-desc" id="quick-view-style-help">
-                Theme mode uses a compatible theme Quick View and automatically falls back to App default when unavailable.
-                App default replaces supported theme Quick View buttons so only one opens. Applies to collection and instant search.
-                Currently supports compatible Dawn-based themes and Prestige 10.11.0. Keep collection Quick View enabled to show buttons on app product cards.
-              </p>
-              <label>
-                <input type="checkbox" checked={showQuickViewSizeChart}
-                  disabled={fetcher.state !== "idle"}
-                  onChange={() => toggleSetting("showQuickViewSizeChart", showQuickViewSizeChart)} />
-                {" "}Show size chart
-              </label>
-              <p className="int-desc">Enable to show the size chart link in Quick View. Your theme must have a compatible size chart.</p>
+              {showQuickViewCollection && renderQuickViewOptions(false)}
             </div>
             {/* Card 5: Wholesale Mode */}
             <div className="int-card">
