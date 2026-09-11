@@ -511,7 +511,7 @@ export default function Settings() {
                   search dropdown.
                 </p>
               </div>
-              {showQuickViewInstantSearch && renderQuickViewOptions(true)}
+              {renderQuickViewOptions(true)}
             </div>
 
             {/* Card 4: Quick View (Collection & Search) */}
