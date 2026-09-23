@@ -1,3 +1,4 @@
+import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -37,8 +38,8 @@ export default function CreateSearchRuleModal({
 
   const [isDateRangeChecked, setIsDateRangeChecked] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [startDate, setStartDate] = useState("2026-05-25");
-  const [endDate, setEndDate] = useState("2026-05-25");
+  const [startDate, setStartDate] = useState(todayDate());
+  const [endDate, setEndDate] = useState(todayDate());
 
   const [showRulesTooltip, setShowRulesTooltip] = useState(false);
   const [openActionDropdownIndex, setOpenActionDropdownIndex] = useState(null);
@@ -82,12 +83,12 @@ export default function CreateSearchRuleModal({
         setSearchQueries(ruleToEdit.searchQueries || []);
         if (ruleToEdit.startDate || ruleToEdit.endDate) {
           setIsDateRangeChecked(true);
-          setStartDate(ruleToEdit.startDate ? new Date(ruleToEdit.startDate).toISOString().split('T')[0] : "2026-05-25");
-          setEndDate(ruleToEdit.endDate ? new Date(ruleToEdit.endDate).toISOString().split('T')[0] : "2026-05-25");
+          setStartDate(ruleToEdit.startDate ? new Date(ruleToEdit.startDate).toISOString().split('T')[0] : todayDate());
+          setEndDate(ruleToEdit.endDate ? new Date(ruleToEdit.endDate).toISOString().split('T')[0] : todayDate());
         } else {
           setIsDateRangeChecked(false);
-          setStartDate("2026-05-25");
-          setEndDate("2026-05-25");
+          setStartDate(todayDate());
+          setEndDate(todayDate());
         }
         if (ruleToEdit.conditions && ruleToEdit.conditions.length > 0) {
           setRuleRules(ruleToEdit.conditions.map(c => {
@@ -126,8 +127,8 @@ export default function CreateSearchRuleModal({
         setSearchQueries([]);
         setIsDateRangeChecked(false);
         setIsDatePickerOpen(false);
-        setStartDate("2026-05-25");
-        setEndDate("2026-05-25");
+        setStartDate(todayDate());
+        setEndDate(todayDate());
       }
     }
   }, [isOpen, ruleToEdit]);
@@ -478,89 +479,13 @@ export default function CreateSearchRuleModal({
 
                 {/* Date Picker Popover */}
                 {isDatePickerOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)", padding: "24px", zIndex: 20, width: "600px", border: "1px solid #e2e8f0" }}>
-                    
-                    <div style={{ display: "flex", gap: "32px", justifyContent: "space-between" }}>
-                      
-                      {/* Left Calendar (Start Date) */}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px", gap: "4px" }}>
-                          Start date <TooltipIcon />
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg></button>
-                          <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg></button>
-                        </div>
-                        
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
-                          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-                        </div>
-                        
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "14px", color: "#334155" }}>
-                          <div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}>1</div><div style={{ padding: "6px" }}>2</div>
-                          <div style={{ padding: "6px" }}>3</div><div style={{ padding: "6px" }}>4</div><div style={{ padding: "6px" }}>5</div><div style={{ padding: "6px" }}>6</div><div style={{ padding: "6px" }}>7</div><div style={{ padding: "6px" }}>8</div><div style={{ padding: "6px" }}>9</div>
-                          <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
-                          <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
-                          <div style={{ padding: "6px" }}>24</div>
-                          <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                          <div style={{ padding: "6px", color: "#94a3b8" }}>26</div><div style={{ padding: "6px", color: "#94a3b8" }}>27</div><div style={{ padding: "6px", color: "#94a3b8" }}>28</div><div style={{ padding: "6px", color: "#94a3b8" }}>29</div><div style={{ padding: "6px", color: "#94a3b8" }}>30</div>
-                          <div style={{ padding: "6px", color: "#94a3b8" }}>31</div>
-                        </div>
-                      </div>
-
-                      {/* Right Calendar (End Date) */}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px", gap: "4px" }}>
-                          End date <TooltipIcon />
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg></button>
-                          <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg></button>
-                        </div>
-                        
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
-                          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-                        </div>
-                        
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "14px", color: "#334155" }}>
-                          <div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}>1</div><div style={{ padding: "6px" }}>2</div>
-                          <div style={{ padding: "6px" }}>3</div><div style={{ padding: "6px" }}>4</div><div style={{ padding: "6px" }}>5</div><div style={{ padding: "6px" }}>6</div><div style={{ padding: "6px" }}>7</div><div style={{ padding: "6px" }}>8</div><div style={{ padding: "6px" }}>9</div>
-                          <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
-                          <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
-                          <div style={{ padding: "6px" }}>24</div>
-                          <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                          <div style={{ padding: "6px", fontWeight: "600" }}>26</div><div style={{ padding: "6px", fontWeight: "600" }}>27</div><div style={{ padding: "6px", fontWeight: "600" }}>28</div><div style={{ padding: "6px", fontWeight: "600" }}>29</div><div style={{ padding: "6px", fontWeight: "600" }}>30</div>
-                          <div style={{ padding: "6px", fontWeight: "600" }}>31</div>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Footer values and buttons */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "24px" }}>
-                      <div style={{ display: "flex", gap: "100px", paddingLeft: "16px" }}>
-                        <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E1B4B" }}>{startDate}</div>
-                        <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E1B4B" }}>{endDate}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: "12px" }}>
-                        <button 
-                          onClick={() => setIsDatePickerOpen(false)}
-                          style={{ background: "#fff", color: "#5B21B6", border: "1px solid #5B21B6", padding: "10px 24px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
-                        >
-                          Cancel
-                        </button>
-                        <button 
-                          onClick={() => setIsDatePickerOpen(false)}
-                          style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
-                        >
-                          Select
-                        </button>
-                      </div>
-                    </div>
-
-                  </div>
+                  <DateRangePicker startDate={startDate} endDate={endDate}
+                    onCancel={() => setIsDatePickerOpen(false)}
+                    onSelect={(start, end) => {
+                      setStartDate(start); setEndDate(end);
+                      setIsDateRangeChecked(Boolean(start && end));
+                      setIsDatePickerOpen(false);
+                    }} />
                 )}
               </div>
             )}
@@ -726,87 +651,15 @@ export default function CreateSearchRuleModal({
 
                           {/* Date Picker Popover for Rules */}
                           {openRuleDatePickerIndex === i && (
-                            <div style={{ position: "absolute", top: "100%", left: 0, marginTop: "8px", background: "#fff", borderRadius: "12px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)", zIndex: 20, width: "700px", border: "1px solid #e2e8f0", display: "flex", overflow: "hidden" }}>
-                              
-                              {/* Left Side (White Area) */}
-                              <div style={{ padding: "24px", flex: 1 }}>
-                                <div style={{ display: "flex", gap: "32px", justifyContent: "space-between" }}>
-                                  
-                                  {/* Left Calendar (Start Date) */}
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg></button>
-                                      <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg></button>
-                                    </div>
-                                    
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
-                                      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-                                    </div>
-                                    
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "14px", color: "#334155" }}>
-                                      <div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}>1</div><div style={{ padding: "6px" }}>2</div>
-                                      <div style={{ padding: "6px" }}>3</div><div style={{ padding: "6px" }}>4</div><div style={{ padding: "6px" }}>5</div><div style={{ padding: "6px" }}>6</div><div style={{ padding: "6px" }}>7</div><div style={{ padding: "6px" }}>8</div><div style={{ padding: "6px" }}>9</div>
-                                      <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
-                                      <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
-                                      <div style={{ padding: "6px" }}>24</div>
-                                      <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                                      <div style={{ padding: "6px", color: "#94a3b8" }}>26</div><div style={{ padding: "6px", color: "#94a3b8" }}>27</div><div style={{ padding: "6px", color: "#94a3b8" }}>28</div><div style={{ padding: "6px", color: "#94a3b8" }}>29</div><div style={{ padding: "6px", color: "#94a3b8" }}>30</div>
-                                      <div style={{ padding: "6px", color: "#94a3b8" }}>31</div>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Right Calendar (End Date) */}
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"></path></svg></button>
-                                      <div style={{ fontSize: "16px", fontWeight: "600", color: "#1e293b" }}>May 2026</div>
-                                      <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5B21B6" }}><svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"></path></svg></button>
-                                    </div>
-                                    
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "10px", color: "#64748b", fontWeight: "600", marginBottom: "8px" }}>
-                                      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-                                    </div>
-                                    
-                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px", textAlign: "center", fontSize: "14px", color: "#334155" }}>
-                                      <div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}></div><div style={{ padding: "6px" }}>1</div><div style={{ padding: "6px" }}>2</div>
-                                      <div style={{ padding: "6px" }}>3</div><div style={{ padding: "6px" }}>4</div><div style={{ padding: "6px" }}>5</div><div style={{ padding: "6px" }}>6</div><div style={{ padding: "6px" }}>7</div><div style={{ padding: "6px" }}>8</div><div style={{ padding: "6px" }}>9</div>
-                                      <div style={{ padding: "6px" }}>10</div><div style={{ padding: "6px" }}>11</div><div style={{ padding: "6px" }}>12</div><div style={{ padding: "6px" }}>13</div><div style={{ padding: "6px" }}>14</div><div style={{ padding: "6px" }}>15</div><div style={{ padding: "6px" }}>16</div>
-                                      <div style={{ padding: "6px" }}>17</div><div style={{ padding: "6px" }}>18</div><div style={{ padding: "6px" }}>19</div><div style={{ padding: "6px" }}>20</div><div style={{ padding: "6px" }}>21</div><div style={{ padding: "6px" }}>22</div><div style={{ padding: "6px" }}>23</div>
-                                      <div style={{ padding: "6px" }}>24</div>
-                                      <div style={{ padding: "6px", background: "#5B21B6", color: "#fff", borderRadius: "50%", cursor: "pointer", fontWeight: "600" }}>25</div>
-                                      <div style={{ padding: "6px", fontWeight: "600" }}>26</div><div style={{ padding: "6px", fontWeight: "600" }}>27</div><div style={{ padding: "6px", fontWeight: "600" }}>28</div><div style={{ padding: "6px", fontWeight: "600" }}>29</div><div style={{ padding: "6px", fontWeight: "600" }}>30</div>
-                                      <div style={{ padding: "6px", fontWeight: "600" }}>31</div>
-                                    </div>
-                                  </div>
-
-                                </div>
-
-                                {/* Footer values and buttons */}
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "24px" }}>
-                                  <div style={{ display: "flex", gap: "100px", paddingLeft: "16px" }}>
-                                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E1B4B" }}>2026-05-25</div>
-                                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E1B4B" }}>2026-05-25</div>
-                                  </div>
-                                  <div style={{ display: "flex", gap: "12px" }}>
-                                    <button 
-                                      onClick={() => setOpenRuleDatePickerIndex(null)}
-                                      style={{ background: "#fff", color: "#5B21B6", border: "1px solid #5B21B6", padding: "10px 24px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button 
-                                      onClick={() => setOpenRuleDatePickerIndex(null)}
-                                      style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}
-                                    >
-                                      Select
-                                    </button>
-                                  </div>
-                                </div>
-
-                              </div>
-
-                            </div>
+                            <DateRangePicker
+                              startDate={r.dateValue?.split(" - ")[0] || ""}
+                              endDate={r.dateValue?.split(" - ")[1] || ""}
+                              onCancel={() => setOpenRuleDatePickerIndex(null)}
+                              onSelect={(start, end) => {
+                                setRuleRules(current => current.map((rule, index) => index === i
+                                  ? { ...rule, dateValue: start && end ? start + " - " + end : "" } : rule));
+                                setOpenRuleDatePickerIndex(null);
+                              }} />
                           )}
                         </div>
                       ) : [

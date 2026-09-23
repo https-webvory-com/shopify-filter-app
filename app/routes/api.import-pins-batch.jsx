@@ -112,7 +112,10 @@ export const action = async ({ request }) => {
         }
 
         // Determine applyToSearchType
-        const applyToSearchType = row.applyToSearchType || "both";
+        const applyToSearchType = row.applyToSearchType === "search" ? "page" : row.applyToSearchType || "both";
+        const searchQueries = Array.isArray(row.searchQueries)
+          ? row.searchQueries.filter(query => typeof query === "string" && query.trim()).map(query => query.trim())
+          : row.searchQuery ? [row.searchQuery] : [];
 
         // Determine rule name and applyToAll
         let ruleName = "Imported Pin";
@@ -125,7 +128,8 @@ export const action = async ({ request }) => {
             : "";
           ruleName = originalTitles || "All Collections";
         } else {
-          ruleName = row.searchQuery || "All Searches";
+          applyToAll = row.applyToAll === true || (row.applyToAll == null && searchQueries.length === 0);
+          ruleName = applyToAll ? "All Searches" : searchQueries.join(", ");
         }
         
         // Ensure ruleName is not empty string
@@ -147,7 +151,7 @@ export const action = async ({ request }) => {
             status: row.active !== false,
             collections: validCollections,
             products: validProducts,
-            searchQueries: row.searchQuery ? [row.searchQuery] : [],
+            searchQueries,
             applyToSearchType,
             applyToAll,
           },
@@ -158,7 +162,7 @@ export const action = async ({ request }) => {
             applyToAll,
             collections: validCollections,
             products: validProducts,
-            searchQueries: row.searchQuery ? [row.searchQuery] : [],
+            searchQueries,
             ruleType,
             applyToSearchType,
           },

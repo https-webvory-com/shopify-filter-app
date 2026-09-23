@@ -352,7 +352,7 @@ export default function PinningEditor() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, selectedCollections, applyToAll]);
 
-  // When products (pinned list) changes, we should refetch the current page 
+  // When products (pinned list) changes, we should refetch the current page
   // so the backend naturally replenishes the missing slots
   useEffect(() => {
     if (searchQuery !== undefined) {
@@ -756,6 +756,13 @@ export default function PinningEditor() {
                 />
               </div>
               <button
+                onClick={() => {
+                  setCurrentPage(0);
+                  setIsFetchingMore(true);
+                  fetcher.submit({ intent: "search", q: searchQuery,
+                    collections: JSON.stringify(selectedCollections), applyToAll,
+                    skip: 0, excludedIds: JSON.stringify(products.map(product => product.id)) }, { method: "post" });
+                }}
                 style={{
                   background: "#5B21B6",
                   color: "#fff",

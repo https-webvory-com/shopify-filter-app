@@ -83,7 +83,7 @@ export default function ExportMerchandisingRulesModal({ isOpen, onClose, selecte
       if (selectedFields.includes("End Date")) row["EndDate"] = rule.endDate ? new Date(rule.endDate).toISOString() : "";
       if (selectedFields.includes("Start Date")) row["StartDate"] = rule.startDate ? new Date(rule.startDate).toISOString() : "";
       
-      if (selectedFields.includes("For collection pages")) row["ForCollect"] = "TRUE";
+      if (selectedFields.includes("For collection pages")) row["ForCollect"] = rule.ruleType === "search" ? "FALSE" : "TRUE";
       if (selectedFields.includes("Locales")) row["Locales"] = rule.locales || "";
       if (selectedFields.includes("Locations")) row["Locations"] = "";
       if (selectedFields.includes("Search queries")) row["SearchQueries"] = rule.searchQueries && rule.searchQueries.length > 0 ? JSON.stringify(rule.searchQueries) : "";

@@ -8,11 +8,12 @@ import {
   redirect,
 } from "react-router";
 import { authenticate } from "../shopify.server";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const action = async ({ request, params }) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const ruleId = params.id;
 
@@ -88,10 +89,10 @@ export const action = async ({ request, params }) => {
       shop,
       name,
       ruleType: "search",
+      applyToAll: formData.get("applyToAll") === "true",
       searchQueries: searchQueriesJSON ? JSON.parse(searchQueriesJSON) : [],
       applyToSearchType,
       products: JSON.parse(productsJSON),
-      status: true,
     };
 
     let savedRule;
@@ -110,7 +111,7 @@ export const action = async ({ request, params }) => {
 };
 
 export const loader = async ({ request, params }) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const ruleId = params.id;
 
@@ -118,9 +119,10 @@ export const loader = async ({ request, params }) => {
   const searchSearchQueries = url.searchParams.get("searchQueries");
     
   let defaultParams = null;
-  if (ruleId === "new" && searchSearchQueries) {
+  if (ruleId === "new") {
     try {
       defaultParams = {
+        applyToAll: url.searchParams.get("applyToAll") === "true",
         searchQueries: searchSearchQueries ? JSON.parse(searchSearchQueries) : [],
       };
     } catch (e) {
@@ -135,27 +137,13 @@ export const loader = async ({ request, params }) => {
     });
   }
 
-  // Fetch collections for dropdown
-  const graphqlQuery = `
-    query {
-      collections(first: 250) {
-        nodes {
-          id
-          title
-        }
-      }
-    }
-  `;
-  const response = await admin.graphql(graphqlQuery);
-  const result = await response.json();
-  const allCollections =
-    result.data?.collections?.nodes?.map((c) => c.title).sort() || [];
-
-  return { rule, allCollections, defaultParams };
+  return { rule, defaultParams };
 };
 
+export const headers = (headersArgs) => boundary.headers(headersArgs);
+
 export default function PinningEditor() {
-  const { rule, allCollections, defaultParams } = useLoaderData();
+  const { rule, defaultParams } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -180,6 +168,8 @@ export default function PinningEditor() {
   const [products, setProducts] = useState(initialProducts);
   const [name, setName] = useState(defaultName);
   const [searchQueries, setSearchQueries] = useState(initialSearchQueries);
+  const initialApplyToAll = rule?.applyToAll ?? defaultParams?.applyToAll ?? false;
+  const [applyToAll, setApplyToAll] = useState(initialApplyToAll);
   const initialApplyToInstantSearch = rule ? (rule.applyToSearchType === "instant" || rule.applyToSearchType === "both") : true;
   const initialApplyToSearchResults = rule ? (rule.applyToSearchType === "page" || rule.applyToSearchType === "both") : true;
 
@@ -193,6 +183,7 @@ export default function PinningEditor() {
     JSON.stringify(products) !== JSON.stringify(initialProducts) ||
     name !== defaultName ||
     JSON.stringify(searchQueries) !== JSON.stringify(initialSearchQueries) ||
+    applyToAll !== initialApplyToAll ||
     
     applyToInstantSearch !== initialApplyToInstantSearch ||
     applyToSearchResults !== initialApplyToSearchResults;
@@ -472,19 +463,15 @@ export default function PinningEditor() {
     }
   };
 
-  const handleCollectionChange = (e) => {
-    const options = e.target.options;
-    const values = [];
-    for (let i = 0; i < options.length; i++) {
-      if (options[i].selected) {
-        values.push(options[i].value);
-      }
-    }
-    setSelectedCollections(values);
+  const handleSearch = () => {
+    setCurrentPage(0);
+    setIsFetchingMore(true);
+    fetcher.submit({ intent: "search", q: searchQuery, skip: 0,
+      excludedIds: JSON.stringify(products.map(product => product.id)) }, { method: "post" });
   };
 
   const handleSave = () => {
-    if (searchQueries.length === 0) {
+    if (!applyToAll && searchQueries.length === 0) {
       shopify.toast.show("Please add at least one search query", { isError: true });
       return;
     }
@@ -501,6 +488,7 @@ export default function PinningEditor() {
 
     const formData = new FormData();
     formData.append("intent", "save");
+    formData.append("applyToAll", String(applyToAll));
     formData.append("name", name);
     formData.append("searchQueries", JSON.stringify(searchQueries));
     formData.append("applyToSearchType", applyToSearchType);
@@ -710,6 +698,10 @@ export default function PinningEditor() {
               <div style={{ fontWeight: "600", fontSize: "14px", color: "#1e293b", marginBottom: "12px" }}>
                 Target Search Queries
               </div>
+              <label style={{ display: "block", marginBottom: "12px" }}>
+                <input type="checkbox" checked={applyToAll} onChange={event => setApplyToAll(event.target.checked)} />
+                Apply to all searches
+              </label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
                 {searchQueries.map(q => (
                   <div key={q} style={{ 
@@ -901,6 +893,7 @@ export default function PinningEditor() {
                 />
               </div>
               <button
+                onClick={handleSearch}
                 style={{
                   background: "#5B21B6",
                   color: "#fff",

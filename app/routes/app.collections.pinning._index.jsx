@@ -8,6 +8,7 @@ import {
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { matchesRuleFilters } from "../utils/ruleFilters";
 import prisma from "../db.server";
 import FilterModal from "../components/merchandising/FilterModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
@@ -173,7 +174,7 @@ export default function PinningIndex() {
         .includes(searchQuery.toLowerCase());
     if (statusFilter === "active" && !rule.status) return false;
     if (statusFilter === "inactive" && rule.status) return false;
-    return matchesSearch;
+    return matchesSearch && matchesRuleFilters(rule, ruleFilters, ruleMatchType);
   });
 
   const sortedRules = [...filteredRules].sort((a, b) => {
@@ -876,6 +877,7 @@ export default function PinningIndex() {
             </div>
 
             <button
+              aria-label="Filter rules"
               onClick={() => setIsFilterModalOpen(true)}
               className="merch-icon-btn"
             >
@@ -894,6 +896,7 @@ export default function PinningIndex() {
               </svg>
             </button>
             <button
+              aria-label="Customize columns"
               onClick={() => setIsCustomizeColumnsOpen(true)}
               className="merch-icon-btn"
             >

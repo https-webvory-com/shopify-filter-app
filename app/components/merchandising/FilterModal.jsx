@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 
-export default function FilterModal({ isOpen, onClose, onApply, currentMatchType = "all", currentFilters = [] }) {
+export default function FilterModal({ isOpen, onClose, onApply, currentMatchType = "all", currentFilters = [], targetField = "Collections" }) {
   const [matchType, setMatchType] = useState(currentMatchType);
   const [filters, setFilters] = useState(currentFilters);
 
   useEffect(() => {
     if (isOpen) {
       setMatchType(currentMatchType);
-      setFilters(currentFilters);
+      setFilters(currentFilters.map(filter => ({ ...filter })));
     }
   }, [isOpen, currentMatchType, currentFilters]);
 
   const fieldOptions = [
-    { label: "Collections", value: "Collections" },
+    { label: targetField, value: targetField },
     { label: "Active", value: "Active" },
     { label: "Item name", value: "Item name" }
   ];
@@ -35,11 +35,11 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
   };
 
   const addFilter = () => {
-    setFilters([...filters, { field: "Collections", operator: "contains", value: "" }]);
+    setFilters([...filters, { field: targetField, operator: "contains", value: "" }]);
   };
 
   const updateFilter = (index, key, value) => {
-    const newFilters = [...filters];
+    const newFilters = filters.map(filter => ({ ...filter }));
     newFilters[index][key] = value;
     
     if (key === "field") {

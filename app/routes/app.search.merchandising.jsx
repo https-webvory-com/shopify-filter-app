@@ -6,6 +6,7 @@ import {
   useLoaderData,
 } from "react-router";
 import { authenticate } from "../shopify.server";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import FilterModal from "../components/merchandising/FilterModal";
@@ -222,32 +223,44 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const graphqlQuery = await admin.graphql(`
-    #graphql
-    query {
-      collections(first: 250) {
-        nodes {
-          id
-          title
+  let graphqlData;
+  let lookupWarning = null;
+  try {
+    const graphqlQuery = await admin.graphql(`
+      #graphql
+      query {
+        collections(first: 250) {
+          nodes {
+            id
+            title
+          }
         }
-      }
-      locations(first: 250, includeInactive: true) {
-        nodes {
-          id
-          name
-        }
-      }
-      shop {
-        fulfillmentServices {
-          location {
+        locations(first: 250, includeInactive: true) {
+          nodes {
             id
             name
           }
         }
+        shop {
+          fulfillmentServices {
+            location {
+              id
+              name
+            }
+          }
+        }
       }
+    `);
+    graphqlData = await graphqlQuery.json();
+    if (graphqlData.errors?.length) {
+      throw new Error("Shopify returned errors loading merchandising options");
     }
-  `);
-  const graphqlData = await graphqlQuery.json();
+  } catch (error) {
+    // Authentication responses must reach Shopify's boundary unchanged.
+    if (error instanceof Response) throw error;
+    console.error("Error fetching search merchandising options:", error);
+    lookupWarning = "Some collection and location options could not be loaded. Refresh the page to retry before editing rules that use these options.";
+  }
   const shopifyCollections =
     graphqlData?.data?.collections?.nodes
       ?.map((c) => ({ id: c.id, title: c.title }))
@@ -342,6 +355,7 @@ export const loader = async ({ request }) => {
   });
 
   return {
+    lookupWarning,
     shopifyCollections,
     shopifyVendors,
     shopifyOptions,
@@ -355,8 +369,11 @@ export const loader = async ({ request }) => {
   };
 };
 
+export const headers = (headersArgs) => boundary.headers(headersArgs);
+
 export default function MerchandisingIndex() {
   const {
+    lookupWarning,
     shopifyCollections,
     shopifyVendors,
     shopifyOptions,
@@ -500,11 +517,14 @@ export default function MerchandisingIndex() {
         shopify.toast.show("Rule status updated");
       if (fetcher.data.intent === "duplicate")
         shopify.toast.show("Rule duplicated successfully");
+      if (fetcher.data.intent === "importRules")
+        shopify.toast.show(`Successfully imported ${fetcher.data.count} rule(s)`);
     }
   }, [fetcher.state, fetcher.data]);
 
   return (
     <s-page heading="Merchandising">
+      {lookupWarning && <s-banner tone="warning">{lookupWarning}</s-banner>}
       <ui-title-bar title="Search > Merchandising">
         <button variant="breadcrumb" onClick={() => navigate("/app/search")}>
           Back to Search
@@ -1524,6 +1544,7 @@ export default function MerchandisingIndex() {
           isOpen={isFilterModalOpen}
           onClose={() => setIsFilterModalOpen(false)}
           currentMatchType={ruleMatchType}
+          targetField="Search Queries"
           currentFilters={ruleFilters}
           onApply={(match, filters) => {
             setRuleMatchType(match);
@@ -1673,7 +1694,7 @@ export default function MerchandisingIndex() {
               setIsExportModalOpen(false);
               setSelectedRules([]);
             }}
-            selectedRuleIds={selectedRules}
+            selectedRuleIds={selectedRules.map(rule => rule.id)}
             allRules={merchandisingRules}
           />
         )}

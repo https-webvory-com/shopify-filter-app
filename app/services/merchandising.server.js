@@ -220,23 +220,27 @@ export async function getActivePinningRuleForSearch(
 
   const queryLower = searchQuery.toLowerCase();
 
+  let allSearchesRule = null;
   for (const rule of activeRules) {
-    if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
-
+    const appliesTo = rule.applyToSearchType === "search" ? "page" : rule.applyToSearchType;
     // Check if the rule applies to this type of search (instant vs page)
     if (
-      rule.applyToSearchType !== "both" &&
-      rule.applyToSearchType !== searchType
+      appliesTo !== "both" && appliesTo !== searchType
     ) {
       continue;
     }
 
-    if (rule.searchQueries.some((q) => q.toLowerCase().trim() === queryLower.trim())) {
+    if (rule.applyToAll) {
+      allSearchesRule ??= rule;
+      continue;
+    }
+
+    if (rule.searchQueries?.some((q) => q.toLowerCase().trim() === queryLower.trim())) {
       return rule;
     }
   }
 
-  return null;
+  return allSearchesRule;
 }
 
 /**

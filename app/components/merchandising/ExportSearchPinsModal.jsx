@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import Papa from "papaparse";
+import { searchPinScopeToCsv } from "../../utils/searchPinCsv";
 
 export default function ExportSearchPinsModal({ isOpen, onClose, selectedRuleIds, allRules }) {
   const fields = [
     "Active",
     "AppliedToInstantSearch",
     "AppliedToSearch",
+    "ApplyToAll",
     "Brief",
     "CollectionTitles",
     "Collections",
@@ -13,6 +15,7 @@ export default function ExportSearchPinsModal({ isOpen, onClose, selectedRuleIds
     "Id",
     "Products",
     "SearchQuery",
+    "SearchQueries",
     "SiteId"
   ];
 
@@ -25,10 +28,11 @@ export default function ExportSearchPinsModal({ isOpen, onClose, selectedRuleIds
     
     const exportData = rulesToExport.map(rule => {
       const row = {};
+      for (const [field, value] of Object.entries(searchPinScopeToCsv(rule))) {
+        if (selectedFields.includes(field)) row[field] = value;
+      }
       
       if (selectedFields.includes("Active")) row["Active"] = rule.status ? "TRUE" : "FALSE";
-      if (selectedFields.includes("AppliedToInstantSearch")) row["AppliedToInstantSearch"] = rule.applyToSearchType === "instant" || rule.applyToSearchType === "both" ? "TRUE" : "FALSE";
-      if (selectedFields.includes("AppliedToSearch")) row["AppliedToSearch"] = rule.applyToSearchType === "search" || rule.applyToSearchType === "both" ? "TRUE" : "FALSE";
       
       if (selectedFields.includes("Brief")) {
         const total = (rule.products || []).length;
@@ -43,7 +47,6 @@ export default function ExportSearchPinsModal({ isOpen, onClose, selectedRuleIds
       if (selectedFields.includes("Id")) row["Id"] = rule.id;
       if (selectedFields.includes("Products")) row["Products"] = JSON.stringify(rule.products || []);
       
-      if (selectedFields.includes("SearchQuery")) row["SearchQuery"] = rule.searchQueries && rule.searchQueries.length > 0 ? rule.searchQueries[0] : "";
       if (selectedFields.includes("SiteId")) row["SiteId"] = rule.shop;
       
       return row;

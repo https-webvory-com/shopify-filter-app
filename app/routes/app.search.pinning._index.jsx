@@ -8,6 +8,8 @@ import {
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { matchesRuleFilters } from "../utils/ruleFilters";
 import prisma from "../db.server";
 import FilterModal from "../components/merchandising/FilterModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
@@ -42,6 +44,7 @@ export const action = async ({ request }) => {
           name: `${originalRule.name || "Untitled"} (Copy)`,
           status: originalRule.status,
           ruleType: "search",
+          applyToAll: originalRule.applyToAll,
           searchQueries: originalRule.searchQueries,
           applyToSearchType: originalRule.applyToSearchType,
           products: originalRule.products,
@@ -66,7 +69,7 @@ export const action = async ({ request }) => {
 };
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const pinningRules = await prisma.pinnedProductRule.findMany({
@@ -74,28 +77,13 @@ export const loader = async ({ request }) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const graphqlQuery = await admin.graphql(`
-    #graphql
-    query {
-      collections(first: 250) {
-        nodes {
-          id
-          title
-        }
-      }
-    }
-  `);
-  const graphqlData = await graphqlQuery.json();
-  const collections =
-    graphqlData?.data?.collections?.nodes
-      ?.map((c) => ({ id: c.id, title: c.title }))
-      .sort((a, b) => a.title.localeCompare(b.title)) || [];
-
-  return { pinningRules, collections };
+  return { pinningRules };
 };
 
+export const headers = (headersArgs) => boundary.headers(headersArgs);
+
 export default function PinningIndex() {
-  const { pinningRules, collections } = useLoaderData();
+  const { pinningRules } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -136,8 +124,6 @@ export default function PinningIndex() {
     submit(formData, { method: "post" });
   };
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedCollection, setSelectedCollection] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -173,7 +159,7 @@ export default function PinningIndex() {
         .includes(searchQuery.toLowerCase());
     if (statusFilter === "active" && !rule.status) return false;
     if (statusFilter === "inactive" && rule.status) return false;
-    return matchesSearch;
+    return matchesSearch && matchesRuleFilters(rule, ruleFilters, ruleMatchType);
   });
 
   const sortedRules = [...filteredRules].sort((a, b) => {
@@ -758,6 +744,7 @@ export default function PinningIndex() {
             </div>
 
             <button
+              aria-label="Filter rules"
               onClick={() => setIsFilterModalOpen(true)}
               style={{
                 background: "none",
@@ -781,6 +768,7 @@ export default function PinningIndex() {
               </svg>
             </button>
             <button
+              aria-label="Customize columns"
               onClick={() => setIsCustomizeColumnsOpen(true)}
               style={{
                 background: "none",
@@ -1286,7 +1274,7 @@ export default function PinningIndex() {
                         .map((c) => {
                           if (c.id === "Search Queries") {
                             const collText =
-                              rule.searchQueries && rule.searchQueries.length > 0
+                              rule.applyToAll ? "All searches" : rule.searchQueries && rule.searchQueries.length > 0
                                 ? rule.searchQueries.join(", ")
                                 : "None";
                             return (
@@ -1537,6 +1525,7 @@ export default function PinningIndex() {
           isOpen={isFilterModalOpen}
           onClose={() => setIsFilterModalOpen(false)}
           currentMatchType={ruleMatchType}
+          targetField="Search Queries"
           currentFilters={ruleFilters}
           onApply={(match, filters) => {
             setRuleMatchType(match);

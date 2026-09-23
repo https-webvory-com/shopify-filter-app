@@ -1195,7 +1195,7 @@ export default function MergedValues() {
             Filter options ({rules.length})
           </span>
           <button onClick={openAdd} className="btn-merge-action">
-            Merge values
+            Add merge value
           </button>
         </div>
 
@@ -1350,7 +1350,7 @@ export default function MergedValues() {
               Stack similar values under the same value category
             </p>
             <button onClick={openAdd} className="btn-merge-action" style={{ padding: "12px 26px", borderRadius: "10px" }}>
-              Merge values
+              Add merge value
             </button>
           </div>
         ) : (

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import { searchPinScopeFromCsv } from "../../utils/searchPinCsv";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,21 +19,12 @@ function tryParse(str, fallback) {
  * Supports both the data1246.csv format and our own export format.
  */
 function mapCsvRow(row) {
-  const isInstant = (row["AppliedToInstantSearch"] || "").toUpperCase().trim() === "TRUE";
-  const isSearch = (row["AppliedToSearch"] || "").toUpperCase().trim() === "TRUE";
-
-  let applyToSearchType = "both";
-  if (isInstant && !isSearch) applyToSearchType = "instant";
-  if (!isInstant && isSearch) applyToSearchType = "search";
-  if (!isInstant && !isSearch) applyToSearchType = "none";
-
   return {
     externalId: row["Id"] || "",
     active: (row["Active"] || "True").toUpperCase().trim() !== "FALSE",
     collectionTitles: tryParse(row["CollectionTitles"], []),
     products: tryParse(row["Products"], []),
-    searchQuery: row["SearchQuery"] || null,
-    applyToSearchType,
+    ...searchPinScopeFromCsv(row),
   };
 }
 

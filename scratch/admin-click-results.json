@@ -1,0 +1,219 @@
+{
+  "environment": "Local React route components with fixture loaders/actions; no live Shopify API or database",
+  "pages": [
+    {
+      "controls": 8,
+      "error": false,
+      "errors": [],
+      "url": "/app/collections/merchandising"
+    },
+    {
+      "controls": 13,
+      "error": false,
+      "errors": [],
+      "url": "/app/collections/pinning/new"
+    },
+    {
+      "controls": 9,
+      "error": false,
+      "errors": [],
+      "url": "/app/collections/pinning"
+    },
+    {
+      "controls": 2,
+      "error": false,
+      "errors": [],
+      "url": "/app/collections"
+    },
+    {
+      "controls": 17,
+      "error": false,
+      "errors": [],
+      "url": "/app/filters/groups/new"
+    },
+    {
+      "controls": 12,
+      "error": false,
+      "errors": [],
+      "url": "/app/filters/groups"
+    },
+    {
+      "controls": 7,
+      "error": false,
+      "errors": [],
+      "url": "/app/filters/merged-value"
+    },
+    {
+      "controls": 9,
+      "error": false,
+      "errors": [],
+      "url": "/app/filters/settings"
+    },
+    {
+      "controls": 3,
+      "error": false,
+      "errors": [],
+      "url": "/app/filters"
+    },
+    {
+      "controls": 1,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/banners"
+    },
+    {
+      "controls": 1,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/blacklist"
+    },
+    {
+      "controls": 8,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/merchandising"
+    },
+    {
+      "controls": 19,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/pinning/new"
+    },
+    {
+      "controls": 9,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/pinning"
+    },
+    {
+      "controls": 1,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/redirects"
+    },
+    {
+      "controls": 1,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/settings"
+    },
+    {
+      "controls": 7,
+      "error": false,
+      "errors": [],
+      "url": "/app/search/synonyms"
+    },
+    {
+      "controls": 3,
+      "error": false,
+      "errors": [],
+      "url": "/app/search"
+    },
+    {
+      "controls": 12,
+      "error": false,
+      "errors": [],
+      "url": "/app/settings/customization"
+    },
+    {
+      "controls": 11,
+      "error": false,
+      "errors": [],
+      "url": "/app/settings/general"
+    },
+    {
+      "controls": 4,
+      "error": false,
+      "errors": [],
+      "url": "/app/settings/integrations"
+    },
+    {
+      "controls": 6,
+      "error": false,
+      "errors": [],
+      "url": "/app/settings/theme-setup"
+    },
+    {
+      "controls": 3,
+      "error": false,
+      "errors": [],
+      "url": "/app/settings"
+    },
+    {
+      "controls": 3,
+      "error": false,
+      "errors": [],
+      "url": "/app/upgrade"
+    },
+    {
+      "controls": 8,
+      "error": false,
+      "errors": [],
+      "url": "/app"
+    }
+  ],
+  "smoke": [
+    {
+      "clicks": 63,
+      "failures": []
+    },
+    {
+      "clicks": 33,
+      "failures": []
+    },
+    {
+      "clicks": 49,
+      "failures": []
+    },
+    {
+      "clicks": 31,
+      "failures": []
+    },
+    {
+      "clicks": 28,
+      "failures": []
+    }
+  ],
+  "workflows": [
+    {
+      "name": "search: pin filters apply and cancelled edits do not change results",
+      "passed": true
+    },
+    {
+      "name": "search: Search button submits a product search",
+      "passed": true
+    },
+    {
+      "name": "search: merchandising dates can be selected and cancelled",
+      "passed": true
+    },
+    {
+      "name": "collections: pin filters apply and cancelled edits do not change results",
+      "passed": true
+    },
+    {
+      "name": "collections: Search button submits a product search",
+      "passed": true
+    },
+    {
+      "name": "collections: merchandising dates can be selected and cancelled",
+      "passed": true
+    },
+    {
+      "name": "Search merchandising exports the selected rule, with search scope",
+      "passed": true
+    },
+    {
+      "name": "All searches is retained when opening the new pin editor",
+      "passed": true
+    },
+    {
+      "name": "Search-pin CSV export includes scope and every search query",
+      "passed": true
+    },
+    {
+      "name": "Merged Values opens the add dialog from the renamed button",
+      "passed": true
+    }
+  ]
+}
