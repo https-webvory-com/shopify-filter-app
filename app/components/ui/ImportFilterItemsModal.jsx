@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
 import { Modal } from "./Modal";
+import { SampleCsvDownload } from "./SampleCsvDownload";
 
 export function ImportFilterItemsModal({ isOpen, onClose, onSubmit, isSubmitting }) {
   const [step, setStep] = useState(1);
@@ -216,6 +217,9 @@ export function ImportFilterItemsModal({ isOpen, onClose, onSubmit, isSubmitting
                 Upload a CSV file containing your filter options.
               </p>
               
+              <SampleCsvDownload href="/samples/filter-items.csv">
+                Examples include vendor, color, and size filters. Use your store's option names after option:.
+              </SampleCsvDownload>
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}

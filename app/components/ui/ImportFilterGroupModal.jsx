@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import { SampleCsvDownload } from "./SampleCsvDownload";
 
 export function ImportFilterGroupModal({ isOpen, onClose, onSubmit, isSubmitting }) {
   const [step, setStep] = useState(1);
@@ -164,6 +165,10 @@ export function ImportFilterGroupModal({ isOpen, onClose, onSubmit, isSubmitting
         {step === 1 ? (
           <>
             {/* Upload Area */}
+            <SampleCsvDownload href="/samples/filter-groups.csv">
+              Examples include groups for all collection pages and search pages.
+              Leave Identifier blank to create a new group.
+            </SampleCsvDownload>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

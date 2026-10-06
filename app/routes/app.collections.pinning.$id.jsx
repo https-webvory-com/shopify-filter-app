@@ -9,6 +9,8 @@ import {
 } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { pinProductSearchFilter } from "../utils/pinProductSearch.server";
+import PinSearchField from "../components/merchandising/PinSearchField";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const action = async ({ request, params }) => {
@@ -17,7 +19,6 @@ export const action = async ({ request, params }) => {
   const formData = await request.formData();
   const ruleId = params.id;
   const intent = formData.get("intent");
-  const { invalidateShop } = await import("../services/shopCache.server");
 
   if (intent === "search") {
     const query = formData.get("q") || "";
@@ -27,13 +28,9 @@ export const action = async ({ request, params }) => {
 
     const whereClause = { shop, status: "active" };
 
-    if (query.trim() !== "") {
-      whereClause.OR = [
-        { title: { contains: query, mode: "insensitive" } },
-        { vendor: { contains: query, mode: "insensitive" } },
-        { tags: { has: query } }
-      ];
-    }
+    Object.assign(whereClause, await pinProductSearchFilter(
+      prisma, shop, query, formData.get("searchField"),
+    ));
 
     if (!applyToAll && collections.length > 0) {
       whereClause.collections = {
@@ -84,6 +81,8 @@ export const action = async ({ request, params }) => {
 
     return Response.json({ products, totalCount });
   }
+
+  const { invalidateShop } = await import("../services/shopCache.server");
 
   if (intent === "save") {
     const productsJSON = formData.get("products");
@@ -218,6 +217,7 @@ export default function PinningEditor() {
     }
   };
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState("title");
   const [pinnedSearchQuery, setPinnedSearchQuery] = useState("");
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
 
@@ -339,7 +339,7 @@ export default function PinningEditor() {
         fetcher.submit(
           {
             intent: "search",
-            q: searchQuery,
+            q: searchQuery, searchField,
             collections: JSON.stringify(selectedCollections),
             applyToAll: applyToAll,
             skip: 0,
@@ -350,7 +350,7 @@ export default function PinningEditor() {
       }
     }, 500);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, selectedCollections, applyToAll]);
+  }, [searchQuery, searchField, selectedCollections, applyToAll]);
 
   // When products (pinned list) changes, we should refetch the current page
   // so the backend naturally replenishes the missing slots
@@ -359,7 +359,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           collections: JSON.stringify(selectedCollections),
           applyToAll: applyToAll,
           skip: currentPage * 9,
@@ -388,7 +388,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           collections: JSON.stringify(selectedCollections),
           applyToAll: applyToAll,
           skip: nextPage * 9,
@@ -407,7 +407,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           collections: JSON.stringify(selectedCollections),
           applyToAll: applyToAll,
           skip: prevPage * 9,
@@ -703,6 +703,7 @@ export default function PinningEditor() {
           >
 
 
+            <PinSearchField value={searchField} onChange={setSearchField} />
             <div
               style={{
                 display: "flex",
@@ -742,7 +743,7 @@ export default function PinningEditor() {
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search to pin products"
+                  placeholder={searchField === "tags" ? "Search products by tag" : "Search to pin products"}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{
@@ -759,7 +760,7 @@ export default function PinningEditor() {
                 onClick={() => {
                   setCurrentPage(0);
                   setIsFetchingMore(true);
-                  fetcher.submit({ intent: "search", q: searchQuery,
+                  fetcher.submit({ intent: "search", q: searchQuery, searchField,
                     collections: JSON.stringify(selectedCollections), applyToAll,
                     skip: 0, excludedIds: JSON.stringify(products.map(product => product.id)) }, { method: "post" });
                 }}

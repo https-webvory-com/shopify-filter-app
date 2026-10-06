@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
+import { pinProductSearchFilter } from "../../app/utils/pinProductSearch.server.js";
 import {
   searchPinScopeFromCsv,
   searchPinScopeToCsv,
@@ -57,6 +58,8 @@ async function mockedModule(file, mocks) {
     console,
     require(name) {
       if (name in mocks) return mocks[name];
+      if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter };
+      if (name.startsWith("../components/")) return {};
       if (
         [
           "react",
@@ -72,6 +75,73 @@ async function mockedModule(file, mocks) {
   vm.runInNewContext(code, context);
   return context.module.exports;
 }
+
+for (const section of ["collections", "search"]) {
+  test(`${section} pin editor searches title or tags while retaining scope and pagination`, async () => {
+    const shop = "fixture.myshopify.com";
+    const calls = [];
+    const prisma = {
+      $queryRaw: async (sql, queryShop, text) => {
+        assert.equal(queryShop, shop);
+        assert.equal(text, "SUMMER");
+        assert.ok(sql.join("?").includes("strpos(lower(tag), lower("));
+        return [{ tag: "Summer Sale" }, { tag: "summer" }];
+      },
+      product: {
+        count: async ({ where }) => { calls.push({ where }); return 12; },
+        findMany: async (args) => { calls.push(args); return [{ id: "product-2", title: "Blue dress", images: [] }]; },
+      },
+    };
+    const route = await mockedModule(`app/routes/app.${section}.pinning.$id.jsx`, {
+      "../shopify.server": { authenticate: { admin: async () => ({ session: { shop } }) } },
+      "../db.server": { __esModule: true, default: prisma },
+    });
+    for (const id of ["new", "rule-1"]) {
+      for (const searchField of ["title", "tags"]) {
+        calls.length = 0;
+        const form = new FormData();
+        Object.entries({ intent: "search", q: "  SUMMER  ", searchField,
+          collections: '["Summer"]', applyToAll: "false", skip: "9", excludedIds: '["product-1"]',
+        }).forEach(([key, value]) => form.set(key, value));
+        const response = await route.action({ request: new Request("https://fixture.test", { method: "POST", body: form }), params: { id } });
+        assert.equal((await response.json()).totalCount, 12);
+        const where = JSON.parse(JSON.stringify(calls[1].where));
+        assert.equal(where.shop, shop);
+        assert.equal(where.status, "active");
+        assert.deepEqual(where.id, { notIn: ["product-1"] });
+        assert.equal(calls[1].skip, 9);
+        assert.equal(calls[1].take, 9);
+        assert.deepEqual(calls[0].where, calls[1].where);
+        if (section === "collections") assert.deepEqual(where.collections.some.collection.title.in, ["Summer"]);
+        if (searchField === "tags") {
+          assert.deepEqual(where.tags, { hasSome: ["Summer Sale", "summer"] });
+          assert.equal(where.title, undefined);
+          assert.equal(where.OR, undefined);
+        } else {
+          assert.deepEqual(where.OR, [
+            { title: { contains: "  SUMMER  ", mode: "insensitive" } },
+            { vendor: { contains: "  SUMMER  ", mode: "insensitive" } },
+            { tags: { has: "  SUMMER  " } },
+          ]);
+          assert.equal(where.tags, undefined);
+        }
+      }
+    }
+  });
+}
+
+test("pin product search handles empty input, unmatched tags and unknown modes", async () => {
+  const prisma = { $queryRaw: async () => [] };
+  assert.deepEqual(await pinProductSearchFilter(prisma, "shop", " ", "tags"), {});
+  assert.deepEqual(await pinProductSearchFilter(prisma, "shop", "absent", "tags"), { tags: { hasSome: [] } });
+  assert.deepEqual(await pinProductSearchFilter(prisma, "shop", "dress", "invalid"), {
+    OR: [
+      { title: { contains: "dress", mode: "insensitive" } },
+      { vendor: { contains: "dress", mode: "insensitive" } },
+      { tags: { has: "dress" } },
+    ],
+  });
+});
 
 test("All searches survives editor load and save; editing does not enable a disabled pin", async () => {
   const writes = [];

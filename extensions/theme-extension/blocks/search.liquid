@@ -1,6 +1,7 @@
 {% if template.name == 'search' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
+      full_width: block.settings.full_width,
       show_price_filter: block.settings.show_price_filter,
       show_brand_filter: block.settings.show_brand_filter,
       show_color_filter: block.settings.show_color_filter,
@@ -33,6 +34,12 @@
   "target": "section",
   "templates": ["search"],
   "settings": [
+    {
+      "type": "checkbox",
+      "id": "full_width",
+      "label": "Enable Full Width Layout",
+      "default": false
+    },
     {
       "type": "header",
       "content": "Grid Layout"

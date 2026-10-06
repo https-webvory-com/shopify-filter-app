@@ -1,0 +1,4 @@
+Identifier,Filter name,Display mode,Active,Ordinal,Label,LabelPrefix
+vendor,,list,TRUE,0,Brand,
+option:Color,,swatch,TRUE,1,Color,
+option:Size,,box,TRUE,2,Size,

@@ -425,6 +425,7 @@ const AutocompleteInput = ({
       style={{
         position: "relative",
         flex: 7,
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
         gap: "8px",
@@ -461,7 +462,7 @@ const AutocompleteInput = ({
       />
 
       {selectedValues.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", overflowWrap: "anywhere" }}>
           {selectedValues.map((val) => (
             <div key={val} className="autocomplete-tag">
               <span>{val}</span>
@@ -1050,7 +1051,7 @@ export default function MergedValues() {
           padding: 26px !important;
           width: 100% !important;
           max-width: 800px !important;
-          margin: auto !important;
+          margin: 0 auto !important;
           overflow: visible !important;
           box-shadow: 0 24px 64px rgba(30, 27, 75, 0.12) !important;
           position: relative !important;
@@ -1620,7 +1621,7 @@ export default function MergedValues() {
                     style={{
                       display: "flex",
                       gap: "16px",
-                      alignItems: "center",
+                      alignItems: "flex-start",
                       position: "relative",
                       zIndex: 100 - index,
                     }}
@@ -1642,6 +1643,8 @@ export default function MergedValues() {
                       }
                       style={{
                         flex: "3",
+                        minWidth: 0,
+                        boxSizing: "border-box",
                         padding: "10px 16px",
                         background: "#ffffff",
                         border: "1px solid rgba(30, 27, 75, 0.12)",

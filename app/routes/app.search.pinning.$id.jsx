@@ -10,6 +10,8 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { pinProductSearchFilter } from "../utils/pinProductSearch.server";
+import PinSearchField from "../components/merchandising/PinSearchField";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const action = async ({ request, params }) => {
@@ -28,13 +30,9 @@ export const action = async ({ request, params }) => {
 
     const whereClause = { shop, status: "active" };
 
-    if (query.trim() !== "") {
-      whereClause.OR = [
-        { title: { contains: query, mode: "insensitive" } },
-        { vendor: { contains: query, mode: "insensitive" } },
-        { tags: { has: query } }
-      ];
-    }
+    Object.assign(whereClause, await pinProductSearchFilter(
+      prisma, shop, query, formData.get("searchField"),
+    ));
 
 
     const skip = parseInt(formData.get("skip") || "0", 10);
@@ -197,6 +195,7 @@ export default function PinningEditor() {
     }
   };
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchField, setSearchField] = useState("title");
   const [pinnedSearchQuery, setPinnedSearchQuery] = useState("");
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
 
@@ -318,7 +317,7 @@ export default function PinningEditor() {
         fetcher.submit(
           {
             intent: "search",
-            q: searchQuery,
+            q: searchQuery, searchField,
             
             
             skip: 0,
@@ -329,7 +328,7 @@ export default function PinningEditor() {
       }
     }, 500);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
+  }, [searchQuery, searchField]);
 
   // When products (pinned list) changes, we should refetch the current page 
   // so the backend naturally replenishes the missing slots
@@ -338,7 +337,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           
           
           skip: currentPage * 9,
@@ -367,7 +366,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           
           
           skip: nextPage * 9,
@@ -386,7 +385,7 @@ export default function PinningEditor() {
       fetcher.submit(
         {
           intent: "search",
-          q: searchQuery,
+          q: searchQuery, searchField,
           
           
           skip: prevPage * 9,
@@ -466,7 +465,7 @@ export default function PinningEditor() {
   const handleSearch = () => {
     setCurrentPage(0);
     setIsFetchingMore(true);
-    fetcher.submit({ intent: "search", q: searchQuery, skip: 0,
+    fetcher.submit({ intent: "search", q: searchQuery, searchField, skip: 0,
       excludedIds: JSON.stringify(products.map(product => product.id)) }, { method: "post" });
   };
 
@@ -840,6 +839,7 @@ export default function PinningEditor() {
               </label>
             </div>
 
+            <PinSearchField value={searchField} onChange={setSearchField} />
             <div
               style={{
                 display: "flex",
@@ -879,7 +879,7 @@ export default function PinningEditor() {
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search to pin products"
+                  placeholder={searchField === "tags" ? "Search products by tag" : "Search to pin products"}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{

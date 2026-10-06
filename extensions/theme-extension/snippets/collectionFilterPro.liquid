@@ -62,12 +62,13 @@
 {%- endstyle -%}
 
 <script>
-  window.cfpFullWidth = {{ full_width | default: true | json }};
+  window.cfpFullWidth = {{ full_width | default: true, allow_false: true | json }};
   window.cfpCurrency = {
     isoCode: {{ cart.currency.iso_code | json }},
     symbol: {{ cart.currency.symbol | json }}
   };
 </script>
+{% if full_width != false %}
 <style>
   /* Force full width natively from liquid to bypass CDN caching */
   .collection.page-width, 
@@ -84,6 +85,7 @@
       }
   }
 </style>
+{% endif %}
 
 <div id="cfp-overlay" class="cfp-overlay" aria-hidden="true"></div>
 

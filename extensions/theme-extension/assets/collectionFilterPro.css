@@ -1435,14 +1435,16 @@ facet-filters-form,
     visibility: visible !important;
     pointer-events: auto !important;
   }
-  .cfp-sidebar {
+  #cfp-sidebar.cfp-sidebar {
     position: fixed !important;
     top: 0 !important;
     left: -100% !important;
     right: auto !important;
     bottom: 0 !important;
-    width: 360px !important;
-    max-width: 90vw !important;
+    width: min(360px, 90vw) !important;
+    min-width: 0 !important;
+    max-width: min(360px, 90vw) !important;
+    box-sizing: border-box !important;
     height: 100vh !important;
     max-height: 100vh !important;
     background: #fff !important;
@@ -1455,7 +1457,7 @@ facet-filters-form,
     padding: 0 !important;
     margin: 0 !important;
   }
-  .cfp-sidebar.cfp-sidebar--open {
+  #cfp-sidebar.cfp-sidebar.cfp-sidebar--open {
     left: 0 !important;
     display: flex !important;
     visibility: visible !important;
