@@ -9,7 +9,7 @@ let webhookWorker;
 async function processWebhookJob(job) {
   const { name: topic, data } = job;
   const { shop, payload } = data;
-  const normalizedTopic = (topic || "").toUpperCase();
+  const normalizedTopic = (topic || "").replaceAll("/", "_").toUpperCase();
 
   console.log(`CFP Worker: Processing job #${job.id} - Topic: ${normalizedTopic} for Shop: ${shop}`);
 
@@ -148,7 +148,15 @@ async function handleOrderCancelled(shop, orderPayload) {
 }
 
 async function handleProductUpdate(shop, payload) {
-  const productId = `gid://shopify/Product/${payload.id}`;
+  if (!payload.id) throw new Error("Product webhook is missing its product ID");
+  const productId = payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`;
+  // Load at processing time to avoid the Redis -> worker -> sync -> Redis cycle.
+  const { unauthenticated } = await import("../shopify.server.js");
+  const { syncSingleProduct } = await import("../services/sync.server.js");
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  const { admin } = await unauthenticated.admin(shop);
+  await syncSingleProduct(shop, admin, productId, { retrySearchErrors: true });
+  await invalidateShop(shop);
   console.log(`CFP Worker: Product update synced for ${productId}`);
 }
 
@@ -184,7 +192,7 @@ async function handleAppUninstalled(shop) {
 export function initWebhookWorker() {
   if (!global.__webhookWorker) {
     global.__webhookWorker = new Worker("webhookQueue", processWebhookJob, {
-      connection: redisOptions,
+      connection: { ...redisOptions, maxRetriesPerRequest: null },
       concurrency: 5,
     });
 
@@ -194,6 +202,10 @@ export function initWebhookWorker() {
 
     global.__webhookWorker.on("failed", (job, err) => {
       console.error(`CFP Worker: Job #${job?.id} (${job?.name}) failed:`, err.message);
+    });
+
+    global.__webhookWorker.on("error", (err) => {
+      console.error("CFP Worker: Redis/worker error:", err);
     });
 
     console.log("CFP Worker: BullMQ Webhook Worker initialized for ALL webhooks (concurrency: 5).");

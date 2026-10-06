@@ -25,6 +25,9 @@ if (!global.__webhookQueue) {
       removeOnFail: { count: 5000 },
     },
   });
+  global.__webhookQueue.on("error", (error) => {
+    console.error("CFP Queue: Redis connection error:", error);
+  });
 }
 webhookQueue = global.__webhookQueue;
 

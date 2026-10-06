@@ -848,7 +848,7 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
  * @param {object} admin - The authenticated Shopify Admin API client
  * @param {string} productId - The Shopify Product GID
  */
-export async function syncSingleProduct(shop, admin, productId) {
+export async function syncSingleProduct(shop, admin, productId, { retrySearchErrors = false } = {}) {
   console.log(`CFP: Syncing single product ${productId} for ${shop}...`);
 
   const metafieldSettings = await prisma.filterSetting.findMany({
@@ -990,6 +990,7 @@ export async function syncSingleProduct(shop, admin, productId) {
       console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
     } catch (e) {
       console.error("CFP: Failed to delete document from Meilisearch", e);
+      if (retrySearchErrors) throw e;
     }
     return null;
   }
@@ -1099,6 +1100,7 @@ export async function syncSingleProduct(shop, admin, productId) {
       })
       .catch((e) => {
         console.error("CFP: Failed to push product to Meilisearch", e);
+        if (retrySearchErrors) throw e;
       }),
   ]);
 
