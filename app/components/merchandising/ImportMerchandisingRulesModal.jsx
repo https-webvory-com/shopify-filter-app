@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 
-export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmit, isSubmitting }) {
+export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmit, isSubmitting, ruleType = "collection" }) {
   const [step, setStep] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -262,6 +263,11 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
         {step === 1 ? (
           <>
             {/* Upload Area */}
+            <SampleCsvDownload href={`/samples/${ruleType === "search" ? "search" : "collection"}-merchandising.csv`}>
+              {ruleType === "search"
+                ? "Use your search queries and exact product tags. SearchQueries and Conditions use JSON arrays."
+                : "Use your exact collection titles and product types. CollectionTitles and Conditions use JSON arrays."}
+            </SampleCsvDownload>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

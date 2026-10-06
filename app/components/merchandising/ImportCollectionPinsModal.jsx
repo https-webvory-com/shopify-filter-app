@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import Papa from "papaparse";
+import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -304,6 +305,10 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
         {/* ── STEP 1: File Upload ── */}
         {step === 1 && (
           <>
+            <SampleCsvDownload href="/samples/collection-pins.csv">
+              Use your exact collection titles and replace the example product IDs
+              with IDs from your store. Products and CollectionTitles use JSON arrays.
+            </SampleCsvDownload>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

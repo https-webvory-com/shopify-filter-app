@@ -1,0 +1,3 @@
+Name,Active,CustomerTags,Locales,StartDate,EndDate,SearchQueries,Conditions
+Test boost summer searches,TRUE,,,,,"[""summer dress"",""evening dress""]","[{""Type"":""Boost"",""Field"":""tags"",""Value"":[""Summer""],""Operator"":""equals""}]"
+Test bury clearance searches,TRUE,,,,,"[""summer dress""]","[{""Type"":""Bury"",""Field"":""tags"",""Value"":[""Clearance""],""Operator"":""equals""}]"

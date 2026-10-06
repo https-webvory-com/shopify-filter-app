@@ -1676,6 +1676,7 @@ export default function MerchandisingIndex() {
         />
         {isImportModalOpen && (
           <ImportMerchandisingRulesModal
+            ruleType="search"
             isOpen={isImportModalOpen}
             onClose={() => setIsImportModalOpen(false)}
             onSubmit={(parsedRules) => {

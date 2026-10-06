@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 import { searchPinScopeFromCsv } from "../../utils/searchPinCsv";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -174,6 +175,10 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
         {/* ── STEP 1 ── */}
         {step === 1 && (
           <>
+            <SampleCsvDownload href="/samples/search-pins.csv">
+              Examples show specific search queries and all searches. Replace the
+              example product IDs with IDs from your store. Products and SearchQueries use JSON arrays.
+            </SampleCsvDownload>
             <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
               onClick={() => { if (!selectedFile && fileInputRef.current) fileInputRef.current.click(); }}
               style={{ border: `2px dashed ${isDragging ? "#5B21B6" : "#c9cccf"}`, borderRadius: "8px", padding: selectedFile ? "40px 20px" : "50px 20px", textAlign: "center", backgroundColor: isDragging ? "rgba(91,33,182,0.04)" : "#fff", transition: "all 0.2s ease", marginBottom: "24px", cursor: selectedFile ? "default" : "pointer" }}>

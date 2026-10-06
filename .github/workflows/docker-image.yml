@@ -83,6 +83,20 @@ jobs:
             done
             df -h /var/lib/containerd
 
+            # Image pruning cannot reclaim application logs or volume data.
+            # Fail before login/pull and leave the running release in place.
+            available_kb=$(df -Pk /var/lib/docker /var/lib/containerd | awk 'NR > 1 { if (!seen || $4 < minimum) minimum=$4; seen=1 } END { print minimum }')
+            if [ "$available_kb" -lt 2097152 ]; then
+              echo "Deployment stopped: at least 2 GiB of free space is required before pulling the image."
+              echo "Inspect container logs and expand the EC2 disk or reclaim explicitly approved data."
+              docker ps -aq | while read -r container_id; do
+                docker inspect --format '{{.Name}} {{.HostConfig.LogConfig.Type}} {{json .HostConfig.LogConfig.Config}}' "$container_id"
+                log_path=$(docker inspect --format '{{.LogPath}}' "$container_id")
+                if [ -n "$log_path" ]; then sudo -n du -h "$log_path" || true; fi
+              done
+              exit 1
+            fi
+
             # Login writes Docker credentials, so reclaim space first.
             aws ecr get-login-password --region $AWS_REGION | \
             docker login \

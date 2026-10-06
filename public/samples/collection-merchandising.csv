@@ -1,0 +1,3 @@
+Name,Active,CustomerTags,Locales,StartDate,EndDate,CollectionTitles,Conditions
+Test boost formal dresses,TRUE,,,,,"[""Summer Collection""]","[{""Type"":""Boost"",""Field"":""product_type"",""Value"":[""Formal Dresses""],""Operator"":""equals""}]"
+Test bury clearance,TRUE,,,,,"[""Summer Collection""]","[{""Type"":""Bury"",""Field"":""tags"",""Value"":[""Clearance""],""Operator"":""equals""}]"
