@@ -14,7 +14,6 @@ import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
-import { fetchCollectionPage } from "../utils/collectionPage.js";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -71,8 +70,8 @@ export const loader = async ({ request }) => {
       url.searchParams.get("usf_sort") ||
       "best-selling";
     const sortBy = rawSort.toLowerCase().replace(/_/g, "-");
-    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
-    const limit = Math.min(250, Math.max(1, parseInt(url.searchParams.get("limit") || "25") || 25));
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const limit = parseInt(url.searchParams.get("limit") || "25");
     const country = url.searchParams.get("country");
 
     let vendors = [
@@ -532,16 +531,6 @@ export const loader = async ({ request }) => {
 
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters)];
     const activeCategories = Object.keys(categoryFilters);
-    const useCollectionPagination = !isSearch && !searchQuery;
-    let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
-    if (useCollectionPagination && activePinnedList.length) {
-      const validPins = await prisma.product.findMany({
-        where: { shop, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
-        select: { id: true },
-      });
-      const validIds = new Set(validPins.map(product => product.id));
-      activePinnedList = activePinnedList.filter(id => validIds.has(id));
-    }
 
     // ── 8. Build Meilisearch queries ───────────────────────────────────
     //
@@ -571,7 +560,7 @@ export const loader = async ({ request }) => {
       indexUid: "products",
       q: tier1SearchQuery,
       filter: tier1Filter,
-      limit: useCollectionPagination ? 0 : limit,
+      limit: limit,
       offset: (page - 1) * limit,
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
@@ -602,7 +591,7 @@ export const loader = async ({ request }) => {
       const tier2MainQuery = {
         ...mainQuery,
         q: searchQuery, // fallback ALWAYS uses the full original search text
-        filter: useCollectionPagination ? [...allFiltersList, `NOT (${[...ruleMeiliFilters, ...queryParserMeiliFilters].join(" AND ")})`] : allFiltersList,
+        filter: allFiltersList,
       };
       if (meiliSort) {
         tier2MainQuery.sort = meiliSort;
@@ -652,7 +641,7 @@ export const loader = async ({ request }) => {
       queries.push({
         indexUid: "products",
         q: searchQuery,
-        filter: useCollectionPagination ? queries[tier2QueryIndex].filter : allFiltersList,
+        filter: allFiltersList,
         facets: targetFacets,
         hitsPerPage: 1,
         page: 1,
@@ -685,8 +674,6 @@ export const loader = async ({ request }) => {
     let facetDistribution = {};
     let facetRes = null;
     let meiliError = null;
-    let collectionPageTotal = null;
-    let collectionPaginationApplied = false;
 
     try {
       const multiSearchRes = await meiliClient.multiSearch({ queries });
@@ -698,7 +685,7 @@ export const loader = async ({ request }) => {
       let activeEstimatedTotalHits = tier1Res?.estimatedTotalHits || 0;
 
       // If Tier 1 hits didn't fill the page, append items from Tier 2 (excluding duplicates)
-      if (!useCollectionPagination && tier2QueryIndex !== -1 && combinedHits.length < limit) {
+      if (tier2QueryIndex !== -1 && combinedHits.length < limit) {
         const tier2Res = multiSearchRes.results[tier2QueryIndex];
         const existingIds = new Set(combinedHits.map((h) => h.id));
         const fillHits = (tier2Res?.hits || []).filter((h) => !existingIds.has(h.id));
@@ -719,25 +706,6 @@ export const loader = async ({ request }) => {
         hits: combinedHits,
         estimatedTotalHits: activeEstimatedTotalHits,
       };
-      if (useCollectionPagination) {
-        const tiers = [{ query: mainQuery, total: facetRes?.totalHits ?? tier1Res?.estimatedTotalHits ?? 0 }];
-        if (tier2QueryIndex !== -1) {
-          const fallbackFacets = multiSearchRes.results[tier2FacetQueryIndex];
-          tiers.push({ query: queries[tier2QueryIndex], total: fallbackFacets?.totalHits ?? 0 });
-          // Facets describe the full collection, including the fallback tier.
-          for (const [field, values] of Object.entries(fallbackFacets?.facetDistribution || {})) {
-            const merged = { ...(facetDistribution[field] || {}) };
-            for (const [value, count] of Object.entries(values)) merged[value] = (merged[value] || 0) + count;
-            facetDistribution[field] = merged;
-          }
-        }
-        const result = await fetchCollectionPage(meiliClient.index("products"), {
-          page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve,
-        });
-        meiliRes = { hits: result.hits, estimatedTotalHits: result.total };
-        collectionPageTotal = result.total;
-        collectionPaginationApplied = true;
-      }
 
       // Merge disjunctive facet counts
       for (let i = 0; i < activeCategories.length; i++) {
@@ -755,14 +723,6 @@ export const loader = async ({ request }) => {
     } catch (e) {
       meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
-      if (useCollectionPagination) {
-        // Keep cards available if the new page-query path is unsupported by
-        // the deployed search server. Fetch only the old bounded page.
-        const fallbackQuery = { ...mainQuery, filter: allFiltersList, q: searchQuery, limit, offset: (page - 1) * limit };
-        if (meiliSort) fallbackQuery.sort = meiliSort;
-        const { indexUid, q, ...options } = fallbackQuery;
-        meiliRes = await meiliClient.index("products").search(q, options);
-      }
     }
 
     const meiliTime = Date.now() - meiliStart;
@@ -784,10 +744,10 @@ export const loader = async ({ request }) => {
     }));
 
     // ── 10.5 Unified Multi-Page Pinning Architecture (Supports 50+ Pinned Products) ────
-    if (!collectionPaginationApplied) activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
+    let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
     
     // Fix: Filter out out-of-stock pinned products BEFORE pagination to prevent empty slots on pages
-    if (!collectionPaginationApplied && activePinnedList.length > 0 && globalSettings?.showOnlyInStock) {
+    if (activePinnedList.length > 0 && globalSettings?.showOnlyInStock) {
       try {
         const dbStock = await prisma.product.findMany({
           where: { id: { in: activePinnedList } },
@@ -805,7 +765,7 @@ export const loader = async ({ request }) => {
     const totalPinned = activePinnedList.length;
 
     let pagePinnedIds = [];
-    if (!collectionPaginationApplied && totalPinned > 0) {
+    if (totalPinned > 0) {
       const pinStart = (page - 1) * limit;
       const pinEnd = page * limit;
       if (pinStart < totalPinned) {
@@ -835,7 +795,7 @@ export const loader = async ({ request }) => {
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
-    const totalCount = collectionPageTotal ?? ((facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned);
+    const totalCount = (facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned;
     let paginatedSlice = finalProducts.slice(0, limit); // Strictly 25 items per page
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
@@ -1310,7 +1270,6 @@ export const loader = async ({ request }) => {
       mergedValues,
       didYouMean,
       debug: {
-        collectionPaginationApplied,
         resolvedCollectionId,
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,
