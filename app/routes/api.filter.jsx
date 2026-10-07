@@ -464,17 +464,14 @@ export const loader = async ({ request }) => {
           collClauseParts.push(`collections = 'gid://shopify/Collection/${resolvedCollectionId}'`);
         }
       }
-      if (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all") {
+      if (!resolvedCollectionId && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all") {
         collClauseParts.push(`collection_titles IN ['${resolvedCollectionTitle.replace(/'/g, "\\'")}']`);
       }
 
       const collClause = collClauseParts.join(" OR ");
 
-      if (includeMeiliFilters.length > 0) {
-        baseFilters.push(`((${collClause}) OR ${includeMeiliFilters.join(" OR ")})`);
-      } else {
-        baseFilters.push(`(${collClause})`);
-      }
+      // Include rules must not expand a collection to products from elsewhere.
+      baseFilters.push(`(${collClause})`);
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
@@ -534,10 +531,15 @@ export const loader = async ({ request }) => {
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters)];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
+    const pinCollectionScope = !isSearch && resolvedCollectionId
+      ? { collections: { some: { collectionId: resolvedCollectionId.includes("gid://") ? resolvedCollectionId : `gid://shopify/Collection/${resolvedCollectionId}` } } }
+      : !isSearch && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all"
+        ? { collections: { some: { collection: { shop, title: resolvedCollectionTitle } } } }
+        : {};
     let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
-        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
+        where: { shop, ...pinCollectionScope, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
         select: { id: true },
       });
       const validIds = new Set(validPins.map(product => product.id));

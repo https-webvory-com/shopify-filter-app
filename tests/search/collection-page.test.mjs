@@ -125,7 +125,7 @@ test("a truncated ID snapshot fails explicitly instead of undercounting the coll
 test("the storefront loader returns the full count, pinned cards, and the final collection page", async () => {
   const documents = Array.from({ length: 23110 }, (_, i) => ({
     id: String(i + 1), title: `Dress ${i + 1}`, handle: `dress-${i + 1}`,
-    status: "ACTIVE", boosted: i < 5555, tags: [], options: [{ name: "Color", values: [i < 5555 ? "Black" : "Blue"] }],
+    status: "ACTIVE", collections: ["gid://shopify/Collection/1"], boosted: i < 5555, tags: [], options: [{ name: "Color", values: [i < 5555 ? "Black" : "Blue"] }],
     images: ["blue.jpg", "green.jpg", "black.jpg"], variantPrices: [
       { id: `${i + 1}01`, option1: "Green", available: true, imageUrl: "green.jpg", price: 100 },
       { id: `${i + 1}02`, option1: "Blue", available: true, imageUrl: "blue.jpg", price: 100 },
@@ -133,12 +133,16 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     ], priceMin: 100, priceMax: 100,
   }));
   documents.push({ ...documents[0], id: "23111", status: "DRAFT" }, { ...documents[0], id: "23112", status: "ARCHIVED" });
+  documents.push({ ...documents[0], id: "23113", collections: ["gid://shopify/Collection/2"], collection_titles: ["Black Tie Dresses"], tags: ["TopFormal"] });
   const pins = [1, 3, 5, 7, 9, 11].map(id => ({ id: `gid://shopify/Product/${id}` }));
-  const savedPins = [...pins, { id: "gid://shopify/Product/23111" }, { id: "gid://shopify/Product/23112" }];
-  const rule = { conditions: [{ action: "Boost", field: "Color (product option)", value: "Black", operator: "contains" }] };
+  const savedPins = [...pins, { id: "gid://shopify/Product/23111" }, { id: "gid://shopify/Product/23112" }, { id: "gid://shopify/Product/23113" }];
+  const rule = { conditions: [{ action: "Boost", field: "Color (product option)", value: "Black", operator: "contains" }, { action: "Include", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const matching = filter => {
     const text = JSON.stringify(filter);
-    const eligible = text.includes("status = 'ACTIVE'") ? documents.filter(p => p.status === "ACTIVE") : documents;
+    let eligible = text.includes("status = 'ACTIVE'") ? documents.filter(p => p.status === "ACTIVE") : documents;
+    if (text.includes("collections = 'gid://shopify/Collection/1'")) {
+      eligible = eligible.filter(p => p.collections.includes("gid://shopify/Collection/1") || (text.includes("OR tags IN") && p.tags.includes("TopFormal")) || (text.includes("collection_titles IN") && p.collection_titles?.includes("Black Tie Dresses")));
+    }
     return text.includes("NOT (") ? eligible.filter(p => !p.boosted) : text.includes("option_Color") ? eligible.filter(p => p.boosted) : eligible;
   };
   const index = {
@@ -164,6 +168,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../db.server": { __esModule: true, default: { product: { findMany: async ({ where }) => {
       assert.equal(where.shop, "fixture.myshopify.com");
       assert.equal(where.status.equals, "active");
+      assert.equal(where.collections.some.collectionId, "gid://shopify/Collection/1");
       return pins;
     } } } },
     "../services/merchandising.server": merchandising,
@@ -193,7 +198,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     assert.equal(response.debug.collectionPaginationApplied, true);
     assert.equal(response.debug.meiliError, null);
     assert.equal(response.products.length, page === 925 ? 10 : 25);
-    assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112"].includes(p.id)));
+    assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112", "gid://shopify/Product/23113"].includes(p.id)));
     if (page === 1) {
       assert.deepEqual(Array.from(response.products.slice(0, 6), p => p.id), pins.map(p => p.id));
       assert.equal(response.products[1].selectedVariantId, "303");
