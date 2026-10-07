@@ -125,14 +125,21 @@ test("a truncated ID snapshot fails explicitly instead of undercounting the coll
 test("the storefront loader returns the full count, pinned cards, and the final collection page", async () => {
   const documents = Array.from({ length: 23110 }, (_, i) => ({
     id: String(i + 1), title: `Dress ${i + 1}`, handle: `dress-${i + 1}`,
-    boosted: i < 5555, tags: [], options: [{ name: "Color", values: [i < 5555 ? "Black" : "Blue"] }],
-    images: ["dress.jpg"], variantPrices: [], priceMin: 100, priceMax: 100,
+    status: "ACTIVE", boosted: i < 5555, tags: [], options: [{ name: "Color", values: [i < 5555 ? "Black" : "Blue"] }],
+    images: ["blue.jpg", "green.jpg", "black.jpg"], variantPrices: [
+      { id: `${i + 1}01`, option1: "Green", available: true, imageUrl: "green.jpg", price: 100 },
+      { id: `${i + 1}02`, option1: "Blue", available: true, imageUrl: "blue.jpg", price: 100 },
+      { id: `${i + 1}03`, option1: i < 5555 ? "Black" : "Blue", available: true, imageUrl: i < 5555 ? "black.jpg" : "blue.jpg", price: 100 },
+    ], priceMin: 100, priceMax: 100,
   }));
+  documents.push({ ...documents[0], id: "23111", status: "DRAFT" }, { ...documents[0], id: "23112", status: "ARCHIVED" });
   const pins = [1, 3, 5, 7, 9, 11].map(id => ({ id: `gid://shopify/Product/${id}` }));
+  const savedPins = [...pins, { id: "gid://shopify/Product/23111" }, { id: "gid://shopify/Product/23112" }];
   const rule = { conditions: [{ action: "Boost", field: "Color (product option)", value: "Black", operator: "contains" }] };
   const matching = filter => {
     const text = JSON.stringify(filter);
-    return text.includes("NOT (") ? documents.filter(p => !p.boosted) : text.includes("option_Color") ? documents.filter(p => p.boosted) : documents;
+    const eligible = text.includes("status = 'ACTIVE'") ? documents.filter(p => p.status === "ACTIVE") : documents;
+    return text.includes("NOT (") ? eligible.filter(p => !p.boosted) : text.includes("option_Color") ? eligible.filter(p => p.boosted) : eligible;
   };
   const index = {
     async search(_q, options) { return { hits: matching(options.filter).slice(options.offset, options.offset + options.limit) }; },
@@ -149,12 +156,16 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   vm.runInNewContext((await transform(await fs.readFile("app/services/merchandising.server.js", "utf8"), { format: "cjs" })).code, serviceContext);
   const merchandising = { ...serviceContext.module.exports,
     getActiveRuleForCollection: async () => rule,
-    getActivePinningRuleForCollection: async () => ({ products: pins }),
+    getActivePinningRuleForCollection: async () => ({ products: savedPins }),
   };
   const cache = new Map();
   const mocks = {
     "react-router": { data: value => value },
-    "../db.server": { __esModule: true, default: { product: { findMany: async () => pins } } },
+    "../db.server": { __esModule: true, default: { product: { findMany: async ({ where }) => {
+      assert.equal(where.shop, "fixture.myshopify.com");
+      assert.equal(where.status.equals, "active");
+      return pins;
+    } } } },
     "../services/merchandising.server": merchandising,
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
@@ -182,8 +193,18 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     assert.equal(response.debug.collectionPaginationApplied, true);
     assert.equal(response.debug.meiliError, null);
     assert.equal(response.products.length, page === 925 ? 10 : 25);
-    if (page === 1) assert.deepEqual(Array.from(response.products.slice(0, 6), p => p.id), pins.map(p => p.id));
+    assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112"].includes(p.id)));
+    if (page === 1) {
+      assert.deepEqual(Array.from(response.products.slice(0, 6), p => p.id), pins.map(p => p.id));
+      assert.equal(response.products[1].selectedVariantId, "303");
+      assert.equal(response.products[1].merchandisingImage, "black.jpg");
+      assert.equal(response.products[1].variants[0].option1, "Black");
+    }
     if (page === 223) assert.ok(response.products.some(p => p.id === "gid://shopify/Product/5556"));
     if (page === 925) assert.ok(response.products.some(p => p.id === "gid://shopify/Product/23110"));
   }
+  const filtered = await context.module.exports.loader({ request: new Request("https://fixture.test/api/filter?shop=fixture.myshopify.com&collectionHandle=black-tie-dresses&option_Color=Blue&limit=25") });
+  assert.equal(filtered.crash, undefined, filtered.error);
+  assert.equal(filtered.products[0].variants[0].option1, "Blue");
+  assert.equal(filtered.products[0].merchandisingImage, "blue.jpg");
 });

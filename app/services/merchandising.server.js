@@ -536,6 +536,37 @@ function checkRuleMatch(product, condition, mergedValues = []) {
   return false;
 }
 
+// Select presentation independently of scoring so pins keep their configured order.
+export function selectMerchandisingVariant(product, rule, mergedValues = []) {
+  const variants = product.variantPrices || product.variants || [];
+  const imageOf = variant => {
+    const image = variant?.imageUrl || variant?.image;
+    return typeof image === "string" ? image : image?.url || image?.src || null;
+  };
+  for (const condition of rule?.conditions || []) {
+    if (!["Boost", "Pin"].includes(condition.action)) continue;
+    const field = (condition.field || "").toLowerCase();
+    if (!field.includes("color") && !field.includes("product option")) continue;
+    const match = checkRuleMatch(product, condition, mergedValues);
+    if (!match?.variant) continue;
+    const optionName = field.replace(" (product option)", "");
+    const optionIndex = (product.options || []).findIndex(option => option.name?.toLowerCase() === optionName);
+    if (optionIndex < 0) continue;
+    const key = `option${optionIndex + 1}`;
+    const values = String(condition.value || "").split(",").map(value => value.replace(/[\[\]"']/g, "").trim().toLowerCase());
+    const variant = variants.find(v => v.available !== false && values.includes(String(v[key] || "").trim().toLowerCase())) || match.variant;
+    const color = String(variant[key] || "").trim().toLowerCase();
+    const sister = variants.find(v => String(v[key] || "").trim().toLowerCase() === color && imageOf(v));
+    const galleryImage = (product.images || []).find(image => {
+      const url = typeof image === "string" ? image : image?.url || image?.src || "";
+      return color && url.split("/").pop().split("?")[0].toLowerCase().includes(color);
+    });
+    const imageUrl = imageOf(variant) || imageOf(sister) || (typeof galleryImage === "string" ? galleryImage : galleryImage?.url || galleryImage?.src) || null;
+    return { variantId: variant.id, variant, imageUrl };
+  }
+  return null;
+}
+
 /**
  * Applies merchandising rules and pinning rules to an array of products and returns the sorted array.
  */
@@ -923,5 +954,4 @@ export function buildMeiliRuleFilter(ruleConditions) {
   if (filters.length === 0) return [];
   return [`(${filters.join(" OR ")})`];
 }
-
 

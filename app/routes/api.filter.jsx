@@ -8,6 +8,7 @@ import {
   getActivePinningRuleForSearch,
   buildMeiliIncludeFilters,
   buildMeiliRuleFilter,
+  selectMerchandisingVariant,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -444,7 +445,7 @@ export const loader = async ({ request }) => {
     }
 
     // ── 7. Build Meilisearch filters ───────────────────────────────────
-    const baseFilters = [`shop = '${shop}'`];
+    const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
     if (globalSettings?.showOnlyInStock) {
       baseFilters.push(`available = true`);
     }
@@ -534,9 +535,9 @@ export const loader = async ({ request }) => {
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
     let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
-    if (useCollectionPagination && activePinnedList.length) {
+    if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
-        where: { shop, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
+        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
         select: { id: true },
       });
       const validIds = new Set(validPins.map(product => product.id));
@@ -787,23 +788,7 @@ export const loader = async ({ request }) => {
     }));
 
     // ── 10.5 Unified Multi-Page Pinning Architecture (Supports 50+ Pinned Products) ────
-    if (!collectionPaginationApplied) activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? pinnedIds : [];
-    
-    // Fix: Filter out out-of-stock pinned products BEFORE pagination to prevent empty slots on pages
-    if (!collectionPaginationApplied && activePinnedList.length > 0 && globalSettings?.showOnlyInStock) {
-      try {
-        const dbStock = await prisma.product.findMany({
-          where: { id: { in: activePinnedList } },
-          select: { id: true, variants: { select: { available: true } } }
-        });
-        activePinnedList = activePinnedList.filter(id => {
-          const match = dbStock.find(p => p.id === id);
-          return match && match.variants.some(v => v.available === true);
-        });
-      } catch (e) {
-        console.error("CFP: Failed to check pinned stock", e);
-      }
-    }
+    // Keep the active/in-stock pins validated before querying, including fallback pages.
 
     const totalPinned = activePinnedList.length;
 
@@ -847,7 +832,7 @@ export const loader = async ({ request }) => {
       try {
         const missingIds = productsNeedingFallback.map(p => p.id);
         const dbProducts = await prisma.product.findMany({
-          where: { id: { in: missingIds } },
+          where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: missingIds } },
           select: { 
             id: true, title: true, handle: true, vendor: true, productType: true,
             tags: true, images: true, status: true, options: true, priceMin: true, priceMax: true,
@@ -988,6 +973,14 @@ export const loader = async ({ request }) => {
         if (activeVariant) matchScore = highestScore;
       }
 
+      if (!activeVariant && Object.keys(optionsFilters).length === 0) {
+        const selection = selectMerchandisingVariant(p, activeRule, mergedValues);
+        if (selection) {
+          activeVariant = localVariantPrices.find(v => String(v.id) === String(selection.variantId)) || null;
+          if (activeVariant && selection.imageUrl) activeVariant.imageUrl = selection.imageUrl;
+        }
+      }
+
       if (activeVariant) {
         if (activeVariant.imageUrl) {
           const filterVariantImage = activeVariant.imageUrl;
@@ -1049,7 +1042,8 @@ export const loader = async ({ request }) => {
         featured_image: productImages.length > 0 ? productImages[0] : null,
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
-        merchandisingImage: p.merchandisingImage || null,
+        selectedVariantId: activeVariant?.id || null,
+        merchandisingImage: activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null),
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,

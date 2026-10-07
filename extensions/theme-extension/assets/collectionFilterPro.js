@@ -618,6 +618,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
 
+        if (!matchedVariant && product.selectedVariantId && product.variants) {
+            const selectedId = String(product.selectedVariantId).split('/').pop();
+            matchedVariant = product.variants.find(v => String(v.id).split('/').pop() === selectedId) || null;
+            if (matchedVariant) {
+                matchedVariantId = selectedId;
+                variantImg = matchedVariant.imageUrl || null;
+            }
+        }
+
         // Fallback: If no matched variant from filters (or no filters applied),
         // try to select the first AVAILABLE variant so the PDP doesn't load a sold-out option by default.
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
@@ -676,7 +685,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             fallbackImg = fallbackImg.src || fallbackImg.url || '';
         }
         
-        let primaryImg = customImage || product.merchandisingImage || variantImg || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = customImage || variantImg || product.merchandisingImage || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
         
         let productUrl = `/products/${product.handle}`;
@@ -846,6 +855,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                 activeIndex = foundIndex;
                 colorWasFiltered = true;
              }
+         } else if (product.selectedVariantId && matchedVariant) {
+              const color = matchedVariant[optionKey];
+              const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase() === String(color || '').toLowerCase());
+              if (foundIndex !== -1) {
+                  activeIndex = foundIndex;
+                  colorWasFiltered = true;
+              }
          } else if (product.merchandisingImage) {
               const merchBase = product.merchandisingImage.split('?')[0].replace(/^https?:/, '').toLowerCase();
               let foundIndex = colorsArray.findIndex(c => {
@@ -927,7 +943,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
-                           if('${data.variantId}') card.querySelector('a').href='/products/${product.handle}?variant=${data.variantId}';">
+                           if('${data.variantId}') card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href='/products/${product.handle}?variant=${data.variantId}');">
                 <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
              </div>`;
           });
@@ -947,10 +963,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           
           if (matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = getResizedImageUrl(matchedColorUrl, 360);
-             if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
-                 productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
-             }
           }
+          const activeVariantId = (product.selectedVariantId && matchedVariantId) || colorsArray[activeIndex][1].variantId;
+          if (activeVariantId) productUrl = `/products/${product.handle}?variant=${activeVariantId}`;
         }
       }
       
@@ -2455,4 +2470,3 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
 })();
-

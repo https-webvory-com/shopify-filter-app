@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
+import { isStorefrontProduct } from "../utils/storefrontProduct.js";
 
 /**
  * Format products and push to Meilisearch index.
@@ -283,7 +284,7 @@ export async function syncProducts(shop, admin, session = null, forceFresh = fal
       const accessToken = session?.accessToken;
       if (accessToken) {
         const countRes = await fetch(
-          `https://${shop}/admin/api/2025-10/products/count.json?status=active`,
+          `https://${shop}/admin/api/2025-10/products/count.json`,
           { headers: { "X-Shopify-Access-Token": accessToken } }
         );
         const countData = await countRes.json();
@@ -359,7 +360,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   const query = `#graphql
     query getProducts($cursor: String) {
-      products(first: 50, after: $cursor, query: "status:active") {
+      products(first: 50, after: $cursor) {
         pageInfo {
           hasNextPage
           endCursor
@@ -485,17 +486,15 @@ async function processSyncChunk(jobId, shop, admin) {
       const productsData = responseJson.data?.products;
       if (!productsData || productsData.nodes.length === 0) break;
       // Filter: only ACTIVE status AND published to Online Store (publishedAt is not null)
-      const products = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt !== null);
+      const products = productsData.nodes.filter(isStorefrontProduct);
 
-      // Handle products that are ACTIVE but removed from the Online Store (publishedAt is null)
-      const unpublishedProducts = productsData.nodes.filter((p) => p.status === "ACTIVE" && p.publishedAt === null);
+      // Remove stale drafts, archived products, and products unpublished from the Online Store.
+      const unpublishedProducts = productsData.nodes.filter((p) => !isStorefrontProduct(p));
       if (unpublishedProducts.length > 0) {
         for (const p of unpublishedProducts) {
           const numericId = p.id.split("/").pop();
-          await prisma.product.deleteMany({ where: { id: p.id } });
-          try {
-            await meiliClient.index("products").deleteDocument(numericId);
-          } catch (e) { /* ignore if not found */ }
+          await meiliClient.index("products").deleteDocument(numericId);
+          await prisma.product.deleteMany({ where: { shop, id: p.id } });
           console.log(`CFP: Removed unpublished product ${p.id} from DB/Meili`);
         }
       }
@@ -629,7 +628,7 @@ async function processSyncChunk(jobId, shop, admin) {
         where: { id: jobId },
         data: {
           cursor: cursor,
-          productsProcessed: { increment: products.length },
+          productsProcessed: { increment: productsData.nodes.length },
           status: hasNextPage ? "IN_PROGRESS" : "COMPLETED",
         },
       });
@@ -971,7 +970,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
 
   const product = responseJson.data?.product;
 
-  const shouldDelete = !product || product.status !== "ACTIVE" || product.publishedAt === null;
+  const shouldDelete = !isStorefrontProduct(product);
 
   if (shouldDelete) {
     const reason = !product
@@ -982,7 +981,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     console.warn(
       `CFP: Product ${productId} should be removed (${reason}). Deleting from DB/Meili.`,
     );
-    await prisma.product.deleteMany({ where: { id: productId } });
+    await prisma.product.deleteMany({ where: { shop, id: productId } });
     // Also remove from Meilisearch
     try {
       const numericId = productId.split("/").pop();
