@@ -610,10 +610,7 @@ export function applyMerchandisingRules(
           const imageUrl =
             typeof matchResult === "object" ? matchResult.imageUrl : null;
 
-          if (cond.action === "Boost" && typeof matchResult === "object" && matchResult.variant && !p.merchandisingVariantId) {
-            p.merchandisingVariantId = matchResult.variant.id || null;
-            if (imageUrl) p.merchandisingImage = imageUrl;
-          } else if (imageUrl && !p.merchandisingImage && !pinnedIds.includes(p.id)) {
+          if (imageUrl && !p.merchandisingImage && !pinnedIds.includes(p.id)) {
             p.merchandisingImage = imageUrl;
           }
 
@@ -692,10 +689,10 @@ export function applyMerchandisingRules(
     if (!prioritizeSortOverMerchandising) {
       const aBaseScore = sortBy === "price-ascending" ? -parseFloat(a.priceMin || 0) : 
                          sortBy === "price-descending" ? parseFloat(a.priceMin || 0) : 
-                         (a.collectionBestSellingRank !== undefined ? 0 : (a.bestSellingScore || 0));
+                         (a.bestSellingScore || 0);
       const bBaseScore = sortBy === "price-ascending" ? -parseFloat(b.priceMin || 0) : 
                          sortBy === "price-descending" ? parseFloat(b.priceMin || 0) : 
-                         (b.collectionBestSellingRank !== undefined ? 0 : (b.bestSellingScore || 0));
+                         (b.bestSellingScore || 0);
                          
       const aTotalScore = a.merchandisingScore + aBaseScore;
       const bTotalScore = b.merchandisingScore + bBaseScore;
@@ -720,10 +717,6 @@ export function sortProductsByDefault(products, sortBy) {
 }
 
 function defaultSortComparison(a, b, sortBy) {
-  if (sortBy === "best-selling" && a.collectionBestSellingRank !== undefined && b.collectionBestSellingRank !== undefined) {
-    const comparison = a.collectionBestSellingRank - b.collectionBestSellingRank;
-    if (comparison !== 0) return comparison;
-  }
   if (sortBy === "title-ascending")
     return (a.title || "").localeCompare(b.title || "");
   if (sortBy === "title-descending")
