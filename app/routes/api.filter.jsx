@@ -14,6 +14,8 @@ import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
+import { collectCollectionCandidates, paginateRankedCollection } from "../utils/collectionPagination.js";
+import { fetchCollectionBestSellingIds, assignCollectionBestSellingRanks } from "../utils/collectionBestSelling.js";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -21,7 +23,7 @@ import { rateLimit } from "../services/rateLimiter.server";
  * Key optimizations vs previous version:
  *  1. All independent DB queries run in parallel via Promise.all()
  *  2. Stable shop config (settings, mergedValues, filterGroups) served from in-memory cache
- *  3. Meilisearch uses native offset pagination (no more limit:1000 + JS slice)
+ *  3. Native pagination for ordinary queries; collection rules rank all candidates first
  *  4. Facet query is separate (limit:0) so product data is not transferred for counts
  *  5. Pinning + merchandising rule DB calls run in parallel
  */
@@ -70,8 +72,8 @@ export const loader = async ({ request }) => {
       url.searchParams.get("usf_sort") ||
       "best-selling";
     const sortBy = rawSort.toLowerCase().replace(/_/g, "-");
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const limit = parseInt(url.searchParams.get("limit") || "25");
+    const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
+    const limit = Math.min(250, Math.max(1, parseInt(url.searchParams.get("limit") || "25") || 25));
     const country = url.searchParams.get("country");
 
     let vendors = [
@@ -544,7 +546,13 @@ export const loader = async ({ request }) => {
     // Now: Only 24 docs are transferred per request
     //
     // ── 8. Build Meilisearch queries (Native 2-Tier Merchandising Query Architecture) ──
-    const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
+    const useCollectionBestSelling = !isSearch && Boolean(resolvedCollectionId) && ["best-selling", "bestselling"].includes(sortBy);
+    const rankFullCollection = !isSearch && (
+      useCollectionBestSelling || Boolean(activeRule?.conditions?.length) || (!userHasFilters && pinnedIds.length > 0)
+    );
+    // A boost changes ranking, not membership. Fetch the whole collection so
+    // compound colors, buried products and lower-scoring tiers remain candidates.
+    const ruleMeiliFilters = !rankFullCollection && !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
     
     // We activate Tier 1 strict filtering if we have Merchandising Rules OR Query Parser Filters
     const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || queryParserMeiliFilters.length > 0;
@@ -560,8 +568,8 @@ export const loader = async ({ request }) => {
       indexUid: "products",
       q: tier1SearchQuery,
       filter: tier1Filter,
-      limit: limit,
-      offset: (page - 1) * limit,
+      limit: rankFullCollection ? 500 : limit,
+      offset: rankFullCollection ? 0 : (page - 1) * limit,
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
         "priceMin", "priceMax", "tags", "images", "variantPrices",
@@ -706,6 +714,18 @@ export const loader = async ({ request }) => {
         hits: combinedHits,
         estimatedTotalHits: activeEstimatedTotalHits,
       };
+      if (rankFullCollection) {
+        // Reuse the full candidate set across page requests. Rule evaluation
+        // still runs on each request; shop invalidation also clears this cache.
+        meiliRes.hits = await getCached(
+          `collectionCandidates:${shop}:${JSON.stringify(mainQuery)}`,
+          () => collectCollectionCandidates(
+            meiliClient.index("products"), mainQuery, tier1Res,
+            facetRes?.totalHits ?? activeEstimatedTotalHits,
+          ),
+          30,
+        );
+      }
 
       // Merge disjunctive facet counts
       for (let i = 0; i < activeCategories.length; i++) {
@@ -721,6 +741,7 @@ export const loader = async ({ request }) => {
         }
       }
     } catch (e) {
+      if (rankFullCollection) throw e;
       meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
     }
@@ -733,6 +754,7 @@ export const loader = async ({ request }) => {
       _originalIndex: idx,
       id: `gid://shopify/Product/${h.id}`,
       variants: (h.variantPrices || []).map((v) => ({
+        id: v.id,
         available: v.available,
         price: v.price,
         compareAtPrice: v.compareAtPrice,
@@ -772,7 +794,24 @@ export const loader = async ({ request }) => {
         pagePinnedIds = activePinnedList.slice(pinStart, pinEnd);
       }
       // Always exclude ALL pinned IDs from general Meilisearch results to prevent duplicates across pages
-      allMatchedProducts = allMatchedProducts.filter((p) => !activePinnedList.includes(p.id));
+      if (!rankFullCollection) {
+        allMatchedProducts = allMatchedProducts.filter((p) => !activePinnedList.includes(p.id));
+      }
+    }
+
+    if (rankFullCollection) {
+      // Include pins once in the complete candidate set, then let the existing
+      // pin comparator preserve their configured order before slicing pages.
+      const presentIds = new Set(allMatchedProducts.map(product => product.id));
+      const missingPins = activePinnedList.filter(id => !presentIds.has(id));
+      if (missingPins.length) {
+        const products = await prisma.product.findMany({
+          where: { shop, id: { in: missingPins } },
+          include: { variants: true },
+        });
+        allMatchedProducts.push(...products.map(product => ({ ...product, variantPrices: product.variants })));
+      }
+      pagePinnedIds = [];
     }
 
     // Inject this page's slice of pinned IDs at the front
@@ -785,18 +824,28 @@ export const loader = async ({ request }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
+    if (useCollectionBestSelling) {
+      const ids = await getCached(`collectionBestSelling:${shop}:${resolvedCollectionId}`, async () => {
+        const { admin } = await unauthenticated.admin(shop);
+        const id = String(resolvedCollectionId).startsWith("gid://") ? resolvedCollectionId : `gid://shopify/Collection/${resolvedCollectionId}`;
+        return fetchCollectionBestSellingIds(admin, id);
+      }, 300);
+      assignCollectionBestSellingRanks(allMatchedProducts, ids);
+    }
+
     const finalProducts = applyMerchandisingRules(
       allMatchedProducts,
       activeRule,
-      sortBy,
+      useCollectionBestSelling ? "best-selling" : sortBy,
       activePinningRule,
       mergedValues,
       globalSettings,
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
-    const totalCount = (facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned;
-    let paginatedSlice = finalProducts.slice(0, limit); // Strictly 25 items per page
+    const rankedPage = rankFullCollection ? paginateRankedCollection(finalProducts, page, limit) : null;
+    const totalCount = rankedPage?.totalCount ?? ((facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned);
+    let paginatedSlice = rankedPage?.products ?? finalProducts.slice(0, limit);
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
@@ -945,6 +994,10 @@ export const loader = async ({ request }) => {
         if (activeVariant) matchScore = highestScore;
       }
 
+      if (!activeVariant && p.merchandisingVariantId) {
+        const normalizeVariantId = id => String(id || "").split("/").pop();
+        activeVariant = localVariantPrices.find(v => normalizeVariantId(v.id) === normalizeVariantId(p.merchandisingVariantId)) || null;
+      }
       if (activeVariant) {
         if (activeVariant.imageUrl) {
           const filterVariantImage = activeVariant.imageUrl;
@@ -1007,6 +1060,7 @@ export const loader = async ({ request }) => {
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
         merchandisingImage: p.merchandisingImage || null,
+        merchandisingVariantId: p.merchandisingVariantId || null,
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,

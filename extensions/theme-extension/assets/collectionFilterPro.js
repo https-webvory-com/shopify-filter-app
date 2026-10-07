@@ -618,6 +618,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
 
+        if (!matchedVariant && product.merchandisingVariantId) {
+            const variantId = String(product.merchandisingVariantId).split('/').pop();
+            matchedVariant = product.variants?.find(v => String(v.id).split('/').pop() === variantId) || null;
+            if (matchedVariant) {
+                matchedVariantId = variantId;
+                variantImg = product.merchandisingImage || matchedVariant.imageUrl;
+            }
+        }
+
         // Fallback: If no matched variant from filters (or no filters applied),
         // try to select the first AVAILABLE variant so the PDP doesn't load a sold-out option by default.
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
@@ -846,6 +855,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                 activeIndex = foundIndex;
                 colorWasFiltered = true;
              }
+         } else if (product.merchandisingVariantId && matchedVariant && typeof optionKey !== 'undefined') {
+              const color = matchedVariant[optionKey];
+              const foundIndex = colorsArray.findIndex(c => c[0].toLowerCase() === String(color || '').toLowerCase());
+              if (foundIndex !== -1) {
+                  activeIndex = foundIndex;
+                  colorWasFiltered = true;
+              }
          } else if (product.merchandisingImage) {
               const merchBase = product.merchandisingImage.split('?')[0].replace(/^https?:/, '').toLowerCase();
               let foundIndex = colorsArray.findIndex(c => {
@@ -947,8 +963,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           
           if (matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = getResizedImageUrl(matchedColorUrl, 360);
-             if (!productUrl.includes('?variant=') && colorsArray[activeIndex][1].variantId) {
-                 productUrl += `?variant=${colorsArray[activeIndex][1].variantId}`;
+             if (colorsArray[activeIndex][1].variantId) {
+                 productUrl = `/products/${product.handle}?variant=${matchedVariantId || colorsArray[activeIndex][1].variantId}`;
              }
           }
         }
