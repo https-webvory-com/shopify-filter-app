@@ -14,8 +14,9 @@ import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
-import { collectCollectionCandidates, paginateRankedCollection } from "../utils/collectionPagination.js";
-import { fetchCollectionBestSellingIds, assignCollectionBestSellingRanks } from "../utils/collectionBestSelling.js";
+import { collectCollectionCandidates, paginateRankedCollection, hydrateCollectionPage } from "../utils/collectionPagination.js";
+import { assignCollectionBestSellingRanks } from "../utils/collectionBestSelling.js";
+import { getCollectionRanking } from "../services/collectionRanking.server.js";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -580,6 +581,17 @@ export const loader = async ({ request }) => {
         "metafield_custom.wedding_collection_image"
       ],
     };
+    const fullProductAttributes = mainQuery.attributesToRetrieve;
+    if (rankFullCollection) {
+      // Ranking needs option/price data, not galleries and repeated variant
+      // image URLs. Hydrate only the final page after global ranking.
+      mainQuery.attributesToRetrieve = [
+        "id", "title", "vendor", "productType", "tags", "options", "collections", "collection_titles",
+        "priceMin", "priceMax", "createdAt", "bestSellingScore", "trendingScore", "available",
+        "variantPrices.id", "variantPrices.option1", "variantPrices.option2", "variantPrices.option3",
+        "variantPrices.available", "variantPrices.price", "variantPrices.compareAtPrice", "variantPrices.inventory",
+      ];
+    }
     
     // If Tier 1 query is empty (e.g. they only searched "red"), we MUST provide a sort array 
     // because Meilisearch text relevance won't apply to an empty query.
@@ -824,13 +836,11 @@ export const loader = async ({ request }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
+    let collectionRankingStatus = "not-applicable";
     if (useCollectionBestSelling) {
-      const ids = await getCached(`collectionBestSelling:${shop}:${resolvedCollectionId}`, async () => {
-        const { admin } = await unauthenticated.admin(shop);
-        const id = String(resolvedCollectionId).startsWith("gid://") ? resolvedCollectionId : `gid://shopify/Collection/${resolvedCollectionId}`;
-        return fetchCollectionBestSellingIds(admin, id);
-      }, 300);
-      assignCollectionBestSellingRanks(allMatchedProducts, ids);
+      const ranking = await getCollectionRanking(shop, resolvedCollectionId);
+      collectionRankingStatus = ranking.status;
+      if (ranking.value) assignCollectionBestSellingRanks(allMatchedProducts, ranking.value);
     }
 
     const finalProducts = applyMerchandisingRules(
@@ -846,6 +856,10 @@ export const loader = async ({ request }) => {
     const rankedPage = rankFullCollection ? paginateRankedCollection(finalProducts, page, limit) : null;
     const totalCount = rankedPage?.totalCount ?? ((facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned);
     let paginatedSlice = rankedPage?.products ?? finalProducts.slice(0, limit);
+    if (rankFullCollection) {
+      const hydrated = await hydrateCollectionPage(meiliClient.index("products"), paginatedSlice, shop, fullProductAttributes);
+      paginatedSlice = applyMerchandisingRules(hydrated, activeRule, useCollectionBestSelling ? "best-selling" : sortBy, activePinningRule, mergedValues, globalSettings);
+    }
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
@@ -1324,6 +1338,7 @@ export const loader = async ({ request }) => {
       mergedValues,
       didYouMean,
       debug: {
+        collectionRankingStatus,
         resolvedCollectionId,
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,

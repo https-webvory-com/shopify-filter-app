@@ -7,6 +7,7 @@
 import redis from "./redis.server.js";
 
 const TTL_SEC = 60; // 60 seconds
+const inFlight = new Map();
 
 /**
  * Get a value from Redis cache, or fetch it if missing/expired.
@@ -22,17 +23,26 @@ export async function getCached(key, fetchFn, customTtlSec = TTL_SEC) {
   }
 
   // Cache miss or expired — fetch fresh data
-  const data = await fetchFn();
+  if (inFlight.has(key)) return inFlight.get(key);
+  const pending = (async () => {
+    const data = await fetchFn();
 
-  try {
-    if (data !== undefined && data !== null) {
-      await redis.setex(key, customTtlSec, JSON.stringify(data));
+    try {
+      if (data !== undefined && data !== null) {
+        await redis.setex(key, customTtlSec, JSON.stringify(data));
+      }
+    } catch (error) {
+      console.error("CFP Redis set error for key", key, error);
     }
-  } catch (error) {
-    console.error("CFP Redis set error for key", key, error);
-  }
 
-  return data;
+    return data;
+  })();
+  inFlight.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlight.delete(key);
+  }
 }
 
 /**
