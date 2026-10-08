@@ -121,6 +121,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
+  function syncSortControls() {
+    const option = Array.from(document.querySelectorAll('.cfp-custom-sort__option'))
+      .find(option => option.getAttribute('data-value') === activeFilters.sortBy);
+    const label = document.getElementById('cfp-custom-sort-label');
+    if (label && option) label.textContent = option.textContent.trim();
+    const select = document.getElementById('cfp-sort-select-top');
+    if (select) select.value = activeFilters.sortBy;
+  }
+
   function syncStateToURL() {
     const params = new URLSearchParams(window.location.search);
     
@@ -228,6 +237,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     // Make sure we inject the UI into the correct container now that sidebar is ready
     findAndInject();
 
+    syncSortControls();
+
     if (triggerBtn) {
       triggerBtn.addEventListener('click', openSidebar);
     }
@@ -264,6 +275,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   // â”€â”€ 3. Fetch data from Shopify App Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   
   async function fetchAndRenderData(isLoadMore = false) {
+    syncSortControls();
     if (activeFetchController) {
       activeFetchController.abort();
     }
@@ -403,11 +415,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   function applyGlobalSettings(settings) {
     const container = document.body;
     if (!container) return;
+    const wasHorizontal = container.classList.contains('cfp-horizontal-layout');
     
     if (settings.horizontalFilters) {
       container.classList.add('cfp-horizontal-layout');
+      if (isHorizontalFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true') closeSidebar();
     } else {
       container.classList.remove('cfp-horizontal-layout');
+      if (wasHorizontal) closeSidebar();
     }
 
     if (settings.darkMode) {
@@ -1617,7 +1632,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       })();
 
       const groupId = `cfp-group-${setting.id || index}-${type}-${key || ''}`;
-      let isCollapsed = adv.desktopCollapsed;
+      let isCollapsed = isHorizontalFilterLayout() ? true : adv.desktopCollapsed;
       if (cfpGroupToggleState[groupId] !== undefined) {
         isCollapsed = !cfpGroupToggleState[groupId];
       }
@@ -1688,6 +1703,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   // â”€â”€ 7. Setup Interactivity Listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupStaticEventListeners() {
+    document.body.addEventListener('click', event => {
+      if (isHorizontalFilterLayout() && !event.target.closest('#cfp-sidebar .cfp-group')) closeHorizontalFilterGroups();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && isHorizontalFilterLayout()) {
+        const openToggle = sidebar?.querySelector('.cfp-group__toggle[aria-expanded="true"]');
+        closeHorizontalFilterGroups();
+        openToggle?.focus();
+      }
+    });
+    window.matchMedia('(min-width: 769px)').addEventListener('change', () => {
+      if (globalSettings.horizontalFilters) closeSidebar();
+    });
     document.body.addEventListener('click', function(e) {
       if (e.target.closest('#cfp-drawer-trigger-btn')) {
         openSidebar();
@@ -1765,9 +1793,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const expanded = toggle.getAttribute('aria-expanded') === 'true';
         const contentId = toggle.getAttribute('aria-controls');
         const content = document.getElementById(contentId);
+        if (isHorizontalFilterLayout() && !expanded) closeHorizontalFilterGroups();
         toggle.setAttribute('aria-expanded', String(!expanded));
         if (content) content.classList.toggle('cfp-collapsed', expanded);
           cfpGroupToggleState[contentId] = !expanded;
+        if (content && !expanded && isHorizontalFilterLayout()) {
+          content.style.left = '0px';
+          const rect = content.getBoundingClientRect();
+          const shift = Math.min(0, window.innerWidth - 16 - rect.right);
+          content.style.left = `${Math.max(16 - rect.left, shift)}px`;
+        }
       });
     });
   }
@@ -2366,8 +2401,23 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
+  function isHorizontalFilterLayout() {
+    return !!globalSettings.horizontalFilters && window.matchMedia('(min-width: 769px)').matches;
+  }
+
+  function closeHorizontalFilterGroups() {
+    if (!sidebar) return;
+    sidebar.querySelectorAll('.cfp-group__toggle[aria-expanded="true"]').forEach(toggle => {
+      const contentId = toggle.getAttribute('aria-controls');
+      toggle.setAttribute('aria-expanded', 'false');
+      document.getElementById(contentId)?.classList.add('cfp-collapsed');
+      cfpGroupToggleState[contentId] = false;
+    });
+  }
+
   function openSidebar() {
     if (!sidebar) return;
+    if (isHorizontalFilterLayout()) return;
     sidebar.classList.add('cfp-sidebar--open');
     if (overlay) overlay.classList.add('cfp-overlay--visible');
     sidebar.removeAttribute('aria-hidden');
@@ -2384,10 +2434,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
-    sidebar.setAttribute('aria-hidden', 'true');
+    if (isHorizontalFilterLayout()) {
+      sidebar.removeAttribute('aria-hidden');
+      closeHorizontalFilterGroups();
+    }
+    else sidebar.setAttribute('aria-hidden', 'true');
     if (triggerBtn) {
       triggerBtn.setAttribute('aria-expanded', 'false');
-      try { triggerBtn.focus(); } catch(e) {}
+      if (!isHorizontalFilterLayout()) {
+        try { triggerBtn.focus(); } catch(e) {}
+      }
     }
     document.body.style.overflow = '';
   }

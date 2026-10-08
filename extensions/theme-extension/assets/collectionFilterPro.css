@@ -1119,18 +1119,6 @@ facet-filters-form,
 .cfp-dark-mode .cfp-filter-list label {
   color: var(--cfp-text);
 }
-.cfp-horizontal-layout .cfp-layout-wrapper {
-  flex-direction: column !important;
-}
-.cfp-horizontal-layout .cfp-sidebar {
-  width: 100% !important;
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 20px;
-}
-.cfp-horizontal-layout .cfp-sidebar > div {
-  flex: 1 1 200px;
-}
 @media (max-width: 768px) {
   .cfp-desktop-like-mobile .cfp-sidebar {
     position: static !important;
@@ -1949,4 +1937,59 @@ facet-filters-form,
 @keyframes cfp-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Desktop horizontal filters are inline; mobile retains the drawer layout. */
+@media (min-width: 769px) {
+  .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
+  .cfp-horizontal-layout #cfp-sidebar.cfp-sidebar {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    display: flex !important;
+    visibility: visible !important;
+    flex-direction: column !important;
+    overflow: visible;
+    z-index: 10 !important;
+    transition: none !important;
+    border-right: 0 !important;
+    margin-bottom: 20px !important;
+  }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__header,
+  .cfp-horizontal-layout #cfp-drawer-trigger-btn { display: none !important; }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__body { flex: none; padding: 0; overflow: visible; }
+  .cfp-horizontal-layout #cfp-sidebar__filter-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-group {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--cfp-border);
+    border-radius: var(--cfp-radius);
+  }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-group__toggle { gap: 16px; padding: 12px 16px; }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-group__content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: min(300px, calc(100vw - 32px));
+    box-sizing: border-box;
+    max-height: min(420px, 60vh);
+    overflow: auto;
+    padding: 16px;
+    background: var(--cfp-bg);
+    border: 1px solid var(--cfp-border);
+    border-radius: var(--cfp-radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+    z-index: 20;
+  }
+  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { padding: 12px 0; border-top: 0; }
 }
