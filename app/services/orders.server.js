@@ -12,6 +12,7 @@ export async function syncHistoricalOrders(shop) {
   const job = await prisma.syncJob.create({
     data: {
       shop,
+      kind: "ORDERS",
       status: "IN_PROGRESS",
       productsProcessed: 0,
       totalProducts: null,

@@ -8,84 +8,48 @@ import { syncProducts } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import SyncErrorBanner from "../components/ui/SyncErrorBanner";
-import { syncErrorMessage, syncIssueForJob } from "../utils/syncError.js";
+import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
-  const syncedProductsCount = await prisma.product.count({
-    where: { shop: session.shop },
-  });
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const scope = productSyncJobWhere(shop);
+  const syncedProductsCount = await prisma.product.count({ where: { shop } });
+  let latestJob = await prisma.syncJob.findFirst({ where: scope, orderBy: { createdAt: "desc" } });
 
-  let activeSyncJob = await prisma.syncJob.findFirst({
-    where: { 
-      shop: session.shop, 
-      status: "IN_PROGRESS",
-      totalProducts: { not: null }
-    },
-  });
-
-  // A missing heartbeat for five minutes makes a stopped job resumable.
-  if (activeSyncJob) {
-    const now = new Date();
-    const lastUpdate = new Date(activeSyncJob.updatedAt);
-    const diffMinutes = (now - lastUpdate) / 1000 / 60;
-    if (diffMinutes > 5) {
-      await prisma.syncJob.update({
-        where: { id: activeSyncJob.id },
-        data: { status: "FAILED", lastError: "Sync stopped sending progress updates. Resume it from the saved position." }
-      });
-      activeSyncJob = null;
-    }
+  // Legacy completion flags were written before all final steps finished.
+  if (latestJob?.status === "COMPLETED" && !latestJob.completedAt) {
+    latestJob = await prisma.syncJob.update({ where: { id: latestJob.id }, data: {
+      status: "FAILED", kind: "PRODUCTS",
+      lastError: "This earlier sync was not verified as complete. Resume it from the saved position.",
+    } });
   }
-
-  // Check if a FAILED (resumable) job exists
-  let resumableJob = !activeSyncJob
-    ? await prisma.syncJob.findFirst({
-        where: { 
-          shop: session.shop, 
-          status: "FAILED",
-          totalProducts: { not: null }
-        },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
-
-  // Shopify stats are now fetched asynchronously via the /app/api/stats route
-
-  // Last completed sync job
+  if (latestJob?.status === "IN_PROGRESS" && Date.now() - new Date(latestJob.updatedAt).getTime() > 5 * 60 * 1000) {
+    latestJob = await prisma.syncJob.update({ where: { id: latestJob.id }, data: {
+      status: "FAILED", lastError: "Sync stopped sending progress updates. Resume it from the saved position.",
+    } });
+  }
   const lastCompletedJob = await prisma.syncJob.findFirst({
-    where: { 
-      shop: session.shop, 
-      status: "COMPLETED",
-      totalProducts: { not: null }
-    },
-    orderBy: { updatedAt: "desc" },
+    where: { ...scope, status: "COMPLETED", completedAt: { not: null } },
+    orderBy: { completedAt: "desc" },
   });
-
-  // If a completed job exists that is newer than the failed job, then the failed job is obsolete
-  if (resumableJob && lastCompletedJob && new Date(lastCompletedJob.createdAt) > new Date(resumableJob.createdAt)) {
-    resumableJob = null;
-  }
-
+  const active = latestJob?.status === "IN_PROGRESS";
+  const failed = latestJob?.status === "FAILED";
+  const progress = latestJob ? {
+    processed: latestJob.productsProcessed ?? 0,
+    total: latestJob.totalProducts || null,
+  } : null;
   return {
     syncedProductsCount,
-    isSyncingBackground: !!activeSyncJob,
-    lastSyncedAt: lastCompletedJob?.updatedAt ?? null,
-    syncIssue: syncIssueForJob(activeSyncJob || resumableJob),
-    latestSyncStatus: activeSyncJob ? "IN_PROGRESS" : resumableJob ? "FAILED" : lastCompletedJob ? "COMPLETED" : "IDLE",
-    // Live progress during sync
-    syncProgress: activeSyncJob ? {
-      processed: activeSyncJob.productsProcessed ?? 0,
-      total: activeSyncJob.totalProducts ?? null,
-    } : null,
-    // Resumable job info
-    resumableJob: resumableJob ? {
-      processed: resumableJob.productsProcessed ?? 0,
-      total: resumableJob.totalProducts ?? null,
-    } : null,
+    isSyncingBackground: active,
+    lastSyncedAt: lastCompletedJob?.completedAt ?? null,
+    syncIssue: syncIssueForJob(latestJob),
+    latestSyncId: latestJob?.id ?? null,
+    latestSyncStatus: latestJob?.status ?? "IDLE",
+    syncProgress: progress,
+    resumableJob: failed ? progress : null,
   };
 };
-
 
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -122,7 +86,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus } = useLoaderData();
+  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus, latestSyncId } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
@@ -193,14 +157,15 @@ export default function Index() {
     }
   }, [syncFetcher.data, shopify]);
 
-  // Show toast when background sync COMPLETES (isSyncingBackground goes true → false)
-  const wasSyncingRef = useRef(false);
+  // Only the same attempt changing from running to verified completion can succeed.
+  const previousSyncRef = useRef(null);
   useEffect(() => {
-    if (wasSyncingRef.current === true && isSyncingBackground === false && latestSyncStatus === "COMPLETED") {
-      shopify.toast.show("✅ Sync complete! All products are ready for filtering.", { duration: 5000 });
+    const previous = previousSyncRef.current;
+    if (isCompletedSyncTransition(previous, { id: latestSyncId, status: latestSyncStatus })) {
+      shopify.toast.show("Sync complete! All products are ready for filtering.", { duration: 5000 });
     }
-    wasSyncingRef.current = isSyncingBackground;
-  }, [isSyncingBackground, latestSyncStatus, shopify]);
+    previousSyncRef.current = { id: latestSyncId, status: latestSyncStatus };
+  }, [latestSyncId, latestSyncStatus, shopify]);
 
   // Poll for sync completion if running in background
   useEffect(() => {
@@ -527,14 +492,14 @@ export default function Index() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b" }}>
                 {/* During active sync — show live processed count */}
-                {isSyncing && syncProgress ? (
+                {syncProgress ? (
                   <>
                     <strong style={{ color: "#7c3aed", fontSize: "16px" }}>
                       {syncProgress.processed.toLocaleString()}
                     </strong>
                     {syncProgress.total
-                      ? <span> / {syncProgress.total.toLocaleString()} syncing...</span>
-                      : <span> products synced so far...</span>}
+                      ? <span> / {syncProgress.total.toLocaleString()} {latestSyncStatus === "COMPLETED" ? "processed" : latestSyncStatus === "FAILED" ? "sync stopped" : "syncing..."}</span>
+                      : <span> products processed{latestSyncStatus === "FAILED" ? " before sync stopped" : ""}</span>}
                   </>
                 ) : shopifyActiveCount ? (
                   <>
@@ -552,7 +517,7 @@ export default function Index() {
               </span>
 
               {/* Fully synced */}
-              {!isSyncing && !syncIssue && lastSyncedAt && shopifyActiveCount && currentCount >= shopifyActiveCount && (
+              {!isSyncing && latestSyncStatus === "COMPLETED" && !syncIssue && (
                 <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
                   ✅ Fully Synced
                 </span>
@@ -567,11 +532,11 @@ export default function Index() {
 
             {/* Progress bar — live during sync OR static DB progress */}
             {(() => {
-              const total = (isSyncing && syncProgress?.total) || shopifyActiveCount;
-              const done  = (isSyncing && syncProgress?.processed) || currentCount;
+              const total = syncProgress ? syncProgress.total : shopifyActiveCount;
+              const done  = syncProgress ? syncProgress.processed : currentCount;
               if (!total || total === 0) return null;
               const pct = Math.min(100, Math.round((done / total) * 100));
-              const color = pct === 100 ? "#16a34a" : isSyncing ? "#7c3aed" : "#7c3aed";
+              const color = latestSyncStatus === "COMPLETED" ? "#16a34a" : latestSyncStatus === "FAILED" ? "#dc2626" : "#7c3aed";
               return (
                 <div style={{ marginBottom: "6px" }}>
                   <div style={{ background: "#e2e8f0", borderRadius: "999px", height: "8px", width: "100%", maxWidth: "340px" }}>

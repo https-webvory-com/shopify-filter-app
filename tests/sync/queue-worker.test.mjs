@@ -6,7 +6,7 @@ import vm from "node:vm";
 import { transform } from "esbuild";
 
 async function worker({status="IN_PROGRESS",attempt=0,error}={}) {
-  const calls=[];const saved={shop:"fixture.myshopify.com",status,cursor:"saved-page-138",productsProcessed:6900};
+  const calls=[];const saved={completedAt:status==="COMPLETED"?new Date():null,shop:"fixture.myshopify.com",status,cursor:"saved-page-138",productsProcessed:6900};
   const prisma={syncJob:{findUnique:async()=>saved, update:async({data})=>{calls.push(data.status);Object.assign(saved,data);}}};
   const source=(await fs.readFile("app/workers/productSyncWorker.server.js","utf8"))
     .replace('await import("../shopify.server.js")','({unauthenticated: auth})')

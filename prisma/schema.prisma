@@ -283,6 +283,8 @@ model SyncJob {
   id                String   @id @default(uuid())
   shop              String
   status            String   @default("IN_PROGRESS")
+  kind              String?
+  completedAt       DateTime?
   cursor            String?
   productsProcessed Int      @default(0)
   totalProducts     Int?

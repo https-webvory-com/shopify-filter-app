@@ -6,14 +6,17 @@ import { transform } from "esbuild";
 import React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
-import { syncErrorMessage, syncIssueForJob } from "../../app/utils/syncError.js";
+import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../../app/utils/syncError.js";
 
 async function routeFixture(job) {
-  const prisma={product:{count:async()=>500},syncJob:{findFirst:async({where})=>where.status===job.status?job:null}};
+  const prisma={product:{count:async()=>48860},syncJob:{
+    findFirst:async({where})=>where.status ? (job.status===where.status && job.completedAt ? job : null) : job,
+    update:async({data})=>Object.assign(job,data),
+  }};
   const mocks={
     "../shopify.server":{authenticate:{admin:async()=>({session:{shop:"fixture.myshopify.com"}})}},
     "../db.server":{__esModule:true,default:prisma},
-    "../utils/syncError.js":{syncErrorMessage,syncIssueForJob},
+    "../utils/syncError.js":{syncErrorMessage,syncIssueForJob,productSyncJobWhere,isCompletedSyncTransition},
     "react/jsx-runtime":jsxRuntime,
   };
   const ctx={module:{exports:{}},exports:{},console,require:name=>mocks[name]||{}};
@@ -57,4 +60,53 @@ test("error banner renders retry information and a stopped sync with resume inst
   assert.match(pending,/role="alert"/);assert.match(pending,/recovering automatically/);assert.match(pending,/attempt 2 of 10/);
   const failed=renderToStaticMarkup(React.createElement(Banner,{issue:{message:"Indexing failed",retrying:false,processed:500}}));
   assert.match(failed,/Sync did not complete/);assert.match(failed,/Resume Sync/);assert.match(failed,/500 products processed/);
+});
+
+
+test("stopped progress stays at 21800 even when 48860 products already exist in the database", async () => {
+  const result = await routeFixture({id:"current",kind:"PRODUCTS",status:"FAILED",productsProcessed:21800,totalProducts:48860,lastError:"Indexing failed"});
+  assert.equal(result.syncedProductsCount,48860);
+  assert.equal(result.syncProgress.processed,21800);
+  assert.equal(result.syncProgress.total,48860);
+  assert.equal(result.latestSyncId,"current");
+  assert.equal(result.latestSyncStatus,"FAILED");
+});
+
+test("a legacy completion flag without verification is resumable, never a success", async () => {
+  const result = await routeFixture({id:"old",status:"COMPLETED",cursor:"at-21800",productsProcessed:21800,totalProducts:48860});
+  assert.equal(result.latestSyncStatus,"FAILED");
+  assert.equal(result.resumableJob.processed,21800);
+  assert.equal(result.lastSyncedAt,null);
+});
+
+test("only the same running job can trigger a completion notification", () => {
+  const running={id:"current",status:"IN_PROGRESS"};
+  assert.equal(isCompletedSyncTransition(running,{id:"old-order-sync",status:"COMPLETED"}),false);
+  assert.equal(isCompletedSyncTransition(running,{id:"current",status:"FAILED"}),false);
+  assert.equal(isCompletedSyncTransition(running,{id:"current",status:"COMPLETED"}),true);
+});
+
+async function renderDashboard(data) {
+  const mocks={
+    react:{useEffect(){},useRef:()=>({current:null})},
+    "react/jsx-runtime":jsxRuntime,
+    "react-router":{useLoaderData:()=>data,useFetcher:()=>({state:"idle",data:null}),useRevalidator:()=>({revalidate(){}}),useNavigate:()=>()=>{}},
+    "@shopify/app-bridge-react":{useAppBridge:()=>({toast:{show(){}}})},
+    "../components/ui/LoadingSpinner":{__esModule:true,default:()=>React.createElement("span",null,"Loading")},
+    "../components/ui/SyncErrorBanner":{__esModule:true,default:()=>null},
+  };
+  const ctx={module:{exports:{}},exports:{},require:name=>mocks[name]||{}};
+  vm.runInNewContext((await transform(await fs.readFile("app/routes/app._index.jsx","utf8"),{format:"cjs",loader:"jsx",jsx:"automatic"})).code,ctx);
+  return renderToStaticMarkup(React.createElement(ctx.module.exports.default));
+}
+
+test("the actual dashboard keeps stopped progress instead of rendering database count as completion", async () => {
+  const result=await routeFixture({id:"current",status:"FAILED",productsProcessed:21800,totalProducts:48860,lastError:"Indexing failed"});
+  const html=await renderDashboard(result);
+  const section=html.slice(html.indexOf("Database Synchronization"));
+  assert.match(section,/21,800/);
+  assert.match(section,/sync stopped/);
+  assert.match(section,/45%/);
+  assert.ok(!section.includes("Fully Synced"));
+  assert.ok(!section.includes("48,860 active products synced"));
 });

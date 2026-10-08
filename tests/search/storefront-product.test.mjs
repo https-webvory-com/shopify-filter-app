@@ -1,4 +1,4 @@
-import { syncErrorMessage } from "../../app/utils/syncError.js";
+import { syncErrorMessage, productSyncJobWhere } from "../../app/utils/syncError.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -29,7 +29,7 @@ async function loadSync({ product, deleteError } = {}) {
     addDocuments: async docs => { calls.push(["addIndex", docs]); return { taskUid: 1 }; },
   };
   const mocks = {
-    "../utils/syncError.js": { syncErrorMessage },
+    "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },
     "../db.server": { __esModule: true, default: prisma },
     "./meiliClient.server": { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: "succeeded" }) } } },
     "./shopCache.server": { invalidateShop: async () => {} },

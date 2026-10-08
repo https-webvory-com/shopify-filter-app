@@ -6,6 +6,7 @@ export function syncErrorMessage(error) {
   if (/unauthor|access denied|permission|invalid.api.key|access token|401|403/.test(text)) return "A service rejected access. Check the store connection and service credentials.";
   if (/database|prisma|p1001|p1002|p2024|p2028/.test(text + code)) return "The database could not complete this batch. Saved sync progress is retained.";
   if (/fetch failed|timeout|timed out|econn|enotfound|eai_again|502|503|504|unavailable/.test(text + code)) return "A service could not be reached. Saved sync progress is retained.";
+  if (/pagination stopped|unread products/.test(text)) return "Shopify pagination stopped before all products were read. Saved progress is retained.";
   if (/index|meili/.test(text)) return "Search indexing failed. This batch has not been marked as synced.";
   if (/sales data|orders/.test(text)) return "Products were processed, but the sales ranking update did not finish.";
   return "Sync encountered an error. Saved progress is retained; contact support if retries fail.";
@@ -20,4 +21,18 @@ export function syncIssueForJob(job) {
     retryCount: job.retryCount || 0,
     processed: job.productsProcessed || 0,
   };
+}
+
+
+export function productSyncJobWhere(shop) {
+  return { shop, OR: [
+    { kind: "PRODUCTS" },
+    // Old sales jobs have no product cursor; do not treat them as product syncs.
+    { kind: null, totalProducts: { not: null }, OR: [{ cursor: { not: null } }, { productsProcessed: 0 }] },
+  ] };
+}
+
+
+export function isCompletedSyncTransition(previous, current) {
+  return Boolean(previous?.id && previous.id === current?.id && previous.status === "IN_PROGRESS" && current.status === "COMPLETED");
 }

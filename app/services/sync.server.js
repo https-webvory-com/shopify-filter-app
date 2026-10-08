@@ -3,7 +3,7 @@ import { geminiEmbedder } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
-import { syncErrorMessage } from "../utils/syncError.js";
+import { syncErrorMessage, productSyncJobWhere } from "../utils/syncError.js";
 
 /**
  * Format products and push to Meilisearch index.
@@ -262,38 +262,30 @@ async function initializeProductSync(shop, admin, session, forceFresh) {
   // ── Resume or Fresh Start ──────────────────────────────────────────
   let job = null;
   const latestJob = await prisma.syncJob.findFirst({
-    where: { shop, totalProducts: { not: null }, OR: [{ cursor: { not: null } }, { productsProcessed: 0 }] },
+    where: productSyncJobWhere(shop),
     orderBy: { createdAt: "desc" },
   });
-  if (latestJob?.status === "IN_PROGRESS" || (!forceFresh && latestJob?.status === "FAILED")) job = latestJob;
+  if (latestJob?.status === "IN_PROGRESS" || (!forceFresh && (latestJob?.status === "FAILED" || (latestJob?.status === "COMPLETED" && !latestJob.completedAt)))) job = latestJob;
 
   if (job) {
     // Resume from where it stopped
     console.log(`CFP: Resuming failed sync for ${shop} from cursor (${job.productsProcessed} already done)`);
     job = await prisma.syncJob.update({
       where: { id: job.id },
-      data: { status: "IN_PROGRESS", lastError: null, retryCount: 0, updatedAt: new Date() },
+      data: { status: "IN_PROGRESS", kind: "PRODUCTS", completedAt: null, lastError: null, retryCount: 0, updatedAt: new Date() },
     });
   } else {
     // Keep earlier jobs so sync history remains available.
 
-    // Fetch total active products count for progress display
-    let totalProducts = null;
-    try {
-      const accessToken = session?.accessToken;
-      if (accessToken) {
-        const countRes = await fetch(
-          `https://${shop}/admin/api/2025-10/products/count.json`,
-          { headers: { "X-Shopify-Access-Token": accessToken } }
-        );
-        const countData = await countRes.json();
-        totalProducts = countData?.count ?? null;
-      }
-    } catch (e) { /* non-critical */ }
+    let totalProducts = 0;
+    try { totalProducts = await shopifyProductCount(admin); } catch (error) {
+      console.warn("CFP: Product count unavailable; verifying it at completion:", error.message);
+    }
 
     job = await prisma.syncJob.create({
       data: {
         shop,
+        kind: "PRODUCTS",
         status: "IN_PROGRESS",
         totalProducts: totalProducts ?? 0,
       },
@@ -517,6 +509,10 @@ async function processSyncChunk(jobId, shop, admin) {
 
       const productsData = responseJson.data?.products;
       if (!productsData) throw new Error("Shopify returned no product connection");
+      if (typeof productsData.pageInfo?.hasNextPage !== "boolean" || (productsData.pageInfo.hasNextPage && (!productsData.pageInfo.endCursor || productsData.pageInfo.endCursor === cursor))) {
+        throw new Error("Shopify pagination stopped returning a valid next cursor");
+      }
+      if (productsData.nodes.length === 0 && productsData.pageInfo.hasNextPage) throw new Error("Shopify pagination stopped with an empty intermediate page");
       if (productsData.nodes.length === 0) {
         hasNextPage = false;
         break;
@@ -687,6 +683,13 @@ async function processSyncChunk(jobId, shop, admin) {
 
   if (!hasNextPage) {
     try {
+      // Exhausting a cursor alone is insufficient when a saved scan is incomplete.
+      // Recount to allow legitimate catalog deletions while rejecting an early end.
+      const currentTotal = await shopifyProductCount(admin);
+      if ((job.productsProcessed || 0) < currentTotal) {
+        throw new Error(`Shopify pagination stopped with unread products: ${job.productsProcessed || 0} / ${currentTotal}`);
+      }
+      await prisma.syncJob.update({ where: { id: jobId }, data: { totalProducts: currentTotal } });
       await autoSeedOptionFilters(shop);
       await updateMeiliSettings(shop, { throwOnError: true });
       
@@ -698,7 +701,7 @@ async function processSyncChunk(jobId, shop, admin) {
       await invalidateShop(shop);
       await prisma.syncJob.update({
         where: { id: jobId },
-        data: { status: "COMPLETED", lastError: null },
+        data: { status: "COMPLETED", completedAt: new Date(), lastError: null },
       });
       console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
     } catch (finalErr) {
@@ -1237,4 +1240,17 @@ export async function syncCollectionProducts(shop, admin, collectionId) {
       `CFP: No product differences found for collection ${collectionId}.`,
     );
   }
+}
+
+
+async function shopifyProductCount(admin) {
+  const response = await admin.graphql(`#graphql
+    query verifyProductSyncCount { productsCount(limit: null) { count precision } }
+  `);
+  const json = await response.json();
+  const result = json.data?.productsCount;
+  if (json.errors?.length || !Number.isSafeInteger(result?.count) || result.count < 0 || result.precision !== "EXACT") {
+    throw new Error("Shopify product count could not be verified");
+  }
+  return result.count;
 }

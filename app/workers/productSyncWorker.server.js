@@ -6,8 +6,8 @@ import { syncErrorMessage } from "../utils/syncError.js";
 export async function processProductSyncJob(job) {
   const { shop, syncJobId } = job.data;
   const saved = await prisma.syncJob.findUnique({ where: { id: syncJobId } });
-  if (!saved || saved.shop !== shop || saved.status === "COMPLETED") return;
-  await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: "IN_PROGRESS" } });
+  if (!saved || saved.shop !== shop || (saved.status === "COMPLETED" && saved.completedAt)) return;
+  await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: "IN_PROGRESS", kind: "PRODUCTS", completedAt: null } });
   try {
     // Offline authentication survives closure of the admin page and server restarts.
     const { unauthenticated } = await import("../shopify.server.js");
