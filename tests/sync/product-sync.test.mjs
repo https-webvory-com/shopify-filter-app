@@ -6,7 +6,7 @@ import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
 
-async function fixture({ failSetup = false, failIndex = false, finalizationGate, processed = 6900, total = 6900 } = {}) {
+async function fixture({ failSetup = false, failIndex = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
   const updates = [];
   let heartbeat, cleared = false;
   const job = { id: "job", status: "IN_PROGRESS", cursor: "last-saved", productsProcessed: processed };
@@ -45,7 +45,7 @@ async function fixture({ failSetup = false, failIndex = false, finalizationGate,
     if(query.includes("getPublishedCollections")) return {data:{collections:{nodes:[],pageInfo:{hasNextPage:false}}}};
     assert.equal(variables.cursor,"last-saved");
     assert.ok(query.includes("products(first: 10"));
-    return {data:{products:{nodes:failIndex?[{id:"gid://shopify/Product/1",status:"DRAFT"}]:[],pageInfo:{hasNextPage:false,endCursor:"end"}}}};
+    return {data:{products:{nodes:(failIndex || morePages)?[{id:"gid://shopify/Product/1",status:"DRAFT"}]:[],pageInfo:{hasNextPage:morePages,endCursor:"end"}}}};
   }})};
   return {run:options=>context.module.exports.runProductSync("job","fixture.myshopify.com",admin,options),updates,
     heartbeat:()=>heartbeat(),cleared:()=>cleared};
@@ -105,4 +105,13 @@ for (const status of ["FAILED", "COMPLETED"]) test("an unfinished " + status + "
   assert.equal(result.jobId,"same-job");assert.match(result.message,/21800/);
   assert.equal(saved.cursor,"cursor-21800");assert.equal(saved.productsProcessed,21800);
   assert.equal(saved.status,"IN_PROGRESS");assert.equal(calls.length,1);
+});
+
+test("a bounded sync turn saves the cursor and yields before finalization", async () => {
+  const f=await fixture({morePages:true});
+  const result=await f.run({markFailure:false,maxBatches:1});
+  assert.equal(result.needsContinuation,true);
+  assert.ok(f.updates.some(update=>update.cursor==="end" && update.productsProcessed.increment===1));
+  assert.ok(!f.updates.some(update=>update.status==="COMPLETED" || update.status==="FAILED"));
+  assert.equal(f.cleared(),true);
 });

@@ -134,6 +134,9 @@ jobs:
             $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             npx prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma
 
+            docker stop --time 30 shopify-filter-sync-worker || true
+            docker rm shopify-filter-sync-worker || true
+
             docker stop shopify-filter-app || true
             docker rm shopify-filter-app || true
 
@@ -141,6 +144,7 @@ jobs:
             docker run -d \
             --name shopify-filter-app \
             --env-file .env \
+            -e CFP_WORKER_MODE=web \
             -p 3005:3005 \
             --restart always \
             --log-opt max-size=10m \
@@ -158,6 +162,36 @@ jobs:
             done
             if [ "$ready" != true ]; then
               echo "App failed its startup health check."
+              exit 1
+            fi
+
+            # Isolate background work from the HTTP server with bounded memory.
+            docker run -d \
+            --name shopify-filter-sync-worker \
+            --env-file .env \
+            -e CFP_WORKER_MODE=worker \
+            -e CFP_WEBHOOK_CONCURRENCY=2 \
+            -e NODE_OPTIONS=--max-old-space-size=256 \
+            --memory=512m \
+            --memory-swap=512m \
+            --cpu-shares=256 \
+            --restart always \
+            --log-opt max-size=10m \
+            --log-opt max-file=3 \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            node scripts/run-background-worker.mjs
+
+            worker_ready=false
+            for attempt in $(seq 1 45); do
+              if docker exec shopify-filter-sync-worker node -e 'process.exit(require("fs").existsSync("/tmp/cfp-background-worker.ready") ? 0 : 1)'; then
+                worker_ready=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$worker_ready" != true ]; then
+              echo "Background worker failed its startup check; the web server remains running."
+              docker inspect --format '{{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' shopify-filter-sync-worker
               exit 1
             fi
 

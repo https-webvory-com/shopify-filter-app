@@ -25,3 +25,21 @@ jobs:
             done
             sudo -n du -xhd1 /var/log /var/lib /home/ubuntu 2>/dev/null | sort -h
             sudo -n du -xhd1 /var/lib/docker 2>/dev/null | sort -h
+
+            # Read-only diagnostics for intermittent 502 responses during sync.
+            free -m
+            docker stats --no-stream --format '{{.Name}} Memory={{.MemUsage}} CPU={{.CPUPerc}}'
+            for app_container in shopify-filter-app shopify-filter-sync-worker; do
+              if docker inspect "$app_container" >/dev/null 2>&1; then
+                docker inspect --format '{{.Name}} Status={{.State.Status}} Started={{.State.StartedAt}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}} MemoryLimit={{.HostConfig.Memory}}' "$app_container"
+                docker logs --tail 300 "$app_container" 2>&1 | grep -E 'FATAL ERROR:|heap out of memory|Reached heap limit|JavaScript heap' | tail -n 10 || true
+              fi
+            done
+            sudo -n dmesg --ctime 2>/dev/null | grep -E 'Out of memory|Killed process|oom-kill' | tail -n 15 || true
+            # Summarize nginx failures without exposing request URLs or tokens.
+            for failure_kind in 'upstream prematurely closed' 'upstream timed out' 'connect() failed'; do
+              failure_count=$(sudo -n tail -n 1000 /var/log/nginx/error.log 2>/dev/null | grep -F -c "$failure_kind" || true)
+              echo "nginx $failure_kind occurrences in recent log: $failure_count"
+            done
+            # Only status metadata for this store; never sessions or credentials.
+            docker exec shopify-filter-app node -e 'const {PrismaClient}=require("@prisma/client"); const db=new PrismaClient(); db.syncJob.findMany({where:{shop:{in:["thedressoutlet.myshopify.com","another-shpyfy-store.myshopify.com"]},kind:"PRODUCTS"},orderBy:{createdAt:"desc"},take:5,select:{shop:true,id:true,status:true,productsProcessed:true,totalProducts:true,retryCount:true,completedAt:true,updatedAt:true}}).then(rows=>console.log("SYNC_AUDIT",JSON.stringify(rows))).catch(error=>{console.error("SYNC_AUDIT_FAILED",error.code||error.name);process.exitCode=1;}).finally(()=>db.$disconnect())'

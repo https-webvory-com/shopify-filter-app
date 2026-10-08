@@ -8,7 +8,7 @@ import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../../app/utils/syncError.js";
 
-async function routeFixture(job) {
+async function routeFixture(job, queueState = "missing") {
   const prisma={product:{count:async()=>48860},syncJob:{
     findFirst:async({where})=>where.status ? (job.status===where.status && job.completedAt ? job : null) : job,
     update:async({data})=>Object.assign(job,data),
@@ -17,6 +17,7 @@ async function routeFixture(job) {
     "../shopify.server":{authenticate:{admin:async()=>({session:{shop:"fixture.myshopify.com"}})}},
     "../db.server":{__esModule:true,default:prisma},
     "../utils/syncError.js":{syncErrorMessage,syncIssueForJob,productSyncJobWhere,isCompletedSyncTransition},
+    "../services/productSyncQueue.server.js":{productSyncQueue:{getJob:async()=>queueState === "missing" ? null : {getState:async()=>queueState,failedReason:"Shopify unavailable"}}},
     "react/jsx-runtime":jsxRuntime,
   };
   const ctx={module:{exports:{}},exports:{},console,require:name=>mocks[name]||{}};
@@ -86,11 +87,12 @@ test("only the same running job can trigger a completion notification", () => {
   assert.equal(isCompletedSyncTransition(running,{id:"current",status:"COMPLETED"}),true);
 });
 
-async function renderDashboard(data) {
+async function renderDashboard(data, stats = null) {
+  if(stats) stats={totalProducts:51,draftProducts:0,archivedProducts:0,allCollections:16,publishedCollections:15,smartCollections:2,...stats};
   const mocks={
     react:{useEffect(){},useRef:()=>({current:null})},
     "react/jsx-runtime":jsxRuntime,
-    "react-router":{useLoaderData:()=>data,useFetcher:()=>({state:"idle",data:null}),useRevalidator:()=>({revalidate(){}}),useNavigate:()=>()=>{}},
+    "react-router":{useLoaderData:()=>data,useFetcher:()=>({state:"idle",data:stats}),useRevalidator:()=>({revalidate(){}}),useNavigate:()=>()=>{}},
     "@shopify/app-bridge-react":{useAppBridge:()=>({toast:{show(){}}})},
     "../components/ui/LoadingSpinner":{__esModule:true,default:()=>React.createElement("span",null,"Loading")},
     "../components/ui/SyncErrorBanner":{__esModule:true,default:()=>null},
@@ -109,4 +111,39 @@ test("the actual dashboard keeps stopped progress instead of rendering database 
   assert.match(section,/45%/);
   assert.ok(!section.includes("Fully Synced"));
   assert.ok(!section.includes("48,860 active products synced"));
+});
+
+test("queued sync is not failed after five minutes without a worker heartbeat", async () => {
+  for (const state of ["waiting", "delayed", "active", "prioritized"]) {
+    const result = await routeFixture({id:"small-store",status:"IN_PROGRESS",productsProcessed:45,totalProducts:51,updatedAt:new Date(Date.now()-3600000)}, state);
+    assert.equal(result.latestSyncStatus,"IN_PROGRESS");
+    assert.equal(result.syncIssue,null);
+    assert.equal(result.syncQueueState,state);
+  }
+});
+test("a dashboard timeout is repaired when its queue job is still pending", async () => {
+  const result = await routeFixture({id:"small-store",status:"FAILED",lastError:"Sync stopped sending progress updates",productsProcessed:45,totalProducts:51}, "waiting");
+  assert.equal(result.latestSyncStatus,"IN_PROGRESS");
+  assert.equal(result.syncIssue,null);
+});
+test("an actual failed queue job exposes a safe worker error", async () => {
+  const result = await routeFixture({id:"small-store",status:"IN_PROGRESS",productsProcessed:45,totalProducts:51,updatedAt:new Date()}, "failed");
+  assert.equal(result.latestSyncStatus,"FAILED");
+  assert.match(result.syncIssue.message,/could not be reached/);
+});
+
+test("verified unpublished products are explained separately from a waiting scan",async()=>{
+  const data=await routeFixture({id:"small-store",status:"IN_PROGRESS",productsProcessed:45,totalProducts:51,updatedAt:new Date()},"waiting");
+  data.syncedProductsCount=45;
+  const html=await renderDashboard(data,{activeProducts:51,publishedProducts:45,unpublishedProducts:6});
+  assert.match(html,/6 unpublished products excluded from listings/);
+  assert.ok(html.includes("45 products in database / 45 published products"));
+  assert.match(html,/Sync is queued/);
+  assert.ok(!html.includes("Fully Synced"));
+});
+test("a database count difference alone is never labelled unpublished",async()=>{
+  const data=await routeFixture({id:"small-store",status:"FAILED",productsProcessed:45,totalProducts:51,lastError:"Indexing failed"});
+  data.syncedProductsCount=45;
+  const html=await renderDashboard(data,{activeProducts:51});
+  assert.ok(!html.includes("unpublished products excluded"));
 });

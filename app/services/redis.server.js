@@ -25,8 +25,12 @@ import { initProductSyncWorker } from "../workers/productSyncWorker.server.js";
 
 redis.on('connect', () => {
   console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
-  initWebhookWorker();
-  initProductSyncWorker();
+  if (process.env.CFP_WORKER_MODE !== "web") {
+    initWebhookWorker();
+    initProductSyncWorker();
+  }
+  // A dedicated worker restart must not invalidate storefront caches.
+  if (process.env.CFP_WORKER_MODE === "worker") return;
   // Auto-clear all stale fullApiResponse, merch, and pinning cache keys on server process startup/restart
   Promise.all([
     redis.keys('*fullApiResponse*'),

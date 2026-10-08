@@ -22,6 +22,8 @@ export const loader = async ({ request }) => {
 
     const colRes = await admin.graphql(`#graphql
       query {
+        publishedProducts: productsCount(limit: null, query: "status:active AND published_status:published") { count precision }
+        unpublishedProducts: productsCount(limit: null, query: "status:active AND published_status:unpublished") { count precision }
         allCollections: collectionsCount { count }
         publishedCollections: collectionsCount(query: "published_status:published") { count }
         smartCollections: collectionsCount(query: "collection_type:smart") { count }
@@ -31,6 +33,8 @@ export const loader = async ({ request }) => {
 
     shopifyStats = {
       activeProducts:       activeCount,
+      publishedProducts: colData?.publishedProducts?.precision === "EXACT" ? colData.publishedProducts.count : null,
+      unpublishedProducts: colData?.unpublishedProducts?.precision === "EXACT" ? colData.unpublishedProducts.count : null,
       draftProducts:        draftCount,
       archivedProducts:     archivedCount,
       totalProducts:        activeCount + draftCount + archivedCount,

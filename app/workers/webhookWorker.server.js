@@ -193,7 +193,7 @@ export function initWebhookWorker() {
   if (!global.__webhookWorker) {
     global.__webhookWorker = new Worker("webhookQueue", processWebhookJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },
-      concurrency: 5,
+      concurrency: Math.max(1, Math.min(10, parseInt(process.env.CFP_WEBHOOK_CONCURRENCY, 10) || 5)),
     });
 
     global.__webhookWorker.on("completed", (job) => {
@@ -208,7 +208,7 @@ export function initWebhookWorker() {
       console.error("CFP Worker: Redis/worker error:", err);
     });
 
-    console.log("CFP Worker: BullMQ Webhook Worker initialized for ALL webhooks (concurrency: 5).");
+    console.log("CFP Worker: BullMQ Webhook Worker initialized (concurrency: " + global.__webhookWorker.opts.concurrency + ").");
   }
   webhookWorker = global.__webhookWorker;
   return webhookWorker;

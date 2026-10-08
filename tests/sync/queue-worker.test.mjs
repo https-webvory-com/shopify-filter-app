@@ -5,16 +5,19 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 
-async function worker({status="IN_PROGRESS",attempt=0,error}={}) {
+class DelayedError extends Error {}
+
+async function worker({status="IN_PROGRESS",attempt=0,error, continuation=false}={}) {
   const calls=[];const saved={completedAt:status==="COMPLETED"?new Date():null,shop:"fixture.myshopify.com",status,cursor:"saved-page-138",productsProcessed:6900};
   const prisma={syncJob:{findUnique:async()=>saved, update:async({data})=>{calls.push(data.status);Object.assign(saved,data);}}};
   const source=(await fs.readFile("app/workers/productSyncWorker.server.js","utf8"))
     .replace('await import("../shopify.server.js")','({unauthenticated: auth})')
     .replace('await import("../services/sync.server.js")','({runProductSync: sync})');
-  const ctx={module:{exports:{}},exports:{},require:name=>name.includes("db.server")?{__esModule:true,default:prisma}:name.includes("syncError")?{syncErrorMessage}:{},
-    auth:{admin:async()=>({admin:{}})},sync:async(id,shop,admin,options)=>{assert.equal(options.markFailure,false);assert.equal(id,"existing-job");assert.equal(shop,saved.shop);assert.equal(saved.cursor,"saved-page-138");if(error)throw error;await prisma.syncJob.update({data:{status:"COMPLETED"}});}};
+  const ctx={module:{exports:{}},exports:{},require:name=>name==="bullmq"?{DelayedError}:name.includes("db.server")?{__esModule:true,default:prisma}:name.includes("syncError")?{syncErrorMessage}:{},
+    auth:{admin:async()=>({admin:{}})},sync:async(id,shop,admin,options)=>{assert.equal(options.markFailure,false);assert.equal(id,"existing-job");assert.equal(shop,saved.shop);assert.equal(saved.cursor,"saved-page-138");if(error)throw error;if(continuation)return {needsContinuation:true};await prisma.syncJob.update({data:{status:"COMPLETED"}});}};
   vm.runInNewContext((await transform(source,{format:"cjs"})).code,ctx);
-  return {calls,saved,run:()=>ctx.module.exports.processProductSyncJob({data:{shop:saved.shop,syncJobId:"existing-job"},attemptsMade:attempt,opts:{attempts:10}})};
+  const delays=[];
+  return {calls,saved,delays,run:()=>ctx.module.exports.processProductSyncJob({data:{shop:saved.shop,syncJobId:"existing-job"},attemptsMade:attempt,opts:{attempts:10},moveToDelayed:async(time,token)=>delays.push({time,token})}, "lock-token")};
 }
 
 test("a restarted worker resumes the saved job rather than creating a fresh sync",async()=>{
@@ -36,4 +39,14 @@ test("enqueueing the same running sync reuses its persistent queue job",async()=
   const ctx={module:{exports:{}},exports:{},global:{},console,require:name=>name==="bullmq"?{Queue}:{redisOptions:{}}};
   vm.runInNewContext((await transform(await fs.readFile("app/services/productSyncQueue.server.js","utf8"),{format:"cjs"})).code,ctx);
   assert.equal(await ctx.module.exports.enqueueProductSync("same-job","fixture.myshopify.com"),existing);assert.equal(adds,0);
+});
+
+test("a committed batch releases the worker for other stores without consuming a failure retry",async()=>{
+  const f=await worker({continuation:true});
+  await assert.rejects(f.run(),DelayedError);
+  assert.deepEqual(f.calls,["IN_PROGRESS"]);
+  assert.equal(f.saved.retryCount,undefined);
+  assert.equal(f.saved.cursor,"saved-page-138");
+  assert.equal(f.delays.length,1);
+  assert.equal(f.delays[0].token,"lock-token");
 });

@@ -1,9 +1,9 @@
-import { Worker } from "bullmq";
+import { Worker, DelayedError } from "bullmq";
 import { redisOptions } from "../services/queue.server.js";
 import prisma from "../db.server.js";
 import { syncErrorMessage } from "../utils/syncError.js";
 
-export async function processProductSyncJob(job) {
+export async function processProductSyncJob(job, token) {
   const { shop, syncJobId } = job.data;
   const saved = await prisma.syncJob.findUnique({ where: { id: syncJobId } });
   if (!saved || saved.shop !== shop || (saved.status === "COMPLETED" && saved.completedAt)) return;
@@ -13,8 +13,14 @@ export async function processProductSyncJob(job) {
     const { unauthenticated } = await import("../shopify.server.js");
     const { runProductSync } = await import("../services/sync.server.js");
     const { admin } = await unauthenticated.admin(shop);
-    await runProductSync(syncJobId, shop, admin, { markFailure: false });
+    const result = await runProductSync(syncJobId, shop, admin, { markFailure: false, maxBatches: 5 });
+    if (result?.needsContinuation) {
+      // Release the worker between committed batches so another store can sync.
+      await job.moveToDelayed(Date.now() + 100, token);
+      throw new DelayedError();
+    }
   } catch (error) {
+    if (error instanceof DelayedError) throw error;
     const retrying = job.attemptsMade + 1 < (job.opts.attempts || 1);
     await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: retrying ? "IN_PROGRESS" : "FAILED", lastError: syncErrorMessage(error), retryCount: job.attemptsMade + 1 } });
     throw error;

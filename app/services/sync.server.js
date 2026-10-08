@@ -310,7 +310,7 @@ async function initializeProductSync(shop, admin, session, forceFresh) {
   };
 }
 
-export async function runProductSync(jobId, shop, admin, { markFailure = true } = {}) {
+export async function runProductSync(jobId, shop, admin, { markFailure = true, maxBatches = Infinity } = {}) {
   activeProductSyncs.set(shop, jobId);
   // Batch persistence can take several minutes on products with many variants.
   // Keep the job alive independently of when the cursor is committed.
@@ -329,7 +329,7 @@ export async function runProductSync(jobId, shop, admin, { markFailure = true } 
   }, 15000);
   heartbeat.unref?.();
   try {
-    await processSyncChunk(jobId, shop, admin);
+    return await processSyncChunk(jobId, shop, admin, maxBatches);
   } catch (error) {
     if (markFailure) await prisma.syncJob.update({ where: { id: jobId }, data: { status: "FAILED", lastError: syncErrorMessage(error) } });
     throw error;
@@ -339,7 +339,7 @@ export async function runProductSync(jobId, shop, admin, { markFailure = true } 
   }
 }
 
-async function processSyncChunk(jobId, shop, admin) {
+async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
   let job = await prisma.syncJob.findUnique({ where: { id: jobId } });
   if (!job || job.status !== "IN_PROGRESS") return;
 
@@ -493,6 +493,7 @@ async function processSyncChunk(jobId, shop, admin) {
   let hasNextPage = true;
   let cursor = job.cursor;
 
+  let batchesProcessed = 0;
   // We process in a while loop but we save state every chunk
   while (hasNextPage) {
     try {
@@ -672,6 +673,8 @@ async function processSyncChunk(jobId, shop, admin) {
       console.log(
         `CFP: SyncJob ${jobId} processed ${job.productsProcessed} products so far.`,
       );
+
+      if (++batchesProcessed >= maxBatches && hasNextPage) return { needsContinuation: true };
 
       // Small delay to yield event loop and avoid Shopify rate limits
       await new Promise((resolve) => setTimeout(resolve, 100));

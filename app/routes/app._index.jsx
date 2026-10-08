@@ -6,6 +6,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { syncProducts } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
+import { productSyncQueue } from "../services/productSyncQueue.server.js";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import SyncErrorBanner from "../components/ui/SyncErrorBanner";
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
@@ -24,10 +25,31 @@ export const loader = async ({ request }) => {
       lastError: "This earlier sync was not verified as complete. Resume it from the saved position.",
     } });
   }
-  if (latestJob?.status === "IN_PROGRESS" && Date.now() - new Date(latestJob.updatedAt).getTime() > 5 * 60 * 1000) {
-    latestJob = await prisma.syncJob.update({ where: { id: latestJob.id }, data: {
-      status: "FAILED", lastError: "Sync stopped sending progress updates. Resume it from the saved position.",
-    } });
+  let syncQueueState = null;
+  if (latestJob?.status === "IN_PROGRESS" || latestJob?.status === "FAILED") {
+    try {
+      const queued = await productSyncQueue.getJob(latestJob.id);
+      syncQueueState = queued ? await queued.getState() : "missing";
+      const pending = ["waiting", "delayed", "active", "prioritized", "waiting-children"].includes(syncQueueState);
+      if (pending && latestJob.status === "FAILED") {
+        // The dashboard previously mistook a waiting job for a stopped worker.
+        latestJob = await prisma.syncJob.update({ where: { id: latestJob.id }, data: {
+          status: "IN_PROGRESS", lastError: null,
+        } });
+      } else if (!pending && latestJob.status === "IN_PROGRESS") {
+        const stale = Date.now() - new Date(latestJob.updatedAt).getTime() > 5 * 60 * 1000;
+        if (syncQueueState === "failed" || stale) {
+          latestJob = await prisma.syncJob.update({ where: { id: latestJob.id }, data: {
+            status: "FAILED", lastError: queued?.failedReason ? syncErrorMessage(new Error(queued.failedReason)) :
+              "No running or queued sync was found. Resume it from the saved position.",
+          } });
+        }
+      }
+    } catch (error) {
+      // A Redis outage is not evidence that the saved sync itself has failed.
+      console.error("CFP: Unable to read sync queue status:", error.message);
+      syncQueueState = "unavailable";
+    }
   }
   const lastCompletedJob = await prisma.syncJob.findFirst({
     where: { ...scope, status: "COMPLETED", completedAt: { not: null } },
@@ -40,6 +62,7 @@ export const loader = async ({ request }) => {
     total: latestJob.totalProducts || null,
   } : null;
   return {
+    syncQueueState,
     syncedProductsCount,
     isSyncingBackground: active,
     lastSyncedAt: lastCompletedJob?.completedAt ?? null,
@@ -86,7 +109,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus, latestSyncId } = useLoaderData();
+  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus, latestSyncId } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
@@ -103,6 +126,8 @@ export default function Index() {
 
   const shopifyStats = statsFetcher.data || null;
   const shopifyActiveCount = shopifyStats?.activeProducts ?? null;
+  const shopifyPublishedCount = shopifyStats?.publishedProducts ?? null;
+  const shopifyUnpublishedCount = shopifyStats?.unpublishedProducts ?? null;
 
   const isSyncing =
     (["loading", "submitting"].includes(syncFetcher.state) &&
@@ -162,7 +187,8 @@ export default function Index() {
   useEffect(() => {
     const previous = previousSyncRef.current;
     if (isCompletedSyncTransition(previous, { id: latestSyncId, status: latestSyncStatus })) {
-      shopify.toast.show("Sync complete! All products are ready for filtering.", { duration: 5000 });
+      shopify.toast.show("Sync complete! Published products are ready for filtering.", { duration: 5000 });
+      statsFetcher.load("/app/api/stats");
     }
     previousSyncRef.current = { id: latestSyncId, status: latestSyncStatus };
   }, [latestSyncId, latestSyncStatus, shopify]);
@@ -488,6 +514,12 @@ export default function Index() {
 
             <SyncErrorBanner issue={syncIssue || (syncFetcher.data?.error && syncFetcher.data?.type === "sync" ? { message: syncFetcher.data.error, retrying: false, processed: 0 } : null)} />
 
+            {isSyncingBackground && ["waiting", "delayed", "prioritized", "waiting-children"].includes(syncQueueState) && (
+              <p role="status">Sync is queued. It will continue automatically from the saved position when the worker is available.</p>
+            )}
+            {isSyncingBackground && syncQueueState === "unavailable" && (
+              <p role="status">Sync queue status is temporarily unavailable. Saved progress is preserved.</p>
+            )}
             {/* Synced vs Total */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b" }}>
@@ -522,10 +554,14 @@ export default function Index() {
                   ✅ Fully Synced
                 </span>
               )}
-              {/* Missing */}
-              {!isSyncing && shopifyActiveCount && currentCount < shopifyActiveCount && (
-                <span style={{ background: "#fef9c3", color: "#a16207", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }} title="These products are active in Shopify but not published to the Online Store channel.">
-                  ⚠️ {(shopifyActiveCount - currentCount).toLocaleString()} unpublished from Online Store
+              {shopifyUnpublishedCount > 0 && (
+                <span style={{ background: "#f1f5f9", color: "#475569", fontSize: "12px", padding: "2px 10px", borderRadius: "20px" }}>
+                  {shopifyUnpublishedCount.toLocaleString()} unpublished products excluded from listings
+                </span>
+              )}
+              {shopifyPublishedCount !== null && (
+                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                  {currentCount.toLocaleString()} products in database / {shopifyPublishedCount.toLocaleString()} published products
                 </span>
               )}
             </div>
