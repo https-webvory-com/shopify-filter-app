@@ -5,6 +5,7 @@ import {
   useSubmit,
   useNavigation,
   useActionData,
+  useRevalidator,
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -86,6 +87,7 @@ export default function PinningIndex() {
   const { pinningRules } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
   const navigate = useNavigate();
   const actionData = useActionData();
   const shopify = useAppBridge();
@@ -1548,8 +1550,7 @@ export default function PinningIndex() {
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           onImportComplete={() => {
-            setIsImportModalOpen(false);
-            window.location.reload();
+            revalidator.revalidate();
           }}
         />
 

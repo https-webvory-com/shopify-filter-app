@@ -1993,3 +1993,44 @@ facet-filters-form,
   }
   .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { padding: 12px 0; border-top: 0; }
 }
+
+/* Inline mobile layouts must override the shared drawer rules. */
+@media (max-width: 768px) {
+  .cfp-desktop-like-mobile #cfp-sidebar.cfp-sidebar,
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar.cfp-sidebar {
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    display: flex !important;
+    visibility: visible !important;
+    flex-direction: column !important;
+    background: var(--cfp-bg) !important;
+    z-index: 10 !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+  }
+  .cfp-desktop-like-mobile #cfp-drawer-trigger-btn,
+  .cfp-mobile-horizontal-scrolling #cfp-drawer-trigger-btn,
+  .cfp-desktop-like-mobile #cfp-sidebar .cfp-sidebar__header,
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__header { display: none !important; }
+  .cfp-desktop-like-mobile #cfp-sidebar .cfp-sidebar__body,
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body {
+    display: block !important;
+    flex: none !important;
+    overflow: visible !important;
+    padding: 12px !important;
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    align-items: flex-start;
+    padding-bottom: 8px;
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group { flex: 0 0 220px; box-sizing: border-box; }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content { max-height: 360px; overflow-y: auto; }
+}

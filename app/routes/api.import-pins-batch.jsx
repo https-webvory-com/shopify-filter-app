@@ -45,19 +45,26 @@ export const action = async ({ request }) => {
 
     // ─── Batch-validate collection titles at once ─────────────────────────
     const allCollectionTitles = new Set();
+    const allCollectionIds = new Set();
+    const collectionGid = id => String(id).startsWith("gid://shopify/Collection/") ? String(id) : `gid://shopify/Collection/${id}`;
     for (const row of rows) {
+      for (const id of row.collectionIds || []) {
+        if (id) allCollectionIds.add(collectionGid(id));
+      }
       for (const t of row.collectionTitles || []) {
         if (t) allCollectionTitles.add(t);
       }
     }
 
     let validCollectionTitleSet = new Set();
-    if (allCollectionTitles.size > 0) {
+    let collectionTitlesById = new Map();
+    if (allCollectionTitles.size > 0 || allCollectionIds.size > 0) {
       const validCols = await prisma.collection.findMany({
-        where: { shop, title: { in: Array.from(allCollectionTitles) } },
-        select: { title: true },
+        where: { shop, OR: [{ title: { in: Array.from(allCollectionTitles) } }, { id: { in: Array.from(allCollectionIds) } }] },
+        select: { id: true, title: true },
       });
       validCollectionTitleSet = new Set(validCols.map((c) => c.title));
+      collectionTitlesById = new Map(validCols.map(c => [c.id, c.title]));
     }
 
     // ─── Process each row individually with try/catch ─────────────────────
@@ -98,14 +105,16 @@ export const action = async ({ request }) => {
           continue;
         }
 
-        // Validate collections by title
+        // Stable IDs survive renamed collections; titles support older exports.
         let validCollections = row.collectionTitles || [];
-        if (ruleType === "collection" && validCollections.length > 0) {
-          validCollections = validCollections.filter((t) => validCollectionTitleSet.has(t));
+        if (ruleType === "collection" && (validCollections.length > 0 || row.collectionIds?.length > 0)) {
+          validCollections = row.collectionIds?.length
+            ? [...new Set(row.collectionIds.map(id => collectionTitlesById.get(collectionGid(id))).filter(Boolean))]
+            : validCollections.filter((t) => validCollectionTitleSet.has(t));
           if (validCollections.length === 0) {
             skippedRows.push({
               id: externalId,
-              reason: `Collection(s) not found in store: ${row.collectionTitles.join(", ")}`,
+              reason: `Collection(s) not found in store: ${(row.collectionTitles || []).join(", ") || (row.collectionIds || []).join(", ")}`,
             });
             continue;
           }
@@ -183,6 +192,7 @@ export const action = async ({ request }) => {
       errors: skippedRows,
     });
   } catch (err) {
+    if (err instanceof Response) throw err;
     console.error("[import-pins-batch] Fatal error:", err);
     return Response.json(
       { imported: 0, skipped: 0, errors: [{ id: "batch", reason: err.message }] },

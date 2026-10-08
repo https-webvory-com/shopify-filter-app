@@ -1,3 +1,4 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
@@ -5,6 +6,7 @@ import {
   useSubmit,
   useNavigation,
   useActionData,
+  useRevalidator,
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -100,6 +102,7 @@ export default function PinningIndex() {
   const { pinningRules, collections } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
   const navigate = useNavigate();
   const actionData = useActionData();
   const shopify = useAppBridge();
@@ -1892,9 +1895,8 @@ export default function PinningIndex() {
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           onImportComplete={() => {
-            setIsImportModalOpen(false);
-            // Reload page to show newly imported rules
-            window.location.reload();
+            // Refresh the list while keeping the import summary visible
+            revalidator.revalidate();
           }}
         />
         {isExportModalOpen && (
@@ -1912,3 +1914,5 @@ export default function PinningIndex() {
     </s-page>
   );
 }
+
+export const headers = args => boundary.headers(args);

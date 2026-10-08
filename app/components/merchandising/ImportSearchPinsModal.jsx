@@ -24,6 +24,7 @@ function mapCsvRow(row) {
     externalId: row["Id"] || "",
     active: (row["Active"] || "True").toUpperCase().trim() !== "FALSE",
     collectionTitles: tryParse(row["CollectionTitles"], []),
+    collectionIds: tryParse(row["Collections"], []),
     products: tryParse(row["Products"], []),
     ...searchPinScopeFromCsv(row),
   };

@@ -378,3 +378,42 @@ for (const section of ['collections', 'search']) {
     assert.deepEqual(await result.json(), { query: 'Form', tags: ['Formal'] });
   });
 }
+
+
+test('collection pin import uses IDs for renamed collections and never broadens missing IDs to all collections', async () => {
+  const writes = [];
+  const route = await mockedModule('app/routes/api.import-pins-batch.jsx', {
+    '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
+    '../db.server': { __esModule: true, default: {
+      product: { findMany: async () => [{ id: 'gid://shopify/Product/1', title: 'Dress', images: [] }] },
+      collection: { findMany: async ({ where }) => {
+        assert.equal(where.shop, 'fixture.myshopify.com');
+        assert.ok(where.OR[1].id.in.includes('gid://shopify/Collection/10'));
+        return [{ id: 'gid://shopify/Collection/10', title: 'Champagne Bridesmaids Dresses' }];
+      } },
+      pinnedProductRule: { upsert: async args => writes.push(args) },
+    } },
+  });
+  const products = [{ Id: 1 }];
+  const rows = [
+    { externalId: 'renamed', collectionIds: [10], collectionTitles: ['Champagne Bridesmaid Dresses'], products },
+    { externalId: 'legacy', collectionIds: [], collectionTitles: ['Champagne Bridesmaids Dresses'], products },
+    { externalId: 'missing', collectionIds: [999], collectionTitles: ['Champagne Bridesmaids Dresses'], products },
+  ];
+  const response = await route.action({ request: new Request('https://fixture.test/api/import-pins-batch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows, ruleType: 'collection' }) }) });
+  const result = await response.json();
+  assert.equal(result.imported, 2); assert.equal(result.skipped, 1);
+  assert.equal(result.errors[0].id, 'missing');
+  assert.deepEqual(Array.from(writes[0].create.collections), ['Champagne Bridesmaids Dresses']);
+  assert.equal(writes[0].create.applyToAll, false);
+  assert.equal(writes[0].where.shop_name_ruleType.name, 'Champagne Bridesmaid Dresses');
+});
+
+test('pin import preserves Shopify authentication responses rather than reporting them as batch failures', async () => {
+  const rejection = new Response(null, { status: 401, headers: { 'X-Shopify-Retry-Invalid-Session-Request': '1' } });
+  const route = await mockedModule('app/routes/api.import-pins-batch.jsx', {
+    '../shopify.server': { authenticate: { admin: async () => { throw rejection; } } },
+    '../db.server': { __esModule: true, default: {} },
+  });
+  await assert.rejects(route.action({ request: new Request('https://fixture.test/api/import-pins-batch') }), value => value === rejection);
+});
