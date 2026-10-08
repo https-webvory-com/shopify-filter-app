@@ -72,7 +72,8 @@ export const loader = async ({ request }) => {
       url.searchParams.get("sort") ||
       url.searchParams.get("usf_sort") ||
       "best-selling";
-    const sortBy = rawSort.toLowerCase().replace(/_/g, "-");
+    const normalizedSort = rawSort.toLowerCase().replace(/_/g, "-");
+    const sortBy = normalizedSort === "bestselling" ? "best-selling" : normalizedSort;
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
     const limit = Math.min(250, Math.max(1, parseInt(url.searchParams.get("limit") || "25") || 25));
     const country = url.searchParams.get("country");
@@ -537,10 +538,10 @@ export const loader = async ({ request }) => {
       : !isSearch && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all"
         ? { collections: { some: { collection: { shop, title: resolvedCollectionTitle } } } }
         : {};
-    // Apply priority before allocating pin slots or merchandising tiers across pages.
-    const hasRankedSort = !["relevance", "r"].includes(sortBy);
-    const sortOverPinning = hasRankedSort && globalSettings?.prioritizeSortOverPinning === true;
-    const sortOverMerchandising = hasRankedSort && globalSettings?.prioritizeSortOverMerchandising === true;
+    // Bestselling retains pins and merchandising; other selected sorts may override them.
+    const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
+    const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
+    const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
@@ -824,7 +825,7 @@ export const loader = async ({ request }) => {
       allMatchedProducts,
       activeRule,
       sortBy,
-      activePinningRule,
+      userHasFilters ? null : activePinningRule,
       mergedValues,
       globalSettings,
     );

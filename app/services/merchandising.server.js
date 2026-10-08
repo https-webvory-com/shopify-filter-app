@@ -681,9 +681,9 @@ export function applyMerchandisingRules(
   }
 
   // Priority toggles (SoBooster defaults: false -> rules and pinning have priority)
-  const hasRankedSort = !["relevance", "r"].includes(sortBy);
-  const prioritizeSortOverPinning = hasRankedSort && globalSettings?.prioritizeSortOverPinning === true;
-  const prioritizeSortOverMerchandising = hasRankedSort && globalSettings?.prioritizeSortOverMerchandising === true;
+  const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
+  const prioritizeSortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
+  const prioritizeSortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
 
   // Pre-compute O(1) pin map for fast sorting
   const pinMap = new Map();
@@ -693,7 +693,7 @@ export function applyMerchandisingRules(
   filteredProducts.sort((a, b) => {
     // When a customer explicitly selects a manual sort order (e.g. Price: Low to High, Price: High to Low),
     // customer sort takes precedence over default rules so price sorting is 100% accurate.
-    const isCustomSortSelected = sortBy && sortBy !== "best-selling" && sortBy !== "manual";
+    const isCustomSortSelected = hasCustomSort;
     if (isCustomSortSelected) {
       const customComparison = defaultSortComparison(a, b, sortBy);
       if (customComparison !== 0) return customComparison;

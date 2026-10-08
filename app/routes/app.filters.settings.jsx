@@ -410,13 +410,13 @@ export default function FilterSettings() {
         <SettingsSection title="Sorting">
           <SettingToggle disabled={isSaving}
             label="Prioritize sort order over merchandising rules"
-            description="Apply the selected sort order before merchandising boosts when choosing products for each page."
+            description="Let Price, Title, Date and Trending sorting override merchandising boosts. Bestselling keeps merchandising priority."
             value={sortOverMerchandising}
             onChange={(val) => handleSettingChange("prioritizeSortOverMerchandising", val)}
           />
           <SettingToggle disabled={isSaving}
             label="Prioritize sort order over pinning"
-            description="Keep pinned products in the selected sort order instead of reserving the first positions for them."
+            description="Let Price, Title, Date and Trending sorting override pinned positions. Bestselling keeps pins in their configured order."
             value={sortOverPinning}
             onChange={(val) => handleSettingChange("prioritizeSortOverPinning", val)}
           />

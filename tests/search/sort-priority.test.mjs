@@ -21,7 +21,7 @@ async function collectionRoute(settings) {
   const docs = Array.from({ length: 180 }, (_, i) => ({
     id: String(i + 1), title: "Dress " + (i + 1), handle: "dress-" + (i + 1), status: "ACTIVE",
     tags: i < 10 ? ["TopFormal"] : [], collections: ["gid://shopify/Collection/1"],
-    bestSellingScore: i + 1, trendingScore: 0, createdAt: 1000,
+    bestSellingScore: i + 1, trendingScore: 0, createdAt: i + 1,
     images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], priceMin: i + 1, priceMax: i + 1,
     variantPrices: [{ id: String(i + 1) + "01", option1: "Black", available: true, price: i + 1, imageUrl: "black.jpg" }],
   }));
@@ -63,7 +63,7 @@ async function collectionRoute(settings) {
 }
 
 for (const overPins of [false,true]) for (const overMerch of [false,true]) {
-  test("collection priority pin=" + overPins + " merchandising=" + overMerch + " applies before pagination", async () => {
+  test("collection priority pin=" + overPins + " merchandising=" + overMerch + " preserves bestselling pins across pagination", async () => {
     const load = await collectionRoute({ prioritizeSortOverPinning: overPins, prioritizeSortOverMerchandising: overMerch });
     const output = [];
     for(let page=1;page<=8;page++) {
@@ -73,8 +73,8 @@ for (const overPins of [false,true]) for (const overMerch of [false,true]) {
       output.push(...Array.from(result.products,p=>p.id.split("/").pop()));
     }
     const base = Array.from({length:180},(_,i)=>String(180-i));
-    const tiers = overMerch ? base : [...base.filter(id=>Number(id)<=10), ...base.filter(id=>Number(id)>10)];
-    const expected = overPins ? tiers : ["1", "175", ...tiers.filter(id=>!["1","175"].includes(id))];
+    const tiers = [...base.filter(id=>Number(id)<=10), ...base.filter(id=>Number(id)>10)];
+    const expected = ["1", "175", ...tiers.filter(id=>!["1","175"].includes(id))];
     assert.deepEqual(output,expected); assert.equal(new Set(output).size,180);
     const empty = await load("page=9&sortBy=best-selling"); assert.equal(empty.products.length,0);
   });
@@ -105,5 +105,29 @@ test("priority settings save true and false independently without resetting othe
     const form=new FormData();form.set(key,value);
     const result=await route.action({request:new Request("https://fixture.test/app/filters/settings",{method:"POST",body:form})});
     assert.equal(result.success,true);assert.deepEqual(JSON.parse(JSON.stringify(saved)),{[key]:value==="true"});
+  }
+});
+
+
+test("bestselling alias and manual default retain pins with both priorities ON", async()=>{
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true});
+  for(const sort of ["bestselling","manual"]){
+    const first=await load("page=1&sortBy="+sort);
+    assert.deepEqual(Array.from(first.products.slice(0,2),p=>p.id.split("/").pop()),["1","175"]);
+    const next=await load("page=2&sortBy="+sort);
+    assert.ok(next.products.every(p=>!["1","175"].includes(p.id.split("/").pop())));
+  }
+});
+
+test("price and newest override pins and boosts across all pages with priorities ON", async()=>{
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true});
+  for(const sort of ["price-ascending","created-descending"]){
+    const ids=[];
+    for(let page=1;page<=8;page++){
+      const result=await load("page="+page+"&sortBy="+sort);
+      assert.equal(result.totalCount,180);assert.equal(result.debug.meiliError,null);
+      ids.push(...Array.from(result.products,p=>Number(p.id.split("/").pop())));
+    }
+    assert.deepEqual(ids,Array.from({length:180},(_,i)=>sort==="price-ascending"?i+1:180-i));
   }
 });
