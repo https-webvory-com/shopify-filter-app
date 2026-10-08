@@ -8,6 +8,7 @@
     productLimit: {{ block.settings.product_limit | default: 6 | json }}
   };
 </script>
+<script src="{{ 'marketPricing.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'instantSearch.js' | asset_url }}" defer="defer"></script>
 {{ 'instantSearch.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'quickViewAdapters.js' | asset_url }}" defer="defer"></script>

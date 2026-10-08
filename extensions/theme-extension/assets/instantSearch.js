@@ -1008,14 +1008,18 @@ document.addEventListener("DOMContentLoaded", function () {
     list.innerHTML = html;
   }
 
-  function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
+  let marketRenderVersion = 0;
+  async function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
     if (data && data.globalSettings) {
       window.cfpGlobalSettings = data.globalSettings;
       window.cfpQuickViewInstance?.configure(data.globalSettings);
     }
 
     const grid = document.getElementById("cfp-search-products");
-    const products = data.products || [];
+    const version = ++marketRenderVersion;
+    const products = window.cfpMarketPricing ? await window.cfpMarketPricing.apply(data.products || []) : (data.products || []).map(p=>({...p,_marketPricingUnavailable:true}));
+    if (version !== marketRenderVersion) return;
+    contextualPricingApplied = true;
 
     if (products.length === 0) {
       const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
@@ -1219,10 +1223,7 @@ document.addEventListener("DOMContentLoaded", function () {
          imageUrl = getResizedImageUrl(imageUrl, '600x');
       }
 
-      let rate = 1;
-      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
-        rate = parseFloat(window.Shopify.currency.rate) || 1;
-      }
+      const rate = 1; // Shopify storefront prices already include the visitor's market.
       let symbol = '$';
       if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
          try {
@@ -1239,10 +1240,6 @@ document.addEventListener("DOMContentLoaded", function () {
       let price = "";
       if (p.priceMin !== undefined) {
          let priceVal = parseFloat(p.priceMin) * rate;
-         const currencyActive = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) ? window.Shopify.currency.active : '';
-         if (currencyActive === 'INR' || symbol === '₹') {
-            priceVal = Math.ceil((priceVal * 1.01664) / 100) * 100;
-         }
          price = `${symbol}${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       }
       let productUrl = `/products/${p.handle}`;
@@ -1285,7 +1282,7 @@ document.addEventListener("DOMContentLoaded", function () {
             <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
             ${swatchesHtml}
             ${(data.globalSettings && data.globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
-            <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${price}</div>
+            <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${p._marketPricingUnavailable ? "See product price" : price}</div>
             `}
           </a>
         </div>

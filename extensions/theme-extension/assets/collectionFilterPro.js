@@ -478,7 +478,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     productContainer.style.setProperty('display', 'grid', 'important');
   }
 
-  function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
+  let marketRenderVersion = 0;
+  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
+    const version = ++marketRenderVersion;
+    products = window.cfpMarketPricing ? await window.cfpMarketPricing.apply(products) : products.map(p=>({...p,_marketPricingUnavailable:true}));
+    if (version !== marketRenderVersion) return;
+    contextualPricingApplied = true;
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     const grid = getProductContainer();
     grid.style.display = 'grid';
@@ -690,10 +695,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (typeof matchedVariantId !== 'undefined' && matchedVariantId) {
            productUrl += `?variant=${matchedVariantId}`;
         }
-      let rate = 1;
-      if (!contextualPricingApplied && window.Shopify && window.Shopify.currency && window.Shopify.currency.rate) {
-        rate = parseFloat(window.Shopify.currency.rate) || 1;
-      }
+      const rate = 1; // Shopify storefront prices already include the visitor's market.
       
       let symbol = '$';
       if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
@@ -723,11 +725,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       let priceVal = parseFloat(basePrice) * rate;
-      const currencyActive = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) ? window.Shopify.currency.active : '';
-      if (currencyActive === 'INR' || symbol === '₹') {
-         // Apply Shopify Market Price Adjustment factor (+1.66% duties/shipping) & Math.ceil to nearest 100
-         priceVal = Math.ceil((priceVal * 1.01664) / 100) * 100;
-      }
       const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       
       const hasSaleTag = Array.isArray(product.tags) && product.tags.some(t => typeof t === 'string' && t.toLowerCase().trim().includes('sale'));
@@ -1024,8 +1021,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               ${swatchesHtml}
               ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
               <div class="cfp-product-card__price-row">
-                <span class="cfp-product-card__price">${symbol}${price}</span>
-                ${onSale ? `<span class="cfp-product-card__compare-price">${symbol}${comparePrice}</span>` : ''}
+                <span class="cfp-product-card__price">${product._marketPricingUnavailable ? "See product price" : `${symbol}${price}`}</span>
+                ${onSale && !product._marketPricingUnavailable ? `<span class="cfp-product-card__compare-price">${symbol}${comparePrice}</span>` : ''}
               </div>
               `}
             </div>
