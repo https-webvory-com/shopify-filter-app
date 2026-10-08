@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useFetcher, useLoaderData, useRevalidator, useNavigate } from "react-router";
+import { useFetcher, useLoaderData, useRevalidator, useNavigate, useRouteError, isRouteErrorResponse } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -7,6 +7,8 @@ import prisma from "../db.server";
 import { syncProducts } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import SyncErrorBanner from "../components/ui/SyncErrorBanner";
+import { syncErrorMessage, syncIssueForJob } from "../utils/syncError.js";
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -22,15 +24,15 @@ export const loader = async ({ request }) => {
     },
   });
 
-  // Crash recovery: if the job hasn't been updated in 1 minute, it's stuck -> mark FAILED (resumable)
+  // A missing heartbeat for five minutes makes a stopped job resumable.
   if (activeSyncJob) {
     const now = new Date();
     const lastUpdate = new Date(activeSyncJob.updatedAt);
     const diffMinutes = (now - lastUpdate) / 1000 / 60;
-    if (diffMinutes > 1) {
+    if (diffMinutes > 5) {
       await prisma.syncJob.update({
         where: { id: activeSyncJob.id },
-        data: { status: "FAILED" }
+        data: { status: "FAILED", lastError: "Sync stopped sending progress updates. Resume it from the saved position." }
       });
       activeSyncJob = null;
     }
@@ -69,6 +71,8 @@ export const loader = async ({ request }) => {
     syncedProductsCount,
     isSyncingBackground: !!activeSyncJob,
     lastSyncedAt: lastCompletedJob?.updatedAt ?? null,
+    syncIssue: syncIssueForJob(activeSyncJob || resumableJob),
+    latestSyncStatus: activeSyncJob ? "IN_PROGRESS" : resumableJob ? "FAILED" : lastCompletedJob ? "COMPLETED" : "IDLE",
     // Live progress during sync
     syncProgress: activeSyncJob ? {
       processed: activeSyncJob.productsProcessed ?? 0,
@@ -95,7 +99,7 @@ export const action = async ({ request }) => {
       return { success: true, message: result.message, type: "sync" };
     } catch (e) {
       console.error("Sync error:", e);
-      return { error: e.message, type: "sync" };
+      return { error: syncErrorMessage(e), type: "sync" };
     }
   }
 
@@ -118,7 +122,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob } = useLoaderData();
+  const { syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
@@ -192,11 +196,11 @@ export default function Index() {
   // Show toast when background sync COMPLETES (isSyncingBackground goes true → false)
   const wasSyncingRef = useRef(false);
   useEffect(() => {
-    if (wasSyncingRef.current === true && isSyncingBackground === false) {
+    if (wasSyncingRef.current === true && isSyncingBackground === false && latestSyncStatus === "COMPLETED") {
       shopify.toast.show("✅ Sync complete! All products are ready for filtering.", { duration: 5000 });
     }
     wasSyncingRef.current = isSyncingBackground;
-  }, [isSyncingBackground, shopify]);
+  }, [isSyncingBackground, latestSyncStatus, shopify]);
 
   // Poll for sync completion if running in background
   useEffect(() => {
@@ -517,14 +521,7 @@ export default function Index() {
               Database Synchronization
             </h2>
 
-            {/* Resumable job banner */}
-            {resumableJob && !isSyncing && (!resumableJob.total || currentCount < resumableJob.total) && (
-              <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px", fontSize: "13px", color: "#854d0e", display: "flex", alignItems: "center", gap: "8px" }}>
-                ⚠️ Previous sync stopped at <strong>{resumableJob.processed.toLocaleString()}</strong>
-                {resumableJob.total ? <> / {resumableJob.total.toLocaleString()}</> : ""} products.
-                Click <strong>Resume Sync</strong> to continue from where it stopped.
-              </div>
-            )}
+            <SyncErrorBanner issue={syncIssue || (syncFetcher.data?.error && syncFetcher.data?.type === "sync" ? { message: syncFetcher.data.error, retrying: false, processed: 0 } : null)} />
 
             {/* Synced vs Total */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
@@ -555,7 +552,7 @@ export default function Index() {
               </span>
 
               {/* Fully synced */}
-              {!isSyncing && shopifyActiveCount && currentCount >= shopifyActiveCount && (
+              {!isSyncing && !syncIssue && lastSyncedAt && shopifyActiveCount && currentCount >= shopifyActiveCount && (
                 <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
                   ✅ Fully Synced
                 </span>
@@ -589,7 +586,7 @@ export default function Index() {
 
             {lastSyncedAt && !isSyncing && (
               <p style={{ color: "#94a3b8", margin: 0, fontSize: "12px" }}>
-                Last synced: {new Date(lastSyncedAt).toLocaleString()}
+                Last completed sync: {new Date(lastSyncedAt).toLocaleString()}
               </p>
             )}
           </div>
@@ -1048,3 +1045,18 @@ export default function Index() {
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  if (isRouteErrorResponse(error) && error.status < 500) return boundary.error(error);
+  return (
+    <s-page heading="Sync status unavailable">
+      <div role="alert" style={{ padding: "20px", background: "#fef2f2", borderRadius: "8px", color: "#991b1b" }}>
+        <h2>We could not load the sync status</h2>
+        <p>The app or its connection is unavailable. This does not mean the sync completed.</p>
+        <p>Refresh to check whether the background sync is running or needs attention.</p>
+        <button type="button" onClick={() => window.location.reload()}>Retry</button>
+      </div>
+    </s-page>
+  );
+}

@@ -286,6 +286,8 @@ model SyncJob {
   cursor            String?
   productsProcessed Int      @default(0)
   totalProducts     Int?
+  lastError         String?
+  retryCount        Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

@@ -3,6 +3,7 @@ import { geminiEmbedder } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
+import { syncErrorMessage } from "../utils/syncError.js";
 
 /**
  * Format products and push to Meilisearch index.
@@ -93,7 +94,7 @@ export async function formatAndPushToMeili(products) {
 /**
  * Extract dynamic keys from Prisma and update Meilisearch index settings.
  */
-export async function updateMeiliSettings(shop) {
+export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
   try {
     const index = meiliClient.index("products");
     const dynamicKeys = new Set();
@@ -179,6 +180,7 @@ export async function updateMeiliSettings(shop) {
       `CFP: Failed to update Meilisearch settings for ${shop}`,
       error,
     );
+    if (throwOnError) throw error;
   }
 }
 
@@ -240,28 +242,40 @@ async function autoSeedOptionFilters(shop) {
  * @param {string} shop - The shop domain
  * @param {object} admin - The authenticated Shopify Admin API client
  */
-export async function syncProducts(shop, admin, session = null, forceFresh = false) {
+const activeProductSyncs = new Map();
+const startingProductSyncs = new Map();
+
+export function syncProducts(shop, admin, session = null, forceFresh = false) {
+  if (startingProductSyncs.has(shop)) return startingProductSyncs.get(shop);
+  const starting = initializeProductSync(shop, admin, session, forceFresh)
+    .finally(() => startingProductSyncs.delete(shop));
+  startingProductSyncs.set(shop, starting);
+  return starting;
+}
+
+async function initializeProductSync(shop, admin, session, forceFresh) {
+  if (activeProductSyncs.has(shop)) {
+    return { jobId: activeProductSyncs.get(shop), message: "Product sync is already running" };
+  }
   console.log(`CFP: Initializing background product sync for ${shop} (forceFresh=${forceFresh})...`);
 
   // ── Resume or Fresh Start ──────────────────────────────────────────
   let job = null;
-  if (!forceFresh) {
-    job = await prisma.syncJob.findFirst({
-      where: { shop, status: "FAILED" },
-      orderBy: { createdAt: "desc" },
-    });
-  }
+  const latestJob = await prisma.syncJob.findFirst({
+    where: { shop, totalProducts: { not: null }, OR: [{ cursor: { not: null } }, { productsProcessed: 0 }] },
+    orderBy: { createdAt: "desc" },
+  });
+  if (latestJob?.status === "IN_PROGRESS" || (!forceFresh && latestJob?.status === "FAILED")) job = latestJob;
 
-  if (job && job.cursor) {
+  if (job) {
     // Resume from where it stopped
     console.log(`CFP: Resuming failed sync for ${shop} from cursor (${job.productsProcessed} already done)`);
     job = await prisma.syncJob.update({
       where: { id: job.id },
-      data: { status: "IN_PROGRESS", updatedAt: new Date() },
+      data: { status: "IN_PROGRESS", lastError: null, retryCount: 0, updatedAt: new Date() },
     });
   } else {
-    // Fresh start — delete all old jobs
-    await prisma.syncJob.deleteMany({ where: { shop } });
+    // Keep earlier jobs so sync history remains available.
 
     // Fetch total active products count for progress display
     let totalProducts = null;
@@ -281,16 +295,20 @@ export async function syncProducts(shop, admin, session = null, forceFresh = fal
       data: {
         shop,
         status: "IN_PROGRESS",
-        totalProducts,
+        totalProducts: totalProducts ?? 0,
       },
     });
     console.log(`CFP: Starting fresh sync for ${shop} — ${totalProducts ?? "?"} total active products`);
   }
 
-  // Start background processing without awaiting it
-  processSyncChunk(job.id, shop, admin).catch((err) => {
-    console.error(`CFP: Background sync failed for ${shop}`, err);
-  });
+  // Persist the work in Redis before returning; a restarted worker resumes it.
+  try {
+    const { enqueueProductSync } = await import("./productSyncQueue.server.js");
+    await enqueueProductSync(job.id, shop);
+  } catch (error) {
+    await prisma.syncJob.update({ where: { id: job.id }, data: { status: "FAILED", lastError: syncErrorMessage(error) } });
+    throw error;
+  }
 
   return {
     jobId: job.id,
@@ -298,6 +316,35 @@ export async function syncProducts(shop, admin, session = null, forceFresh = fal
       ? `Resuming sync from product ${job.productsProcessed}...`
       : "Full sync started in background",
   };
+}
+
+export async function runProductSync(jobId, shop, admin, { markFailure = true } = {}) {
+  activeProductSyncs.set(shop, jobId);
+  // Batch persistence can take several minutes on products with many variants.
+  // Keep the job alive independently of when the cursor is committed.
+  let heartbeatPending = false;
+  const heartbeat = setInterval(async () => {
+    if (heartbeatPending) return;
+    heartbeatPending = true;
+    try {
+      await prisma.syncJob.updateMany({
+        where: { id: jobId, status: "IN_PROGRESS" },
+        data: { updatedAt: new Date() },
+      });
+    } catch (error) {
+      console.error("CFP: Product sync heartbeat failed:", error.message);
+    } finally { heartbeatPending = false; }
+  }, 15000);
+  heartbeat.unref?.();
+  try {
+    await processSyncChunk(jobId, shop, admin);
+  } catch (error) {
+    if (markFailure) await prisma.syncJob.update({ where: { id: jobId }, data: { status: "FAILED", lastError: syncErrorMessage(error) } });
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
+    if (activeProductSyncs.get(shop) === jobId) activeProductSyncs.delete(shop);
+  }
 }
 
 async function processSyncChunk(jobId, shop, admin) {
@@ -345,7 +392,7 @@ async function processSyncChunk(jobId, shop, admin) {
 
   const query = `#graphql
     query getProducts($cursor: String) {
-      products(first: 50, after: $cursor) {
+      products(first: 10, after: $cursor) {
         pageInfo {
           hasNextPage
           endCursor
@@ -469,7 +516,11 @@ async function processSyncChunk(jobId, shop, admin) {
       }
 
       const productsData = responseJson.data?.products;
-      if (!productsData || productsData.nodes.length === 0) break;
+      if (!productsData) throw new Error("Shopify returned no product connection");
+      if (productsData.nodes.length === 0) {
+        hasNextPage = false;
+        break;
+      }
       // Filter: only ACTIVE status AND published to Online Store (publishedAt is not null)
       const products = productsData.nodes.filter(isStorefrontProduct);
 
@@ -599,11 +650,14 @@ async function processSyncChunk(jobId, shop, admin) {
         (async () => {
           try {
             const task = await meiliClient.index("products").addDocuments(meiliDocs);
+            const indexed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
+            if (indexed.status !== "succeeded") throw new Error("Product indexing failed: " + (indexed.error?.code || indexed.status));
             console.log(
               `CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`,
             );
           } catch (e) {
-            console.error("CFP: Meilisearch push failed (check VPS disk space):", e.message || e);
+            console.error("CFP: Meilisearch push failed:", e.message || e);
+            throw e;
           }
         })(),
       ]);
@@ -614,7 +668,8 @@ async function processSyncChunk(jobId, shop, admin) {
         data: {
           cursor: cursor,
           productsProcessed: { increment: productsData.nodes.length },
-          status: hasNextPage ? "IN_PROGRESS" : "COMPLETED",
+          status: "IN_PROGRESS",
+          lastError: null,
         },
       });
 
@@ -626,35 +681,29 @@ async function processSyncChunk(jobId, shop, admin) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     } catch (err) {
       console.error(`CFP: Error processing chunk for job ${jobId}`, err);
-      await prisma.syncJob.update({
-        where: { id: jobId },
-        data: { status: "FAILED" },
-      });
-      break;
+      throw err;
     }
   }
 
   if (!hasNextPage) {
     try {
       await autoSeedOptionFilters(shop);
-      await updateMeiliSettings(shop);
+      await updateMeiliSettings(shop, { throwOnError: true });
       
       // Calculate and update Trending/BestSelling scores
       const { syncHistoricalOrders } = await import("./orders.server.js");
-      await syncHistoricalOrders(shop);
+      const scoresSynced = await syncHistoricalOrders(shop);
+      if (scoresSynced === false) throw new Error("Sales data sync failed; retrying finalization");
 
       await invalidateShop(shop);
       await prisma.syncJob.update({
         where: { id: jobId },
-        data: { status: "COMPLETED" },
+        data: { status: "COMPLETED", lastError: null },
       });
       console.log(`CFP: Background sync complete for ${shop}. Job ID: ${jobId}`);
     } catch (finalErr) {
       console.error(`CFP: Final sync steps failed for ${shop}`, finalErr);
-      await prisma.syncJob.update({
-        where: { id: jobId },
-        data: { status: "FAILED" },
-      });
+      throw finalErr;
     }
   }
 }

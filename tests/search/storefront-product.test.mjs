@@ -1,3 +1,4 @@
+import { syncErrorMessage } from "../../app/utils/syncError.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -28,8 +29,9 @@ async function loadSync({ product, deleteError } = {}) {
     addDocuments: async docs => { calls.push(["addIndex", docs]); return { taskUid: 1 }; },
   };
   const mocks = {
+    "../utils/syncError.js": { syncErrorMessage },
     "../db.server": { __esModule: true, default: prisma },
-    "./meiliClient.server": { __esModule: true, default: { index: () => index } },
+    "./meiliClient.server": { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: "succeeded" }) } } },
     "./shopCache.server": { invalidateShop: async () => {} },
     "../utils/storefrontProduct.js": { isStorefrontProduct },
   };
@@ -60,7 +62,7 @@ test("a full sync visits draft products and removes stale unpublished entries", 
       pageInfo: { hasNextPage: true, endCursor: "next" },
     } } }) };
   } };
-  await sync.processSyncChunk("job", "fixture.myshopify.com", admin);
+  await assert.rejects(sync.processSyncChunk("job", "fixture.myshopify.com", admin), /End fixture/);
   assert.deepEqual(calls.filter(c => c[0] === "deleteIndex").map(c => c[1]), ["1", "2", "3"]);
   assert.equal(calls.find(c => c[0] === "addIndex")[1].length, 0);
   assert.equal(calls.find(c => c[0] === "job")[1].productsProcessed.increment, 3);

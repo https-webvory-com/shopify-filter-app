@@ -21,10 +21,12 @@ redis.on('error', (err) => {
 });
 
 import { initWebhookWorker } from "../workers/webhookWorker.server.js";
+import { initProductSyncWorker } from "../workers/productSyncWorker.server.js";
 
 redis.on('connect', () => {
   console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
   initWebhookWorker();
+  initProductSyncWorker();
   // Auto-clear all stale fullApiResponse, merch, and pinning cache keys on server process startup/restart
   Promise.all([
     redis.keys('*fullApiResponse*'),

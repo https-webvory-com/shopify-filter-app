@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
+import { availablePins } from "../../app/utils/availablePins.server.js";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../../app/utils/pinProductSearch.server.js";
 import {
@@ -58,6 +59,7 @@ async function mockedModule(file, mocks) {
     console,
     require(name) {
       if (name in mocks) return mocks[name];
+      if (name === "../utils/availablePins.server.js") return { availablePins };
       if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter, pinProductTagSuggestions };
       if (name.startsWith("../components/")) return {};
       if (
@@ -108,6 +110,7 @@ for (const section of ["collections", "search"]) {
         const where = JSON.parse(JSON.stringify(calls[1].where));
         assert.equal(where.shop, shop);
         assert.equal(where.status, "active");
+        assert.equal(where.variants.some.available, true);
         assert.deepEqual(where.id, { notIn: ["product-1"] });
         assert.equal(calls[1].skip, 9);
         assert.equal(calls[1].take, 9);

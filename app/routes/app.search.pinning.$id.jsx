@@ -10,6 +10,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { availablePins } from "../utils/availablePins.server.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinProductSearch.server";
 import PinSearchField from "../components/merchandising/PinSearchField";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -33,7 +34,7 @@ export const action = async ({ request, params }) => {
     const collections = collectionsStr ? JSON.parse(collectionsStr) : [];
     const applyToSearchType = formData.get("applyToSearchType") || "both";
 
-    const whereClause = { shop, status: "active" };
+    const whereClause = { shop, status: "active", variants: { some: { available: true } } };
 
     Object.assign(whereClause, await pinProductSearchFilter(
       prisma, shop, query, formData.get("searchField"),
@@ -139,6 +140,8 @@ export const loader = async ({ request, params }) => {
       where: { id: ruleId, shop },
     });
   }
+
+  if (rule) rule = { ...rule, products: await availablePins(prisma, shop, rule.products) };
 
   return { rule, defaultParams };
 };

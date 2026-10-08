@@ -201,7 +201,7 @@ export async function syncHistoricalOrders(shop) {
       where: { id: jobId },
       data: {
         productsProcessed: processedOrders,
-        totalProducts: processedOrders, // use orders count as total for display
+        totalProducts: null, // Preserve the orders-job discriminator.
         status: "IN_PROGRESS",
       }
     });
@@ -277,7 +277,7 @@ export async function syncHistoricalOrders(shop) {
       data: {
         status: "COMPLETED",
         productsProcessed: processedOrders,
-        totalProducts: processedOrders,
+        totalProducts: null,
       }
     });
 
