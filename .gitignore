@@ -32,3 +32,6 @@ meilisearch.exe
 meili_data/
    
 data.ms/
+
+# Local audit snapshots and browser test artifacts
+/scratch/

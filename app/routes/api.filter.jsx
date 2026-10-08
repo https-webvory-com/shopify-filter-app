@@ -537,7 +537,11 @@ export const loader = async ({ request }) => {
       : !isSearch && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all"
         ? { collections: { some: { collection: { shop, title: resolvedCollectionTitle } } } }
         : {};
-    let activePinnedList = (!userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
+    // Apply priority before allocating pin slots or merchandising tiers across pages.
+    const hasRankedSort = !["relevance", "r"].includes(sortBy);
+    const sortOverPinning = hasRankedSort && globalSettings?.prioritizeSortOverPinning === true;
+    const sortOverMerchandising = hasRankedSort && globalSettings?.prioritizeSortOverMerchandising === true;
+    let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
         where: { shop, ...pinCollectionScope, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
@@ -559,7 +563,7 @@ export const loader = async ({ request }) => {
     // Now: Only 24 docs are transferred per request
     //
     // ── 8. Build Meilisearch queries (Native 2-Tier Merchandising Query Architecture) ──
-    const ruleMeiliFilters = !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
+    const ruleMeiliFilters = !sortOverMerchandising && !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
     
     // We activate Tier 1 strict filtering if we have Merchandising Rules OR Query Parser Filters
     const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || queryParserMeiliFilters.length > 0;

@@ -1,0 +1,109 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import vm from "node:vm";
+import { transform } from "esbuild";
+import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
+
+async function loadModule(file, mocks) {
+  const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
+  const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+    if (name in mocks) return mocks[name];
+    if (name === "../db.server.js") return { __esModule: true, default: {} };
+    if (["react", "react-router", "@shopify/app-bridge-react", "@shopify/shopify-app-react-router/server"].includes(name)) return {};
+    throw Error("Unexpected import " + name);
+  } };
+  vm.runInNewContext((await transform(source, { loader: file.endsWith("jsx") ? "jsx" : "js", format: "cjs" })).code, context);
+  return context.module.exports;
+}
+
+async function collectionRoute(settings) {
+  const docs = Array.from({ length: 180 }, (_, i) => ({
+    id: String(i + 1), title: "Dress " + (i + 1), handle: "dress-" + (i + 1), status: "ACTIVE",
+    tags: i < 10 ? ["TopFormal"] : [], collections: ["gid://shopify/Collection/1"],
+    bestSellingScore: i + 1, trendingScore: 0, createdAt: 1000,
+    images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], priceMin: i + 1, priceMax: i + 1,
+    variantPrices: [{ id: String(i + 1) + "01", option1: "Black", available: true, price: i + 1, imageUrl: "black.jpg" }],
+  }));
+  const byId = new Map(docs.map(p => [p.id, p]));
+  const matching = filter => {
+    const text = JSON.stringify(filter);
+    return docs.filter(p => !text.includes("TopFormal") || (text.includes("NOT (") ? !p.tags.length : p.tags.length));
+  };
+  const select = options => {
+    const products = matching(options.filter).map(p => ({ ...p }));
+    const sort = options.sort?.[0];
+    products.sort((a,b) => sort === "priceMin:asc" ? a.priceMin-b.priceMin : b.bestSellingScore-a.bestSellingScore);
+    return { hits: products.slice(options.offset || 0, (options.offset || 0) + (options.limit ?? 25)), totalHits: products.length, estimatedTotalHits: products.length, facetDistribution: {} };
+  };
+  const index = { search: async (_q, options) => select(options), getDocument: async id => ({ ...byId.get(id) }) };
+  const meili = { index: () => index, multiSearch: async ({ queries }) => ({ results: queries.map(select) }) };
+  const service = await loadModule("app/services/merchandising.server.js", {});
+  const pins = { products: ["1", "175"].map(id => ({ id: "gid://shopify/Product/" + id })) };
+  const rule = { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
+  const cache = new Map();
+  const route = await loadModule("app/routes/api.filter.jsx", {
+    "react-router": { data: value => value },
+    "../db.server": { __esModule: true, default: { product: { findMany: async () => pins.products } } },
+    "../services/merchandising.server": { ...service, getActiveRuleForCollection: async () => rule, getActivePinningRuleForCollection: async () => pins },
+    "../services/filterSettings.server": {},
+    "../services/meiliClient.server": { __esModule: true, default: meili },
+    "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
+    "../services/shopCache.server": { getCached: async (key, fetchValue) => {
+      if (key.startsWith("globalSettings:")) return settings;
+      if (key.startsWith("mergedValues:")) return [];
+      if (key.startsWith("filterGroup:")) return { resolvedCollectionId: "gid://shopify/Collection/1", resolvedCollectionTitle: "Dresses", activeGroupFilters: [] };
+      if (!cache.has(key)) cache.set(key, await fetchValue());
+      return cache.get(key);
+    } },
+    "../shopify.server": {}, "../services/rateLimiter.server": { rateLimit: async () => true },
+    "../utils/collectionPage.js": { fetchCollectionPage },
+  });
+  return page => route.loader({ request: new Request("https://fixture.test/api/filter?shop=fixture.myshopify.com&collectionId=1&limit=25&" + page) });
+}
+
+for (const overPins of [false,true]) for (const overMerch of [false,true]) {
+  test("collection priority pin=" + overPins + " merchandising=" + overMerch + " applies before pagination", async () => {
+    const load = await collectionRoute({ prioritizeSortOverPinning: overPins, prioritizeSortOverMerchandising: overMerch });
+    const output = [];
+    for(let page=1;page<=8;page++) {
+      const result = await load("page=" + page + "&sortBy=best-selling");
+      assert.equal(result.totalCount, 180); assert.equal(result.debug.meiliError, null);
+      assert.ok(result.products.every(p => p.title && p.handle && p.images.length && p.variants.length));
+      output.push(...Array.from(result.products,p=>p.id.split("/").pop()));
+    }
+    const base = Array.from({length:180},(_,i)=>String(180-i));
+    const tiers = overMerch ? base : [...base.filter(id=>Number(id)<=10), ...base.filter(id=>Number(id)>10)];
+    const expected = overPins ? tiers : ["1", "175", ...tiers.filter(id=>!["1","175"].includes(id))];
+    assert.deepEqual(output,expected); assert.equal(new Set(output).size,180);
+    const empty = await load("page=9&sortBy=best-selling"); assert.equal(empty.products.length,0);
+  });
+}
+
+test("priority ON respects price sorting and filtered collection membership", async()=>{
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true});
+  const price=await load("page=1&sortBy=price-ascending");
+  assert.deepEqual(Array.from(price.products,p=>Number(p.id.split("/").pop())),Array.from({length:25},(_,i)=>i+1));
+  const filtered=await load("page=1&tag[]=TopFormal&sortBy=best-selling");
+  assert.equal(filtered.totalCount,10);
+  assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[10,9,8,7,6,5,4,3,2,1]);
+});
+
+test("bestselling score precedes existing position and ties preserve existing order", async()=>{
+  const {sortProductsByDefault}=await loadModule("app/services/merchandising.server.js",{});
+  const products=[{id:"low",bestSellingScore:1,_originalIndex:0},{id:"high",bestSellingScore:10,_originalIndex:1},{id:"tie",bestSellingScore:10,_originalIndex:2}];
+  assert.deepEqual(Array.from(sortProductsByDefault(products,"best-selling"),p=>p.id),["high","tie","low"]);
+});
+
+test("priority settings save true and false independently without resetting other settings",async()=>{
+  let saved;
+  const route=await loadModule("app/routes/app.filters.settings.jsx",{
+    "../shopify.server":{authenticate:{admin:async()=>({session:{shop:"fixture.myshopify.com"}})}},
+    "../services/filterSettings.server":{updateFilterGlobalSettings:async(shop,payload)=>{saved=payload;}},
+  });
+  for(const key of ["prioritizeSortOverPinning","prioritizeSortOverMerchandising"])for(const value of ["true","false"]){
+    const form=new FormData();form.set(key,value);
+    const result=await route.action({request:new Request("https://fixture.test/app/filters/settings",{method:"POST",body:form})});
+    assert.equal(result.success,true);assert.deepEqual(JSON.parse(JSON.stringify(saved)),{[key]:value==="true"});
+  }
+});

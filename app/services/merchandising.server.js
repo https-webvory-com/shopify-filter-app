@@ -681,8 +681,9 @@ export function applyMerchandisingRules(
   }
 
   // Priority toggles (SoBooster defaults: false -> rules and pinning have priority)
-  const prioritizeSortOverPinning = globalSettings?.prioritizeSortOverPinning ?? false;
-  const prioritizeSortOverMerchandising = globalSettings?.prioritizeSortOverMerchandising ?? false;
+  const hasRankedSort = !["relevance", "r"].includes(sortBy);
+  const prioritizeSortOverPinning = hasRankedSort && globalSettings?.prioritizeSortOverPinning === true;
+  const prioritizeSortOverMerchandising = hasRankedSort && globalSettings?.prioritizeSortOverMerchandising === true;
 
   // Pre-compute O(1) pin map for fast sorting
   const pinMap = new Map();
@@ -761,24 +762,17 @@ function defaultSortComparison(a, b, sortBy) {
   if (sortBy === "created-descending")
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
-  // default / manual / best-selling: tie-break by original collection position (_originalIndex)
-  if (a._originalIndex !== undefined && b._originalIndex !== undefined && a._originalIndex !== b._originalIndex) {
-    return a._originalIndex - b._originalIndex;
-  }
-
   // default / best-selling: sort by bestSellingScore DESC
-  if (sortBy === "best-selling") {
+  if (["best-selling", "bestselling", "manual"].includes(sortBy)) {
     const scoreA = a.bestSellingScore !== undefined ? parseFloat(a.bestSellingScore) : 0;
     const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
     if (scoreB !== scoreA) return scoreB - scoreA;
-    return 0;
   }
   
   if (sortBy === "trending") {
     const scoreA = a.trendingScore !== undefined ? parseFloat(a.trendingScore) : 0;
     const scoreB = b.trendingScore !== undefined ? parseFloat(b.trendingScore) : 0;
     if (scoreB !== scoreA) return scoreB - scoreA;
-    return 0;
   }
 
   if (a._originalIndex !== undefined && b._originalIndex !== undefined) {
@@ -954,4 +948,3 @@ export function buildMeiliRuleFilter(ruleConditions) {
   if (filters.length === 0) return [];
   return [`(${filters.join(" OR ")})`];
 }
-

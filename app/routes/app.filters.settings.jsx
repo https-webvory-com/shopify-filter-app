@@ -17,7 +17,7 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   
   const payload = {};
-  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'desktopLikeOnMobile', 'darkMode'];
+  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'desktopLikeOnMobile', 'darkMode', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
   for (const key of booleanSettings) {
     if (formData.has(key)) {
       const value = formData.get(key);
@@ -218,10 +218,15 @@ export default function FilterSettings() {
   const [desktopLikeOnMobile, setDesktopLikeOnMobile] = useState(settings?.desktopLikeOnMobile || false);
   const [darkMode, setDarkMode] = useState(settings?.darkMode || false);
 
+  const [sortOverPinning, setSortOverPinning] = useState(settings?.prioritizeSortOverPinning ?? false);
+  const [sortOverMerchandising, setSortOverMerchandising] = useState(settings?.prioritizeSortOverMerchandising ?? false);
+
   const isSaving = nav.state !== "idle";
 
   const handleSettingChange = (key, value) => {
-    if (key === "horizontalFilters") setHorizontalFilters(value);
+    if (key === "prioritizeSortOverPinning") setSortOverPinning(value);
+    else if (key === "prioritizeSortOverMerchandising") setSortOverMerchandising(value);
+    else if (key === "horizontalFilters") setHorizontalFilters(value);
     else if (key === "mobileFilterLayout") setMobileLayout(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
@@ -402,6 +407,20 @@ export default function FilterSettings() {
       </div>
 
       <div className="settings-container">
+        <SettingsSection title="Sorting">
+          <SettingToggle disabled={isSaving}
+            label="Prioritize sort order over merchandising rules"
+            description="Apply the selected sort order before merchandising boosts when choosing products for each page."
+            value={sortOverMerchandising}
+            onChange={(val) => handleSettingChange("prioritizeSortOverMerchandising", val)}
+          />
+          <SettingToggle disabled={isSaving}
+            label="Prioritize sort order over pinning"
+            description="Keep pinned products in the selected sort order instead of reserving the first positions for them."
+            value={sortOverPinning}
+            onChange={(val) => handleSettingChange("prioritizeSortOverPinning", val)}
+          />
+        </SettingsSection>
         <SettingsSection title="Filters Settings">
           <SettingToggle disabled={isSaving}
                         label="Horizontal filters"

@@ -264,6 +264,8 @@ model FilterGlobalSetting {
   desktopLikeOnMobile                 Boolean  @default(false)
   darkMode                            Boolean  @default(false)
   showOnlyInStock                     Boolean  @default(false)
+  prioritizeSortOverPinning           Boolean  @default(false)
+  prioritizeSortOverMerchandising     Boolean  @default(false)
   secondImageOnHover                  Boolean  @default(true)
   showQuickViewInstantSearch          Boolean  @default(true)
   showQuickViewCollection             Boolean  @default(true)
