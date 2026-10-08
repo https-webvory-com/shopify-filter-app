@@ -40,15 +40,15 @@ export function ExportFilterGroupsModal({ isOpen, onClose, selectedGroups, allGr
     const rows = groupsToExport.map((group) => {
       const row = [];
 
-      const collectionTitles = group.collections
+      const collectionTitles = (group.collections || [])
         .filter((c) => c.pageType === "collection" && c.collectionTitle !== "All Collections")
         .map((c) => c.collectionTitle);
 
-      const collectionIds = group.collections
+      const collectionIds = (group.collections || [])
         .filter((c) => c.pageType === "collection" && c.collectionId !== "__all__")
-        .map((c) => c.collectionId.split("/").pop());
+        .map((c) => String(c.collectionId || "").split("/").pop()).filter(Boolean);
 
-      const forCollectionPages = group.collections.some((c) => c.pageType === "collection");
+      const forCollectionPages = (group.collections || []).some((c) => c.pageType === "collection");
 
       if (fields.identifier) row.push(group.id);
       if (fields.itemName) row.push(group.name);
@@ -56,7 +56,7 @@ export function ExportFilterGroupsModal({ isOpen, onClose, selectedGroups, allGr
       if (fields.active) row.push(group.status ? "True" : "False");
       
       if (fields.collectionTitles) {
-        row.push(collectionTitles.length > 0 ? `["${collectionTitles.join('","')}"]` : "");
+        row.push(collectionTitles.length > 0 ? JSON.stringify(collectionTitles) : "");
       }
       if (fields.collections) {
         row.push(collectionIds.length > 0 ? `[${collectionIds.join(",")}]` : "");

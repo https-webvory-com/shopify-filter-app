@@ -174,6 +174,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/merchandising.server": merchandising,
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
+    "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return {};
       if (key.startsWith("mergedValues:")) return [];

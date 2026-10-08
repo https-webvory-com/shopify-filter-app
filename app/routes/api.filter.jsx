@@ -16,6 +16,7 @@ import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
+import { semanticMultiSearch } from "../services/semanticSearch.server";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -692,7 +693,7 @@ export const loader = async ({ request }) => {
     let collectionPaginationApplied = false;
 
     try {
-      const multiSearchRes = await meiliClient.multiSearch({ queries });
+      const multiSearchRes = await semanticMultiSearch(queries);
       const tier1Res = multiSearchRes.results[0];
       facetRes = multiSearchRes.results[facetQueryIndex];
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };

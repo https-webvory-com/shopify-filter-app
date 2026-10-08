@@ -5,6 +5,7 @@ import meiliClient from "../services/meiliClient.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import { getCached } from "../services/shopCache.server";
 import { rateLimit } from "../services/rateLimiter.server";
+import { semanticSearch } from "../services/semanticSearch.server";
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -44,7 +45,7 @@ export const loader = async ({ request }) => {
     const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
     const cleanSearchQuery = typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
     
-    let meiliFilters = [`shop = '${shop}'`];
+    let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
     
     if (globalSettings?.showOnlyInStock) {
       meiliFilters.push(`available = true`);
@@ -73,10 +74,6 @@ export const loader = async ({ request }) => {
         limit: limit + 20, // Request extra to compensate for post-filtering
         facets: ["tags", "productType"],
         attributesToHighlight: ["title", "tags", "productType", "vendor"]
-        // hybrid: {
-        //     semanticRatio: 0.1,
-        //     embedder: "default"
-        // }
     };
 
     if (sortBy) {
@@ -95,19 +92,10 @@ export const loader = async ({ request }) => {
         }
     }
 
-    let meiliRes;
-    try {
-        // -- TIER 2: Hybrid Semantic Vector Search --
-        meiliRes = await meiliClient.index("products").search(cleanSearchQuery, meiliSearchParams);
-    } catch (vectorError) {
-        // GRACEFUL FALLBACK: If API Key expires or Meilisearch is not configured for vectors
-        console.error("CFP: Semantic Search failed, falling back to Keyword Search. Error:", vectorError.message);
-        delete meiliSearchParams.hybrid;
-        meiliRes = await meiliClient.index("products").search(searchQuery, meiliSearchParams);
-    }
+    const meiliRes = await semanticSearch(cleanSearchQuery, meiliSearchParams);
 
     let didYouMean = null;
-    if (cleanSearchQuery.length > 2 && meiliRes.hits.length > 0) {
+    if (cleanSearchQuery.length > 2 && meiliRes.hits.length > 0 && !meiliRes.semanticHitCount) {
       const sq = cleanSearchQuery.toLowerCase();
       // Check if clean query is found exactly in any of the results
       const exactMatchFound = meiliRes.hits.some(hit => 

@@ -10,7 +10,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
-import { pinProductSearchFilter } from "../utils/pinProductSearch.server";
+import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinProductSearch.server";
 import PinSearchField from "../components/merchandising/PinSearchField";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
@@ -21,6 +21,11 @@ export const action = async ({ request, params }) => {
 
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "tagSuggestions") {
+    const query = String(formData.get("q") || "");
+    return Response.json({ query, tags: await pinProductTagSuggestions(prisma, shop, query) });
+  }
 
   if (intent === "search") {
     const query = formData.get("q") || "";
@@ -839,7 +844,7 @@ export default function PinningEditor() {
               </label>
             </div>
 
-            <PinSearchField value={searchField} onChange={setSearchField} />
+
             <div
               style={{
                 display: "flex",
@@ -848,50 +853,7 @@ export default function PinningEditor() {
                 marginBottom: "20px",
               }}
             >
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  background: "#f8fafc",
-                  padding: "10px 16px",
-                  borderRadius: "24px",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <svg
-                  style={{
-                    width: "16px",
-                    height: "16px",
-                    color: "#94a3b8",
-                    marginRight: "8px",
-                  }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  ></path>
-                </svg>
-                <input
-                  type="text"
-                  placeholder={searchField === "tags" ? "Search products by tag" : "Search to pin products"}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    outline: "none",
-                    fontSize: "14px",
-                    color: "#334155",
-                    width: "100%",
-                  }}
-                />
-              </div>
+              <PinSearchField value={searchField} onChange={setSearchField} query={searchQuery} onQueryChange={setSearchQuery} />
               <button
                 onClick={handleSearch}
                 style={{

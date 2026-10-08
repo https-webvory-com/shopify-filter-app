@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { geminiEmbedder } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
@@ -158,25 +159,9 @@ export async function updateMeiliSettings(shop) {
 
     if (process.env.GEMINI_API_KEY) {
       try {
-        await index.updateEmbedders({
-          default: {
-            source: "rest",
-            url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent?key=${process.env.GEMINI_API_KEY}`,
-            request: {
-              model: "models/gemini-embedding-2",
-              content: {
-                parts: [{ text: "{{text}}" }],
-              },
-            },
-            response: {
-              embedding: {
-                values: "{{embedding}}",
-              },
-            },
-            documentTemplate:
-              "A {{productType}} named {{title}} by {{vendor}}. Tags: {{tags | join: ', '}}",
-          },
-        });
+        const task = await index.updateEmbedders({ default: geminiEmbedder(process.env.GEMINI_API_KEY) });
+        const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 600000 });
+        if (completed.status !== "succeeded") throw new Error("Semantic embedding configuration failed: " + (completed.error?.code || completed.status));
         console.log(`CFP: AI Vector embedder (Gemini) configured for ${shop}`);
       } catch (embedErr) {
         // vector store experimental feature not enabled on this Meilisearch instance — skip silently

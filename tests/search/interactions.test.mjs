@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
-import { pinProductSearchFilter } from "../../app/utils/pinProductSearch.server.js";
+import { pinProductSearchFilter, pinProductTagSuggestions } from "../../app/utils/pinProductSearch.server.js";
 import {
   searchPinScopeFromCsv,
   searchPinScopeToCsv,
@@ -58,7 +58,7 @@ async function mockedModule(file, mocks) {
     console,
     require(name) {
       if (name in mocks) return mocks[name];
-      if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter };
+      if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter, pinProductTagSuggestions };
       if (name.startsWith("../components/")) return {};
       if (
         [
@@ -118,11 +118,8 @@ for (const section of ["collections", "search"]) {
           assert.equal(where.title, undefined);
           assert.equal(where.OR, undefined);
         } else {
-          assert.deepEqual(where.OR, [
-            { title: { contains: "  SUMMER  ", mode: "insensitive" } },
-            { vendor: { contains: "  SUMMER  ", mode: "insensitive" } },
-            { tags: { has: "  SUMMER  " } },
-          ]);
+          assert.deepEqual(where.title, { contains: "SUMMER", mode: "insensitive" });
+          assert.equal(where.OR, undefined);
           assert.equal(where.tags, undefined);
         }
       }
@@ -353,3 +350,31 @@ test("Batch import persists all search queries and the all-search flag", async (
   assert.equal(writes[1].create.applyToAll, true);
   assert.equal(writes[1].update.applyToAll, true);
 });
+
+test('product ID search accepts numeric IDs and GIDs without losing pinned exclusions', async () => {
+  for (const text of ['12345', 'gid://shopify/Product/12345']) {
+    const filter = await pinProductSearchFilter({}, 'shop', text, 'id');
+    assert.deepEqual(filter, { AND: [{ id: { equals: 'gid://shopify/Product/12345' } }] });
+    const where = { ...filter, id: { notIn: ['gid://shopify/Product/12345'] } };
+    assert.equal(where.AND[0].id.equals, where.id.notIn[0]);
+  }
+  const invalid = await pinProductSearchFilter({}, 'shop', 'not an ID', 'id');
+  assert.equal(invalid.AND[0].id.equals, '__invalid_product_id__');
+});
+
+for (const section of ['collections', 'search']) {
+  test(section + ' tag suggestions remain tenant scoped and do not run a product search', async () => {
+    const prisma = { $queryRaw: async (sql, shop, text) => {
+      assert.equal(shop, 'fixture.myshopify.com'); assert.equal(text, 'Form');
+      assert.match(sql.join('?'), /LIMIT 25/);
+      return [{ tag: 'Formal' }];
+    } };
+    const route = await mockedModule('app/routes/app.' + section + '.pinning.$id.jsx', {
+      '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
+      '../db.server': { __esModule: true, default: prisma },
+    });
+    const body = new FormData(); body.set('intent', 'tagSuggestions'); body.set('q', 'Form');
+    const result = await route.action({ request: new Request('https://fixture.test', { method: 'POST', body }), params: { id: 'new' } });
+    assert.deepEqual(await result.json(), { query: 'Form', tags: ['Formal'] });
+  });
+}

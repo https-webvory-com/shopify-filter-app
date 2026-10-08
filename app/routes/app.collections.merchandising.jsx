@@ -1613,9 +1613,8 @@ export default function MerchandisingIndex() {
           <ExportMerchandisingRulesModal
             isOpen={isExportModalOpen}
             onClose={() => setIsExportModalOpen(false)}
-            rules={merchandisingRules.filter((r) =>
-              selectedRules.includes(r.id)
-            )}
+            selectedRuleIds={selectedRules}
+            allRules={merchandisingRules}
             onExport={() => {
               setIsExportModalOpen(false);
               setSelectedRules([]);
