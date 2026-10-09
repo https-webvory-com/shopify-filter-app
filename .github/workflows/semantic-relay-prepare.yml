@@ -1,0 +1,50 @@
+name: Prepare private Gemini relay
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+      - name: Allow private Meilisearch traffic to the app
+        run: |
+          python3 - <<'PY'
+          import subprocess, json
+          def aws(*args):
+              return json.loads(subprocess.check_output(['aws','ec2',*args,'--output','json']))
+          instances = aws('describe-instances','--filters','Name=private-ip-address,Values=10.0.1.75')['Reservations']
+          instance = [i for r in instances for i in r['Instances']]
+          if len(instance) != 1: raise SystemExit('Expected one app instance')
+          groups = [g['GroupId'] for g in instance[0]['SecurityGroups']]
+          permission = [{'IpProtocol':'tcp','FromPort':3005,'ToPort':3005,'IpRanges':[{'CidrIp':'10.0.2.139/32','Description':'Authenticated Gemini relay from Meilisearch'}]}]
+          result = subprocess.run(['aws','ec2','authorize-security-group-ingress','--group-id',groups[0],'--ip-permissions',json.dumps(permission)],capture_output=True,text=True)
+          if result.returncode and 'InvalidPermission.Duplicate' not in result.stderr: raise SystemExit(result.stderr)
+          print('PRIVATE_RELAY_NETWORK_READY')
+          PY
+      - name: Configure existing app environment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+            python3 - <<'PY'
+            import pathlib, secrets, os
+            path = pathlib.Path('/home/ubuntu/shopify-filter-app/.env')
+            lines = path.read_text().splitlines()
+            values = dict(line.split('=',1) for line in lines if '=' in line and not line.startswith('#'))
+            token = values.get('SEMANTIC_RELAY_TOKEN') or secrets.token_hex(32)
+            lines = [line for line in lines if not line.startswith(('SEMANTIC_RELAY_TOKEN=','SEMANTIC_RELAY_URL='))]
+            lines += ['SEMANTIC_RELAY_TOKEN='+token, 'SEMANTIC_RELAY_URL=http://10.0.1.75:3005/api/internal/embeddings']
+            path.write_text('\n'.join(lines)+'\n')
+            os.chmod(path,0o600)
+            print('PRIVATE_RELAY_ENV_READY')
+            PY
