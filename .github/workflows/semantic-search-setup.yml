@@ -43,7 +43,7 @@ jobs:
              if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing in app container');
              const { geminiEmbedder } = await import('./app/utils/semanticSearch.js');
              const config = geminiEmbedder(process.env.GEMINI_API_KEY);
-            config.documentTemplate = "{{doc.title}}. {{doc.productType}} by {{doc.vendor}}. Colors: {{doc.option_Color}}. Tags: {{doc.tags}}";
+            config.documentTemplate = "{% for field in fields %}{% if field.name == 'title' or field.name == 'productType' or field.name == 'vendor' or field.name == 'option_Color' or field.name == 'tags' or field.name == 'metafield_global.description_tag' %}{% if field.value != nil %}{{field.name}}: {{field.value}}. {% endif %}{% endif %}{% endfor %}";
             config.documentTemplateMaxBytes = 2000;
              // Verify the provider before changing Meilisearch or embedding the catalog.
              const provider = await fetch(config.url, { method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(60000), body:JSON.stringify({...config.request,content:{parts:[{text:'red dress for office'}]}}) });
