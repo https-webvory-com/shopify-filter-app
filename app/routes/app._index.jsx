@@ -8,8 +8,13 @@ import { syncProducts } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import { productSyncQueue } from "../services/productSyncQueue.server.js";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+<<<<<<< HEAD
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
 
+=======
+import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
+
+>>>>>>> 11606d0803a181c9512952b3108693ddaa20e1e2
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -73,6 +78,7 @@ export const loader = async ({ request }) => {
   };
 };
 
+<<<<<<< HEAD
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
@@ -124,6 +130,59 @@ export default function Index() {
   }, [statsFetcher]);
 
   const shopifyStats = statsFetcher.data || null;
+=======
+export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const actionType = formData.get("actionType");
+
+  if (actionType === "sync" || actionType === "force_sync") {
+    try {
+      const forceFresh = actionType === "force_sync";
+      const result = await syncProducts(session.shop, admin, session, forceFresh);
+      return { success: true, message: result.message, type: "sync" };
+    } catch (e) {
+      console.error("Sync error:", e);
+      return { error: syncErrorMessage(e), type: "sync" };
+    }
+  }
+
+  if (actionType === "sync_orders") {
+    try {
+      // Run orders sync in background (don't await fully)
+      syncHistoricalOrders(session.shop).then(() => {
+        console.log("Orders sync completed for", session.shop);
+      }).catch(err => {
+        console.error("Orders sync failed:", err);
+      });
+      return { success: true, message: "Orders sync started in background! This may take a few minutes.", type: "sync_orders" };
+    } catch (e) {
+      console.error("Orders sync error:", e);
+      return { error: e.message, type: "sync_orders" };
+    }
+  }
+
+  return null;
+};
+
+export default function Index() {
+  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, latestSyncStatus, latestSyncId } = useLoaderData();
+  const syncFetcher = useFetcher();
+  const statsFetcher = useFetcher();
+  const ordersSyncStatusFetcher = useFetcher();
+  const shopify = useAppBridge();
+  const { revalidate } = useRevalidator();
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (statsFetcher.state === "idle" && !statsFetcher.data) {
+      statsFetcher.load("/app/api/stats");
+    }
+  }, [statsFetcher]);
+
+  const shopifyStats = statsFetcher.data || null;
+>>>>>>> 11606d0803a181c9512952b3108693ddaa20e1e2
   const shopifyActiveCount = shopifyStats?.activeProducts ?? null;
   const shopifyPublishedCount = shopifyStats?.publishedProducts ?? null;
   const shopifyUnpublishedCount = shopifyStats?.unpublishedProducts ?? null;
@@ -192,6 +251,7 @@ export default function Index() {
     previousSyncRef.current = { id: latestSyncId, status: latestSyncStatus };
   }, [latestSyncId, latestSyncStatus, shopify]);
 
+<<<<<<< HEAD
   // Poll for sync completion if running in background
   useEffect(() => {
     if (isSyncingBackground) {
@@ -511,6 +571,327 @@ export default function Index() {
               Database Synchronization
             </h2>
 
+=======
+  // Poll for sync completion if running in background
+  useEffect(() => {
+    if (isSyncingBackground) {
+      const interval = setInterval(() => {
+        revalidate();
+      }, 3000); // Check every 3 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isSyncingBackground, revalidate]);
+
+  const triggerSync = () =>
+    syncFetcher.submit({ actionType: "sync" }, { method: "POST" });
+
+  const triggerForceSync = () =>
+    syncFetcher.submit({ actionType: "force_sync" }, { method: "POST" });
+
+  // Since sync is now background, we just show the initial loader count
+  const currentCount = syncedProductsCount;
+
+  return (
+    <s-page heading="AI Search & Filter Dashboard">
+      <ui-title-bar title="Dashboard"></ui-title-bar>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          .dash-section-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1E1B4B;
+            margin: 32px 0 16px 0;
+            font-family: "Inter", sans-serif;
+          }
+
+          .sov-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+          }
+
+          @media (max-width: 900px) {
+            .sov-grid { grid-template-columns: repeat(2, 1fr); }
+          }
+          @media (max-width: 600px) {
+            .sov-grid { grid-template-columns: 1fr; }
+          }
+
+          /* âœ¨ Active Card âœ¨ */
+          .sov-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #ede9fe;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.28s cubic-bezier(0.16,1,0.3,1),
+                        box-shadow 0.28s cubic-bezier(0.16,1,0.3,1),
+                        border-color 0.28s ease;
+            box-shadow: 0 1px 3px rgba(91,33,182,0.06),
+                        0 1px 8px rgba(0,0,0,0.04);
+            min-height: 200px;
+            position: relative;
+          }
+
+          .sov-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(91,33,182,0.10),
+                        0 1px 4px rgba(0,0,0,0.04);
+            border-color: #a5b4fc;
+          }
+
+          /* âœ¨ Coming Soon Card âœ¨ */
+          .sov-card-soon {
+            background: #fafafa;
+            border-radius: 16px;
+            border: 1.5px dashed #d8b4fe;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            cursor: not-allowed;
+            position: relative;
+            box-shadow: none;
+            min-height: 200px;
+          }
+
+          /* Corner ribbon */
+          .sov-soon-ribbon {
+            position: absolute;
+            top: 11px;
+            right: -22px;
+            background: linear-gradient(90deg, #7C3AED, #5B21B6);
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            z-index: 10;
+            box-shadow: 0 2px 6px rgba(91,33,182,0.3);
+            transform: rotate(45deg);
+            padding: 4px 30px;
+            text-align: center;
+          }
+
+          /* Muted coming soon text */
+          .sov-card-soon .sov-card-title {
+            color: #9ca3af;
+          }
+          .sov-card-soon .sov-card-desc {
+            color: #c4b5fd;
+          }
+
+          .sov-card-soon .sov-card-icon {
+            background: #f3f4f6;
+            color: #d1d5db;
+          }
+
+          /* Coming soon bottom bar */
+          .sov-soon-bar {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            background: linear-gradient(90deg, #f5f3ff, #ede9fe);
+            border: 1px solid #ddd6fe;
+            font-size: 12px;
+            font-weight: 700;
+            color: #7C3AED;
+            letter-spacing: 0.4px;
+            align-self: flex-start;
+          }
+
+          .sov-soon-icon {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+          }
+
+          .sov-card-body {
+            padding: 24px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+          }
+
+          .sov-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+          }
+
+          .sov-card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #f3e8ff 0%, #ede9fe 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5B21B6;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+          }
+
+          .sov-card:hover .sov-card-icon {
+            background: #5B21B6;
+            color: #ffffff;
+            transform: scale(1.05);
+          }
+
+          .sov-card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1e1b4b;
+            margin: 0;
+            line-height: 1.3;
+          }
+
+          .sov-card-desc {
+            font-size: 13.5px;
+            color: #64748b;
+            line-height: 1.6;
+            margin: 0 0 20px 0;
+            flex: 1;
+          }
+
+          /* Active CTA button */
+          .sov-btn {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #5B21B6;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            align-self: flex-start;
+          }
+
+          .sov-card:hover .sov-btn {
+            background: #f3e8ff;
+            border-color: #d8b4fe;
+            color: #4c1d95;
+          }
+
+          /* Text link CTA */
+          .sov-link-btn {
+            background: none;
+            border: none;
+            color: #5B21B6;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            align-self: flex-start;
+          }
+
+          .sov-card:hover .sov-link-btn {
+            color: #7C3AED;
+            gap: 8px;
+          }
+        `,
+        }}
+      />
+
+      <div
+        style={{
+          maxWidth: "1200px",
+          margin: "0 auto",
+          paddingBottom: "60px",
+          fontFamily: '"Inter", sans-serif',
+        }}
+      >
+        {/* ———————————————————————————————————————————————— */}
+        {!shopifyStats && (
+          <div style={{ minHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <LoadingSpinner text="Fetching store overview..." />
+          </div>
+        )}
+        {shopifyStats && (
+          <>
+            <h2 className="dash-section-title" style={{ marginTop: "0" }}>Store Overview</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "28px" }}>
+
+              {[
+                { label: "Total Products",      value: shopifyStats.totalProducts,      dot: "#1E1B4B", icon: "📦" },
+                { label: "Active",              value: shopifyStats.activeProducts,     dot: "#16a34a", icon: "●" },
+                { label: "Draft",               value: shopifyStats.draftProducts,      dot: "#d97706", icon: "●" },
+                { label: "Archived",            value: shopifyStats.archivedProducts,   dot: "#94a3b8", icon: "●" },
+                { label: "Total Collections",   value: shopifyStats.allCollections,     dot: "#7c3aed", icon: "📁" },
+                { label: "Published",           value: shopifyStats.publishedCollections, dot: "#2563eb", icon: "●" },
+                { label: "Smart Collections",   value: shopifyStats.smartCollections,   dot: "#e11d48", icon: "⚡" },
+                { label: "Synced to DB",        value: syncedProductsCount,             dot: "#5B21B6", icon: "✓",  highlight: true },
+              ].map(({ label, value, dot, icon, highlight }) => (
+                <div
+                  key={label}
+                  style={{
+                    background: highlight ? "rgba(91,33,182,0.04)" : "#ffffff",
+                    border: highlight ? "1px solid rgba(91,33,182,0.2)" : "1px solid #e8edf2",
+                    borderRadius: "14px",
+                    padding: "20px 20px 18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  {/* Top row: icon dot + label */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "10px", color: dot, lineHeight: 1 }}>{icon === "●" ? "●" : icon === "✓" ? "✓" : icon}</span>
+                    <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "500" }}>{label}</span>
+                  </div>
+                  {/* Big number */}
+                  <div style={{ fontSize: "30px", fontWeight: "800", color: highlight ? "#5B21B6" : "#1E1B4B", letterSpacing: "-0.5px", lineHeight: 1 }}>
+                    {value.toLocaleString()}
+                  </div>
+                </div>
+              ))}
+
+            </div>
+          </>
+        )}
+
+        {/* Sync Controls Banner */}
+
+        <div
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(91, 33, 182, 0.05) 0%, rgba(124, 58, 237, 0.02) 100%)",
+            border: "1px solid rgba(91, 33, 182, 0.1)",
+            borderRadius: "16px",
+            padding: "24px 32px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "20px",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <h2
+              style={{
+                fontSize: "18px",
+                fontWeight: "700",
+                color: "#1E1B4B",
+                margin: "0 0 8px 0",
+              }}
+            >
+              Database Synchronization
+            </h2>
+
+>>>>>>> 11606d0803a181c9512952b3108693ddaa20e1e2
             {isSyncingBackground && ["waiting", "delayed", "prioritized", "waiting-children"].includes(syncQueueState) && (
               <p role="status">Sync is queued. It will continue automatically from the saved position when the worker is available.</p>
             )}
