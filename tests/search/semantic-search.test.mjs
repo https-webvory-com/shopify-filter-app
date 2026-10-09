@@ -32,7 +32,9 @@ test("ordinary keyword errors propagate without a redundant retry", async () => 
 
 test("Gemini embedding configuration uses document fields and matching dimensions", () => {
   const config = geminiEmbedder("fixture-key");
-  assert.match(config.documentTemplate, /doc.title/);
+  assert.match(config.documentTemplate, /field.name == 'title'/);
+  assert.match(config.documentTemplate, /field.name == 'option_Color'/);
+  assert.match(config.documentTemplate, /field.value != nil/);
   assert.equal(config.dimensions, config.request.outputDimensionality);
   assert.equal(config.response.embedding.values, "{{embedding}}");
 });
