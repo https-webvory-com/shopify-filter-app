@@ -102,6 +102,13 @@ async function renderDashboard(data, stats = null) {
   return renderToStaticMarkup(React.createElement(ctx.module.exports.default));
 }
 
+test("completed store renders its dashboard without a sync status error",async()=>{
+  const data=await routeFixture({id:"completed-store",status:"COMPLETED",productsProcessed:51,totalProducts:51,completedAt:new Date()});
+  const html=await renderDashboard(data);
+  assert.match(html,/Fully Synced/);
+  assert.ok(!html.includes("Sync did not complete"));
+});
+
 test("the actual dashboard keeps stopped progress instead of rendering database count as completion", async () => {
   const result=await routeFixture({id:"current",status:"FAILED",productsProcessed:21800,totalProducts:48860,lastError:"Indexing failed"});
   const html=await renderDashboard(result);
