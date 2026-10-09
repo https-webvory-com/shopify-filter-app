@@ -274,6 +274,30 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   // â”€â”€ 3. Fetch data from Shopify App Proxy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   
+  // A cold collection can finish loading after the initial API response.
+  // Resolve that order before rendering; otherwise the fallback stays on screen.
+  async function waitForCollectionOrder(data, requestUrl, signal) {
+    for (let attempt = 0; attempt < 30 && data.debug?.collectionBestSellingStatus === 'pending'; attempt++) {
+      await new Promise((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', onAbort);
+          reject(new DOMException('Aborted', 'AbortError'));
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        }, 1000);
+        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) onAbort();
+      });
+      const response = await fetch(requestUrl, { signal });
+      if (!response.ok) throw new Error('Collection order refresh failed');
+      data = await response.json();
+    }
+    return data;
+  }
+
   async function fetchAndRenderData(isLoadMore = false) {
     syncSortControls();
     if (activeFetchController) {
@@ -362,6 +386,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           data = await response.json();
         }
 
+      data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
+      if (fetchSignal.aborted) return;
       console.log('[CFP] API Response:', data);
 
       sidebar.classList.remove('cfp-loading');
