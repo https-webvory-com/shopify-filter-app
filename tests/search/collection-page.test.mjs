@@ -237,7 +237,12 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   assert.equal(retained._status, 200);
   assert.deepEqual(Array.from(retained.products, p => p.id.split('/').pop()), Array.from({ length: 25 }, (_, i) => String(i + 26)));
   sourceOrder = { ids: ['1'], status: 'stale', refreshState: 'waiting' };
-  assert.equal((await load('page=1'))._status, 202);
+  const stale = await load('page=1');
+  assert.equal(stale._status, 200);
+  assert.equal(stale.debug.collectionBestSellingStatus, 'stale');
+  assert.equal(stale.debug.collectionBestSellingApplied, true);
+  sourceOrder = { ids: ['1'], status: 'stale', refreshState: 'failed' };
+  assert.equal((await load('page=1'))._status, 200);
   sourceOrder = { ids: null, status: 'failed', refreshState: 'failed' };
   assert.equal((await load('page=1'))._status, 503);
   sourceOrder = { ids: Array.from({ length: 23110 }, (_, i) => String(i + 1)), status: 'ready' };

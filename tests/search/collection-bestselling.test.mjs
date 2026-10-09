@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
+import crypto from 'node:crypto';
 import {readCollectionBestSellingIds} from '../../app/utils/collectionBestSelling.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 test('Shopify order follows every collection page and explicitly requests BEST_SELLING',async()=>{
@@ -50,6 +51,7 @@ test('Dynamic Set replaces the preceding score and collection order breaks ties'
 async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
  const calls=[];let stored=snapshot;
  const mocks={
+  'node:crypto':crypto,
   './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
   './queue.server.js':{webhookQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
@@ -82,6 +84,15 @@ test('fresh snapshots serve immediately without scheduling Shopify reads',async(
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
  const state=await service.getCollectionBestSellingState('shop','collection');
  assert.equal(state.status,'ready');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls.length,0);
+});
+
+test('unchanged Shopify refreshes retain the same ranking revision',async()=>{
+ const service=await loadOrderService({snapshot:{ids:['2','1'],updatedAt:1}});
+ const before=await service.getCollectionBestSellingState('shop','collection');
+ await service.refreshCollectionBestSelling('shop','collection');
+ const after=await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(before.revision,after.revision);
+ assert.equal(after.status,'ready');
 });
 test('stale snapshots remain usable while a durable retrying job refreshes them',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1}});

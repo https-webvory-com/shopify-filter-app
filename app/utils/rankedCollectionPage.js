@@ -1,7 +1,44 @@
 const cleanId = id => String(id).split('/').pop();
+const fullRankingFields = ['id', 'title', 'vendor', 'productType', 'tags', 'priceMin', 'inventoryTotal', 'variantPrices', 'options', 'images', 'collections', 'collection_titles', 'bestSellingScore', 'trendingScore', 'createdAt'];
+
+// Old index documents did not contain inventory. Never treat missing inventory
+// as zero: a global sold-out exclusion would otherwise remove the whole store.
+export async function hydrateCollectionInventory(products, variantModel) {
+  const missing = products.filter(p => !Number.isFinite(p.inventoryTotal));
+  for (let offset = 0; offset < missing.length; offset += 1000) {
+    const batch = missing.slice(offset, offset + 1000);
+    const rows = await variantModel.groupBy({
+      by: ['productId'], where: {productId: {in: batch.map(p => p.id)}}, _sum: {inventory: true},
+    });
+    const totals = new Map(rows.map(row => [row.productId, row._sum.inventory ?? 0]));
+    for (const product of batch) product.inventoryTotal = totals.get(product.id) ?? 0;
+  }
+}
+
+export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = true) {
+  // Older callers retain the full projection. Tag-only collections must not
+  // transfer tens of thousands of products' variant arrays just to rank IDs.
+  if (!Array.isArray(conditions)) return fullRankingFields;
+  const fields = new Set(['id']);
+  if (!hasShopifyOrder && ['best-selling', 'bestselling'].includes(sortBy)) fields.add('bestSellingScore');
+  if (sortBy?.startsWith('price')) fields.add('priceMin');
+  if (['created-ascending', 'created-descending'].includes(sortBy)) fields.add('createdAt');
+  if (['title-ascending', 'title-descending'].includes(sortBy)) fields.add('title');
+  if (sortBy && !['best-selling', 'bestselling', 'price-ascending', 'price-descending', 'created-ascending', 'created-descending', 'title-ascending', 'title-descending'].includes(sortBy)) return fullRankingFields;
+  for (const condition of conditions) {
+    const field = (condition.field || '').toLowerCase();
+    const simple = { tags: ['tags'], vendor: ['vendor'], 'product type': ['productType'], product: ['title'], collections: ['collections', 'collection_titles'], price: ['priceMin'], id: [] };
+    if (field in simple) simple[field].forEach(value => fields.add(value));
+    else if (field === 'available') fields.add('inventoryTotal');
+    else if (['discount', 'percent sales'].includes(field) || /option|color|size|title/.test(field)) {
+      ['variantPrices', 'options', 'images'].forEach(value => fields.add(value));
+    } else return fullRankingFields;
+  }
+  return [...fields];
+}
 
 // Rank and exclude the complete eligible set before allocating any page slots.
-export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange }) {
+export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking }) {
   const { indexUid, q, ...options } = query;
   const documents = [];
   const seen = new Set();
@@ -9,7 +46,7 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
   for (let offset = 0; ; offset += batchSize) {
     const result = await index.search(q, {
       ...options, offset, limit: batchSize,
-      attributesToRetrieve: ['id', 'title', 'vendor', 'productType', 'tags', 'priceMin', 'variantPrices', 'options', 'collections', 'collection_titles', 'bestSellingScore', 'trendingScore', 'createdAt'],
+      attributesToRetrieve: collectionRankingFields(conditions, sortBy, Array.isArray(orderedIds)),
     });
     for (const product of result.hits) {
       const id = cleanId(product.id);
@@ -34,6 +71,7 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
     variants: p.variantPrices || [],
     collections: p.collection_titles?.map(title => ({ collection: { title } })) || p.collections || [],
   }));
+  if (hydrateRanking) await hydrateRanking(products);
   return arrange(products).map(product => cleanId(product.id));
 }
 

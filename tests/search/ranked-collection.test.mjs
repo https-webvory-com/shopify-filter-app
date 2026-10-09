@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
-import { buildCollectionSequence, readRankedCollectionPage } from '../../app/utils/rankedCollectionPage.js';
+import { buildCollectionSequence, readRankedCollectionPage, collectionRankingFields, hydrateCollectionInventory } from '../../app/utils/rankedCollectionPage.js';
 
 const context = { module: { exports: {} }, exports: {}, console, require: () => ({ __esModule: true, default: {} }) };
 vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js', 'utf8'), { format: 'cjs' })).code, context);
@@ -15,6 +15,31 @@ const indexFor = docs => ({
 const build = (docs, conditions, extra = {}) => buildCollectionSequence(indexFor(docs), {
   query: { q: '', filter: [] }, pinnedIds: [], orderedIds: docs.map(p => p.id),
   arrange: products => apply(products, { conditions }, 'best-selling', null, [], { preserveCollectionBestSellingOrder: true }), ...extra,
+});
+
+test('tag-only ranking avoids transferring variant arrays; option rules retain variant and image data', () => {
+  assert.deepEqual(collectionRankingFields([{field:'Tags'}], 'best-selling'), ['id', 'tags']);
+  assert.deepEqual(collectionRankingFields([], 'best-selling'), ['id']);
+  assert.ok(collectionRankingFields([], 'best-selling', false).includes('bestSellingScore'));
+  assert.ok(collectionRankingFields([{field:'Color (product option)'}], 'best-selling').includes('variantPrices'));
+  assert.ok(collectionRankingFields([{field:'Color (product option)'}], 'best-selling').includes('images'));
+  assert.ok(collectionRankingFields([], 'price-descending').includes('priceMin'));
+});
+
+test('global Champagne rule pins survive later Dynamic Set and follow native order after explicit pins', async () => {
+  const docs = [{id:'pin',tags:['BestFormal']},{id:'satin',tags:['BestFormal']},{id:'corset',tags:['BestFormal']},{id:'drape',tags:['BestFormal','Champagne']},{id:'adora',tags:['BestFormal','Champagne Gold']}];
+  const conditions=[{action:'Pin',field:'Tags',value:'Champagne, Champagne Gold'},{action:'Dynamic',field:'Tags',value:'BestFormal',operator:'Set',operand:'1000'}];
+  const ids=await build(docs,conditions,{pinnedIds:['pin'],arrange:products=>apply(products,{conditions},'best-selling',{products:[{id:'gid://shopify/Product/pin'}]},[],{preserveCollectionBestSellingOrder:true})});
+  assert.deepEqual(Array.from(ids),['pin','drape','adora','satin','corset']);
+});
+
+test('legacy inventory is hydrated in batches and zero bounds exclude sold-out products',async()=>{
+  const docs=[{id:'1',inventoryTotal:5},{id:'2'},{id:'3'}];let requested;
+  const conditions=[{action:'Exclude',field:'Available',value:'-999',maxValue:'0'}];
+  const ids=await build(docs,conditions,{conditions,sortBy:'best-selling',hydrateRanking:products=>hydrateCollectionInventory(products,{groupBy:async query=>{requested=query.where.productId.in;return [{productId:'gid://shopify/Product/2',_sum:{inventory:4}},{productId:'gid://shopify/Product/3',_sum:{inventory:0}}];}})});
+  assert.deepEqual(Array.from(requested),['gid://shopify/Product/2','gid://shopify/Product/3']);
+  assert.deepEqual(Array.from(ids),['1','2']);
+  assert.deepEqual(collectionRankingFields(conditions,'best-selling'),['id','inventoryTotal']);
 });
 
 test('all merchandising score levels are globally ordered before page boundaries', async () => {

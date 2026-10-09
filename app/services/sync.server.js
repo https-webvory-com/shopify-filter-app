@@ -47,6 +47,7 @@ export async function formatAndPushToMeili(products) {
         ? p.collections.map((c) => c.collectionId)
         : [],
       available,
+      inventoryTotal: (p.variants || []).reduce((sum, v) => sum + (v.inventory || 0), 0),
       status: p.status ? p.status.toUpperCase() : "ACTIVE",
       createdAt: p.createdAt ? p.createdAt.getTime() : Date.now(),
       bestSellingRank: p.bestSellingRank !== undefined ? p.bestSellingRank : 999999,
@@ -600,6 +601,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
             )
             .map((c) => c.title),
           available,
+          inventoryTotal: p.variants.nodes.reduce((sum, v) => sum + (v.inventoryQuantity || 0), 0),
           status: (p.status || "ACTIVE").toUpperCase(),
           createdAt: p.publishedAt ? new Date(p.publishedAt).getTime() : Date.now(),
           bestSellingScore: p.bestSellingScore || 0.0,
@@ -1094,6 +1096,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
       collections: product.collections.nodes.map((c) => c.id),
       collection_titles: product.collections.nodes.map((c) => c.title),
       available,
+      inventoryTotal: product.variants.nodes.reduce((sum, v) => sum + (v.inventoryQuantity || 0), 0),
       status: (product.status || "ACTIVE").toUpperCase(),
       createdAt: product.publishedAt ? new Date(product.publishedAt).getTime() : Date.now(),
       bestSellingScore: existingDbProduct?.bestSellingScore || 0.0,

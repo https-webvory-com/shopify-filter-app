@@ -16,6 +16,7 @@ export async function getActiveRuleForCollection(
     where: {
       shop,
       status: true,
+      ruleType: "collection",
       AND: [
         {
           OR: [{ startDate: null }, { startDate: { lte: now } }],
@@ -33,7 +34,9 @@ export async function getActiveRuleForCollection(
   const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const matchingRules = rules.filter((rule) => {
-    if (!rule.collections || !Array.isArray(rule.collections) || rule.collections.length === 0) return false;
+    if (!Array.isArray(rule.collections)) return false;
+    // The editor and imports represent "All collections" with an empty list.
+    if (rule.collections.length === 0) return true;
     return rule.collections.some((c) => {
       if (!c) return false;
       const cLower = String(c).toLowerCase().trim();
@@ -256,14 +259,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       field,
     )
   ) {
-    const min =
-      condition.minValue && condition.minValue !== ""
-        ? parseFloat(condition.minValue)
-        : -Infinity;
-    const max =
-      condition.maxValue && condition.maxValue !== ""
-        ? parseFloat(condition.maxValue)
-        : Infinity;
+    const lower = condition.minValue ?? condition.value;
+    const upper = condition.maxValue ?? condition.value2;
+    const min = lower !== undefined && lower !== null && lower !== '' ? parseFloat(lower) : -Infinity;
+    const max = upper !== undefined && upper !== null && upper !== '' ? parseFloat(upper) : Infinity;
 
     if (field === "Price") {
       const minPrice = parseFloat(product.priceMin || 0);
@@ -271,7 +270,7 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     }
 
     if (field === "Available") {
-      const inventory = product.variants
+      const inventory = Number.isFinite(product.inventoryTotal) ? product.inventoryTotal : product.variants
         ? product.variants.reduce((sum, v) => sum + (v.inventory || 0), 0)
         : 0;
       return inventory >= min && inventory <= max;
@@ -628,6 +627,7 @@ export function applyMerchandisingRules(
     // 2. Scoring Phase: Assign scores based on conditions
     filteredProducts.forEach((p) => {
       p.merchandisingScore = 0;
+      p._rulePinned = false;
       const totalConds = rule.conditions.length;
       
       rule.conditions.forEach((cond, index) => {
@@ -655,6 +655,7 @@ export function applyMerchandisingRules(
           } else if (cond.action === "Bury") {
             p.merchandisingScore -= positionalWeight;
           } else if (cond.action === "Pin") {
+            p._rulePinned = true;
             p.merchandisingScore += 100000000;
           } else if (cond.action === "Dynamic") {
             const numStr = cond.operand || cond.value || "";
@@ -679,7 +680,7 @@ export function applyMerchandisingRules(
     });
   } else {
     // Ensure score is 0 if no rules
-    filteredProducts.forEach((p) => (p.merchandisingScore = 0));
+    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; });
   }
 
   // Priority toggles (SoBooster defaults: false -> rules and pinning have priority)
@@ -714,6 +715,12 @@ export function applyMerchandisingRules(
       }
       if (aIsPinned) return -1;
       if (bIsPinned) return 1;
+    }
+
+    // A Dynamic Set changes the numeric score, not a matched rule's Pin action.
+    // Keep the excluded manual path's legacy comparison unchanged.
+    if (sortBy !== "manual" && !prioritizeSortOverMerchandising && a._rulePinned !== b._rulePinned) {
+      return a._rulePinned ? -1 : 1;
     }
 
     if (hasCustomSort) {

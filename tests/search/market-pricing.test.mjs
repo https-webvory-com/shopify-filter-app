@@ -29,3 +29,18 @@ test('failed price requests keep cards available and flag prices as unavailable'
 test('real Shopify compare-at prices are preserved',async()=>{
  const f=fixture({compare:300000});const result=await f.apply(products);assert.equal(result[0].variants[0].compareAtPrice,3000);
 });
+
+test('prices are published individually while another product is still loading',async()=>{
+ let releaseSlow;
+ const published=[];
+ const context={window:{Shopify:{routes:{root:'/'}}},AbortController,setTimeout,clearTimeout,Date,fetch:async url=>{
+  if(url.includes('slow'))await new Promise(resolve=>{releaseSlow=resolve;});
+  return {ok:true,json:async()=>({price_min:1000,price_max:1000,variants:[]})};
+ }};
+ vm.runInNewContext(source,context);
+ const pending=context.window.cfpMarketPricing.apply([{handle:'fast'},{handle:'slow'}],(product,index)=>published.push([product.handle,index,product.priceMin]));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(published,[['fast',0,10]]);
+ releaseSlow();await pending;
+ assert.deepEqual(published,[['fast',0,10],['slow',1,10]]);
+});

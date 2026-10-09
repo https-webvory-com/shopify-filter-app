@@ -26,7 +26,7 @@
     return promise;
   }
   window.cfpMarketPricing = {
-    async apply(products) {
+    async apply(products, onPriced) {
       // Clone cached search data so one market never changes another market's result.
       const result = products.map(p => ({...p,variants:(p.variants || []).map(v=>({...v}))}));
       let next = 0;
@@ -51,6 +51,7 @@
             product._marketPricingApplied = false;
             product._marketPricingUnavailable = true;
           }
+          if (onPriced) onPriced(product, result.indexOf(product));
         }
       }));
       return result;

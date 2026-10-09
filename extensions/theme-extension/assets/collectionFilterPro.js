@@ -561,10 +561,49 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   let marketRenderVersion = 0;
+  function updateMarketCardPrice(card, product) {
+    if (!card || !product || product._marketPricingUnavailable) return;
+    card._cfpMarketProduct = product;
+    const row = card.querySelector('.cfp-product-card__price-row');
+    if (!row) return;
+    const href = card.querySelector('.cfp-product-card__link')?.href;
+    const selected = href ? new URL(href, location.origin).searchParams.get('variant') : null;
+    const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
+    const amount = variant?.price ?? product.priceMin;
+    const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
+    const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
+    const currency = window.Shopify?.currency?.active || 'USD';
+    const format = value => new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
+    row.replaceChildren();
+    const price = document.createElement('span');
+    price.className = 'cfp-product-card__price';
+    price.textContent = format(amount);
+    row.append(price);
+    if (sale) {
+      const oldPrice = document.createElement('span');
+      oldPrice.className = 'cfp-product-card__compare-price';
+      oldPrice.textContent = format(compare);
+      row.append(oldPrice);
+    }
+    if (product.available !== false) {
+      card.querySelector('.cfp-product-card__badge')?.remove();
+      const position = window.collectionFilterProSettings?.sale_label_position || 'top-left';
+      if (sale && position !== 'none') {
+        const badge = document.createElement('span');
+        badge.className = `cfp-product-card__badge cfp-badge--${position}`;
+        badge.style.cssText = 'background-color:var(--cfp-sale-bg,#e11d48);color:var(--cfp-sale-text,#ffffff);z-index:2';
+        badge.textContent = 'ON SALE';
+        card.querySelector('.cfp-product-card__image-container')?.append(badge);
+      }
+    }
+  }
+  window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     const version = ++marketRenderVersion;
-    products = window.cfpMarketPricing ? await window.cfpMarketPricing.apply(products) : products.map(p=>({...p,_marketPricingUnavailable:true}));
-    if (version !== marketRenderVersion) return;
+    const pricingProducts = products;
+    // Render cards immediately, without displaying unverified market prices.
+    // Each price arrives independently; a slow product cannot hold the grid.
+    products = products.map(p => ({...p, _marketPricingUnavailable:true}));
     contextualPricingApplied = true;
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     const grid = getProductContainer();
@@ -1020,7 +1059,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
-                           if('${data.variantId}') card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href='/products/${product.handle}?variant=${data.variantId}');">
+                           if('${data.variantId}') card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href='/products/${product.handle}?variant=${data.variantId}');
+                           window.cfpUpdateMarketCardPrice?.(card, card._cfpMarketProduct);">
                 <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
              </div>`;
           });
@@ -1054,7 +1094,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            if (pos !== 'none') {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text); z-index: 2;">Sold out</span>`;
            }
-      } else if (onSale) {
+      } else if (onSale && !product._marketPricingUnavailable) {
          const pos = s.sale_label_position || 'top-left';
            if (pos !== 'none') {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg, #e11d48); color: var(--cfp-sale-text, #ffffff); z-index: 2;">ON SALE</span>`;
@@ -1084,7 +1124,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       return `
-        <div class="cfp-product-card">
+        <div class="cfp-product-card" data-pricing-render="${version}" data-pricing-index="${productIndex}">
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
             <a href="${productUrl}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">
@@ -1128,6 +1168,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
     renderPagination(grid, totalCount);
+    window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
+      const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);
+      updateMarketCardPrice(card, product);
+    }).catch(error => console.error('CFP: Market pricing unavailable', error));
   }
 
   function renderPagination(grid, totalCount) {

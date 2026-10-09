@@ -17,7 +17,7 @@ import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
-import { buildCollectionSequence, readRankedCollectionPage } from "../utils/rankedCollectionPage.js";
+import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory } from "../utils/rankedCollectionPage.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -713,7 +713,9 @@ export const loader = async ({ request }) => {
       : needsShopifyOrder
       ? await getCollectionBestSellingState(shop, resolvedCollectionId) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
-    if (needsShopifyOrder && (!Array.isArray(collectionBestSellingIds) || (!rankingSession && collectionBestSellingState.status === "stale"))) {
+    // Age alone must not block browsing. A complete last-good Shopify snapshot
+    // remains the ranking source while its durable refresh runs in the worker.
+    if (needsShopifyOrder && !Array.isArray(collectionBestSellingIds)) {
       const orderStatus = collectionBestSellingState.status === "stale"
         ? collectionBestSellingState.refreshState === "failed" ? "failed" : "pending"
         : collectionBestSellingState.status;
@@ -773,13 +775,17 @@ export const loader = async ({ request }) => {
         if (useRankedCollectionPagination) {
           if (!rankingSession) {
             const preparedKey = `collectionPreparedSequence:${shop}:${JSON.stringify([
-              rankingFingerprint, sortBy, allFiltersList, collectionBestSellingState.updatedAt, activeRule, activePinningRule,
+              rankingFingerprint, sortBy, allFiltersList, collectionBestSellingState.revision ?? collectionBestSellingState.updatedAt, activeRule, activePinningRule,
               userHasFilters, globalSettings, mergedValues, tiers.map(tier => tier.total),
             ])}`;
             const prepared = await getCached(preparedKey, async () => {
               const metadata = {};
               const ids = await buildCollectionSequence(meiliClient.index("products"), {
                 query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
+                conditions: activeRule?.conditions,
+                sortBy,
+                hydrateRanking: activeRule?.conditions?.some(c => c.field?.toLowerCase() === 'available')
+                  ? products => hydrateCollectionInventory(products, prisma.variant) : null,
                 pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
                 arrange: products => {
                   const ranked = applyMerchandisingRules(products, activeRule, sortBy,
@@ -794,7 +800,7 @@ export const loader = async ({ request }) => {
                 },
               });
               return { ids, metadata };
-            }, 30);
+            }, 600);
             rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, collectionBestSellingState.updatedAt ?? null, prepared.metadata);
           }
           result = await readRankedCollectionPage(meiliClient.index("products"), {
