@@ -2108,13 +2108,14 @@ facet-filters-form,
 @media (max-width: 768px) {
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body { overflow: visible !important; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups {
-    flex-wrap: wrap;
-    overflow: visible;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
     gap: 12px;
   }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group {
     position: relative;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-width: 0 !important;
     padding: 0 !important;
     margin-bottom: 0 !important;
@@ -2122,7 +2123,7 @@ facet-filters-form,
   }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__toggle { gap: 16px; padding: 12px 16px !important; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content {
-    position: absolute;
+    position: fixed;
     top: 100%;
     left: 0;
     width: min(300px, calc(100vw - 32px));

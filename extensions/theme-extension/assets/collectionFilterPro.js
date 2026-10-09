@@ -1792,6 +1792,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function setupCollapsibleToggles() {
+    const groups = sidebar.querySelector('#cfp-sidebar__filter-groups');
+    if (groups) groups.onscroll = () => {
+      if (window.matchMedia('(max-width: 768px)').matches && isHorizontalFilterLayout()) closeHorizontalFilterGroups();
+    };
     sidebar.querySelectorAll('.cfp-group__toggle').forEach(toggle => {
       // Re-bind click event
       toggle.addEventListener('click', () => {
@@ -1803,6 +1807,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (content) content.classList.toggle('cfp-collapsed', expanded);
           cfpGroupToggleState[contentId] = !expanded;
         if (content && !expanded && isHorizontalFilterLayout()) {
+          if (window.matchMedia('(max-width: 768px)').matches) {
+            const triggerRect = toggle.getBoundingClientRect();
+            content.style.top = `${triggerRect.bottom}px`;
+            const viewportWidth = document.documentElement.clientWidth;
+            const dropdownWidth = Math.min(300, viewportWidth - 32);
+            content.style.left = `${Math.max(16, Math.min(triggerRect.left, viewportWidth - 16 - dropdownWidth))}px`;
+            content.style.maxHeight = `${Math.max(0, Math.min(420, window.innerHeight - triggerRect.bottom - 16))}px`;
+            return;
+          }
           content.style.left = '0px';
           const rect = content.getBoundingClientRect();
           const shift = Math.min(0, window.innerWidth - 16 - rect.right);
