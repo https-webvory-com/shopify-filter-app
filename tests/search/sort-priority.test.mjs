@@ -4,12 +4,18 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
+import { buildCollectionSequence, readRankedCollectionPage } from '../../app/utils/rankedCollectionPage.js';
 
 async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
     if (name in mocks) return mocks[name];
-    if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingIds: async()=>null};
+    if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingState: async()=>({ ids: Array.from({ length: 180 }, (_, i) => String(180 - i)), status: 'ready' })};
+    if (name === "../utils/rankedCollectionPage.js") return { buildCollectionSequence, readRankedCollectionPage };
+    if (name === "../services/collectionRankingSession.server.js") return {
+      collectionRankingFingerprint: () => 'fixture', getCollectionRankingSession: async () => null,
+      saveCollectionRankingSession: async (_shop, fingerprint, ids, updatedAt, metadata) => ({ token: 'fixture-token', fingerprint, ids, updatedAt, metadata }),
+    };
     if (name === "../db.server.js") return { __esModule: true, default: {} };
     if (["react", "react-router", "@shopify/app-bridge-react", "@shopify/shopify-app-react-router/server"].includes(name)) return {};
     throw Error("Unexpected import " + name);
@@ -89,6 +95,20 @@ test("priority ON respects price sorting and filtered collection membership", as
   assert.equal(filtered.totalCount,10);
   assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[10,9,8,7,6,5,4,3,2,1]);
 });
+
+for (const overPins of [false, true]) for (const overMerch of [false, true]) {
+  test(`price sort independently respects pin=${overPins} and merchandising=${overMerch} priorities`, async () => {
+    const load = await collectionRoute({ prioritizeSortOverPinning: overPins, prioritizeSortOverMerchandising: overMerch });
+    const result = await load('page=1&sortBy=price-descending');
+    const ids = Array.from(result.products, p => Number(p.id.split('/').pop()));
+    const all = Array.from({ length: 180 }, (_, i) => 180 - i);
+    const pinned = overPins ? [] : [1, 175];
+    const sorted = overMerch ? all : [...all.filter(id => id <= 10), ...all.filter(id => id > 10)];
+    const ordinary = sorted.filter(id => !pinned.includes(id));
+    const expected = [...pinned, ...ordinary];
+    assert.deepEqual(ids, expected.slice(0, 25));
+  });
+}
 
 test("bestselling score precedes existing position and ties preserve existing order", async()=>{
   const {sortProductsByDefault}=await loadModule("app/services/merchandising.server.js",{});

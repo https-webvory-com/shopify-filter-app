@@ -18,3 +18,15 @@
 - Targeted ranking, pagination, variant, webhook, and worker-isolation checks passed (36 tests), and the production build passed. These checks do not prove complete Dress Outlet parity.
 
 When the user asks about previous ranking work, use these notes as historical context, distinguish verified facts from unresolved issues, and recheck changing runtime state.
+
+## Ranking edge-case follow-up — 2026-10-09
+
+- User explicitly requested fixing all reviewed edge cases EXCEPT manual sorting, then said the earlier pending-order fix was pushed and asked us to continue.
+- New local code builds the complete eligible product sequence with merchandising scores and exclusions before pagination for non-manual collection requests. This fixes multiple score levels crossing page boundaries and exclusion gaps/totals. Shopify Best selling remains the base order within equal scores; pins retain priority and images.
+- Ranked collection pages no longer run the later color-match product re-sort. Variant/image selection still operates. Custom sort priority toggles are respected across the complete collection.
+- An immutable rankingToken freezes IDs, eligibility and ranking metadata across pages for one hour. Identical sequences share a Redis record. New initial page-one loads start a fresh browsing sequence; direct reloads of later pages retain their token. Expired/invalid tokens or inactive products trigger one restart from page one; repeated failures offer Retry. Rule/cache invalidation preserves existing browsing sessions.
+- First visits wait for fresh Shopify order when the snapshot is missing or stale. Unavailable Shopify/search/Redis data returns pending or an error instead of silently substituting store-wide sales ordering. Frontend retries pending/failed refreshes up to 30 times, then shows Retry without rendering fallback products. Ranked responses are no-store.
+- Failed collection-refresh jobs can be scheduled again after a 30-second cooldown. Collection-update workers mark order stale, sync membership with errors propagated for queue retry, invalidate prepared sequences, and refresh order.
+- Initial ranking scans relevant product fields in batches of 1000. Prepared sequences are cached for 30 seconds and invalidated with shop caches. Subsequent token pages fetch only their selected documents. Production first-load performance on Dress Outlet still needs checking.
+- The manual sort path remains the legacy path: our app uses sales-score ordering and rules/pins, not Shopify's saved drag-and-drop positions. The user explicitly excluded fixing that behavior.
+- Final local verification: 161 search/ranking/webhook/sync tests passed, JS syntax check passed, production build passed. This follow-up has NOT been pushed or deployed by this agent. Backend and Shopify theme-extension assets both need deployment; the current Docker GitHub workflow does not publish Shopify extension assets. No Shopify admin or SoBooster settings were mutated. Dress Outlet parity remains unverified.

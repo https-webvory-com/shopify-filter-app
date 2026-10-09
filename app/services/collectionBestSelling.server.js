@@ -4,6 +4,7 @@ import { unauthenticated } from '../shopify.server.js';
 import { readCollectionBestSellingIds } from '../utils/collectionBestSelling.js';
 
 const freshnessMs = 300000;
+const retryCooldownMs = 30000;
 const snapshotKey = (shop, collectionId) => `collectionOrderSnapshot:${shop}:${collectionId}`;
 const jobId = (shop, collectionId) => `collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collectionId)}`;
 
@@ -13,6 +14,15 @@ export async function refreshCollectionBestSelling(shop, collectionId) {
   const ids = await readCollectionBestSellingIds(admin, collectionId);
   await redis.set(snapshotKey(shop, collectionId), JSON.stringify({ ids, updatedAt: Date.now() }));
   return ids;
+}
+
+export async function invalidateCollectionBestSelling(shop, collectionId) {
+  const key = snapshotKey(shop, collectionId);
+  const raw = await redis.get(key);
+  if (raw) {
+    const snapshot = JSON.parse(raw);
+    await redis.set(key, JSON.stringify({ ...snapshot, updatedAt: 0 }));
+  }
 }
 
 export async function getCollectionBestSellingState(shop, collectionId) {
@@ -29,7 +39,11 @@ export async function getCollectionBestSellingState(shop, collectionId) {
     let job = await webhookQueue.getJob(id);
     let state = job ? await job.getState() : null;
     if (state === 'failed') {
-      return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'failed', refreshState: 'failed', updatedAt: snapshot?.updatedAt ?? null };
+      if (Date.now() - (job.finishedOn ?? 0) < retryCooldownMs) {
+        return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'failed', refreshState: 'failed', updatedAt: snapshot?.updatedAt ?? null };
+      }
+      await job.remove();
+      job = null;
     }
     if (state === 'completed') {
       await job.remove();

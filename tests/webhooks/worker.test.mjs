@@ -12,16 +12,20 @@ async function loadWorker(syncError) {
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
     console: { log() {}, error() {} },
-    prisma: { session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
+    prisma: { collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
-      if (path.includes("collectionBestSelling")) return { refreshCollectionBestSelling: async (shop, collectionId) => {
+      if (path.includes("collectionBestSelling")) return { invalidateCollectionBestSelling: async (shop, collectionId) => calls.push(["collection-stale", shop, collectionId]), refreshCollectionBestSelling: async (shop, collectionId) => {
         calls.push(["collection-order", shop, collectionId]);
         if (syncError) throw syncError;
       } };
       if (path.includes("shopify.server")) return { unauthenticated: { admin: async (shop) => {
         calls.push(["admin", shop]); return { admin };
       } } };
-      if (path.includes("sync.server")) return { syncSingleProduct: async (shop, client, id, options) => {
+      if (path.includes("sync.server")) return { syncCollectionProducts: async (shop, client, id, options) => {
+        assert.equal(client, admin); assert.equal(options.throwOnError, true);
+        calls.push(["collection-membership", shop, id]);
+        if (syncError) throw syncError;
+      }, syncSingleProduct: async (shop, client, id, options) => {
         assert.equal(client, admin);
         assert.equal(options.retrySearchErrors, true);
         calls.push(["sync", shop, id]);
@@ -34,6 +38,15 @@ async function loadWorker(syncError) {
   vm.runInContext(source, context);
   return { process: vm.runInContext("processWebhookJob", context), calls };
 }
+
+test("collection updates synchronize eligibility and refresh Shopify ordering", async () => {
+  const worker = await loadWorker();
+  const job = { name: "COLLECTIONS_UPDATE", data: { shop: "fixture", payload: { id: 1, title: "Collection", handle: "collection" } } };
+  await worker.process(job);
+  assert.deepEqual(worker.calls, [["collection-metadata"], ["collection-stale", "fixture", "gid://shopify/Collection/1"], ["admin", "fixture"], ["collection-membership", "fixture", "gid://shopify/Collection/1"], ["invalidate", "fixture"], ["collection-order", "fixture", "gid://shopify/Collection/1"]]);
+  const error = new Error("Membership unavailable");
+  await assert.rejects((await loadWorker(error)).process(job), error);
+});
 
 test("collection order refreshes run in the worker and failures trigger queue retries", async () => {
   const job = { name: "COLLECTION_BEST_SELLING_REFRESH", data: { shop: "fixture", collectionId: "gid://shopify/Collection/1" } };

@@ -335,6 +335,9 @@
       var collHandle = "{{ cfp_collection_handle }}";
       var collId = "{{ cfp_collection_id }}";
       var params = new URLSearchParams(window.location.search);
+      // Ranked collection requests need the final customer/filter context and
+      // one browsing-session token. Let the main script issue that request.
+      if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') return;
       params.set('shop', shop);
       if (collHandle) params.set('collectionHandle', collHandle);
       if (collId && !collHandle) params.set('collectionId', collId);

@@ -696,7 +696,7 @@ export function applyMerchandisingRules(
     // When a customer explicitly selects a manual sort order (e.g. Price: Low to High, Price: High to Low),
     // customer sort takes precedence over default rules so price sorting is 100% accurate.
     const isCustomSortSelected = hasCustomSort;
-    if (isCustomSortSelected) {
+    if (isCustomSortSelected && prioritizeSortOverPinning && prioritizeSortOverMerchandising) {
       const customComparison = defaultSortComparison(a, b, sortBy);
       if (customComparison !== 0) return customComparison;
     }
@@ -714,6 +714,14 @@ export function applyMerchandisingRules(
       }
       if (aIsPinned) return -1;
       if (bIsPinned) return 1;
+    }
+
+    if (hasCustomSort) {
+      if (!prioritizeSortOverMerchandising) {
+        const difference = (b.merchandisingScore || 0) - (a.merchandisingScore || 0);
+        if (difference) return difference;
+      }
+      return defaultSortComparison(a, b, sortBy);
     }
 
     // Collection pagination has already allocated pins and ordered each tier
@@ -914,7 +922,7 @@ export function buildMeiliRuleFilter(ruleConditions) {
 
   // Sort conditions by score operand descending so highest score condition comes first
   const sortedConditions = [...ruleConditions]
-    .filter((cond) => cond.action !== "Bury" && cond.action !== "Include")
+    .filter((cond) => ["Boost", "Pin", "Dynamic"].includes(cond.action))
     .sort((a, b) => getCondScore(b) - getCondScore(a));
 
   if (sortedConditions.length === 0) return [];

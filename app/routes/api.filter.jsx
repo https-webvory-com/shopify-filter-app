@@ -17,6 +17,8 @@ import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
+import { buildCollectionSequence, readRankedCollectionPage } from "../utils/rankedCollectionPage.js";
+import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
 /**
@@ -371,7 +373,9 @@ export const loader = async ({ request }) => {
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
       maxPrice < 9999999 ||
-      (isSearch ? (sortBy !== "relevance" && sortBy !== "best-selling") : (sortBy !== "best-selling" && sortBy !== "manual"));
+      // A collection sort selection is not a product filter. Its two priority
+      // settings decide whether pins and merchandising continue to apply.
+      (isSearch ? (sortBy !== "relevance" && sortBy !== "best-selling") : false);
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
@@ -534,6 +538,7 @@ export const loader = async ({ request }) => {
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters)];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
+    const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual";
     const pinCollectionScope = !isSearch && resolvedCollectionId
       ? { collections: { some: { collectionId: resolvedCollectionId.includes("gid://") ? resolvedCollectionId : `gid://shopify/Collection/${resolvedCollectionId}` } } }
       : !isSearch && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all"
@@ -698,9 +703,28 @@ export const loader = async ({ request }) => {
     let collectionPageTotal = null;
     let collectionPaginationApplied = false;
     let collectionBestSellingApplied = false;
-    const collectionBestSellingState = useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy)
+    let collectionRankingApplied = false;
+    const rankingFingerprint = collectionRankingFingerprint(request.url);
+    let rankingSession = useRankedCollectionPagination
+      ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
+    const needsShopifyOrder = useRankedCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy);
+    const collectionBestSellingState = needsShopifyOrder && rankingSession
+      ? { ids: rankingSession.ids, status: "ready", updatedAt: rankingSession.updatedAt }
+      : needsShopifyOrder
       ? await getCollectionBestSellingState(shop, resolvedCollectionId) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
+    if (needsShopifyOrder && (!Array.isArray(collectionBestSellingIds) || (!rankingSession && collectionBestSellingState.status === "stale"))) {
+      const orderStatus = collectionBestSellingState.status === "stale"
+        ? collectionBestSellingState.refreshState === "failed" ? "failed" : "pending"
+        : collectionBestSellingState.status;
+      return data({ products: [], totalCount: 0, debug: {
+        collectionBestSellingApplied: false,
+        collectionBestSellingStatus: orderStatus,
+        collectionBestSellingRefreshState: collectionBestSellingState.refreshState,
+        collectionBestSellingPending: orderStatus === "pending",
+      } }, { status: orderStatus === "failed" ? 503 : 202,
+        headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+    }
 
     try {
       const multiSearchRes = await semanticMultiSearch(queries);
@@ -745,10 +769,44 @@ export const loader = async ({ request }) => {
             facetDistribution[field] = merged;
           }
         }
-        const result = await fetchCollectionPage(meiliClient.index("products"), {
-          page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve, orderedIds: collectionBestSellingIds,
-          cacheIds: (key, fetchIds) => getCached(`collectionPageIds:${shop}:${key}`, fetchIds, 30),
-        });
+        let result;
+        if (useRankedCollectionPagination) {
+          if (!rankingSession) {
+            const preparedKey = `collectionPreparedSequence:${shop}:${JSON.stringify([
+              rankingFingerprint, sortBy, allFiltersList, collectionBestSellingState.updatedAt, activeRule, activePinningRule,
+              userHasFilters, globalSettings, mergedValues, tiers.map(tier => tier.total),
+            ])}`;
+            const prepared = await getCached(preparedKey, async () => {
+              const metadata = {};
+              const ids = await buildCollectionSequence(meiliClient.index("products"), {
+                query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
+                pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
+                arrange: products => {
+                  const ranked = applyMerchandisingRules(products, activeRule, sortBy,
+                    userHasFilters ? null : activePinningRule, mergedValues,
+                    { ...globalSettings, preserveCollectionBestSellingOrder: needsShopifyOrder });
+                  for (const p of ranked) {
+                    if (p.merchandisingScore || p.merchandisingImage) metadata[p.id.split('/').pop()] = {
+                      merchandisingScore: p.merchandisingScore, merchandisingImage: p.merchandisingImage,
+                    };
+                  }
+                  return ranked;
+                },
+              });
+              return { ids, metadata };
+            }, 30);
+            rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, collectionBestSellingState.updatedAt ?? null, prepared.metadata);
+          }
+          result = await readRankedCollectionPage(meiliClient.index("products"), {
+            ids: rankingSession.ids, page, limit, attributes: mainQuery.attributesToRetrieve,
+          });
+          collectionRankingApplied = true;
+        } else {
+          result = await fetchCollectionPage(meiliClient.index("products"), {
+            page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve, orderedIds: collectionBestSellingIds,
+            cacheIds: (key, fetchIds) => getCached(`collectionPageIds:${shop}:${key}`, fetchIds, 30),
+          });
+        }
         meiliRes = { hits: result.hits, estimatedTotalHits: result.total };
         collectionPageTotal = result.total;
         collectionPaginationApplied = true;
@@ -771,6 +829,7 @@ export const loader = async ({ request }) => {
     } catch (e) {
       meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
+      if (useRankedCollectionPagination) throw e;
       if (useCollectionPagination) {
         // Keep cards available if the new page-query path is unsupported by
         // the deployed search server. Fetch only the old bounded page.
@@ -788,6 +847,8 @@ export const loader = async ({ request }) => {
     // ── 10. Map Meilisearch hits → product objects ─────────────────────
     let allMatchedProducts = (meiliRes.hits || []).map((h, idx) => ({
       ...h,
+      ...(rankingSession?.metadata?.[String(h.id).split('/').pop()] || {}),
+      merchandisingScore: rankingSession?.metadata?.[String(h.id).split('/').pop()]?.merchandisingScore ?? h.merchandisingScore ?? 0,
       _originalIndex: idx,
       id: `gid://shopify/Product/${h.id}`,
       variants: (h.variantPrices || []).map((v) => ({
@@ -827,7 +888,7 @@ export const loader = async ({ request }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
-    const finalProducts = applyMerchandisingRules(
+    const finalProducts = collectionRankingApplied ? allMatchedProducts : applyMerchandisingRules(
       allMatchedProducts,
       activeRule,
       sortBy,
@@ -906,7 +967,12 @@ export const loader = async ({ request }) => {
         });
       } catch (e) {
         console.error("CFP: Failed to fetch fallback product data", e);
+        if (collectionRankingApplied) throw e;
       }
+    }
+
+    if (collectionRankingApplied && paginatedSlice.some(p => !p.title || (p.status && p.status.toLowerCase() !== 'active'))) {
+      throw new Error('Collection ranking session expired; product eligibility changed');
     }
 
     // Out-of-stock pinned products are now filtered BEFORE pagination.
@@ -1082,7 +1148,7 @@ export const loader = async ({ request }) => {
     });
 
     // Sort products by match score so the most relevant colors appear first on the page
-    if (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0) {
+    if (!collectionRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
       products.sort((a, b) => b._matchScore - a._matchScore);
     }
 
@@ -1306,13 +1372,14 @@ export const loader = async ({ request }) => {
     // ⚡ PERFORMANCE: Cache the response for 10 seconds on CDN/browser
     // This avoids repeat API calls when user navigates back or re-renders
     const responseHeaders = {
-      'Cache-Control': 'public, max-age=10, stale-while-revalidate=30',
+      'Cache-Control': useRankedCollectionPagination ? 'no-store' : 'public, max-age=10, stale-while-revalidate=30',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
     const responsePayload = {
+      rankingToken: rankingSession?.token ?? null,
       products,
       totalCount,
       contextualPricingApplied,
@@ -1322,6 +1389,7 @@ export const loader = async ({ request }) => {
       didYouMean,
       debug: {
         collectionPaginationApplied,
+        collectionRankingApplied,
         collectionBestSellingApplied,
         collectionBestSellingPending: collectionBestSellingState.status === "pending",
         collectionBestSellingStatus: collectionBestSellingState.status,
@@ -1418,8 +1486,9 @@ export const loader = async ({ request }) => {
     return data(
       { error: err.message, stack: err.stack, crash: true },
       { 
-        status: 200, 
+        status: /Collection ranking session expired|Invalid collection ranking token/.test(err.message) ? 409 : 503,
         headers: {
+          'Cache-Control': 'no-store',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',

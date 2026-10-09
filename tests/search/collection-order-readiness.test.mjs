@@ -24,7 +24,7 @@ test('cold collection replaces fallback with Shopify order before rendering', as
 });
 test('ready and stale snapshots do not delay rendering', async () => {
   const wait = load(() => { throw Error('Unexpected request'); });
-  for (const status of ['ready', 'stale', 'failed', 'inactive']) {
+  for (const status of ['ready', 'stale', 'inactive']) {
     const data = { debug: { collectionBestSellingStatus: status } };
     assert.equal(await wait(data, '/api/filter', new AbortController().signal), data);
   }
@@ -38,6 +38,16 @@ test('changing filters cancels a pending collection order request', async () => 
 test('unavailable workers cannot cause unlimited polling', async () => {
   let calls = 0;
   const wait = load(async () => { calls++; return { ok: true, json: async () => pending }; });
-  assert.equal(await wait(pending, '/api/filter', new AbortController().signal), pending);
+  await assert.rejects(wait(pending, '/api/filter', new AbortController().signal), /temporarily unavailable/);
   assert.equal(calls, 30);
+});
+
+test('failed refreshes are retried instead of rendering fallback products', async () => {
+  const ready = { products: ['admin-order'], debug: { collectionBestSellingStatus: 'ready' } };
+  const wait = load(async () => ({ ok: true, json: async () => ready }));
+  assert.equal(await wait({ ...pending, debug: { collectionBestSellingStatus: 'failed' } }, '/api/filter', new AbortController().signal), ready);
+});
+
+test('search failures are surfaced rather than rendered as a successful empty collection', async () => {
+  await assert.rejects(load(() => {})({ crash: true, error: 'Search unavailable' }, '/api/filter', new AbortController().signal), /Search unavailable/);
 });

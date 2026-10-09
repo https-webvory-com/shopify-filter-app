@@ -1159,7 +1159,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
  * Detects products that were added or removed from the collection and syncs them.
  * Useful for COLLECTIONS_UPDATE webhooks where product lists might change.
  */
-export async function syncCollectionProducts(shop, admin, collectionId) {
+export async function syncCollectionProducts(shop, admin, collectionId, { throwOnError = false } = {}) {
   console.log(
     `CFP: Syncing products for collection ${collectionId} in background...`,
   );
@@ -1190,17 +1190,22 @@ export async function syncCollectionProducts(shop, admin, collectionId) {
           "CFP: GraphQL error fetching collection products",
           responseJson.errors,
         );
+        if (throwOnError) throw new Error("Shopify collection membership unavailable");
         break;
       }
 
       const products = responseJson.data?.collection?.products;
-      if (!products) break;
+      if (!products) {
+        if (throwOnError) throw new Error("Shopify collection membership unavailable");
+        break;
+      }
 
       products.nodes.forEach((n) => shopifyProductIds.add(n.id));
       hasNextPage = products.pageInfo.hasNextPage;
       cursor = products.pageInfo.endCursor;
     } catch (e) {
       console.error("CFP: Error fetching collection products", e);
+      if (throwOnError) throw e;
       break;
     }
   }
@@ -1232,12 +1237,13 @@ export async function syncCollectionProducts(shop, admin, collectionId) {
     );
     for (const productId of productsToSync) {
       try {
-        await syncSingleProduct(shop, admin, productId);
+        await syncSingleProduct(shop, admin, productId, { retrySearchErrors: throwOnError });
       } catch (e) {
         console.error(
           `CFP: Error syncing product ${productId} during collection update`,
           e,
         );
+        if (throwOnError) throw e;
       }
     }
     console.log(

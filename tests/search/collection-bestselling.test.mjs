@@ -47,11 +47,11 @@ test('Dynamic Set replaces the preceding score and collection order breaks ties'
  assert.deepEqual(Array.from(result,p=>p.merchandisingScore),[1000,1000,99]);
 });
 
-async function loadOrderService({snapshot=null,fail=false}={}) {
+async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
  const calls=[];let stored=snapshot;
  const mocks={
   './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
-  './queue.server.js':{webhookQueue:{getJob:async()=>null,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
+  './queue.server.js':{webhookQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
   '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };
@@ -59,6 +59,25 @@ async function loadOrderService({snapshot=null,fail=false}={}) {
  vm.runInNewContext((await transform(await fs.readFile('app/services/collectionBestSelling.server.js','utf8'),{format:'cjs'})).code,ctx);
  return {...ctx.module.exports,calls,stored:()=>stored};
 }
+
+test('failed worker jobs can recover after their cooldown without losing old order',async()=>{
+ let removed=0;
+ const job={finishedOn:Date.now()-60000,getState:async()=> 'failed',remove:async()=>{removed++;}};
+ const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1},job});
+ const state=await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(removed,1);assert.equal(service.calls.length,1);assert.equal(state.refreshState,'waiting');
+ assert.deepEqual(Array.from(state.ids),['1']);
+});
+test('failed worker jobs respect cooldown instead of repeatedly enqueuing',async()=>{
+ const service=await loadOrderService({job:{finishedOn:Date.now(),getState:async()=> 'failed'}});
+ assert.equal((await service.getCollectionBestSellingState('shop','collection')).status,'failed');
+ assert.equal(service.calls.length,0);
+});
+test('collection updates mark snapshots stale without discarding their IDs',async()=>{
+ const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
+ await service.invalidateCollectionBestSelling('shop','collection');
+ assert.equal(service.stored().updatedAt,0);assert.deepEqual(Array.from(service.stored().ids),['1']);
+});
 test('fresh snapshots serve immediately without scheduling Shopify reads',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
  const state=await service.getCollectionBestSellingState('shop','collection');

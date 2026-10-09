@@ -276,8 +276,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   
   // A cold collection can finish loading after the initial API response.
   // Resolve that order before rendering; otherwise the fallback stays on screen.
+  const collectionRankingTokens = new Map();
+  let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
   async function waitForCollectionOrder(data, requestUrl, signal) {
-    for (let attempt = 0; attempt < 30 && data.debug?.collectionBestSellingStatus === 'pending'; attempt++) {
+    const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus);
+    for (let attempt = 0; attempt < 30 && unresolved(data); attempt++) {
       await new Promise((resolve, reject) => {
         const onAbort = () => {
           clearTimeout(timer);
@@ -291,14 +294,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         signal.addEventListener('abort', onAbort, { once: true });
         if (signal.aborted) onAbort();
       });
-      const response = await fetch(requestUrl, { signal });
-      if (!response.ok) throw new Error('Collection order refresh failed');
+      const response = await fetch(requestUrl, { signal, cache: 'no-store' });
       data = await response.json();
     }
+    if (unresolved(data)) throw new Error('Product order is temporarily unavailable. Please retry.');
+    if (data.crash || data.error) throw new Error(data.error || 'Products are temporarily unavailable. Please retry.');
     return data;
   }
 
-  async function fetchAndRenderData(isLoadMore = false) {
+  async function fetchAndRenderData(isLoadMore = false, allowSessionRestart = true) {
     syncSortControls();
     if (activeFetchController) {
       activeFetchController.abort();
@@ -369,25 +373,47 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
+      const rankingKeyParams = new URLSearchParams(queryParams);
+      rankingKeyParams.delete('page');
+      rankingKeyParams.sort();
+      const rankingKey = rankingKeyParams.toString();
+      const rankedCollection = templateName !== 'search' && activeFilters.sortBy !== 'manual';
+      const rankingToken = rankedCollection ? collectionRankingTokens.get(rankingKey) || initialRankingToken : null;
+      initialRankingToken = null;
+      if (rankingToken) queryParams.set('rankingToken', rankingToken);
+      const displayUrl = new URL(window.location.href);
+      displayUrl.searchParams.delete('rankingToken');
+      window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
         if (!isLoadMore) {
           renderSkeleton();
         }
         let data = null;
-        if (window._cfpEarlyFetch && !isLoadMore && activeFilters.page === 1) {
+        if (window._cfpEarlyFetch && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
           try {
             data = await window._cfpEarlyFetch;
             delete window._cfpEarlyFetch;
           } catch(e) {}
         }
         if (!data) {
-          const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, { signal: fetchSignal });
+          const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, { signal: fetchSignal, cache: 'no-store' });
+          if (response.status === 409 && allowSessionRestart) {
+            collectionRankingTokens.delete(rankingKey);
+            activeFilters.page = 1;
+            return fetchAndRenderData(false, false);
+          }
           data = await response.json();
         }
 
       data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
+      if (data.rankingToken) {
+        collectionRankingTokens.set(rankingKey, data.rankingToken);
+        const readyUrl = new URL(window.location.href);
+        readyUrl.searchParams.set('rankingToken', data.rankingToken);
+        window.history.replaceState(null, '', readyUrl.pathname + readyUrl.search);
+      }
       console.log('[CFP] API Response:', data);
 
       sidebar.classList.remove('cfp-loading');
@@ -433,8 +459,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       window._cfpInitialized = true;
 
     } catch (e) {
+      if (fetchSignal.aborted) return;
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
+      const container = getProductContainer();
+      if (!isLoadMore) container.replaceChildren();
+      const error = document.createElement('div');
+      error.className = 'cfp-order-error';
+      error.setAttribute('role', 'status');
+      const message = document.createElement('p');
+      message.textContent = 'Products are temporarily unavailable. Please retry.';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = 'Retry';
+      retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore); });
+      error.append(message, retry);
+      container.appendChild(error);
     }
   }
 

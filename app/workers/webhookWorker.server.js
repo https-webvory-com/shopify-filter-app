@@ -180,6 +180,15 @@ async function handleCollectionUpdate(shop, payload) {
     update: { title: payload.title, handle: payload.handle },
     create: { id: collectionId, shop, title: payload.title, handle: payload.handle },
   });
+  const { unauthenticated } = await import("../shopify.server.js");
+  const { syncCollectionProducts } = await import("../services/sync.server.js");
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  const { invalidateCollectionBestSelling, refreshCollectionBestSelling } = await import("../services/collectionBestSelling.server.js");
+  await invalidateCollectionBestSelling(shop, collectionId);
+  const { admin } = await unauthenticated.admin(shop);
+  await syncCollectionProducts(shop, admin, collectionId, { throwOnError: true });
+  await invalidateShop(shop);
+  await refreshCollectionBestSelling(shop, collectionId);
   console.log(`CFP Worker: Collection ${collectionId} updated.`);
 }
 

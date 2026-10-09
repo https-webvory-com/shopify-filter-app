@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
 import fs from "node:fs/promises";
 import vm from "node:vm";
+import { buildCollectionSequence, readRankedCollectionPage } from '../../app/utils/rankedCollectionPage.js';
 import { transform } from "esbuild";
 
 function fixture(documents) {
@@ -145,8 +146,9 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     }
     return text.includes("NOT (") ? eligible.filter(p => !p.boosted) : text.includes("option_Color") ? eligible.filter(p => p.boosted) : eligible;
   };
+  let failSearch = false;
   const index = {
-    async search(_q, options) { return { hits: matching(options.filter).slice(options.offset, options.offset + options.limit) }; },
+    async search(_q, options) { if (failSearch) throw new Error('Search unavailable'); return { hits: matching(options.filter).slice(options.offset, options.offset + options.limit) }; },
     async getDocument(id) { return documents.find(p => p.id === id); },
     async getDocuments() { throw new Error("Unsupported ids request"); },
   };
@@ -163,8 +165,10 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     getActivePinningRuleForCollection: async () => ({ products: savedPins }),
   };
   const cache = new Map();
+  const sessions = new Map();
+  let sourceOrder = { ids: Array.from({length:23110},(_,i)=>String(i+1)), status: "ready" };
   const mocks = {
-    "react-router": { data: value => value },
+    "react-router": { data: (value, options) => ({ ...value, _status: options?.status ?? 200 }) },
     "../db.server": { __esModule: true, default: { product: { findMany: async ({ where }) => {
       assert.equal(where.shop, "fixture.myshopify.com");
       assert.equal(where.status.equals, "active");
@@ -174,7 +178,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/merchandising.server": merchandising,
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
-    "../services/collectionBestSelling.server.js": { getCollectionBestSellingState: async () => ({ ids: Array.from({length:23110},(_,i)=>String(i+1)), status: "ready" }) },
+    "../services/collectionBestSelling.server.js": { getCollectionBestSellingState: async () => sourceOrder },
     "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return {};
@@ -186,6 +190,16 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../shopify.server": {},
     "../services/rateLimiter.server": { rateLimit: async () => true },
     "../utils/collectionPage.js": { fetchCollectionPage },
+    "../utils/rankedCollectionPage.js": { buildCollectionSequence, readRankedCollectionPage },
+    "../services/collectionRankingSession.server.js": {
+      collectionRankingFingerprint: () => 'fixture',
+      getCollectionRankingSession: async (_shop, _fingerprint, token) => token ? sessions.get(token) : null,
+      saveCollectionRankingSession: async (_shop, fingerprint, ids, updatedAt, metadata) => {
+        const token = 'fixture-token-' + sessions.size;
+        const session = { token, fingerprint, ids, updatedAt, metadata };
+        sessions.set(token, session); return session;
+      },
+    },
   };
   const source = (await fs.readFile("app/routes/api.filter.jsx", "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require: name => {
@@ -215,4 +229,22 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   assert.equal(filtered.crash, undefined, filtered.error);
   assert.equal(filtered.products[0].variants[0].option1, "Blue");
   assert.equal(filtered.products[0].merchandisingImage, "blue.jpg");
+  const load = query => context.module.exports.loader({ request: new Request('https://fixture.test/api/filter?shop=fixture.myshopify.com&collectionHandle=black-tie-dresses&limit=25&' + query) });
+  sourceOrder = { ids: null, status: 'pending', refreshState: 'waiting' };
+  const cold = await load('page=1');
+  assert.equal(cold._status, 202); assert.equal(cold.products.length, 0);
+  const retained = await load('page=2&rankingToken=fixture-token-0');
+  assert.equal(retained._status, 200);
+  assert.deepEqual(Array.from(retained.products, p => p.id.split('/').pop()), Array.from({ length: 25 }, (_, i) => String(i + 26)));
+  sourceOrder = { ids: ['1'], status: 'stale', refreshState: 'waiting' };
+  assert.equal((await load('page=1'))._status, 202);
+  sourceOrder = { ids: null, status: 'failed', refreshState: 'failed' };
+  assert.equal((await load('page=1'))._status, 503);
+  sourceOrder = { ids: Array.from({ length: 23110 }, (_, i) => String(i + 1)), status: 'ready' };
+  failSearch = true;
+  cache.clear();
+  const unavailable = await load('page=1');
+  assert.equal(unavailable._status, 503);
+  assert.equal(unavailable.crash, true);
+  assert.equal(unavailable.products, undefined);
 });
