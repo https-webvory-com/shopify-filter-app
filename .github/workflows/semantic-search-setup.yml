@@ -36,7 +36,7 @@ jobs:
             async function request(path, body, method = body ? 'POST' : 'GET') {
              const response = await fetch(host + path, { method, headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(60000), ...(body ? {body:JSON.stringify(body)} : {}) });
              const result = await response.json();
-             if (!response.ok) { const error = new Error('HTTP ' + response.status + ' ' + (result.code || 'request_failed')); throw error; }
+             if (!response.ok) { const error = new Error('HTTP ' + response.status + ' ' + (result.code || 'request_failed') + ': ' + (result.message || ''));  throw error; }
              return result;
             }
             try {
