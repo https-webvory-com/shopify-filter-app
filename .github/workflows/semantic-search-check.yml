@@ -1,0 +1,76 @@
+name: Verify semantic search
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check deployed Meilisearch and search relevance
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -eu
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import fs from 'node:fs';
+            const shop = 'thedressoutlet.myshopify.com';
+            const query = 'i want a red dress for office';
+            // Read the deployed client's configuration without logging credentials.
+            const file = ['app/services/meiliClient.server.js', '/app/app/services/meiliClient.server.js'].find(p => fs.existsSync(p));
+            if (!file) { console.log('CHECK_FAILED: deployed Meilisearch client source unavailable'); process.exit(1); }
+            const source = fs.readFileSync(file, 'utf8');
+            const key = source.match(/apiKey:\s*["']([^"']+)["']/)?.[1];
+            const hostVariable = source.match(/host:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,/)?.[1];
+            const host = hostVariable ? source.match(new RegExp('(?:const|let)\\s+' + hostVariable + '\\s*=\\s*["\']([^"\']+)["\']'))?.[1] : source.match(/host:\s*["']([^"']+)["']/)?.[1];
+            if (!key || !host) { console.log('CHECK_FAILED: unsupported client configuration'); process.exit(1); }
+            console.log('CONFIG', JSON.stringify({ shop, query, semanticDisabled: process.env.SEMANTIC_SEARCH_ENABLED === 'false', geminiKeyPresent: !!process.env.GEMINI_API_KEY }));
+            async function request(path, body) {
+              const response = await fetch(host + path, {
+                headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(45000),
+                ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
+              });
+              const result = await response.json();
+              if (!response.ok) { const error = new Error('Meilisearch request failed'); error.code = result.code; error.status = response.status; throw error; }
+              return result;
+            }
+            let failures = 0;
+            async function check(name, run) {
+              try { console.log(name, JSON.stringify(await run())); }
+              catch (error) { failures++; console.log(name, JSON.stringify({ failed: true, status: error.status, code: error.code || error.cause?.code || error.name })); }
+            }
+            await check('EMBEDDERS', async () => {
+              const settings = await request('/indexes/products/settings/embedders');
+              return Object.fromEntries(Object.entries(settings).map(([name, value]) => [name, { source: value.source, model: value.model, dimensions: value.dimensions }]));
+            });
+            await check('INDEX_STATS', async () => {
+              const stats = await request('/indexes/products/stats');
+              return { numberOfDocuments: stats.numberOfDocuments, isIndexing: stats.isIndexing, numberOfEmbeddedDocuments: stats.numberOfEmbeddedDocuments, numberOfEmbeddings: stats.numberOfEmbeddings };
+            });
+            await check('RECENT_SETTINGS_TASKS', async () => {
+              const result = await request('/tasks?indexUids=products&types=settingsUpdate&limit=5');
+              return result.results.map(task => ({ uid: task.uid, status: task.status, finishedAt: task.finishedAt, errorCode: task.error?.code }));
+            });
+            for (const [mode, ratio] of [['KEYWORD', null], ['SEMANTIC_ONLY', 1], ['HYBRID', 0.5]]) {
+              await check(mode, async () => {
+                const result = await request('/indexes/products/search', {
+                  q: query,
+                  filter: [`shop = '${shop}'`, "status = 'ACTIVE'"],
+                  limit: 5,
+                  attributesToRetrieve: ['title', 'productType', 'tags', 'option_Color'],
+                  ...(ratio === null ? {} : { hybrid: { embedder: 'default', semanticRatio: ratio } }),
+                });
+                return { semanticHitCount: result.semanticHitCount, estimatedTotalHits: result.estimatedTotalHits, processingTimeMs: result.processingTimeMs, hits: result.hits };
+              });
+            }
+            process.exitCode = failures ? 1 : 0;
+            NODE
