@@ -714,6 +714,15 @@ export function applyMerchandisingRules(
       if (bIsPinned) return 1;
     }
 
+    // Collection pagination has already allocated pins and ordered each tier
+    // by Shopify. Preserve that sequence; only a different merchandising tier
+    // may outrank it, never our store-wide sales-score tie breakers.
+    if (globalSettings?.preserveCollectionBestSellingOrder && ["best-selling", "bestselling"].includes(sortBy)) {
+      const tierDifference = (b.merchandisingScore || 0) - (a.merchandisingScore || 0);
+      if (!prioritizeSortOverMerchandising && tierDifference) return tierDifference;
+      return (a._originalIndex ?? 0) - (b._originalIndex ?? 0);
+    }
+
     // 2. Merchandising score priority (unless prioritizeSortOverMerchandising is true)
     // We add the base sorting score (bestSellingScore) to the merchandising score.
     // This allows Dynamic (+50) rules to correctly tweak the base score and compete, 

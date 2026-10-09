@@ -2,9 +2,10 @@ const cleanId = id => String(id).split("/").pop();
 
 // Count disjoint tiers together, then allocate pin and ordinary slots globally.
 // Only IDs are cached; full product data is loaded for the requested page.
-export async function fetchCollectionPage(index, { page, limit, pinnedIds, tiers, attributes, cacheIds = async (_key, fetchIds) => fetchIds() }) {
+export async function fetchCollectionPage(index, { page, limit, pinnedIds, tiers, attributes, orderedIds = null, cacheIds = async (_key, fetchIds) => fetchIds() }) {
   const pins = [...new Set(pinnedIds.map(cleanId))];
   const pinSet = new Set(pins);
+  const ranks = orderedIds ? new Map(orderedIds.map((id, rank) => [cleanId(id), rank])) : null;
   const start = (page - 1) * limit;
   const selected = pins.slice(start, start + limit);
   let offset = Math.max(0, start - pins.length);
@@ -16,7 +17,7 @@ export async function fetchCollectionPage(index, { page, limit, pinnedIds, tiers
     const { indexUid, q, ...options } = tier.query;
     let ordinaryIds;
     let ordinaryTotal = tier.total;
-    if (pins.length) {
+    if (pins.length || ranks) {
       const key = JSON.stringify([q, options.filter, options.sort, tier.total]);
       const ids = await cacheIds(key, async () => {
         const result = await index.search(q, { ...options, offset: 0, limit: tier.total, attributesToRetrieve: ["id"] });
@@ -24,6 +25,7 @@ export async function fetchCollectionPage(index, { page, limit, pinnedIds, tiers
         return result.hits.map(product => cleanId(product.id));
       });
       ordinaryIds = ids.filter(id => !pinSet.has(id));
+      if (ranks) ordinaryIds.sort((a,b) => (ranks.get(a) ?? Infinity) - (ranks.get(b) ?? Infinity));
       ordinaryTotal = ordinaryIds.length;
     }
     total += ordinaryTotal;

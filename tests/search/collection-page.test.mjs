@@ -174,6 +174,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/merchandising.server": merchandising,
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
+    "../services/collectionBestSelling.server.js": { getCollectionBestSellingIds: async () => Array.from({length:23110},(_,i)=>String(i+1)) },
     "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return {};
@@ -197,6 +198,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     assert.equal(response.crash, undefined, response.error);
     assert.equal(response.totalCount, 23110);
     assert.equal(response.debug.collectionPaginationApplied, true);
+    assert.equal(response.debug.collectionBestSellingApplied, true);
     assert.equal(response.debug.meiliError, null);
     assert.equal(response.products.length, page === 925 ? 10 : 25);
     assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112", "gid://shopify/Product/23113"].includes(p.id)));

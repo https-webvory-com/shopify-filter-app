@@ -15,6 +15,7 @@ import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
+import { getCollectionBestSellingIds } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -696,6 +697,9 @@ export const loader = async ({ request }) => {
     let meiliError = null;
     let collectionPageTotal = null;
     let collectionPaginationApplied = false;
+    let collectionBestSellingApplied = false;
+    const collectionBestSellingIds = useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy)
+      ? await getCollectionBestSellingIds(shop, resolvedCollectionId) : null;
 
     try {
       const multiSearchRes = await semanticMultiSearch(queries);
@@ -741,12 +745,13 @@ export const loader = async ({ request }) => {
           }
         }
         const result = await fetchCollectionPage(meiliClient.index("products"), {
-          page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve,
+          page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve, orderedIds: collectionBestSellingIds,
           cacheIds: (key, fetchIds) => getCached(`collectionPageIds:${shop}:${key}`, fetchIds, 30),
         });
         meiliRes = { hits: result.hits, estimatedTotalHits: result.total };
         collectionPageTotal = result.total;
         collectionPaginationApplied = true;
+        collectionBestSellingApplied = Array.isArray(collectionBestSellingIds);
       }
 
       // Merge disjunctive facet counts
@@ -827,7 +832,7 @@ export const loader = async ({ request }) => {
       sortBy,
       userHasFilters ? null : activePinningRule,
       mergedValues,
-      globalSettings,
+      { ...globalSettings, preserveCollectionBestSellingOrder: collectionBestSellingApplied },
     );
 
     // ── 12. Paginate results ───────────────────────────────────────────
@@ -1316,6 +1321,8 @@ export const loader = async ({ request }) => {
       didYouMean,
       debug: {
         collectionPaginationApplied,
+        collectionBestSellingApplied,
+        collectionBestSellingPending: !!(useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy) && !collectionBestSellingApplied),
         resolvedCollectionId,
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,

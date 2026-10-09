@@ -9,6 +9,7 @@ async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
     if (name in mocks) return mocks[name];
+    if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingIds: async()=>null};
     if (name === "../db.server.js") return { __esModule: true, default: {} };
     if (["react", "react-router", "@shopify/app-bridge-react", "@shopify/shopify-app-react-router/server"].includes(name)) return {};
     throw Error("Unexpected import " + name);
