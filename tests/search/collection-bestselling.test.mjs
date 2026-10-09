@@ -39,27 +39,51 @@ test('Shopify ranking does not admit products outside the filtered collection or
  assert.deepEqual(result.hits.map(p=>p.id),['1','2','3']);assert.equal(result.total,3);
 });
 
-test('slow Shopify order loading yields quickly and reuses the same background refresh',async()=>{
- let finish;const gate=new Promise(resolve=>{finish=resolve;});let reads=0;
- const mocks={
-  '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
-  './shopCache.server.js':{getCached:async(_key,read)=>read()},
-  '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{reads++;await gate;return ['1','2'];}},
- };
- const ctx={module:{exports:{}},exports:{},setTimeout,clearTimeout,console:{error(){}},require:name=>mocks[name]};
- vm.runInNewContext((await transform(await fs.readFile('app/services/collectionBestSelling.server.js','utf8'),{format:'cjs'})).code,ctx);
- const get=ctx.module.exports.getCollectionBestSellingIds;
- assert.equal(await get('shop','collection',1),null);
- const warmed=get('shop','collection',100);finish();
- assert.deepEqual(Array.from(await warmed),['1','2']);assert.equal(reads,1);
+test('Dynamic Set replaces the preceding score and collection order breaks ties',()=>{
+ const conditions=[{action:'Dynamic',field:'Tags',value:'TopFormal',operator:'Set',operand:'99'},{action:'Dynamic',field:'Tags',value:'BestFormal',operator:'Set',operand:'1000'}];
+ const products=[{id:'1',tags:['TopFormal','BestFormal'],_originalIndex:0,bestSellingScore:1},{id:'2',tags:['BestFormal'],_originalIndex:1,bestSellingScore:9999},{id:'3',tags:['TopFormal'],_originalIndex:2}];
+ const result=apply(products,{conditions},'best-selling',null,[],{preserveCollectionBestSellingOrder:true});
+ assert.deepEqual(Array.from(result,p=>p.id),['1','2','3']);
+ assert.deepEqual(Array.from(result,p=>p.merchandisingScore),[1000,1000,99]);
 });
-test('Shopify authentication failure returns the existing rendering fallback',async()=>{
+
+async function loadOrderService({snapshot=null,fail=false}={}) {
+ const calls=[];let stored=snapshot;
  const mocks={
-  '../shopify.server.js':{unauthenticated:{admin:async()=>{throw Error('401 Unauthorized');}}},
-  './shopCache.server.js':{getCached:async(_key,read)=>read()},
-  '../utils/collectionBestSelling.js':{},
+  './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
+  './queue.server.js':{webhookQueue:{getJob:async()=>null,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
+  '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
+  '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };
- const ctx={module:{exports:{}},exports:{},setTimeout,clearTimeout,console:{error(){}},require:name=>mocks[name]};
+ const ctx={module:{exports:{}},exports:{},Date,console:{error(){}},require:name=>mocks[name]};
  vm.runInNewContext((await transform(await fs.readFile('app/services/collectionBestSelling.server.js','utf8'),{format:'cjs'})).code,ctx);
- assert.equal(await ctx.module.exports.getCollectionBestSellingIds('shop','collection'),null);
+ return {...ctx.module.exports,calls,stored:()=>stored};
+}
+test('fresh snapshots serve immediately without scheduling Shopify reads',async()=>{
+ const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
+ const state=await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(state.status,'ready');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls.length,0);
+});
+test('stale snapshots remain usable while a durable retrying job refreshes them',async()=>{
+ const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1}});
+ const state=await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(state.status,'stale');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls[0].name,'COLLECTION_BEST_SELLING_REFRESH');
+ await service.refreshCollectionBestSelling('shop','collection');assert.deepEqual(Array.from(service.stored().ids),['2','1']);
+});
+test('refresh failures preserve the last successful collection order',async()=>{
+ const snapshot={ids:['1'],updatedAt:1};const service=await loadOrderService({snapshot,fail:true});
+ await assert.rejects(service.refreshCollectionBestSelling('shop','collection'),/Shopify/);
+ assert.deepEqual(service.stored(),snapshot);
+ const state=await service.getCollectionBestSellingState('shop','collection');assert.equal(state.status,'stale');assert.equal(state.refreshState,'failed');
+});
+test('cold collections report pending separately from queue failures',async()=>{
+ assert.equal((await (await loadOrderService()).getCollectionBestSellingState('shop','collection')).status,'pending');
+ assert.equal((await (await loadOrderService({fail:true})).getCollectionBestSellingState('shop','collection')).status,'failed');
+});
+test('SoBooster imports retain Dynamic Set operands including zero',async()=>{
+ const source=await fs.readFile('app/components/merchandising/ImportMerchandisingRulesModal.jsx','utf8');
+ const mapping=source.slice(source.indexOf('  const mapToOurFormat ='),source.indexOf('  const handleNext ='));
+ const ctx={};vm.runInNewContext(mapping+'\nthis.mapRule=mapToOurFormat;',ctx);
+ const rule=ctx.mapRule({Conditions:JSON.stringify([{Type:'Dynamic',Field:'tags',Value:['TopFormal'],DynamicOperator:'Set',DynamicOperand:99},{Type:'Include',Field:'tags',Value:['TopFormal']},{Type:'Dynamic',Field:'tags',Value:['BestFormal'],DynamicOperator:'Set',DynamicOperand:1000},{Type:'Dynamic',Field:'tags',Value:['Zero'],DynamicOperator:'Set',DynamicOperand:0}])});
+ assert.deepEqual(Array.from(rule.conditions,c=>[c.action,c.operator,c.operand]),[['Dynamic','Set','99'],['Include','contains',''],['Dynamic','Set','1000'],['Dynamic','Set','0']]);
 });

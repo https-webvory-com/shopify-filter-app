@@ -174,7 +174,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/merchandising.server": merchandising,
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
-    "../services/collectionBestSelling.server.js": { getCollectionBestSellingIds: async () => Array.from({length:23110},(_,i)=>String(i+1)) },
+    "../services/collectionBestSelling.server.js": { getCollectionBestSellingState: async () => ({ ids: Array.from({length:23110},(_,i)=>String(i+1)), status: "ready" }) },
     "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return {};

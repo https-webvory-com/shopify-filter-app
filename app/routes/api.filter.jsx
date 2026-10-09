@@ -15,7 +15,7 @@ import meiliClient from "../services/meiliClient.server";
 import { getCached } from "../services/shopCache.server";
 import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
-import { getCollectionBestSellingIds } from "../services/collectionBestSelling.server.js";
+import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -698,8 +698,9 @@ export const loader = async ({ request }) => {
     let collectionPageTotal = null;
     let collectionPaginationApplied = false;
     let collectionBestSellingApplied = false;
-    const collectionBestSellingIds = useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy)
-      ? await getCollectionBestSellingIds(shop, resolvedCollectionId) : null;
+    const collectionBestSellingState = useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy)
+      ? await getCollectionBestSellingState(shop, resolvedCollectionId) : { ids: null, status: "inactive" };
+    const collectionBestSellingIds = collectionBestSellingState.ids;
 
     try {
       const multiSearchRes = await semanticMultiSearch(queries);
@@ -1322,7 +1323,10 @@ export const loader = async ({ request }) => {
       debug: {
         collectionPaginationApplied,
         collectionBestSellingApplied,
-        collectionBestSellingPending: !!(useCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy) && !collectionBestSellingApplied),
+        collectionBestSellingPending: collectionBestSellingState.status === "pending",
+        collectionBestSellingStatus: collectionBestSellingState.status,
+        collectionBestSellingRefreshState: collectionBestSellingState.refreshState ?? null,
+        collectionBestSellingUpdatedAt: collectionBestSellingState.updatedAt ?? null,
         resolvedCollectionId,
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,

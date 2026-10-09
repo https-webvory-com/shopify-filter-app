@@ -661,7 +661,9 @@ export function applyMerchandisingRules(
             const num = parseFloat(numStr);
             if (!isNaN(num)) {
               const op = (cond.operator || "Add").trim();
-              if (op === "Set" || op === "Add" || !op || op === "Operator") {
+              if (op === "Set") {
+                p.merchandisingScore = num;
+              } else if (op === "Add" || !op || op === "Operator") {
                 p.merchandisingScore += num;
               } else if (op === "Subtract") {
                 p.merchandisingScore -= num;

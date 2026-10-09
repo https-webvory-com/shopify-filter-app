@@ -14,6 +14,10 @@ async function loadWorker(syncError) {
     console: { log() {}, error() {} },
     prisma: { session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
+      if (path.includes("collectionBestSelling")) return { refreshCollectionBestSelling: async (shop, collectionId) => {
+        calls.push(["collection-order", shop, collectionId]);
+        if (syncError) throw syncError;
+      } };
       if (path.includes("shopify.server")) return { unauthenticated: { admin: async (shop) => {
         calls.push(["admin", shop]); return { admin };
       } } };
@@ -30,6 +34,15 @@ async function loadWorker(syncError) {
   vm.runInContext(source, context);
   return { process: vm.runInContext("processWebhookJob", context), calls };
 }
+
+test("collection order refreshes run in the worker and failures trigger queue retries", async () => {
+  const job = { name: "COLLECTION_BEST_SELLING_REFRESH", data: { shop: "fixture", collectionId: "gid://shopify/Collection/1" } };
+  const worker = await loadWorker();
+  await worker.process(job);
+  assert.deepEqual(worker.calls, [["collection-order", "fixture", "gid://shopify/Collection/1"]]);
+  const error = new Error("Shopify unavailable");
+  await assert.rejects((await loadWorker(error)).process(job), error);
+});
 
 for (const topic of ["PRODUCTS_CREATE", "PRODUCTS_UPDATE", "products/update"]) {
   test(`${topic} syncs the product and invalidates the shop cache`, async () => {

@@ -41,7 +41,7 @@ export async function getCached(key, fetchFn, customTtlSec = TTL_SEC) {
 export async function invalidateShop(shop) {
   const shopStr = String(shop);
   try {
-    const keys = await redis.keys(`*${shopStr}*`);
+    const keys = (await redis.keys(`*${shopStr}*`)).filter(key => !key.startsWith('collectionOrderSnapshot:'));
     if (keys.length > 0) {
       await redis.del(...keys);
     }

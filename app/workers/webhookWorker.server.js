@@ -15,6 +15,11 @@ async function processWebhookJob(job) {
 
   try {
     switch (normalizedTopic) {
+      case "COLLECTION_BEST_SELLING_REFRESH": {
+        const { refreshCollectionBestSelling } = await import("../services/collectionBestSelling.server.js");
+        await refreshCollectionBestSelling(shop, data.collectionId);
+        break;
+      }
       case "ORDERS_PAID":
         await handleOrderPaid(shop, payload);
         break;
