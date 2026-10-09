@@ -58,7 +58,7 @@ jobs:
             });
             await check('RECENT_SETTINGS_TASKS', async () => {
               const result = await request('/tasks?indexUids=products&types=settingsUpdate&limit=5');
-              return result.results.map(task => ({ uid: task.uid, status: task.status, startedAt: task.startedAt, finishedAt: task.finishedAt, duration: task.duration, errorCode: task.error?.code }));
+              return result.results.map(task => ({ uid: task.uid, status: task.status, startedAt: task.startedAt, finishedAt: task.finishedAt, duration: task.duration, errorCode: task.error?.code, errorMessage: task.error?.message?.replaceAll(key, "[redacted]").replaceAll(process.env.GEMINI_API_KEY || "__unused__", "[redacted]").replace(/https?:\/\/\S+/g, "[url redacted]") }));
             });
             for (const [mode, ratio] of [['KEYWORD', null], ['SEMANTIC_ONLY', 1], ['HYBRID', 0.5]]) {
               await check(mode, async () => {
