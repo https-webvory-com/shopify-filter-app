@@ -1,0 +1,112 @@
+import { timingSafeEqual } from "node:crypto";
+
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_BATCH = 100;
+const DIMENSIONS = 768;
+const MODEL = "models/gemini-embedding-2";
+const cache = new Map();
+const pending = new Map();
+let active = 0;
+const waiters = [];
+
+async function acquire() {
+  if (active >= 8) await new Promise(resolve => waiters.push(resolve));
+  else active++;
+}
+function release() {
+  const next = waiters.shift();
+  if (next) next();
+  else active--;
+}
+function json(body, status = 200) {
+  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+function authorized(request, token) {
+  if (!token) return false;
+  const actual = Buffer.from(request.headers.get("Authorization") || "");
+  const expected = Buffer.from(`Bearer ${token}`);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+async function readBody(request) {
+  if (Number(request.headers.get("Content-Length")) > MAX_BODY_BYTES) throw new Error("BODY_TOO_LARGE");
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error("INVALID_BODY");
+  const chunks = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > MAX_BODY_BYTES) { await reader.cancel(); throw new Error("BODY_TOO_LARGE"); }
+      chunks.push(Buffer.from(value));
+    }
+  } finally { reader.releaseLock(); }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+async function generate(texts, apiKey, fetchImpl) {
+  await acquire();
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/${MODEL}:batchEmbedContents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        signal: AbortSignal.timeout(45000),
+        body: JSON.stringify({ requests: texts.map(text => ({ model: MODEL, content: { parts: [{ text }] }, outputDimensionality: DIMENSIONS })) }),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        if (attempt < 2 && [429, 500, 502, 503, 504].includes(response.status)) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(5000, Number(response.headers.get("Retry-After")) * 1000 || 500 * 2 ** attempt)));
+          continue;
+        }
+        throw new Error("PROVIDER_UNAVAILABLE");
+      }
+      const result = await response.json();
+      if (result.embeddings?.length !== texts.length || result.embeddings.some(embedding =>
+        !Array.isArray(embedding.values) || embedding.values.length !== DIMENSIONS || embedding.values.some(value => !Number.isFinite(value)))) {
+        throw new Error("INVALID_PROVIDER_RESPONSE");
+      }
+      return result.embeddings;
+    }
+  } finally { release(); }
+}
+
+export async function handleEmbeddingRelay(request, {
+  token = process.env.SEMANTIC_RELAY_TOKEN,
+  apiKey = process.env.GEMINI_API_KEY,
+  fetchImpl = fetch,
+} = {}) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (!authorized(request, token)) return json({ error: "Unauthorized" }, 401);
+  if (!apiKey) return json({ error: "Embedding provider unavailable" }, 503);
+  let texts;
+  try {
+    ({ texts } = await readBody(request));
+    if (!Array.isArray(texts) || texts.length < 1 || texts.length > MAX_BATCH || texts.some(text =>
+      typeof text !== "string" || !text.trim() || text.length > 8000)) throw new Error("INVALID_BODY");
+  } catch (error) {
+    return json({ error: "Invalid embedding request" }, error.message === "BODY_TOO_LARGE" ? 413 : 400);
+  }
+  try {
+    const unique = [...new Set(texts)];
+    const missing = unique.filter(text => !cache.has(text) && !pending.has(text));
+    if (missing.length) {
+      const batch = generate(missing, apiKey, fetchImpl);
+      missing.forEach((text, index) => {
+        const embedding = batch.then(values => {
+          const value = values[index];
+          if (cache.size >= 256) cache.delete(cache.keys().next().value);
+          cache.set(text, value);
+          return value;
+        }).finally(() => pending.delete(text));
+        pending.set(text, embedding);
+      });
+    }
+    const values = new Map(await Promise.all(unique.map(async text => [text, cache.get(text) || await pending.get(text)])));
+    return json({ embeddings: texts.map(text => values.get(text)) });
+  } catch {
+    return json({ error: "Embedding provider unavailable" }, 503);
+  }
+}

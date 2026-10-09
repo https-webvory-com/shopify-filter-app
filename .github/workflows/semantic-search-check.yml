@@ -20,6 +20,24 @@ jobs:
           command_timeout: 5m
           script: |
             set -eu
+            python3 - <<'PY'
+            import subprocess, json
+            import socket
+            print('SERVER_NETWORK', json.dumps({'hostnameAddresses': subprocess.check_output(['hostname', '-I'], text=True).strip().split(), 'googleAddresses': sorted(set(item[4][0] for item in socket.getaddrinfo('generativelanguage.googleapis.com', 443)))}))
+            service = subprocess.run(['systemctl', 'show', 'meilisearch', '-p', 'ActiveState', '-p', 'FragmentPath'], capture_output=True, text=True)
+            print('MEILISEARCH_SERVICE', service.stdout.strip())
+            listeners = subprocess.run(['ss', '-lnt'], capture_output=True, text=True)
+            print('MEILISEARCH_LOCAL_LISTENERS', json.dumps([line for line in listeners.stdout.splitlines() if ':7700 ' in line]))
+            rows = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}} {{.Image}}'], text=True).splitlines()
+            for row in rows:
+                name, image = row.split(' ', 1)
+                if 'meili' not in (image + ' ' + name).lower():
+                    continue
+                stats = subprocess.check_output(['docker', 'stats', '--no-stream', '--format', '{{.CPUPerc}} {{.MemUsage}}', name], text=True).strip()
+                logs = subprocess.run(['docker', 'logs', '--tail', '1000', name], capture_output=True, text=True)
+                lines = (logs.stdout + logs.stderr).lower().splitlines()
+                print('ENGINE_HEALTH', json.dumps({'container': name, 'resources': stats, 'recent429Lines': sum('429' in line or 'resource_exhausted' in line for line in lines), 'recentEmbeddingErrorLines': sum('error' in line and 'embed' in line for line in lines)}))
+            PY
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import fs from 'node:fs';
             const shop = 'thedressoutlet.myshopify.com';
@@ -43,6 +61,15 @@ jobs:
               if (!response.ok) { const error = new Error('Meilisearch request failed'); error.code = result.code; error.status = response.status; throw error; }
               return result;
             }
+            if (process.env.GEMINI_API_KEY) {
+              const { geminiEmbedder } = await import('./app/utils/semanticSearch.js');
+              const config = geminiEmbedder(process.env.GEMINI_API_KEY);
+              try {
+                const response = await fetch(config.url, {method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(45000), body:JSON.stringify({...config.request,content:{parts:[{text:'red office dress'}]}})});
+                const probe = await response.json();
+                console.log('PROVIDER_HEALTH',JSON.stringify({status:response.status,errorStatus:probe.error?.status,dimensions:probe.embedding?.values?.length,quota:probe.error?.details?.flatMap(detail=>(detail.violations||[]).map(v=>({metric:v.quotaMetric,id:v.quotaId,value:v.quotaValue,dimensions:v.quotaDimensions}))),retryDelay:probe.error?.details?.find(detail=>detail.retryDelay)?.retryDelay}));
+              } catch(error) { console.log('PROVIDER_HEALTH',JSON.stringify({failed:true,code:error.name})); }
+            }
             let failures = 0;
             async function check(name, run) {
               try { console.log(name, JSON.stringify(await run())); }
@@ -50,7 +77,7 @@ jobs:
             }
             await check('EMBEDDERS', async () => {
               const settings = await request('/indexes/products/settings/embedders');
-              return Object.fromEntries(Object.entries(settings).map(([name, value]) => [name, { source: value.source, model: value.model, dimensions: value.dimensions }]));
+              return Object.fromEntries(Object.entries(settings || {}).map(([name, value]) => [name, { source: value.source, model: value.model, dimensions: value.dimensions }]));
             });
             await check('INDEX_STATS', async () => {
               const stats = await request('/indexes/products/stats');
@@ -58,7 +85,7 @@ jobs:
             });
             await check('RECENT_SETTINGS_TASKS', async () => {
               const result = await request('/tasks?indexUids=products&types=settingsUpdate&limit=5');
-              return result.results.map(task => ({ uid: task.uid, status: task.status, finishedAt: task.finishedAt, errorCode: task.error?.code }));
+              return result.results.map(task => ({ uid: task.uid, status: task.status, startedAt: task.startedAt, finishedAt: task.finishedAt, duration: task.duration, errorCode: task.error?.code, errorMessage: task.error?.message?.replaceAll(key, "[redacted]").replaceAll(process.env.GEMINI_API_KEY || "__unused__", "[redacted]").replace(/https?:\/\/\S+/g, "[url redacted]") }));
             });
             for (const [mode, ratio] of [['KEYWORD', null], ['SEMANTIC_ONLY', 1], ['HYBRID', 0.5]]) {
               await check(mode, async () => {

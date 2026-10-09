@@ -1,0 +1,30 @@
+name: Stop quota limited catalog embedding
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import meiliClient from './app/services/meiliClient.server.js';
+            const uid=252811;
+            const before=await meiliClient.tasks.getTask(uid);
+            console.log('CATALOG_TASK_BEFORE',JSON.stringify({uid:before.uid,status:before.status}));
+            if(before.status==='processing'||before.status==='enqueued') {
+              const task=await meiliClient.tasks.cancelTasks({uids:[uid]});
+              await meiliClient.tasks.waitForTask(task.taskUid,{timeout:420000,interval:2000});
+            }
+            const after=await meiliClient.tasks.getTask(uid);
+            const stats=await meiliClient.index('products').getStats();
+            console.log('CATALOG_TASK_AFTER',JSON.stringify({uid:after.uid,status:after.status,numberOfDocuments:stats.numberOfDocuments,isIndexing:stats.isIndexing}));
+            NODE

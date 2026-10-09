@@ -1,5 +1,5 @@
 import prisma from "../db.server";
-import { geminiEmbedder } from "../utils/semanticSearch.js";
+import { geminiEmbedder, geminiRelayEmbedder } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
@@ -160,7 +160,10 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
 
     if (process.env.GEMINI_API_KEY) {
       try {
-        const task = await index.updateEmbedders({ default: geminiEmbedder(process.env.GEMINI_API_KEY) });
+        const embedder = process.env.SEMANTIC_RELAY_URL && process.env.SEMANTIC_RELAY_TOKEN
+          ? geminiRelayEmbedder(process.env.SEMANTIC_RELAY_URL, process.env.SEMANTIC_RELAY_TOKEN)
+          : geminiEmbedder(process.env.GEMINI_API_KEY);
+        const task = await index.updateEmbedders({ default: embedder });
         const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 600000 });
         if (completed.status !== "succeeded") throw new Error("Semantic embedding configuration failed: " + (completed.error?.code || completed.status));
         console.log(`CFP: AI Vector embedder (Gemini) configured for ${shop}`);

@@ -5,7 +5,19 @@ export function geminiEmbedder(apiKey) {
     dimensions: 768,
     request: { model: "models/gemini-embedding-2", content: { parts: [{ text: "{{text}}" }] }, outputDimensionality: 768 },
     response: { embedding: { values: "{{embedding}}" } },
-    documentTemplate: "{{doc.title}}. {{doc.productType}} by {{doc.vendor}}. {{doc.tags | join: ', '}}",
+    documentTemplate: "{% for field in fields %}{% if field.name == 'title' or field.name == 'productType' or field.name == 'vendor' or field.name == 'option_Color' or field.name == 'tags' or field.name == 'metafield_global.description_tag' %}{% if field.value != nil %}{{field.name}}: {{field.value}}. {% endif %}{% endif %}{% endfor %}",
+    documentTemplateMaxBytes: 2000,
+  };
+}
+
+export function geminiRelayEmbedder(url, token) {
+  if (!url || !token) throw new Error("Gemini relay URL and token are required");
+  const { documentTemplate, documentTemplateMaxBytes, dimensions } = geminiEmbedder("");
+  return {
+    source: "rest", url, apiKey: token, dimensions,
+    request: { texts: ["{{text}}", "{{..}}"] },
+    response: { embeddings: [{ values: "{{embedding}}" }, "{{..}}"] },
+    documentTemplate, documentTemplateMaxBytes,
   };
 }
 
