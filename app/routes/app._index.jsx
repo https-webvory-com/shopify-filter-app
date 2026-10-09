@@ -108,7 +108,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, latestSyncStatus, latestSyncId } = useLoaderData();
+  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncIssue, syncProgress, resumableJob, latestSyncStatus, latestSyncId } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
