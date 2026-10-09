@@ -95,7 +95,7 @@ async function renderDashboard(data, stats = null) {
     "react-router":{useLoaderData:()=>data,useFetcher:()=>({state:"idle",data:stats}),useRevalidator:()=>({revalidate(){}}),useNavigate:()=>()=>{}},
     "@shopify/app-bridge-react":{useAppBridge:()=>({toast:{show(){}}})},
     "../components/ui/LoadingSpinner":{__esModule:true,default:()=>React.createElement("span",null,"Loading")},
-    "../components/ui/SyncErrorBanner":{__esModule:true,default:()=>null},
+    "../components/ui/SyncErrorBanner":{__esModule:true,default:()=>React.createElement("div",{"data-sync-error-banner":true},"Sync did not complete")},
   };
   const ctx={module:{exports:{}},exports:{},require:name=>mocks[name]||{}};
   vm.runInNewContext((await transform(await fs.readFile("app/routes/app._index.jsx","utf8"),{format:"cjs",loader:"jsx",jsx:"automatic"})).code,ctx);
@@ -146,4 +146,13 @@ test("a database count difference alone is never labelled unpublished",async()=>
   data.syncedProductsCount=45;
   const html=await renderDashboard(data,{activeProducts:51});
   assert.ok(!html.includes("unpublished products excluded"));
+});
+
+test("dashboard hides the sync error box while keeping stopped progress and recovery controls",async()=>{
+  const data=await routeFixture({id:"stopped",status:"FAILED",productsProcessed:45,totalProducts:51,lastError:"Shopify pagination stopped before all products were read"});
+  const html=await renderDashboard(data);
+  assert.ok(!html.includes("data-sync-error-banner"));
+  assert.ok(!html.includes("Sync did not complete"));
+  assert.match(html,/sync stopped/);
+  assert.match(html,/Resume Sync/);
 });
