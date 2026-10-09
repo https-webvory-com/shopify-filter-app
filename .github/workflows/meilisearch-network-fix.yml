@@ -1,0 +1,83 @@
+name: Repair Meilisearch outbound network
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Create a billable NAT gateway and repair the subnet route
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: meilisearch-network-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+      - name: Review or apply the network repair
+        env:
+          APPLY: ${{ inputs.apply }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          def aws(*args):
+              result = subprocess.run(['aws', 'ec2', *args, '--output', 'json'], capture_output=True, text=True)
+              if result.returncode:
+                  raise RuntimeError(result.stderr.strip())
+              return json.loads(result.stdout) if result.stdout.strip() else {}
+          instance_id = 'i-0ecb95972f915a915'
+          subnet_id = 'subnet-0b6dac9d229cb92b7'
+          vpc_id = 'vpc-0fec1c6b43983d6ba'
+          instance = aws('describe-instances', '--instance-ids', instance_id)['Reservations'][0]['Instances'][0]
+          assert instance['PrivateIpAddress'] == '10.0.2.139' and instance['SubnetId'] == subnet_id and instance['VpcId'] == vpc_id
+          tables = aws('describe-route-tables', '--filters', 'Name=vpc-id,Values=' + vpc_id)['RouteTables']
+          def table_for(subnet):
+              explicit = [table for table in tables if any(a.get('SubnetId') == subnet for a in table['Associations'])]
+              return explicit[0] if explicit else next(table for table in tables if any(a.get('Main') for a in table['Associations']))
+          target = table_for(subnet_id)
+          assert target['RouteTableId'] == 'rtb-05dfcbc71b9733020'
+          default = next((route for route in target['Routes'] if route.get('DestinationCidrBlock') == '0.0.0.0/0'), None)
+          if default and default.get('NatGatewayId'):
+              print('ALREADY_ROUTED_THROUGH_NAT', default['NatGatewayId'])
+              raise SystemExit(0)
+          assert default and default.get('GatewayId') == 'igw-035102ca8a48b0443', 'Route has changed; inspect before proceeding'
+          subnets = aws('describe-subnets', '--filters', 'Name=vpc-id,Values=' + vpc_id)['Subnets']
+          zone = instance['Placement']['AvailabilityZone']
+          public = [subnet for subnet in subnets if subnet['AvailabilityZone'] == zone and subnet['SubnetId'] != subnet_id and any(route.get('DestinationCidrBlock') == '0.0.0.0/0' and route.get('GatewayId') == 'igw-035102ca8a48b0443' and route.get('State') == 'active' for route in table_for(subnet['SubnetId'])['Routes'])]
+          assert public, 'No public subnet in the same availability zone; review the network design'
+          public.sort(key=lambda subnet: subnet['SubnetId'] != 'subnet-045077141dcaca926')
+          public_subnet = public[0]['SubnetId']
+          print('REPAIR_PLAN', json.dumps({'instanceId': instance_id, 'privateSubnet': subnet_id, 'routeTable': target['RouteTableId'], 'publicNatSubnet': public_subnet, 'availabilityZone': zone, 'previousGateway': default['GatewayId'], 'changes': ['Create one public NAT gateway and its Elastic IP', 'Replace only this route table default IPv4 route with NAT gateway'], 'inboundSecurityGroupChanges': False, 'publicIpOnMeilisearch': False}))
+          if os.environ.get('APPLY') != 'true':
+              print('PLAN_ONLY: no AWS resources created or changed')
+              raise SystemExit(0)
+          gateways = aws('describe-nat-gateways', '--filter', 'Name=vpc-id,Values=' + vpc_id, 'Name=tag:Purpose,Values=meilisearch-gemini')['NatGateways']
+          reusable = [gateway for gateway in gateways if gateway['State'] in ['available', 'pending'] and gateway['SubnetId'] == public_subnet]
+          if reusable:
+              gateway_id = reusable[0]['NatGatewayId']
+          else:
+              address = aws('allocate-address', '--domain', 'vpc', '--tag-specifications', 'ResourceType=elastic-ip,Tags=[{Key=Purpose,Value=meilisearch-gemini}]')
+              allocation = address['AllocationId']
+              try:
+                  gateway = aws('create-nat-gateway', '--subnet-id', public_subnet, '--allocation-id', allocation, '--connectivity-type', 'public', '--tag-specifications', 'ResourceType=natgateway,Tags=[{Key=Purpose,Value=meilisearch-gemini},{Key=Name,Value=meilisearch-gemini}]')['NatGateway']
+                  gateway_id = gateway['NatGatewayId']
+              except Exception:
+                  aws('release-address', '--allocation-id', allocation)
+                  raise
+          print('NAT_GATEWAY', gateway_id)
+          # Preserve the existing route until AWS reports the new gateway ready.
+          aws('wait', 'nat-gateway-available', '--nat-gateway-ids', gateway_id)
+          current = aws('describe-route-tables', '--route-table-ids', target['RouteTableId'])['RouteTables'][0]
+          current_default = next(route for route in current['Routes'] if route.get('DestinationCidrBlock') == '0.0.0.0/0')
+          assert current_default.get('GatewayId') == default['GatewayId'], 'Route changed during creation; no route replaced'
+          aws('replace-route', '--route-table-id', target['RouteTableId'], '--destination-cidr-block', '0.0.0.0/0', '--nat-gateway-id', gateway_id)
+          print('OUTBOUND_ROUTE_REPAIRED', gateway_id)
+          print('ROLLBACK_ROUTE: replace default route gateway with igw-035102ca8a48b0443; separately delete the tagged NAT gateway and release its Elastic IP to stop billing')
+          PY
