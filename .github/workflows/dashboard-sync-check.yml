@@ -23,7 +23,7 @@ jobs:
             const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
             try {
               const stats=await meiliClient.index('products').getStats();
-              const embedders=await meiliClient.index('products').getEmbedders();
+              const embedders=(await meiliClient.index('products').getSettings()).embedders || {};
               const embeddingTask=await meiliClient.tasks.getTask(252811);
               console.log('SEARCH_ENGINE_STATUS',JSON.stringify({documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,embedders:Object.keys(embedders),embeddingTask:embeddingTask.status,autoEmbeddingSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
               for(const shop of ['thedressoutlet.myshopify.com','another-shpyfy-store.myshopify.com']){
