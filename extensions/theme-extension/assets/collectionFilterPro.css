@@ -1104,7 +1104,9 @@ facet-filters-form,
 /* --- Global Filter Settings Styles --- */
 .cfp-dark-mode {
   --cfp-bg: #1a1a1a;
-  --cfp-text: #e0e0e0;
+  --cfp-surface: #242424;
+  --cfp-text: #ffffff;
+  --cfp-text-muted: #d1d5db;
   --cfp-border: #333;
   background-color: var(--cfp-bg);
   color: var(--cfp-text);
@@ -1842,6 +1844,34 @@ facet-filters-form,
   font-size: 11px !important;
 }
 
+/* 8. Price Slider Overrides */
+.noUi-handle {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  box-shadow: none !important;
+}
+.noUi-handle::after, .noUi-handle::before {
+  display: none !important;
+}
+.noUi-handle .noUi-touch-area {
+  position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
+}
+
+/* Count markup is controlled by the shop's showProductCount setting. */
+.cfp-button-chip .cfp-checkbox__count {
+  border: 0 !important;
+  height: auto !important;
+  min-width: 0 !important;
+  margin-left: 6px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  font-size: 11px !important;
+}
+
 /* 10. Swatch Grids */
 .cfp-color-grid--list {
   display: grid !important;
@@ -2073,3 +2103,52 @@ facet-filters-form,
     max-height: min(360px, 50dvh);
   }
 }
+
+/* Horizontal mobile filters use the same collapsed popovers as desktop. */
+@media (max-width: 768px) {
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body { overflow: visible !important; }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups {
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 12px;
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    background: var(--cfp-bg);
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__toggle { gap: 16px; padding: 12px 16px !important; }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: min(300px, calc(100vw - 32px));
+    box-sizing: border-box;
+    max-height: min(420px, 60dvh);
+    overflow: auto;
+    padding: 16px;
+    background: var(--cfp-bg);
+    border: 1px solid var(--cfp-border);
+    border-radius: var(--cfp-radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+    z-index: 20;
+  }
+}
+
+/* Theme and generated inline styles must not hide text on dark filter surfaces. */
+.cfp-dark-mode #cfp-sidebar :is(button, .cfp-group__toggle, .cfp-checkbox, .cfp-checkbox__label, .cfp-sidebar__title, .cfp-sidebar__count, .cfp-swatch-label, .cfp-clear-group, .cfp-checkbox__count, .cfp-breadcrumb-chip, .cfp-breadcrumb-remove, .cfp-breadcrumb-clear, .cfp-price-symbol, .cfp-price-divider, .noUi-touch-area),
+.cfp-dark-mode #cfp-top-bar,
+.cfp-dark-mode #cfp-top-bar :is(.cfp-product-count, .cfp-custom-sort__option) { color: #fff !important; }
+.cfp-dark-mode #cfp-sidebar :is(.cfp-price-field, .cfp-price-input, .cfp-select, .cfp-search-input-wrap, .cfp-search-input, .cfp-button-chip > span, .cfp-checkbox__count, .cfp-breadcrumb-chip),
+.cfp-dark-mode #cfp-top-bar :is(button, select, .cfp-custom-sort__trigger, .cfp-custom-sort__dropdown, .cfp-custom-sort__option:hover) {
+  color: #fff !important;
+  background: var(--cfp-surface) !important;
+  border-color: var(--cfp-border) !important;
+}
+.cfp-dark-mode #cfp-sidebar .cfp-search-input::placeholder { color: var(--cfp-text-muted) !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: transparent !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-sidebar__footer { background: var(--cfp-bg) !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-button-chip input:checked + span { background: #000 !important; border-color: #fff !important; }

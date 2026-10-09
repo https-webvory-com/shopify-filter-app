@@ -1,0 +1,27 @@
+name: Keep Gemini embedding on hold
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eu
+            python3 - <<'PY'
+            import pathlib, secrets
+            path=pathlib.Path('/home/ubuntu/shopify-filter-app/.env')
+            lines=[line for line in path.read_text().splitlines() if not line.startswith(('SEMANTIC_RELAY_TOKEN=','SEMANTIC_EMBEDDING_SETUP_ENABLED='))]
+            # Existing indexing requests lose authorization at the next app deploy.
+            # Meilisearch treats 401 as terminal, which releases blocked sync tasks.
+            lines+=['SEMANTIC_RELAY_TOKEN='+secrets.token_hex(32),'SEMANTIC_EMBEDDING_SETUP_ENABLED=false']
+            path.write_text('\n'.join(lines)+'\n');path.chmod(0o600)
+            print('GEMINI_HOLD_READY_FOR_APP_DEPLOY')
+            PY

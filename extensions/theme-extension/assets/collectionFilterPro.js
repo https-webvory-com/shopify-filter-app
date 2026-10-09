@@ -422,8 +422,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.classList.toggle('cfp-horizontal-layout', !!settings.horizontalFilters);
     container.classList.toggle('cfp-dark-mode', !!settings.darkMode);
     const horizontalMobile = String(settings.mobileFilterLayout || '').toLowerCase().replace(/[_ ]/g, '-') === 'horizontal-scrolling';
-    container.classList.toggle('cfp-mobile-horizontal-scrolling', horizontalMobile && !settings.desktopLikeOnMobile);
-    container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile);
+    const useHorizontal = !!settings.horizontalFilters || (horizontalMobile && !settings.desktopLikeOnMobile);
+    container.classList.toggle('cfp-mobile-horizontal-scrolling', useHorizontal);
+    container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile && !useHorizontal);
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) closeSidebar();
     updateStickyFilterOffsets();
   }
@@ -2411,7 +2412,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function isHorizontalFilterLayout() {
-    return !!globalSettings.horizontalFilters && window.matchMedia('(min-width: 769px)').matches;
+    if (window.matchMedia('(min-width: 769px)').matches) return !!globalSettings.horizontalFilters;
+    return !!globalSettings.horizontalFilters || (!globalSettings.desktopLikeOnMobile &&
+      String(globalSettings.mobileFilterLayout || '').replace(/[_ ]/g, '-') === 'horizontal-scrolling');
   }
 
   function closeHorizontalFilterGroups() {
@@ -2499,9 +2502,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         topBar.style.display = 'flex';
       }
       if (breadcrumbs) {
-        // Keep selected filters visible when the filter drawer is closed.
-        wrapper.appendChild(breadcrumbs);
-        breadcrumbs.style.padding = '12px 18px';
+        const filterBody = sidebar.querySelector('.cfp-sidebar__body');
+        (filterBody || sidebar).prepend(breadcrumbs);
+        breadcrumbs.style.padding = '12px 0';
         breadcrumbs.style.marginBottom = '0';
         breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
       }
