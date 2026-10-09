@@ -8,7 +8,6 @@ import { syncProducts } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import { productSyncQueue } from "../services/productSyncQueue.server.js";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import SyncErrorBanner from "../components/ui/SyncErrorBanner";
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
 
 export const loader = async ({ request }) => {
@@ -109,7 +108,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, syncIssue, latestSyncStatus, latestSyncId } = useLoaderData();
+  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncProgress, resumableJob, latestSyncStatus, latestSyncId } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
@@ -511,8 +510,6 @@ export default function Index() {
             >
               Database Synchronization
             </h2>
-
-            <SyncErrorBanner issue={syncIssue || (syncFetcher.data?.error && syncFetcher.data?.type === "sync" ? { message: syncFetcher.data.error, retrying: false, processed: 0 } : null)} />
 
             {isSyncingBackground && ["waiting", "delayed", "prioritized", "waiting-children"].includes(syncQueueState) && (
               <p role="status">Sync is queued. It will continue automatically from the saved position when the worker is available.</p>
