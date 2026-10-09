@@ -158,7 +158,9 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
     // This is why storefront showed "X of 1000 products" instead of actual count
     await index.updatePagination({ maxTotalHits: 100000 });
 
-    if (process.env.GEMINI_API_KEY) {
+    // Catalog sync must not restart a full embedding migration that is on hold.
+    // The manual semantic setup workflow owns initial embedder provisioning.
+    if (process.env.GEMINI_API_KEY && process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED === "true") {
       try {
         const embedder = process.env.SEMANTIC_RELAY_URL && process.env.SEMANTIC_RELAY_TOKEN
           ? geminiRelayEmbedder(process.env.SEMANTIC_RELAY_URL, process.env.SEMANTIC_RELAY_TOKEN)
