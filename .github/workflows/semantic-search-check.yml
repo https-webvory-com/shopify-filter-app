@@ -55,6 +55,15 @@ jobs:
               if (!response.ok) { const error = new Error('Meilisearch request failed'); error.code = result.code; error.status = response.status; throw error; }
               return result;
             }
+            if (process.env.GEMINI_API_KEY) {
+              const { geminiEmbedder } = await import('./app/utils/semanticSearch.js');
+              const config = geminiEmbedder(process.env.GEMINI_API_KEY);
+              try {
+                const response = await fetch(config.url, {method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(45000), body:JSON.stringify({...config.request,content:{parts:[{text:'red office dress'}]}})});
+                const probe = await response.json();
+                console.log('PROVIDER_HEALTH',JSON.stringify({status:response.status,errorStatus:probe.error?.status,dimensions:probe.embedding?.values?.length}));
+              } catch(error) { console.log('PROVIDER_HEALTH',JSON.stringify({failed:true,code:error.name})); }
+            }
             let failures = 0;
             async function check(name, run) {
               try { console.log(name, JSON.stringify(await run())); }
