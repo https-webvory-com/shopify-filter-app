@@ -67,7 +67,7 @@ jobs:
               try {
                 const response = await fetch(config.url, {method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(45000), body:JSON.stringify({...config.request,content:{parts:[{text:'red office dress'}]}})});
                 const probe = await response.json();
-                console.log('PROVIDER_HEALTH',JSON.stringify({status:response.status,errorStatus:probe.error?.status,dimensions:probe.embedding?.values?.length}));
+                console.log('PROVIDER_HEALTH',JSON.stringify({status:response.status,errorStatus:probe.error?.status,dimensions:probe.embedding?.values?.length,quota:probe.error?.details?.flatMap(detail=>(detail.violations||[]).map(v=>({metric:v.quotaMetric,id:v.quotaId,value:v.quotaValue,dimensions:v.quotaDimensions}))),retryDelay:probe.error?.details?.find(detail=>detail.retryDelay)?.retryDelay}));
               } catch(error) { console.log('PROVIDER_HEALTH',JSON.stringify({failed:true,code:error.name})); }
             }
             let failures = 0;
