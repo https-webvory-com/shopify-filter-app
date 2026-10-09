@@ -20,6 +20,18 @@ jobs:
           command_timeout: 5m
           script: |
             set -eu
+            python3 - <<'PY'
+            import subprocess, json
+            rows = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}} {{.Image}}'], text=True).splitlines()
+            for row in rows:
+                name, image = row.split(' ', 1)
+                if 'meili' not in image.lower():
+                    continue
+                stats = subprocess.check_output(['docker', 'stats', '--no-stream', '--format', '{{.CPUPerc}} {{.MemUsage}}', name], text=True).strip()
+                logs = subprocess.run(['docker', 'logs', '--tail', '1000', name], capture_output=True, text=True)
+                lines = (logs.stdout + logs.stderr).lower().splitlines()
+                print('ENGINE_HEALTH', json.dumps({'container': name, 'resources': stats, 'recent429Lines': sum('429' in line or 'resource_exhausted' in line for line in lines), 'recentEmbeddingErrorLines': sum('error' in line and 'embed' in line for line in lines)}))
+            PY
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import fs from 'node:fs';
             const shop = 'thedressoutlet.myshopify.com';
