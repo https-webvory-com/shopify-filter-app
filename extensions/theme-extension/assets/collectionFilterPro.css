@@ -2151,3 +2151,4 @@ facet-filters-form,
 .cfp-dark-mode #cfp-sidebar .cfp-search-input::placeholder { color: var(--cfp-text-muted) !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: transparent !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-sidebar__footer { background: var(--cfp-bg) !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-button-chip input:checked + span { background: #000 !important; border-color: #fff !important; }
