@@ -793,9 +793,18 @@ export default function FilterGroups() {
         /* Table styling - Luxury dark navy header theme */
         .groups-table {
           width: 100% !important;
+          min-width: 860px;
+          table-layout: fixed;
           border-collapse: collapse !important;
           text-align: left !important;
         }
+        .groups-table-scroll { width: 100%; max-width: 100%; overflow-x: auto; }
+        .groups-table th:first-child, .groups-table td:first-child { width: 48px; box-sizing: border-box; padding-inline: 12px !important; }
+        .groups-table td { vertical-align: top; overflow-wrap: anywhere; }
+        .groups-table .group-name-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+        .groups-table .collection-tag-badge { max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; }
+        .filter-groups-container { min-width: 0; max-width: 100%; }
+        .filter-groups-container .table-toolbar { flex-wrap: wrap; gap: 12px; }
         .groups-table th {
           background: #1E1B4B !important; /* Deep navy luxury background */
           border-bottom: 3px solid #5B21B6 !important; /* Indigo underline accent */
@@ -1408,6 +1417,7 @@ export default function FilterGroups() {
             </div>
           </div>
 
+          <div className="groups-table-scroll" role="region" aria-label="Filter groups" tabIndex={0}>
           <table
             className="groups-table"
             style={{
@@ -1455,7 +1465,7 @@ export default function FilterGroups() {
               {filteredGroups.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.filter((c) => c.isVisible).length}
+                    colSpan={columns.filter((c) => c.isVisible).length + 1}
                     style={{
                       padding: "32px",
                       textAlign: "center",
@@ -1745,6 +1755,7 @@ export default function FilterGroups() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </s-stack>
 

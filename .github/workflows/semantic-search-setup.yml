@@ -41,16 +41,12 @@ jobs:
             }
             try {
              if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing in app container');
-             const { geminiEmbedder } = await import('./app/utils/semanticSearch.js');
-             const config = geminiEmbedder(process.env.GEMINI_API_KEY);
-            config.documentTemplate = "{% for field in fields %}{% if field.name == 'title' or field.name == 'productType' or field.name == 'vendor' or field.name == 'option_Color' or field.name == 'tags' or field.name == 'metafield_global.description_tag' %}{% if field.value != nil %}{{field.name}}: {{field.value}}. {% endif %}{% endif %}{% endfor %}";
-            config.documentTemplateMaxBytes = 2000;
-             // Verify the provider before changing Meilisearch or embedding the catalog.
-             const provider = await fetch(config.url, { method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(60000), body:JSON.stringify({...config.request,content:{parts:[{text:'red dress for office'}]}}) });
+             const { geminiRelayEmbedder } = await import('./app/utils/semanticSearch.js');
+             const config = geminiRelayEmbedder(process.env.SEMANTIC_RELAY_URL, process.env.SEMANTIC_RELAY_TOKEN);
+             const provider = await fetch(config.url, { method:'POST', headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.SEMANTIC_RELAY_TOKEN}, signal:AbortSignal.timeout(60000), body:JSON.stringify({texts:['red dress for office']}) });
              const probe = await provider.json();
-             if (!provider.ok) throw new Error('Gemini probe failed: HTTP ' + provider.status + ' ' + (probe.error?.status || 'provider_error'));
-             if (probe.embedding?.values?.length !== config.dimensions) throw new Error('Gemini dimension mismatch');
-             console.log('GEMINI_PROBE_OK dimensions=' + config.dimensions);
+             if (!provider.ok || probe.embeddings?.[0]?.values?.length !== config.dimensions) throw new Error('Private relay probe failed HTTP '+provider.status);
+             console.log('PRIVATE_RELAY_PROBE_OK dimensions=' + config.dimensions);
              console.log('VERSION', JSON.stringify(await request('/version')));
              const flags = await request('/experimental-features');
              if (flags.vectorStore === false) {
@@ -58,6 +54,27 @@ jobs:
                if (enabled.vectorStore !== true) throw new Error('Vector store did not enable');
                console.log('VECTOR_STORE_ENABLED');
              } else console.log('VECTOR_STORE_ALREADY_AVAILABLE');
+             async function waitTask(task, minutes=5) {
+               const deadline=Date.now()+minutes*60000;
+               while(true) {
+                 const state=await request('/tasks/'+task.taskUid);
+                 if(state.status==='succeeded') return;
+                 if(['failed','canceled'].includes(state.status)) throw new Error('Relay verification task '+state.status+' '+(state.error?.code||''));
+                 if(Date.now()>deadline) throw new Error('Relay verification timed out');
+                 await new Promise(resolve=>setTimeout(resolve,2000));
+               }
+             }
+             const testIndex='semantic_relay_probe';
+             await waitTask(await request('/indexes',{uid:testIndex,primaryKey:'id'}));
+             try {
+               await waitTask(await request('/indexes/'+testIndex+'/settings/embedders',{default:config},'PATCH'));
+               await waitTask(await request('/indexes/'+testIndex+'/documents',[{id:'relay-probe',title:'Red office dress',productType:'Dress',option_Color:'Red'}]));
+               const proof=await request('/indexes/'+testIndex+'/search',{q:'workwear dress',hybrid:{embedder:'default',semanticRatio:1}});
+               if(!(proof.semanticHitCount>0)) throw new Error('Meilisearch relay verification returned no semantic hits');
+               console.log('MEILISEARCH_PRIVATE_RELAY_VERIFIED');
+             } finally {
+               await waitTask(await request('/indexes/'+testIndex,null,'DELETE'));
+             }
              const existing = await request('/indexes/products/settings/embedders');
              const readyConfig = existing?.default;
              let task;
@@ -85,7 +102,7 @@ jobs:
              console.log('SEMANTIC_SETUP_VERIFIED');
             } catch(error) {
              // Never print provider responses, settings, URLs or arbitrary error messages.
-             const safe=String(error.message).replaceAll(process.env.GEMINI_API_KEY||'__unused__','[redacted]').replaceAll(key,'[redacted]').replace(/https?:\/\/\S+/g,'[url redacted]');
+             const safe=String(error.message).replaceAll(process.env.GEMINI_API_KEY||'__unused__','[redacted]').replaceAll(key,'[redacted]').replaceAll(process.env.SEMANTIC_RELAY_TOKEN||'__unused_token__','[redacted]').replace(/https?:\/\/\S+/g,'[url redacted]');
              console.error('SETUP_FAILED',safe); process.exitCode=1;
             }
             

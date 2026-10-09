@@ -425,6 +425,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.classList.toggle('cfp-mobile-horizontal-scrolling', horizontalMobile && !settings.desktopLikeOnMobile);
     container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile);
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) closeSidebar();
+    updateStickyFilterOffsets();
+  }
+
+  function updateStickyFilterOffsets() {
+    let headerBottom = 0;
+    document.querySelectorAll('header, sticky-header, [data-sticky-header], .shopify-section-header-sticky').forEach(header => {
+      const position = getComputedStyle(header).position;
+      const rect = header.getBoundingClientRect();
+      if ((position === 'fixed' || position === 'sticky') && rect.top <= 1 && rect.bottom > 0) {
+        headerBottom = Math.max(headerBottom, rect.bottom);
+      }
+    });
+    document.body.style.setProperty('--cfp-sticky-top', `${Math.round(headerBottom)}px`);
+    const toolbarHeight = topBar ? topBar.getBoundingClientRect().height : 0;
+    document.body.style.setProperty('--cfp-toolbar-height', `${Math.round(toolbarHeight)}px`);
   }
 
   // â”€â”€ 4. Render Products Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1522,6 +1537,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${visualHtml}
                         ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 13px; text-align: ${textAlign} !important; color: #202223; line-height: 1.2; word-break: break-word; ${spanWidthStyle} margin: 0 !important; padding: 0 !important;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
+                        ${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}
                       </label>
                     `;
                   }).join('');
@@ -1547,7 +1563,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                   return `
                   <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                     <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
-                    <span>${getDisplayLabel(item.label || item.value, prefix)}</span>
+                    <span>${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}</span>
                   </label>
                   `;
                 }).join('')}
@@ -1683,6 +1699,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   // â”€â”€ 7. Setup Interactivity Listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function setupStaticEventListeners() {
+    let stickyFrame;
+    const scheduleStickyOffsets = () => {
+      if (stickyFrame) return;
+      stickyFrame = requestAnimationFrame(() => { stickyFrame = null; updateStickyFilterOffsets(); });
+    };
+    window.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
+    window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
+    if (topBar && typeof ResizeObserver !== 'undefined') new ResizeObserver(scheduleStickyOffsets).observe(topBar);
     document.body.addEventListener('click', event => {
       if (isHorizontalFilterLayout() && !event.target.closest('#cfp-sidebar .cfp-group')) closeHorizontalFilterGroups();
     });

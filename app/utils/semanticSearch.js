@@ -10,6 +10,17 @@ export function geminiEmbedder(apiKey) {
   };
 }
 
+export function geminiRelayEmbedder(url, token) {
+  if (!url || !token) throw new Error("Gemini relay URL and token are required");
+  const { documentTemplate, documentTemplateMaxBytes, dimensions } = geminiEmbedder("");
+  return {
+    source: "rest", url, apiKey: token, dimensions,
+    request: { texts: ["{{text}}", "{{..}}"] },
+    response: { embeddings: [{ values: "{{embedding}}" }, "{{..}}"] },
+    documentTemplate, documentTemplateMaxBytes,
+  };
+}
+
 // Keep filters, pagination and explicit sorting intact in both modes.
 export function withSemanticSearch(query, enabled) {
   if (!enabled || !query.q?.trim()) return query;
