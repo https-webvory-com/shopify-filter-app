@@ -1,0 +1,45 @@
+name: Inspect Meilisearch network
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Use existing deployment AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+      - name: Inspect routing and outbound rules
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          def aws(*args):
+              result = subprocess.run(['aws', 'ec2', *args, '--output', 'json'], capture_output=True, text=True)
+              if result.returncode:
+                  print('AWS_INSPECTION_FAILED', result.stderr.strip())
+                  raise SystemExit(1)
+              return json.loads(result.stdout)
+          matches = aws('describe-instances', '--filters', 'Name=private-ip-address,Values=10.0.2.139')
+          instances = [instance for reservation in matches['Reservations'] for instance in reservation['Instances']]
+          if len(instances) != 1:
+              print('EXPECTED_ONE_MEILISEARCH_INSTANCE', len(instances))
+              raise SystemExit(1)
+          instance = instances[0]
+          subnet = instance['SubnetId']
+          vpc = instance['VpcId']
+          print('INSTANCE', json.dumps({key: instance.get(key) for key in ['InstanceId', 'PrivateIpAddress', 'PublicIpAddress', 'SubnetId', 'VpcId', 'State']}))
+          tables = aws('describe-route-tables', '--filters', 'Name=vpc-id,Values=' + vpc)['RouteTables']
+          for table in tables:
+              if any(association.get('SubnetId') == subnet or association.get('Main') for association in table['Associations']):
+                  print('ROUTE_TABLE', json.dumps({key: table.get(key) for key in ['RouteTableId', 'Associations', 'Routes']}))
+          gateways = aws('describe-nat-gateways', '--filter', 'Name=vpc-id,Values=' + vpc)['NatGateways']
+          print('AVAILABLE_NAT_GATEWAYS', json.dumps([{key: gateway.get(key) for key in ['NatGatewayId', 'State', 'SubnetId', 'VpcId']} for gateway in gateways if gateway['State'] == 'available']))
+          groups = aws('describe-security-groups', '--group-ids', *[group['GroupId'] for group in instance['SecurityGroups']])['SecurityGroups']
+          print('OUTBOUND_RULES', json.dumps([{key: group.get(key) for key in ['GroupId', 'IpPermissionsEgress']} for group in groups]))
+          PY
