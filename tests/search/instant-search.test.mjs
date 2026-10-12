@@ -1,3 +1,4 @@
+import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -97,6 +98,8 @@ test('instant product cards render before market pricing and ignore stale price 
 test('the search endpoint supplies product suggestions using shop-filtered active results',async()=>{
  const code=(await transform(await fs.readFile('app/routes/api.search.jsx','utf8'),{loader:'jsx',format:'cjs'})).code;
  const mocks={
+  "../utils/searchColor.js":searchColor,
+  "../services/queryParser.server.js":{parseQuery:async()=>null},
   'react-router':{data:(value,init)=>Response.json(value,init)},
   '../utils/searchSuggestions.js':{buildSearchSuggestions},
   '../utils/spellingCorrection.js':{spellingCorrection},

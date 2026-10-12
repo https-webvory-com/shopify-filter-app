@@ -1,51 +1,31 @@
 import meiliClient from "./meiliClient.server.js";
 
-let facetCache = {
-  colors: [],
-  vendors: [],
-  productTypes: [],
-  lastUpdated: null
-};
+import { getCached } from "./shopCache.server.js";
+import prisma from "../db.server";
+import { resolveSearchColor, colorSearchFilter } from "../utils/searchColor.js";
 
-// Cache expires after 1 hour
-const CACHE_TTL = 60 * 60 * 1000;
-
-export async function initializeParserCache() {
-  try {
-    const now = Date.now();
-    if (facetCache.lastUpdated && (now - facetCache.lastUpdated) < CACHE_TTL) {
-      return facetCache;
-    }
-
-    console.log("[QueryParser] Fetching facets to build query parsing dictionary...");
+export async function initializeParserCache(shop) {
+  if (!shop) throw new Error("Query parser requires a shop");
+  return getCached(`queryParserFacets:${shop}`, async () => {
     const index = meiliClient.index('products');
-    
-    // We fetch global facets (no query) to build our lists
+    const attributes = await index.getFilterableAttributes();
+    const colorFields = attributes.filter(field => typeof field === 'string' && /^option_colou?r$/i.test(field));
     const search = await index.search('', {
-      limit: 0,
-      facets: ['option_Color', 'vendor', 'productType']
+      limit: 0, facets: [...colorFields, 'vendor', 'productType'],
+      filter: [`shop = ${JSON.stringify(shop)}`, "status = 'ACTIVE'"]
     });
-
     const dist = search.facetDistribution || {};
-    
-    facetCache.colors = Object.keys(dist.option_Color || {});
-    facetCache.vendors = Object.keys(dist.vendor || {});
-    facetCache.productTypes = Object.keys(dist.productType || {});
-    facetCache.lastUpdated = now;
-
-    console.log(`[QueryParser] Dictionary built: ${facetCache.colors.length} colors, ${facetCache.vendors.length} vendors, ${facetCache.productTypes.length} types`);
-    
-    return facetCache;
-  } catch (error) {
-    console.error("[QueryParser] Failed to initialize cache:", error);
-    return facetCache;
-  }
+    return {
+      colors: [...new Set(colorFields.flatMap(field => Object.keys(dist[field] || {})))],
+      colorFields, vendors: Object.keys(dist.vendor || {}), productTypes: Object.keys(dist.productType || {})
+    };
+  });
 }
 
-export async function parseQuery(query) {
+export async function parseQuery(query, shop) {
   if (!query || typeof query !== 'string') return null;
 
-  const cache = await initializeParserCache();
+  const cache = await initializeParserCache(shop);
   const lowerQuery = query.toLowerCase().trim();
   const tokens = lowerQuery.split(/\s+/);
   
@@ -53,30 +33,10 @@ export async function parseQuery(query) {
   let detectedVendors = [];
   let detectedTypes = [];
 
-  // Basic known generic colors to identify color intents from queries
-  const basicColorTerms = [
-    "black", "white", "red", "blue", "green", "yellow", "orange", 
-    "pink", "purple", "brown", "grey", "gray", "royal", "navy", 
-    "burgundy", "gold", "silver", "fuchsia", "teal", "champagne", 
-    "ivory", "blush", "rose", "emerald", "aqua", "coral", "lilac",
-    "magenta", "maroon", "peach", "plum", "sage", "sapphire", "taupe"
-  ];
-  
-  const queryColorWords = tokens.filter(t => basicColorTerms.includes(t));
-  
-  if (queryColorWords.length > 0) {
-    // Find all exact option_Color values that contain ANY of the detected color words
-    // For example, if words are ["royal", "black"], this matches "Royal/Black", "Royal Blue", "Black", etc.
-    detectedColors = cache.colors.filter(c => {
-      const cLower = c.toLowerCase();
-      // Only match if the exact string contains ANY color words
-      return queryColorWords.some(cw => {
-        // Enforce word boundaries roughly so "red" doesn't match "textured"
-        const regex = new RegExp(`(^|[^a-z])${cw}([^a-z]|$)`);
-        return regex.test(cLower);
-      });
-    });
-  }
+  const aliases = await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } }));
+  const colorIntent = resolveSearchColor(query, cache.colors, aliases);
+  const queryColorWords = colorIntent.requested;
+  detectedColors = colorIntent.values;
 
   // Detect vendors
   for (const v of cache.vendors) {
@@ -131,7 +91,9 @@ export async function parseQuery(query) {
       vendors: detectedVendors,
       types: detectedTypes
     },
-    queryColorWords
+    queryColorWords,
+    colorIntent,
+    colorFilter: colorSearchFilter(colorIntent, cache.colorFields)
   };
 }
 

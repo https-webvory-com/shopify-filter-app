@@ -15,7 +15,7 @@ export function buildSearchSuggestions(query, products = [], facets = [], limit 
       try { options = JSON.parse(options); } catch { options = []; }
     }
     const colors = (Array.isArray(options) ? options : []).filter(o => /colou?r/i.test(o?.name)).flatMap(o => o.values || []);
-    const color = colors.find(value => tokens.some(token => words(value).some(word => word.startsWith(token))));
+    const color = product.searchColor || colors.find(value => tokens.some(token => words(value).some(word => word.startsWith(token))));
     const matches = titleWords.some(word => tokens.some(token => word.startsWith(token))) || color;
     if (matches) candidates.push(color && !titleWords.includes(clean(color).toLowerCase()) ? `${clean(color)} ${title}` : title);
     else fallback.push(title);

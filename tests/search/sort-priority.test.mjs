@@ -1,3 +1,4 @@
+import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import * as availableVariants from "../../app/utils/availableVariants.js";
 import test from "node:test";
@@ -9,8 +10,9 @@ import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
 import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory } from '../../app/utils/rankedCollectionPage.js';
 
 async function loadModule(file, mocks) {
-  const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
-  const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+  const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => testParsedQuery })');
+  const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+    if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
     if (name in mocks) return mocks[name];
@@ -48,12 +50,13 @@ async function collectionRoute(settings) {
     return { hits: products.slice(options.offset || 0, (options.offset || 0) + (options.limit ?? 25)), totalHits: products.length, estimatedTotalHits: products.length, facetDistribution: {} };
   };
   const index = { search: async (_q, options) => select(options), getDocument: async id => ({ ...byId.get(id) }) };
-  const meili = { index: () => index, multiSearch: async ({ queries }) => ({ results: queries.map(select) }) };
+  const meili = { index: () => index, multiSearch: async ({ queries }) => { settings.captureQueries?.push(...queries); return { results: queries.map(select) }; } };
   const service = await loadModule("app/services/merchandising.server.js", {});
   const pins = { products: ["1", "175"].map(id => ({ id: "gid://shopify/Product/" + id })) };
   const rule = { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const cache = new Map();
   const route = await loadModule("app/routes/api.filter.jsx", {
+    testParsedQuery: settings.testParsedQuery,
     "react-router": { data: value => value },
     "../db.server": { __esModule: true, default: { product: { findMany: async () => pins.products } } },
     "../services/merchandising.server": { ...service, getActiveRuleForCollection: async () => rule, getActivePinningRuleForCollection: async () => pins },
@@ -155,4 +158,19 @@ test("price and newest override pins and boosts across all pages with priorities
     }
     assert.deepEqual(ids,Array.from({length:180},(_,i)=>sort==="price-ascending"?i+1:180-i));
   }
+});
+
+
+test("parsed color remains mandatory in all collection search fallback and facet queries", async () => {
+  const captureQueries=[];
+  const colorFilter='(option_Color IN ["Black"])';
+  const run=await collectionRoute({captureQueries,testParsedQuery:{
+    hasFilters:true,remainingQuery:'dress',filters:{colors:['Black'],vendors:[],types:[]},
+    queryColorWords:['black'],colorIntent:{requested:['black'],values:['Black']},colorFilter
+  }});
+  const response=await run('page=1&q=black%20dress');
+  assert.equal(response.error,undefined);
+  assert.ok(captureQueries.length>=4);
+  assert.ok(captureQueries.every(query=>query.filter.includes(colorFilter)));
+  assert.ok(response.products.every(product=>product.searchColor==='Black' && product.searchColorImage==='black.jpg'));
 });

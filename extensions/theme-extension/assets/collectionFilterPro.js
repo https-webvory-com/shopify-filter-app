@@ -743,7 +743,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
 
-        if (!matchedVariant && product.selectedVariantId && product.variants) {
+        if ((!matchedVariant || product.searchColor) && product.selectedVariantId && product.variants) {
             const selectedId = String(product.selectedVariantId).split('/').pop();
             matchedVariant = product.variants.find(v => String(v.id).split('/').pop() === selectedId) || null;
             if (matchedVariant) {
@@ -810,7 +810,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             fallbackImg = fallbackImg.src || fallbackImg.url || '';
         }
         
-        let primaryImg = customImage || variantImg || product.merchandisingImage || fallbackImg || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = (product.searchColor ? product.searchColorImage : (customImage || variantImg || product.merchandisingImage || fallbackImg)) || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
         
         let productUrl = `/products/${product.handle}`;

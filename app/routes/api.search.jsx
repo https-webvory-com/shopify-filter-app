@@ -1,3 +1,5 @@
+import { parseQuery } from "../services/queryParser.server.js";
+import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { buildSearchSuggestions } from "../utils/searchSuggestions.js";
 import { data } from "react-router";
@@ -42,6 +44,8 @@ export const loader = async ({ request }) => {
     
     const searchQuery = query ? query.trim() : "";
     
+    const parsedQuery = searchQuery ? await parseQuery(searchQuery, shop) : null;
+
     // -- TIER 1: NLP Intent Extraction (DISABLED) --
     // const aiExtracted = await extractFiltersFromQuery(searchQuery);
     const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
@@ -49,6 +53,8 @@ export const loader = async ({ request }) => {
     
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
     
+    if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
+
     if (globalSettings?.showOnlyInStock) {
       meiliFilters.push(`available = true`);
     }
@@ -209,6 +215,16 @@ export const loader = async ({ request }) => {
         const status = (p.status || 'ACTIVE').toLowerCase();
         return status === 'active';
       })
+      .map(p => {
+        if (!parsedQuery?.colorIntent?.requested.length) return p;
+        const variant = selectSearchColorVariant(p, parsedQuery.colorIntent.values);
+        if (!variant || (globalSettings?.showOnlyInStock && variant.available === false)) return null;
+        return { ...p, selectedVariantId: variant.id, searchColor: variant.searchColor,
+          searchColorImage: variant.imageUrl, merchandisingImage: variant.imageUrl,
+          images: variant.imageUrl ? [variant.imageUrl] : [],
+          variants: (p.variants || []).map(v => String(v.id) === String(variant.id) ? { ...v, imageUrl: variant.imageUrl } : v) };
+      })
+      .filter(Boolean)
       .slice(0, limit)
       .map(p => ({ ...p, isPinned: pinnedIds.includes(p.id) }));
 

@@ -1,3 +1,4 @@
+import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
 import { data } from "react-router";
@@ -155,7 +156,7 @@ export const loader = async ({ request }) => {
     let parsedQuery = null;
     let queryParserMeiliFilters = [];
     if (searchQuery) {
-      parsedQuery = await parseQuery(searchQuery);
+      parsedQuery = await parseQuery(searchQuery, shop);
       if (parsedQuery && parsedQuery.hasFilters) {
         if (parsedQuery.filters.colors.length > 0) {
           // Temporarily store parsed colors to expand them after mergedValues are loaded
@@ -334,21 +335,6 @@ export const loader = async ({ request }) => {
 
     // Now that mergedValues is loaded, build queryParserMeiliFilters with expanded values!
     if (parsedQuery && parsedQuery.hasFilters) {
-      if ((parsedQuery.filters.colors && parsedQuery.filters.colors.length > 0) || (parsedQuery.queryColorWords && parsedQuery.queryColorWords.length > 0)) {
-        // Here we expand against "Color" which matches the Option type in Merged Values
-        // But wait, what if the user searched "red"? parsedQuery.filters.colors will contain "Red".
-        // The expandFilterValues function matches exact strings.
-        // We also want to manually inject the exact base colors (like "Red", "Black") 
-        // to ensure they map perfectly to merged values.
-        let colorsToExpand = [...parsedQuery.filters.colors];
-        if (parsedQuery.queryColorWords) {
-          colorsToExpand.push(...parsedQuery.queryColorWords);
-        }
-        let expandedColors = expandFilterValues("Color", colorsToExpand);
-        queryParserMeiliFilters.push(
-          `option_Color IN [${[...new Set(expandedColors)].map(c => `'${c.replace(/'/g, "\\'")}'`).join(",")}]`
-        );
-      }
       if (parsedQuery.filters.vendors.length > 0) {
         let expandedVendors = expandFilterValues("vendor", parsedQuery.filters.vendors);
         queryParserMeiliFilters.push(
@@ -548,7 +534,7 @@ export const loader = async ({ request }) => {
       }
     }
 
-    const allFiltersList = [...baseFilters, ...Object.values(categoryFilters)];
+    const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : [])];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual";
@@ -565,9 +551,13 @@ export const loader = async ({ request }) => {
     if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
         where: { shop, ...pinCollectionScope, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
-        select: { id: true },
+        select: parsedQuery?.colorIntent?.requested.length ? { id: true, options: true, variants: true } : { id: true },
       });
-      const validIds = new Set(validPins.map(product => product.id));
+      const validIds = new Set(validPins.filter(product => {
+        if (!parsedQuery?.colorIntent?.requested.length) return true;
+        const variant = selectSearchColorVariant(product, parsedQuery.colorIntent.values);
+        return variant && (!globalSettings?.showOnlyInStock || variant.available !== false);
+      }).map(product => product.id));
       activePinnedList = activePinnedList.filter(id => validIds.has(id));
     }
 
@@ -1025,11 +1015,20 @@ export const loader = async ({ request }) => {
         }));
       }
       
-      let activeVariant = null;
+      let activeVariant = parsedQuery?.colorIntent?.requested.length
+        ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
+            Object.entries(optionsFilters).every(([name, values]) => {
+              const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
+              return index < 0 || values.some(value => String(value).toLowerCase() === String(v[`option${index + 1}`] || '').toLowerCase());
+            })) }, parsedQuery.colorIntent.values) : null;
+      if (activeVariant) {
+        const index = localVariantPrices.findIndex(v => String(v.id) === String(activeVariant.id));
+        if (index >= 0) localVariantPrices[index] = activeVariant;
+      }
       let matchScore = 0;
 
       // Dynamic variant image swapping based on active filters
-      if (Object.keys(optionsFilters).length > 0 && p.options && localVariantPrices.length > 0) {
+      if (!activeVariant && Object.keys(optionsFilters).length > 0 && p.options && localVariantPrices.length > 0) {
         activeVariant = localVariantPrices.find(v => {
           return Object.keys(optionsFilters).some(filterName => {
             const filterValues = optionsFilters[filterName].map(val => val.toLowerCase());
@@ -1142,6 +1141,9 @@ export const loader = async ({ request }) => {
         ];
       }
 
+      if (activeVariant?.searchColor) {
+        productImages = activeVariant.imageUrl ? [activeVariant.imageUrl] : [];
+      }
       const productObj = {
         id: p.id,
         title: p.title,
@@ -1157,6 +1159,8 @@ export const loader = async ({ request }) => {
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
         selectedVariantId: activeVariant?.id || null,
+        searchColor: activeVariant?.searchColor || null,
+        searchColorImage: activeVariant?.searchColor ? activeVariant.imageUrl : null,
         merchandisingImage: activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null),
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({

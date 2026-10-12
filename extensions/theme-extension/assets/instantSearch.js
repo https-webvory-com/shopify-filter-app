@@ -1178,6 +1178,11 @@ document.addEventListener("DOMContentLoaded", function () {
              }
           }
 
+          if (p.selectedVariantId) {
+            const selected = (p.variants || []).find(v => String(v.id).split('/').pop() === String(p.selectedVariantId).split('/').pop());
+            const selectedIndex = colorsArray.findIndex(c => c[0] === selected?.[optionKey]);
+            if (selectedIndex >= 0) { activeIndex = selectedIndex; hasMatchedColor = true; }
+          }
           defaultImageUrl = colorsArray[activeIndex][1].imgUrl;
           if (colorsArray[activeIndex][1].variantId) {
              defaultVariantId = colorsArray[activeIndex][1].variantId;
@@ -1252,7 +1257,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // 3. Extract main image
       let imageUrl = "";
-      if (p.merchandisingImage) {
+      if (p.selectedVariantId) {
+        defaultVariantId = String(p.selectedVariantId).split('/').pop();
+        if (p.searchColor) defaultImageUrl = p.searchColorImage || '';
+      }
+      if (p.searchColor) {
+        imageUrl = defaultImageUrl || 'https://placehold.co/400x500?text=Image+unavailable';
+      } else if (p.merchandisingImage) {
         imageUrl = p.merchandisingImage;
       } else if (defaultImageUrl) {
         // Always use the swatch image corresponding to the activeIndex
