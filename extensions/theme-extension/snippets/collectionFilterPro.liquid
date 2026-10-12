@@ -334,20 +334,34 @@
       var shop = "{{ shop.permanent_domain }}";
       var collHandle = "{{ cfp_collection_handle }}";
       var collId = "{{ cfp_collection_id }}";
-      var params = new URLSearchParams(window.location.search);
-      // Ranked collection requests need the final customer/filter context and
-      // one browsing-session token. Let the main script issue that request.
-      if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') return;
+      var incoming = new URLSearchParams(window.location.search);
+      if (window.location.pathname.includes('/collections/')) {
+        // Start an exact initial collection request while the main script loads.
+        // Filtered links and later pages wait for the full URL-state parser.
+        if ([...incoming.keys()].some(function(key) {
+          return !['sortBy', 'rankingToken', 'preview_theme_id', '_fd', 'pb', 'page'].includes(key)
+            && !key.startsWith('utm_') && key !== 'gclid';
+        }) || Number(incoming.get('page') || 1) !== 1) return;
+        var params = new URLSearchParams();
+        params.set('sortBy', incoming.get('sortBy') || 'best-selling');
+        params.set('page', '1');
+        params.set('limit', '25');
+      } else {
+        var params = incoming;
+      }
       params.set('shop', shop);
       params.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
       if (window.cfpCustomerTags) params.set('customer_tags', window.cfpCustomerTags);
       if (collHandle) params.set('collectionHandle', collHandle);
       if (collId && !collHandle) params.set('collectionId', collId);
       if (window.Shopify && window.Shopify.country) params.set('country', window.Shopify.country);
-      
+      params.sort();
+      window._cfpEarlyFetchParams = params.toString();
+      window._cfpEarlyFetchController = new AbortController();
+
       var apiDomain = 'https://aisearchfilter.webvory.com';
         
-      window._cfpEarlyFetch = fetch(apiDomain + '/api/filter?' + params.toString())
+      window._cfpEarlyFetch = fetch(apiDomain + '/api/filter?' + params.toString(), {signal: window._cfpEarlyFetchController.signal, cache: 'no-store'})
         .then(function(r) { return r.json(); })
         .catch(function(e) { return null; });
     } catch(e) {}

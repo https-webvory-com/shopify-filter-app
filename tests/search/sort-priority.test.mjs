@@ -44,6 +44,8 @@ async function collectionRoute(settings) {
     return docs.filter(p => !text.includes("TopFormal") || (text.includes("NOT (") ? !p.tags.length : p.tags.length));
   };
   const select = options => {
+    const ids = String(options.filter).match(/id IN (\[[^\]]*\])/);
+    if (ids) return {hits: docs.filter(p => JSON.parse(ids[1]).includes(String(p.id)))};
     const products = matching(options.filter).map(p => ({ ...p }));
     const sort = options.sort?.[0];
     products.sort((a,b) => sort === "priceMin:asc" ? a.priceMin-b.priceMin : b.bestSellingScore-a.bestSellingScore);

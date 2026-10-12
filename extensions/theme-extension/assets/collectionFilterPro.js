@@ -391,11 +391,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           renderSkeleton();
         }
         let data = null;
-        if (window._cfpEarlyFetch && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
-          try {
-            data = await window._cfpEarlyFetch;
-            delete window._cfpEarlyFetch;
-          } catch(e) {}
+        if (window._cfpEarlyFetch && !isLoadMore && activeFilters.page === 1) {
+          const expectedParams = new URLSearchParams(queryParams);
+          expectedParams.sort();
+          const matches = window._cfpEarlyFetchParams === expectedParams.toString();
+          const earlyFetch = window._cfpEarlyFetch;
+          const earlyController = window._cfpEarlyFetchController;
+          delete window._cfpEarlyFetch;
+          delete window._cfpEarlyFetchParams;
+          delete window._cfpEarlyFetchController;
+          if (matches) {
+            const abortEarly = () => earlyController?.abort();
+            fetchSignal.addEventListener('abort', abortEarly, {once:true});
+            try { data = await earlyFetch; } catch(e) {}
+            finally { fetchSignal.removeEventListener('abort', abortEarly); }
+            if (fetchSignal.aborted) return;
+          } else {
+            earlyController?.abort();
+          }
         }
         if (!data) {
           const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, { signal: fetchSignal, cache: 'no-store' });
@@ -601,10 +614,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
     const version = ++marketRenderVersion;
-    const pricingProducts = products;
+    const pricingProducts = products.map(p => window.cfpMarketPricing?.peek?.(p) || p);
     // Render cards immediately, without displaying unverified market prices.
     // Each price arrives independently; a slow product cannot hold the grid.
-    products = products.map(p => ({...p, _marketPricingUnavailable:true}));
+    products = pricingProducts.map(p => ({...p, _marketPricingUnavailable: !p._marketPricingApplied}));
     contextualPricingApplied = true;
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     const grid = getProductContainer();
@@ -1062,7 +1075,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                            this.classList.add('cfp-swatch-active');
                            if('${data.variantId}') card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href='/products/${product.handle}?variant=${data.variantId}');
                            window.cfpUpdateMarketCardPrice?.(card, card._cfpMarketProduct);">
-                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
+                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" loading="lazy" decoding="async" width="30" height="30" />
              </div>`;
           });
           

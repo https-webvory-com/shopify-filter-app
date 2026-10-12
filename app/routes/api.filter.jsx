@@ -732,7 +732,12 @@ export const loader = async ({ request }) => {
     }
 
     try {
-      const multiSearchRes = await semanticMultiSearch(queries);
+      const multiSearchRes = useCollectionPagination
+        ? await getCached(`collectionFacetResults:${shop}:${collectionRankingFingerprint(
+            'https://collection-cache.invalid/?queries=' + encodeURIComponent(JSON.stringify(
+              queries.map(query => query.limit === 0 ? { ...query, offset: 0 } : query))))}`,
+          () => semanticMultiSearch(queries), 15)
+        : await semanticMultiSearch(queries);
       const tier1Res = multiSearchRes.results[0];
       facetRes = multiSearchRes.results[facetQueryIndex];
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };
@@ -785,7 +790,7 @@ export const loader = async ({ request }) => {
               const metadata = {};
               const ids = await buildCollectionSequence(meiliClient.index("products"), {
                 query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
-                conditions: activeRule?.conditions,
+                conditions: activeRule?.conditions || [],
                 sortBy,
                 hydrateRanking: async products => {
                   if (needsShopifyOrder) await hydrateCollectionPrices(products, prisma.product, shop);
@@ -812,7 +817,7 @@ export const loader = async ({ request }) => {
             rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, collectionBestSellingState.updatedAt ?? null, prepared.metadata);
           }
           result = await readRankedCollectionPage(meiliClient.index("products"), {
-            ids: rankingSession.ids, page, limit, attributes: mainQuery.attributesToRetrieve,
+            ids: rankingSession.ids, page, limit, attributes: mainQuery.attributesToRetrieve, shop,
           });
           collectionRankingApplied = true;
         } else {
@@ -1487,12 +1492,6 @@ export const loader = async ({ request }) => {
         },
       },
     };
-
-    // Save in Redis Cache for 30s
-    try {
-      const responseCacheKey = `api_filter_res_${shop}_${encodeURIComponent(request.url)}`;
-      await getCached(responseCacheKey, async () => responsePayload, 30);
-    } catch (e) {}
 
     return data(responsePayload, { headers: responseHeaders });
   } catch (err) {

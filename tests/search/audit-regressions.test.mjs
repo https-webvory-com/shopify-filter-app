@@ -136,7 +136,7 @@ test('filter endpoint hides unavailable combinations before pagination, reports 
   const matches=docs.filter(p=>!ids||ids.includes(p.id));
   return {hits:matches.slice(query.offset||0,(query.offset||0)+(query.limit??25)),totalHits:matches.length,estimatedTotalHits:matches.length,facetDistribution:{}};
  };
- const index={getFilterableAttributes:async()=>['id'],search:async(_q,query)=>select(query),getDocument:async id=>docs.find(p=>p.id===id)};
+ const index={getFilterableAttributes:async()=>['id'],search:async(_q,query)=>{const ids=String(query.filter).match(/id IN (\[[^\]]*\])/);return ids?{hits:docs.filter(p=>JSON.parse(ids[1]).includes(String(p.id)))}:select(query);},getDocument:async id=>docs.find(p=>p.id===id)};
  const services=await service();
  const cache=new Map();
  const {loader}=await route('app/routes/api.filter.jsx',{
