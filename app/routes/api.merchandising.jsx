@@ -60,6 +60,8 @@ export const loader = async ({ request }) => {
       activeRule = await getActiveRuleForCollection(
         shop,
         resolvedCollectionTitle,
+        (url.searchParams.get("customerTags") || "").split(",").filter(Boolean),
+        url.searchParams.get("locale") || url.searchParams.get("language") || "",
       );
     }
 

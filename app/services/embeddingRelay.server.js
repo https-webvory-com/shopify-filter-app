@@ -1,4 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, createHash } from "node:crypto";
+import { semanticProvider, OPENAI_EMBEDDING_MODEL } from '../utils/semanticSearch.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_BATCH = 100;
@@ -45,15 +46,17 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-async function generate(texts, apiKey, fetchImpl) {
+async function generate(texts, apiKey, fetchImpl, provider) {
   await acquire();
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/${MODEL}:batchEmbedContents`, {
+      const openai = provider === 'openai';
+      const response = await fetchImpl(openai ? 'https://api.openai.com/v1/embeddings' : `https://generativelanguage.googleapis.com/v1beta/${MODEL}:batchEmbedContents`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        headers: { "Content-Type": "application/json", ...(openai ? {Authorization: `Bearer ${apiKey}`} : {"x-goog-api-key": apiKey}) },
         signal: AbortSignal.timeout(45000),
-        body: JSON.stringify({ requests: texts.map(text => ({ model: MODEL, content: { parts: [{ text }] }, outputDimensionality: DIMENSIONS })) }),
+        body: JSON.stringify(openai ? {model: OPENAI_EMBEDDING_MODEL, input: texts, dimensions: DIMENSIONS, encoding_format: 'float'} :
+          { requests: texts.map(text => ({ model: MODEL, content: { parts: [{ text }] }, outputDimensionality: DIMENSIONS })) }),
       });
       if (!response.ok) {
         await response.body?.cancel();
@@ -64,47 +67,60 @@ async function generate(texts, apiKey, fetchImpl) {
         throw new Error("PROVIDER_UNAVAILABLE");
       }
       const result = await response.json();
-      if (result.embeddings?.length !== texts.length || result.embeddings.some(embedding =>
+      let embeddings = result.embeddings;
+      if (openai) {
+        const ordered = Array.isArray(result.data) ? [...result.data].sort((a,b) => a.index-b.index) : [];
+        if (ordered.length !== texts.length || ordered.some((item,index) => item.index !== index)) throw new Error('INVALID_PROVIDER_RESPONSE');
+        embeddings = ordered.map(item => ({values:item.embedding}));
+      }
+      if (embeddings?.length !== texts.length || embeddings.some(embedding =>
         !Array.isArray(embedding.values) || embedding.values.length !== DIMENSIONS || embedding.values.some(value => !Number.isFinite(value)))) {
         throw new Error("INVALID_PROVIDER_RESPONSE");
       }
-      return result.embeddings;
+      return embeddings;
     }
   } finally { release(); }
 }
 
 export async function handleEmbeddingRelay(request, {
   token = process.env.SEMANTIC_RELAY_TOKEN,
-  apiKey = process.env.GEMINI_API_KEY,
+  provider = semanticProvider(),
+  apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY,
   fetchImpl = fetch,
 } = {}) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!authorized(request, token)) return json({ error: "Unauthorized" }, 401);
   if (!apiKey) return json({ error: "Embedding provider unavailable" }, 503);
-  let texts;
+  let texts, requestedProvider;
   try {
-    ({ texts } = await readBody(request));
+    ({ texts, provider: requestedProvider } = await readBody(request));
+    // Legacy requests belong to the former Gemini relay. Reject them when
+    // OpenAI is active rather than sending OpenAI vectors into a Gemini index.
+    if ((requestedProvider || 'gemini') !== provider) return json({error:'Embedding provider mismatch'}, 409);
     if (!Array.isArray(texts) || texts.length < 1 || texts.length > MAX_BATCH || texts.some(text =>
       typeof text !== "string" || !text.trim() || text.length > 8000)) throw new Error("INVALID_BODY");
   } catch (error) {
     return json({ error: "Invalid embedding request" }, error.message === "BODY_TOO_LARGE" ? 413 : 400);
   }
   try {
+    semanticProvider({SEMANTIC_EMBEDDING_PROVIDER:provider});
+    const namespace = `${provider}:${createHash('sha256').update(apiKey).digest('hex')}:`;
+    const key = text => namespace + text;
     const unique = [...new Set(texts)];
-    const missing = unique.filter(text => !cache.has(text) && !pending.has(text));
+    const missing = unique.filter(text => !cache.has(key(text)) && !pending.has(key(text)));
     if (missing.length) {
-      const batch = generate(missing, apiKey, fetchImpl);
+      const batch = generate(missing, apiKey, fetchImpl, provider);
       missing.forEach((text, index) => {
         const embedding = batch.then(values => {
           const value = values[index];
           if (cache.size >= 256) cache.delete(cache.keys().next().value);
-          cache.set(text, value);
+          cache.set(key(text), value);
           return value;
-        }).finally(() => pending.delete(text));
-        pending.set(text, embedding);
+        }).finally(() => pending.delete(key(text)));
+        pending.set(key(text), embedding);
       });
     }
-    const values = new Map(await Promise.all(unique.map(async text => [text, cache.get(text) || await pending.get(text)])));
+    const values = new Map(await Promise.all(unique.map(async text => [text, cache.get(key(text)) || await pending.get(key(text))])));
     return json({ embeddings: texts.map(text => values.get(text)) });
   } catch {
     return json({ error: "Embedding provider unavailable" }, 503);

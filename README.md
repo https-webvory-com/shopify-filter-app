@@ -1,5 +1,17 @@
 # Shopify App Template - React Router
 
+## Semantic search providers
+
+OpenAI is the default semantic search provider. Set `OPENAI_API_KEY` in the server environment; do not commit keys. It uses `text-embedding-3-small` with 768 dimensions and a 50/50 keyword/semantic blend. No Gemini key is needed.
+
+After deploying the provider-aware backend, run `npm run semantic:setup` on a server with access to Meilisearch. This provisions the selected provider and generates embeddings for the existing catalog. It removes the legacy `default` embedder and the inactive provider from the index, so indexing does not call Gemini while OpenAI is selected. `npm run semantic:status` checks configuration without printing keys. Verify the setup task succeeded before checking live relevance. Queries fall back to keyword search while the selected embedder is unavailable or a provider request fails.
+
+Gemini setup remains in code. To switch later, set `SEMANTIC_EMBEDDING_PROVIDER=gemini` and `GEMINI_API_KEY`, deploy/restart, and rerun setup to rebuild vectors. OpenAI and Gemini use separate embedder names; their vectors are never reused across providers. Do not switch a live relay's provider without rerunning setup: old provider requests are rejected rather than mixing vector spaces.
+
+Optional relay: set both `SEMANTIC_RELAY_URL` and `SEMANTIC_RELAY_TOKEN` on the app. The relay uses the selected provider's API key, authenticates requests, batches embeddings, and caches them separately by provider and credential. Without relay settings, Meilisearch calls the selected provider directly.
+
+Ordinary catalog sync leaves embedding provisioning alone unless `SEMANTIC_EMBEDDING_SETUP_ENABLED=true` is explicitly set. Use the setup command for the initial migration; keep that flag unset afterward. `SEMANTIC_SEARCH_ENABLED=false` temporarily disables hybrid queries.
+
 This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
 
 Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).

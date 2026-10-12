@@ -1,14 +1,43 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { geminiEmbedder, withSemanticSearch, semanticFallback } from "../../app/utils/semanticSearch.js";
+import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
 
 test("semantic requests retain tenant, filters, page and explicit sort", () => {
   const query = { q: "dress for beach wedding", filter: ["shop = 'fixture'", "available = true"], sort: ["priceMin:asc"], offset: 25, limit: 25 };
   const prepared = withSemanticSearch(query, true);
-  assert.deepEqual(prepared, { ...query, hybrid: { embedder: "default", semanticRatio: 0.5 } });
+  assert.deepEqual(prepared, { ...query, hybrid: { embedder: "openai", semanticRatio: 0.5 } });
   assert.equal(withSemanticSearch(query, false), query);
   const empty = { q: "", filter: query.filter };
   assert.equal(withSemanticSearch(empty, true), empty);
+});
+
+test('OpenAI is selected by default even when a Gemini key exists', () => {
+  assert.equal(semanticProvider({GEMINI_API_KEY:'gemini-key'}), 'openai');
+  const settings = semanticEmbedderSettings({OPENAI_API_KEY:'openai-key',GEMINI_API_KEY:'gemini-key'});
+  assert.equal(settings.openai.source, 'openAi');
+  assert.equal(settings.openai.apiKey, 'openai-key');
+  assert.equal(settings.openai.model, 'text-embedding-3-small');
+  assert.equal(settings.openai.dimensions, 768);
+  assert.equal(settings.default, null);
+  assert.equal(settings.gemini, null);
+  assert.throws(()=>semanticEmbedderSettings({GEMINI_API_KEY:'gemini-key'}), /OPENAI_API_KEY/);
+});
+
+test('Gemini requires an explicit switch and its own key', () => {
+  const settings = semanticEmbedderSettings({SEMANTIC_EMBEDDING_PROVIDER:'gemini',GEMINI_API_KEY:'gemini-key'});
+  assert.equal(settings.openai, null);
+  assert.equal(settings.gemini.source, 'rest');
+  assert.equal(settings.gemini.request.model, 'models/gemini-embedding-2');
+  assert.equal(withSemanticSearch({q:'dress'},true,'gemini').hybrid.embedder, 'gemini');
+  assert.throws(()=>semanticEmbedderSettings({SEMANTIC_EMBEDDING_PROVIDER:'gemini',OPENAI_API_KEY:'openai-key'}), /GEMINI_API_KEY/);
+  assert.throws(()=>semanticProvider({SEMANTIC_EMBEDDING_PROVIDER:'invalid'}), /Unsupported/);
+});
+
+test('relay setup pins the provider and rejects partial configuration', () => {
+  const env = {OPENAI_API_KEY:'key',SEMANTIC_RELAY_URL:'https://fixture/embeddings',SEMANTIC_RELAY_TOKEN:'token'};
+  assert.deepEqual(semanticEmbedderSettings(env).openai, semanticRelayEmbedder(env.SEMANTIC_RELAY_URL,env.SEMANTIC_RELAY_TOKEN,'openai'));
+  assert.equal(semanticEmbedderSettings(env).openai.request.provider, 'openai');
+  assert.throws(()=>semanticEmbedderSettings({...env,SEMANTIC_RELAY_TOKEN:''}), /required/);
 });
 
 test("provider failure retries the entire batch as keyword search, including facets", async () => {

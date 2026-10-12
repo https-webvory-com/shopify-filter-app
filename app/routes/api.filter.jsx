@@ -1,3 +1,4 @@
+import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -17,7 +18,7 @@ import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
-import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory, hydrateCollectionPrices } from "../utils/rankedCollectionPage.js";
+import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory, hydrateCollectionPrices, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -386,7 +387,7 @@ export const loader = async ({ request }) => {
 
       isSearch && searchQuery
         ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags)
-        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags),
+        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || ""),
     ]);
 
     // ── 5. Parse pinned IDs ────────────────────────────────────────────
@@ -452,6 +453,7 @@ export const loader = async ({ request }) => {
     }
 
     // ── 7. Build Meilisearch filters ───────────────────────────────────
+    const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
     if (globalSettings?.showOnlyInStock) {
       baseFilters.push(`available = true`);
@@ -481,6 +483,16 @@ export const loader = async ({ request }) => {
       baseFilters.push(`(${collClause})`);
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
+    }
+    if (hideUnavailable) {
+      await getCached('variantEligibilityFilter:' + shop, async () => {
+        await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
+        return true;
+      }, 60);
+      const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
+      const eligible = await getCached('availableVariants:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues]),
+        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues), 30);
+      baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
     const categoryFilters = {};
     if (minPrice > 0 || maxPrice < 9999999) {
@@ -786,6 +798,7 @@ export const loader = async ({ request }) => {
                 sortBy,
                 hydrateRanking: async products => {
                   if (needsShopifyOrder) await hydrateCollectionPrices(products, prisma.product, shop);
+                  if (activeRule?.conditions?.some(c => c.field === "SKU")) await hydrateCollectionSkus(products, prisma.variant, shop);
                   if (activeRule?.conditions?.some(c => c.field?.toLowerCase() === 'available')) {
                     await hydrateCollectionInventory(products, prisma.variant);
                   }
@@ -862,6 +875,8 @@ export const loader = async ({ request }) => {
       _originalIndex: idx,
       id: `gid://shopify/Product/${h.id}`,
       variants: (h.variantPrices || []).map((v) => ({
+        id: v.id,
+        sku: v.sku,
         available: v.available,
         price: v.price,
         compareAtPrice: v.compareAtPrice,
@@ -875,6 +890,7 @@ export const loader = async ({ request }) => {
     // ── 10.5 Unified Multi-Page Pinning Architecture (Supports 50+ Pinned Products) ────
     // Keep the active/in-stock pins validated before querying, including fallback pages.
 
+    if (!collectionRankingApplied && activeRule?.conditions?.some(c => c.field === "SKU")) await hydrateCollectionSkus(allMatchedProducts, prisma.variant, shop);
     const totalPinned = activePinnedList.length;
 
     let pagePinnedIds = [];
@@ -997,9 +1013,16 @@ export const loader = async ({ request }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues) : [...(p.variantPrices || [])];
       let productImages = [...(p.images || [])];
       let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
+      if (hideUnavailable) {
+        localOptions = localOptions.map((option, index) => ({
+          ...option,
+          values: (option.values || []).filter(value => localVariantPrices.some(variant =>
+            String(variant[`option${index + 1}`] || '').toLowerCase() === String(value).toLowerCase())),
+        }));
+      }
       
       let activeVariant = null;
       let matchScore = 0;

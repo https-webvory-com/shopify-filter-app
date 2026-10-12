@@ -1,3 +1,4 @@
+import * as availableVariants from "../../app/utils/availableVariants.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -9,6 +10,7 @@ import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPri
 async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+    if (name === "../utils/availableVariants.js") return availableVariants;
     if (name in mocks) return mocks[name];
     if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingState: async()=>({ ids: Array.from({ length: 180 }, (_, i) => String(180 - i)), status: 'ready' })};
     if (name === "../utils/rankedCollectionPage.js") return { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory };

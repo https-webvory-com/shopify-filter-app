@@ -1,3 +1,4 @@
+import { validConditions } from "../../utils/merchandisingCondition.js";
 import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
@@ -107,7 +108,9 @@ export default function CreateRuleModal({
             return {
               action: c.action || "Boost",
               field: c.field || "",
-              value: parsedValue || "",
+              value: parsedValue ?? "",
+              minValue: c.minValue ?? parsedValue ?? "",
+              maxValue: c.maxValue ?? "",
               value2: parsedValue2 || "",
               operator: c.operator || "Operator",
               operand: c.operand || "",
@@ -134,6 +137,7 @@ export default function CreateRuleModal({
   }, [isOpen, ruleToEdit]);
 
   const handleCreate = () => {
+    if (!ruleName.trim() || !validConditions(ruleRules)) return;
     const payload = {
       actionType: ruleToEdit ? "editRule" : "createRule",
       name: ruleName,
@@ -932,7 +936,7 @@ export default function CreateRuleModal({
           </button>
           <button 
             onClick={handleCreate}
-            disabled={fetcher.state !== "idle" || !ruleName.trim()}
+            disabled={fetcher.state !== "idle" || !ruleName.trim() || !validConditions(ruleRules)}
             style={{ padding: "10px 24px", background: (fetcher.state !== "idle" || !ruleName.trim()) ? "#94a3b8" : "#5B21B6", border: "none", borderRadius: "6px", color: "#fff", fontWeight: "600", fontSize: "14px", cursor: (fetcher.state !== "idle" || !ruleName.trim()) ? "not-allowed" : "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", opacity: !ruleName.trim() ? 0.7 : 1 }}
           >
             {fetcher.state !== "idle" ? (ruleToEdit ? "UPDATING..." : "CREATING...") : (ruleToEdit ? "UPDATE" : "CREATE")}

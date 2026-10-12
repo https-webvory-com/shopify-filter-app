@@ -1,3 +1,4 @@
+import { normalizeCondition, validConditions } from "../utils/merchandisingCondition.js";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
@@ -29,6 +30,7 @@ export const action = async ({ request }) => {
     const startDateStr = formData.get("startDate");
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
+    if (!String(formData.get("name") || "").trim() || !validConditions(conditions)) return Response.json({ error: "Enter a name and complete every condition." }, { status: 400 });
 
     const startDate =
       startDateStr && startDateStr !== "null" && startDateStr.trim() !== ""
@@ -49,17 +51,7 @@ export const action = async ({ request }) => {
         startDate,
         endDate,
         conditions: {
-          create: conditions.map((c) => ({
-            action: c.action,
-            field: c.field,
-            value:
-              typeof c.value === "string" ? c.value : JSON.stringify(c.value),
-            maxValue:
-              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
-            operator: c.operator,
-            operand: c.operand,
-            dateValue: c.dateValue,
-          })),
+          create: conditions.map(normalizeCondition),
         },
       },
     });
@@ -77,6 +69,7 @@ export const action = async ({ request }) => {
     const startDateStr = formData.get("startDate");
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
+    if (!String(formData.get("name") || "").trim() || !validConditions(conditions)) return Response.json({ error: "Enter a name and complete every condition." }, { status: 400 });
 
     const startDate =
       startDateStr && startDateStr !== "null" && startDateStr.trim() !== ""
@@ -86,11 +79,6 @@ export const action = async ({ request }) => {
       endDateStr && endDateStr !== "null" && endDateStr.trim() !== ""
         ? new Date(endDateStr)
         : null;
-
-    // First delete old conditions
-    await prisma.merchandisingRuleCondition.deleteMany({
-      where: { ruleId: id },
-    });
 
     const updatedRule = await prisma.merchandisingRule.update({
       where: { id, shop },
@@ -102,17 +90,8 @@ export const action = async ({ request }) => {
         startDate,
         endDate,
         conditions: {
-          create: conditions.map((c) => ({
-            action: c.action,
-            field: c.field,
-            value:
-              typeof c.value === "string" ? c.value : JSON.stringify(c.value),
-            maxValue:
-              c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
-            operator: c.operator,
-            operand: c.operand,
-            dateValue: c.dateValue,
-          })),
+          deleteMany: {},
+          create: conditions.map(normalizeCondition),
         },
       },
     });
@@ -158,15 +137,7 @@ export const action = async ({ request }) => {
         endDate: existingRule.endDate || null,
         status: existingRule.status,
         conditions: {
-          create: existingRule.conditions.map((c) => ({
-            action: c.action,
-            field: c.field,
-            value: c.value,
-            maxValue: c.maxValue,
-            operator: c.operator,
-            operand: c.operand,
-            dateValue: c.dateValue,
-          })),
+          create: existingRule.conditions.map(normalizeCondition),
         },
       },
     });
@@ -176,6 +147,7 @@ export const action = async ({ request }) => {
 
   if (actionType === "importRules") {
     const rules = JSON.parse(formData.get("rules") || "[]");
+    if (!Array.isArray(rules) || rules.some(r => !validConditions(r.conditions))) return Response.json({ error: "Imported rule contains incomplete conditions." }, { status: 400 });
     let importedCount = 0;
     
     for (const r of rules) {
@@ -202,21 +174,14 @@ export const action = async ({ request }) => {
           startDate: r.startDate ? new Date(r.startDate) : null,
           endDate: r.endDate ? new Date(r.endDate) : null,
           conditions: {
-            create: (r.conditions || []).map(c => ({
-              action: c.action || "Boost",
-              field: c.field || "",
-              value: typeof c.value === "string" ? c.value : JSON.stringify(c.value),
-              maxValue: c.value2 ? (typeof c.value2 === "string" ? c.value2 : JSON.stringify(c.value2)) : null,
-              operator: c.operator || "contains",
-              operand: c.operand || "",
-              dateValue: c.dateValue || ""
-            }))
+            create: (r.conditions || []).map(normalizeCondition)
           }
         }
       });
       importedCount++;
     }
 
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "import", count: importedCount });
   }
 

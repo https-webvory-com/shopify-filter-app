@@ -113,9 +113,10 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
             field: mappedField,
             value: mappedValue,
             value2: mappedValue2,
+            minValue: c.MinValue ?? undefined,
             operator: c.Type === "Dynamic" ? (c.DynamicOperator || c.Operator || "Add") : (c.Operator || "contains"),
             operand: c.Type === "Dynamic" ? String(c.DynamicOperand ?? c.Operand ?? "") : "",
-            dateValue: ""
+            dateValue: c.DateValue || ""
           };
         });
       }

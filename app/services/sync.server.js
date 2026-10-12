@@ -1,5 +1,5 @@
 import prisma from "../db.server";
-import { geminiEmbedder, geminiRelayEmbedder } from "../utils/semanticSearch.js";
+import { semanticEmbedderSettings, semanticProvider } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
@@ -73,6 +73,7 @@ export async function formatAndPushToMeili(products) {
             option1: v.option1 || null,
             option2: v.option2 || null,
             option3: v.option3 || null,
+            sku: v.sku || null,
             imageUrl: v.imageUrl || null,
           }))
         : [],
@@ -127,6 +128,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
     }
 
     const filterableAttributes = [
+      "id",
       "shop",
       "vendor",
       "productType",
@@ -161,15 +163,12 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
 
     // Catalog sync must not restart a full embedding migration that is on hold.
     // The manual semantic setup workflow owns initial embedder provisioning.
-    if (process.env.GEMINI_API_KEY && process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED === "true") {
+    if (process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED === "true") {
       try {
-        const embedder = process.env.SEMANTIC_RELAY_URL && process.env.SEMANTIC_RELAY_TOKEN
-          ? geminiRelayEmbedder(process.env.SEMANTIC_RELAY_URL, process.env.SEMANTIC_RELAY_TOKEN)
-          : geminiEmbedder(process.env.GEMINI_API_KEY);
-        const task = await index.updateEmbedders({ default: embedder });
+        const task = await index.updateEmbedders(semanticEmbedderSettings());
         const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 600000 });
         if (completed.status !== "succeeded") throw new Error("Semantic embedding configuration failed: " + (completed.error?.code || completed.status));
-        console.log(`CFP: AI Vector embedder (Gemini) configured for ${shop}`);
+        console.log(`CFP: AI Vector embedder (${semanticProvider()}) configured for ${shop}`);
       } catch (embedErr) {
         // vector store experimental feature not enabled on this Meilisearch instance — skip silently
         if (embedErr?.cause?.code === 'feature_not_enabled') {
@@ -634,6 +633,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
               option1,
               option2,
               option3,
+              sku: v.sku || null,
               imageUrl: v.image?.url || null,
             };
           }),
@@ -1127,6 +1127,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
         option1,
         option2,
         option3,
+        sku: v.sku || null,
         imageUrl: v.image?.url || null,
       };
     }),

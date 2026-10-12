@@ -1,5 +1,18 @@
 const cleanId = id => String(id).split('/').pop();
-const fullRankingFields = ['id', 'title', 'vendor', 'productType', 'tags', 'priceMin', 'inventoryTotal', 'variantPrices', 'options', 'images', 'collections', 'collection_titles', 'bestSellingScore', 'trendingScore', 'createdAt'];
+const fullRankingFields = ['id', 'title', 'vendor', 'productType', 'tags', 'priceMin', 'inventoryTotal', 'variantPrices', 'options', 'images', 'collections', 'collection_titles', 'bestSellingScore', 'trendingScore', 'createdAt', 'rating', 'metafield_reviews.rating'];
+
+export async function hydrateCollectionSkus(products, variantModel, shop) {
+  const missing = products.filter(p => !p.variants?.length || p.variants.some(v => v.sku === undefined));
+  for (let offset = 0; offset < missing.length; offset += 1000) {
+    const batch = missing.slice(offset, offset + 1000);
+    const rows = await variantModel.findMany({ where: { productId: { in: batch.map(p => p.id) }, product: {shop} }, select: { productId: true, id: true, sku: true, available: true, price: true, compareAtPrice: true, option1: true, option2: true, option3: true, imageUrl: true } });
+    const grouped = new Map();
+    for (const row of rows) { if (!grouped.has(row.productId)) grouped.set(row.productId, []); grouped.get(row.productId).push(row); }
+    for (const product of batch) product.variants = (grouped.get(product.id) || []).map(row => ({
+      ...(product.variants || []).find(v => cleanId(v.id) === cleanId(row.id)), ...row,
+    }));
+  }
+}
 
 export async function hydrateCollectionPrices(products, productModel, shop) {
   const missing = products.filter(p => p.priceMin == null || p.priceMin === '' || !Number.isFinite(Number(p.priceMin)));
@@ -40,7 +53,7 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
   if (sortBy && !['best-selling', 'bestselling', 'price-ascending', 'price-descending', 'created-ascending', 'created-descending', 'title-ascending', 'title-descending'].includes(sortBy)) return fullRankingFields;
   for (const condition of conditions) {
     const field = (condition.field || '').toLowerCase();
-    const simple = { tags: ['tags'], vendor: ['vendor'], 'product type': ['productType'], product: ['title'], collections: ['collections', 'collection_titles'], price: ['priceMin'], id: [] };
+    const simple = { tags: ['tags'], vendor: ['vendor'], 'product type': ['productType'], product: ['title'], collections: ['collections', 'collection_titles'], price: ['priceMin'], date: ['createdAt'], sku: ['variantPrices'], rating: ['rating', 'metafield_reviews.rating'], id: [] };
     if (field in simple) simple[field].forEach(value => fields.add(value));
     else if (field === 'available') fields.add('inventoryTotal');
     else if (['discount', 'percent sales'].includes(field) || /option|color|size|title/.test(field)) {

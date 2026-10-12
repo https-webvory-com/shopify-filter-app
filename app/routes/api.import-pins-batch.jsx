@@ -87,7 +87,7 @@ export const action = async ({ request }) => {
 
           if (validProductMap.has(gid)) {
             const dbProduct = validProductMap.get(gid);
-            const imgUrl = p.ImageUrl || p.imageUrl || (Array.isArray(dbProduct.images) && dbProduct.images[0]?.src) || "";
+            const imgUrl = p.ImageUrl || p.imageUrl || p.image || (Array.isArray(dbProduct.images) && (typeof dbProduct.images[0] === "string" ? dbProduct.images[0] : dbProduct.images[0]?.url || dbProduct.images[0]?.src)) || "";
             validProducts.push({
               id: gid,
               title: p.Title || p.title || dbProduct.title || "",

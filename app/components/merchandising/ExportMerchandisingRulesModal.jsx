@@ -58,7 +58,9 @@ export default function ExportMerchandisingRulesModal({ isOpen, onClose, selecte
             Type: c.action,
             Field: field,
             Value: val,
-            Operator: c.operator || "contains"
+            Operator: c.operator || "contains",
+            MinValue: c.minValue, Value2: c.maxValue, DateValue: c.dateValue,
+            DynamicOperator: c.operator, DynamicOperand: c.operand
           };
         });
         row["Conditions"] = JSON.stringify(conditions);

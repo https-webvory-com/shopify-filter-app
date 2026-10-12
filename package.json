@@ -12,6 +12,8 @@
     "start": "node scripts/flush-cache.js || true; react-router-serve ./build/server/index.js",
     "docker-start": "prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma && npm run setup && node scripts/flush-cache.js && npm run start",
     "flush-cache": "node scripts/flush-cache.js",
+    "semantic:setup": "node scripts/setup-semantic-search.mjs",
+    "semantic:status": "node scripts/setup-semantic-search.mjs --check",
     "setup": "prisma generate && prisma db push --accept-data-loss",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",

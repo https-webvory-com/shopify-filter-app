@@ -318,6 +318,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     try {
       const queryParams = new URLSearchParams();
+      queryParams.set("locale", window.Shopify?.locale || document.documentElement.lang || "en");
 
       // Guard: shop must be present
       if (!shop) {

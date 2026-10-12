@@ -7,6 +7,7 @@ export async function getActiveRuleForCollection(
   shop,
   collectionTitle,
   currentCustomerTags = [],
+  locale = "",
 ) {
   if (!shop || !collectionTitle) return null;
 
@@ -63,6 +64,11 @@ export async function getActiveRuleForCollection(
 
   const applicableRules = [];
   for (const rule of matchingRules) {
+    if (rule.locales?.trim()) {
+      const current = String(locale).trim().toLowerCase().replaceAll("_", "-");
+      const allowed = rule.locales.split(",").map(v => v.trim().toLowerCase().replaceAll("_", "-"));
+      if (!current || !allowed.some(v => v === current || (!v.includes("-") && v === current.split("-")[0]))) continue;
+    }
     if (!rule.customerTags || rule.customerTags.trim() === "") {
       applicableRules.push(rule);
     } else {
@@ -72,7 +78,7 @@ export async function getActiveRuleForCollection(
         .filter(Boolean);
       const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
 
-      const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
+      const hasMatchingTag = requiredTags.some((tag) => tag === "[no tag]" ? userTags.length === 0 : userTags.includes(tag));
       if (hasMatchingTag) {
         applicableRules.push(rule);
       }
@@ -151,7 +157,7 @@ export async function getActiveRuleForSearch(
         .filter(Boolean);
       const userTags = currentCustomerTags.map((t) => t.trim().toLowerCase());
 
-      const hasMatchingTag = requiredTags.some((tag) => userTags.includes(tag));
+      const hasMatchingTag = requiredTags.some((tag) => tag === "[no tag]" ? userTags.length === 0 : userTags.includes(tag));
       if (hasMatchingTag) {
         return rule;
       }
@@ -252,6 +258,12 @@ export async function getActivePinningRuleForSearch(
  */
 function checkRuleMatch(product, condition, mergedValues = []) {
   const field = condition.field || "";
+  if (field === "Date") {
+    const [start, end] = String(condition.dateValue || "").split(" - ");
+    const timestamp = typeof product.createdAt === "number" ? product.createdAt : Date.parse(product.createdAt);
+    const lower = Date.parse(start), upper = Date.parse(end) + 86400000 - 1;
+    return Number.isFinite(timestamp) && timestamp >= lower && timestamp <= upper ? { matchType: "exact" } : false;
+  }
 
   // Handle Min/Max Range conditions
   if (
@@ -298,6 +310,15 @@ function checkRuleMatch(product, condition, mergedValues = []) {
       return pct >= min && pct <= max;
     }
 
+    if (field === "Rating") {
+      let raw = product.rating ?? product["metafield_reviews.rating"];
+      if (typeof raw === "string" && raw.startsWith("{")) {
+        try { raw = JSON.parse(raw); } catch { return false; }
+      }
+      if (raw && typeof raw === "object") raw = raw.value;
+      const rating = raw == null || raw === "" ? NaN : Number(raw);
+      return Number.isFinite(rating) && rating >= min && rating <= max;
+    }
     return false;
   }
 
@@ -354,6 +375,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     return rawValues.some((v) => v === prodIdClean || v === String(product.id).toLowerCase().trim())
       ? { matchType: "exact" }
       : false;
+  }
+  if (field === "SKU") {
+    const skus = rawValues.map(v => v.split("|")[0].trim());
+    return (product.variants || product.variantPrices || []).some(v => skus.includes(String(v.sku || "").trim().toLowerCase())) ? { matchType: "exact" } : false;
   }
   if (field === "Vendor")
     return rawValues.includes((product.vendor || "").toLowerCase())

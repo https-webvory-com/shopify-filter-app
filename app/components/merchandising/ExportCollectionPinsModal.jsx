@@ -39,7 +39,7 @@ export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRul
       if (selectedFields.includes("Brief")) {
         const products = (rule.products || []).slice(0, 4).map(p => ({
           Id: extractNumericId(p.id),
-          ImageUrl: p.imageUrl || ""
+          ImageUrl: p.imageUrl || p.image || p.src || ""
         }));
         row["Brief"] = JSON.stringify({ Total: (rule.products || []).length, Items: products });
       }
@@ -53,7 +53,7 @@ export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRul
         row["Products"] = JSON.stringify((rule.products || []).map(p => ({
           Id: extractNumericId(p.id),
           Title: p.title || "",
-          ImageUrl: p.imageUrl || ""
+          ImageUrl: p.imageUrl || p.image || p.src || ""
         })));
       }
       

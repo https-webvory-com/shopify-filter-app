@@ -339,6 +339,8 @@
       // one browsing-session token. Let the main script issue that request.
       if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') return;
       params.set('shop', shop);
+      params.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
+      if (window.cfpCustomerTags) params.set('customer_tags', window.cfpCustomerTags);
       if (collHandle) params.set('collectionHandle', collHandle);
       if (collId && !collHandle) params.set('collectionId', collId);
       if (window.Shopify && window.Shopify.country) params.set('country', window.Shopify.country);
