@@ -18,6 +18,72 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";
 
+
+  // Search caching is optional. Never let unavailable/full storage block results.
+  const INSTANT_CACHE_PREFIXES = ['cfp_instant_search_', 'cfp_instant_default_'];
+  const INSTANT_CACHE_TTL = 120000;
+  const INSTANT_CACHE_ENTRIES = 12;
+  const INSTANT_CACHE_CHARS = 500000;
+
+  function readInstantCache(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const value = JSON.parse(raw);
+      if (!Array.isArray(value.productsData?.products) || !Number.isFinite(value.timestamp) || Date.now() - value.timestamp > INSTANT_CACHE_TTL) {
+        sessionStorage.removeItem(key); return null;
+      }
+      return raw;
+    } catch { return null; }
+  }
+
+  function writeInstantCache(key, productsData, collectionsData) {
+    try {
+      const raw = JSON.stringify({timestamp:Date.now(),productsData,collectionsData});
+      const entries = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const candidate = sessionStorage.key(i);
+        if (!INSTANT_CACHE_PREFIXES.some(prefix => candidate?.startsWith(prefix))) continue;
+        const value = sessionStorage.getItem(candidate);
+        let timestamp = 0;
+        try { timestamp = JSON.parse(value).timestamp || 0; } catch {}
+        entries.push({key:candidate,size:(value || '').length,timestamp});
+      }
+      entries.sort((a,b) => a.timestamp - b.timestamp);
+      let size = entries.reduce((sum, entry) => sum + entry.size, 0);
+      let count = entries.length;
+      for (const entry of entries) {
+        if (entry.key === key || Date.now() - entry.timestamp > INSTANT_CACHE_TTL || count >= INSTANT_CACHE_ENTRIES || size + raw.length > INSTANT_CACHE_CHARS) {
+          sessionStorage.removeItem(entry.key); size -= entry.size; count--;
+        }
+      }
+      if (raw.length > 150000) return;
+      try { sessionStorage.setItem(key, raw); }
+      catch {
+        // Reclaim only our response cache, preserving other apps and recent searches.
+        for (const entry of entries) sessionStorage.removeItem(entry.key);
+        try { sessionStorage.setItem(key, raw); } catch {}
+      }
+    } catch {}
+  }
+
+  function instantCacheMarket() {
+    return [window.Shopify?.country, window.Shopify?.currency?.active, window.Shopify?.locale, window.Shopify?.routes?.root].join('|');
+  }
+
+  async function fetchSearchJSON(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Search request failed: ' + response.status);
+    return response.json();
+  }
+
+  function highlightSearchText(value, query) {
+    const escape = text => String(text).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    if (!query?.trim()) return escape(value);
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return String(value).split(new RegExp('(' + escapedQuery + ')', 'gi')).map((part, index) => index % 2 ? '<strong>' + escape(part) + '</strong>' : escape(part)).join('');
+  }
+
   // UI Elements
   let modal = null;
   let overlay = null;
@@ -686,8 +752,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function fetchDefaultView() {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
-    const cacheKey = `cfp_instant_default_${shopDomain}`;
-    const cached = sessionStorage.getItem(cacheKey);
+    const cacheKey = `cfp_instant_default_${shopDomain}_${instantCacheMarket()}`;
+    const cached = readInstantCache(cacheKey);
     let hasCachedData = false;
 
     if (cached) {
@@ -695,7 +761,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const parsed = JSON.parse(cached);
         renderRecentSearches("");
         renderCollections(parsed.collectionsData, "", true);
-        renderProducts(parsed.productsData, "", true, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
+        await renderProducts(parsed.productsData, "", true, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -711,9 +777,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       // 1. Fetch 4 popular products in background
-      const productsPromise = fetch(
+      const productsPromise = fetchSearchJSON(
         `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling${countryParam}`
-      ).then((res) => res.json());
+      );
 
       // 2. Fetch all/popular collections in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
@@ -721,7 +787,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(res => {
            if(res.ok) return res.json();
            return fetch(`${rootUrl}search/suggest.json?q=a&resources[type]=collection&resources[limit]=5`).then(r => r.json());
-        });
+        }).catch(() => ({collections:[]}));
 
       const [productsData, collectionsData] = await Promise.all([
         productsPromise,
@@ -729,11 +795,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ]);
 
       // 3. Update Cache silently
-      sessionStorage.setItem(cacheKey, JSON.stringify({
-        timestamp: Date.now(),
-        productsData,
-        collectionsData
-      }));
+      writeInstantCache(cacheKey, productsData, collectionsData);
 
       // 4. Update UI with fresh data if user hasn't typed anything yet
       const inputEl = document.getElementById("cfp-main-search-input");
@@ -741,12 +803,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!currentQuery) {
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
-        renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
+        await renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
       }
 
     } catch (error) {
       console.error("Instant Search Default View Error:", error);
-      if (!hasCachedData) {
+      if (!hasCachedData && !mainInput.value.trim()) {
         document.getElementById("cfp-search-products").innerHTML = 
           `<div class="cfp-search-no-results">Unable to load trending products.</div>`;
         if (document.getElementById("cfp-search-collections")) {
@@ -754,7 +816,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
     } finally {
-      if (!hasCachedData) renderLoading(false);
+      if (!hasCachedData && !mainInput.value.trim()) renderLoading(false);
     }
   }
 
@@ -833,11 +895,7 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
     suggestions.forEach((s) => {
       // Highlight matching query
-      let displayTitle = s;
-      if (query && query.trim().length > 0) {
-        const regex = new RegExp(`(${query})`, 'gi');
-        displayTitle = displayTitle.replace(regex, '<strong>$1</strong>');
-      }
+      const displayTitle = highlightSearchText(s, query);
       
       html += `
         <li class="cfp-recent-search-item">
@@ -855,8 +913,8 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const trimmedQuery = query.trim().toLowerCase();
     
-    const cacheKey = `cfp_instant_search_${shopDomain}_${trimmedQuery}`;
-    const cached = sessionStorage.getItem(cacheKey);
+    const cacheKey = `cfp_instant_search_${shopDomain}_${instantCacheMarket()}_${trimmedQuery}`;
+    const cached = readInstantCache(cacheKey);
     let hasCachedData = false;
 
     renderRecentSearches(query);
@@ -865,7 +923,7 @@ document.addEventListener("DOMContentLoaded", function () {
       try {
         const parsed = JSON.parse(cached);
         renderCollections(parsed.collectionsData, query);
-        renderProducts(parsed.productsData, query, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
+        await renderProducts(parsed.productsData, query, false, parsed.productsData ? parsed.productsData.contextualPricingApplied : false);
         hasCachedData = true;
       } catch (e) {}
     }
@@ -881,15 +939,15 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       // 1. Fetch products from OUR API in background
-      const productsPromise = fetch(
+      const productsPromise = fetchSearchJSON(
         `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}${countryParam}`
-      ).then((res) => res.json());
+      );
 
       // 2. Fetch collections from Shopify Predictive Search API in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
-      const collectionsPromise = fetch(
+      const collectionsPromise = fetchSearchJSON(
         `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=5`
-      ).then((res) => res.json());
+      ).catch(() => ({resources:{results:{collections:[]}}}));
 
       const [productsData, collectionsData] = await Promise.all([
         productsPromise,
@@ -897,11 +955,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ]);
 
       // 3. Update Cache silently
-      sessionStorage.setItem(cacheKey, JSON.stringify({
-        timestamp: Date.now(),
-        productsData,
-        collectionsData
-      }));
+      writeInstantCache(cacheKey, productsData, collectionsData);
 
       // 4. Update UI with fresh data if user hasn't changed query
       const inputEl = document.getElementById("cfp-main-search-input");
@@ -929,7 +983,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         renderCollections(collectionsData, query);
-        renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
         if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
            renderSuggestions(productsData.suggestions, query);
         } else if (currentQuery.length > 0) {
@@ -937,17 +990,18 @@ document.addEventListener("DOMContentLoaded", function () {
            const container = document.getElementById("cfp-recent-searches-container");
            if (container) container.style.display = "none";
         }
+        await renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
       }
 
     } catch (error) {
       console.error("Instant Search Error:", error);
-      if (!hasCachedData) {
+      if (!hasCachedData && mainInput.value.trim().toLowerCase() === trimmedQuery) {
         document.getElementById("cfp-search-products").innerHTML = 
           `<div class="cfp-search-no-results">Something went wrong. Please try again.</div>`;
         document.getElementById("cfp-search-collections").innerHTML = "";
       }
     } finally {
-      if (!hasCachedData) renderLoading(false);
+      if (!hasCachedData && mainInput.value.trim().toLowerCase() === trimmedQuery) renderLoading(false);
     }
   }
 
@@ -988,13 +1042,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     collections.forEach((c) => {
       const collectionUrl = c.url || `/collections/${c.handle}`;
-      let displayTitle = c.title;
-      
-      // Highlight matching query
-      if (query && query.trim().length > 0) {
-        const regex = new RegExp(`(${query})`, 'gi');
-        displayTitle = displayTitle.replace(regex, '<strong>$1</strong>');
-      }
+      const displayTitle = highlightSearchText(c.title, query);
 
       html += `
         <li>
@@ -1017,7 +1065,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const grid = document.getElementById("cfp-search-products");
     const version = ++marketRenderVersion;
-    const products = window.cfpMarketPricing ? await window.cfpMarketPricing.apply(data.products || []) : (data.products || []).map(p=>({...p,_marketPricingUnavailable:true}));
+    const pricingProducts = data.products || [];
+    const products = pricingProducts.map(p=>({...p,_marketPricingUnavailable:true}));
     if (version !== marketRenderVersion) return;
     contextualPricingApplied = true;
 
@@ -1290,6 +1339,16 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     grid.innerHTML = html;
+    const cards = Array.from(grid.querySelectorAll('.cfp-product-card'));
+    window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
+      const card = cards[index];
+      if (version !== marketRenderVersion || !card?.isConnected || product._marketPricingUnavailable) return;
+      const price = card.querySelector('.cfp-search-product-price');
+      if (!price) return;
+      const selected = new URL(card.querySelector('a')?.href || location.href).searchParams.get('variant');
+      const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
+      price.textContent = new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(variant?.price ?? product.priceMin);
+    }).catch(() => {});
   }
 });
 

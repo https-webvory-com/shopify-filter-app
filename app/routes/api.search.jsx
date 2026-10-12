@@ -1,3 +1,4 @@
+import { buildSearchSuggestions } from "../utils/searchSuggestions.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import { getActivePinningRuleForSearch } from "../services/merchandising.server";
@@ -235,6 +236,8 @@ export const loader = async ({ request }) => {
       })
       .slice(0, limit)
       .map(p => ({ ...p, isPinned: pinnedIds.includes(p.id) }));
+
+    suggestions = buildSearchSuggestions(searchQuery, activeResults, suggestions);
 
     // Contextual Pricing
     let contextualPricingApplied = false;
