@@ -10,17 +10,17 @@ try {
   const { default: client } = await import('../app/services/meiliClient.server.js');
   const index = client.index('products');
   if (checkOnly) {
-    const embedders = await index.getEmbedders();
+    const embedders = (await index.getSettings()).embedders || {};
     const config = embedders[provider];
     console.log(JSON.stringify({provider, configured:!!config, source:config?.source,
       model:config?.model, dimensions:config?.dimensions, legacyDefaultPresent:!!embedders.default,
       inactiveProviderPresent:!!embedders[provider === 'openai' ? 'gemini' : 'openai']}, null, 2));
   } else {
-    const task = await index.updateEmbedders(settings);
+    const task = await index.updateSettings({embedders: settings});
     console.log(`Semantic setup: ${provider}; indexing task ${task.taskUid}. Existing products will be embedded with this provider.`);
-    const completed = await client.tasks.waitForTask(task.taskUid, {timeout:600000});
+    const completed = await client.tasks.waitForTask(task.taskUid, {timeout:6000000});
     if (completed.status !== 'succeeded') throw new Error('Semantic indexing did not succeed');
-    console.log(`Semantic setup complete: ${provider}. Restart the app after deploying the provider selection, then verify live search.`);
+    console.log(`Semantic setup complete: ${provider}. Verify live search after the provider-readiness cache refreshes.`);
   }
 } catch {
   console.error('Semantic setup failed. Check the selected provider API key, Meilisearch connectivity, and indexing task status.');

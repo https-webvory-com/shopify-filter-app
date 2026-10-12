@@ -429,7 +429,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const grid = document.getElementById('cfp-products-grid');
       
       // Did You Mean UI
-      if (data.didYouMean && templateName === 'search') {
+      if (data.didYouMean && templateName === 'search' && /^[a-z]{4,}$/i.test(searchTerms.trim())) {
          let dymContainer = document.getElementById("cfp-dym-page-container");
          if (!dymContainer) {
             dymContainer = document.createElement("div");
@@ -438,7 +438,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             if (grid) grid.parentElement.insertBefore(dymContainer, grid);
          }
          if (dymContainer) {
-            dymContainer.innerHTML = `Sorry, nothing found for '<strong>${searchTerms}</strong>'. Did you mean '<a href="/search?q=${data.didYouMean}" style="font-weight: bold; text-decoration: underline; color: #991b1b;">${data.didYouMean}</a>'?`;
+            dymContainer.innerHTML = `${data.products?.length ? '' : 'No matches found. '}Did you mean '<a href="/search?q=${encodeURIComponent(data.didYouMean)}" style="font-weight: bold; text-decoration: underline; color: #991b1b;">${data.didYouMean}</a>'?`;
             dymContainer.style.display = "block";
          }
       } else {

@@ -1,3 +1,4 @@
+import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -15,7 +16,7 @@ function storage(){
 }
 function fixture(store=storage()){
  const calls=[];const elements=new Map();
- const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'blue dress',style:{},classList:{add(){},remove(){}}});return elements.get(id);};
+ const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'blue dress',style:{},classList:{add(){},remove(){}},addEventListener(){}});return elements.get(id);};
  const context={sessionStorage:store,Date,URL,location:{href:'https://shop.test/'},window:{Shopify:{country:'US',currency:{active:'USD'},locale:'en'}},document:{getElementById:element},mainInput:element('cfp-main-search-input'),shopDomain:'fixture',CONFIG:{apiUrl:'https://api.test/api/search',productLimit:6},console:{error(){}},renderRecentSearches(){},renderLoading:flag=>calls.push(['loading',flag]),renderCollections:()=>calls.push(['collections']),renderProducts:async()=>calls.push(['products']),renderSuggestions:suggestions=>calls.push(['suggestions',Array.from(suggestions)]),fetch:async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')?{products:[{title:'Blue dress'}],suggestions:['Blue formal dress']}:{resources:{results:{collections:[]}}}})};
  vm.createContext(context);vm.runInContext(helpers+search+defaults,context);
  return {context,calls,element,store};
@@ -98,6 +99,7 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
  const mocks={
   'react-router':{data:(value,init)=>Response.json(value,init)},
   '../utils/searchSuggestions.js':{buildSearchSuggestions},
+  '../utils/spellingCorrection.js':{spellingCorrection},
   '../db.server':{__esModule:true,default:{}},
   '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null},
   '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
@@ -111,4 +113,18 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
  assert.equal(response.status,200);
  assert.deepEqual((await response.json()).suggestions,['Blue Pleated Satin Evening Dress']);
+});
+
+test('a stale phrase correction is hidden rather than replacing a natural language query',async()=>{
+ const f=fixture();f.context.mainInput.value='blue plus size dress for wedding';
+ f.context.fetch=async()=>({ok:true,json:async()=>({products:[{title:'Blue dress'}],didYouMean:'dress'})});
+ await f.context.performSearch(f.context.mainInput.value);
+ assert.equal(f.element('cfp-did-you-mean-container').style.display,'none');
+});
+test('a genuine spelling prompt never claims no products when results exist',async()=>{
+ const f=fixture();f.context.mainInput.value='drees';
+ f.context.fetch=async()=>({ok:true,json:async()=>({products:[{title:'Blue dress'}],didYouMean:'dress'})});
+ await f.context.performSearch('drees');
+ const banner=f.element('cfp-did-you-mean-container').innerHTML;
+ assert.ok(banner.includes('Did you mean'));assert.ok(!banner.includes('nothing found'));assert.ok(!banner.includes('No matches found'));
 });

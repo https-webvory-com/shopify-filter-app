@@ -1,3 +1,4 @@
+import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
@@ -1186,31 +1187,7 @@ export const loader = async ({ request }) => {
     }
 
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
-    let didYouMean = null;
-    if (searchQuery && searchQuery.length > 2 && meiliRes.hits.length > 0) {
-      const sq = searchQuery.toLowerCase();
-      const exactMatchFound = meiliRes.hits.some(
-        (hit) =>
-          (hit.title && hit.title.toLowerCase().includes(sq)) ||
-          (hit.tags && hit.tags.some((t) => t.toLowerCase().includes(sq))) ||
-          (hit.vendor && hit.vendor.toLowerCase().includes(sq)) ||
-          (hit.productType && hit.productType.toLowerCase().includes(sq))
-      );
-      if (!exactMatchFound) {
-        const firstHit = meiliRes.hits[0];
-        if (firstHit?._formatted) {
-          const match = JSON.stringify(firstHit._formatted).match(
-            /<em>(.*?)<\/em>/i
-          );
-          if (match?.[1]) {
-            const suggestion = match[1].toLowerCase().trim();
-            if (suggestion !== sq && /^[a-z0-9\s]+$/.test(suggestion)) {
-              didYouMean = suggestion;
-            }
-          }
-        }
-      }
-    }
+    const didYouMean = spellingCorrection(searchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 
     // ── 15. Price range counts (from Meilisearch hits) ────────────────
     const priceFilter = activeGroupFilters

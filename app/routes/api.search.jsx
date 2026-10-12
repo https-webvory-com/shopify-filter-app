@@ -1,3 +1,4 @@
+import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { buildSearchSuggestions } from "../utils/searchSuggestions.js";
 import { data } from "react-router";
 import prisma from "../db.server";
@@ -95,33 +96,7 @@ export const loader = async ({ request }) => {
 
     const meiliRes = await semanticSearch(cleanSearchQuery, meiliSearchParams);
 
-    let didYouMean = null;
-    if (cleanSearchQuery.length > 2 && meiliRes.hits.length > 0 && !meiliRes.semanticHitCount) {
-      const sq = cleanSearchQuery.toLowerCase();
-      // Check if clean query is found exactly in any of the results
-      const exactMatchFound = meiliRes.hits.some(hit => 
-        (hit.title && hit.title.toLowerCase().includes(sq)) ||
-        (hit.tags && hit.tags.some(t => t.toLowerCase().includes(sq))) ||
-        (hit.vendor && hit.vendor.toLowerCase().includes(sq)) ||
-        (hit.productType && hit.productType.toLowerCase().includes(sq))
-      );
-
-      if (!exactMatchFound) {
-        // Typo tolerance kicked in. Let's extract the highlighted word.
-        const firstHit = meiliRes.hits[0];
-        if (firstHit._formatted) {
-          const formattedStr = JSON.stringify(firstHit._formatted);
-          const match = formattedStr.match(/<em>(.*?)<\/em>/i);
-          if (match && match[1]) {
-             // Only suggest if it's purely letters and not exactly what they typed
-             const suggestion = match[1].toLowerCase().trim();
-             if (suggestion !== sq && /^[a-z0-9\s]+$/.test(suggestion)) {
-                didYouMean = suggestion;
-             }
-          }
-        }
-      }
-    }
+    const didYouMean = spellingCorrection(cleanSearchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 
     let suggestions = [];
     if (searchQuery.length > 0) {

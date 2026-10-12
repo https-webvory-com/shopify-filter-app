@@ -965,8 +965,8 @@ document.addEventListener("DOMContentLoaded", function () {
         // Did You Mean logic
         const dymContainer = document.getElementById("cfp-did-you-mean-container");
         if (dymContainer) {
-          if (productsData && productsData.didYouMean) {
-            dymContainer.innerHTML = `Sorry, nothing found for '<strong>${query}</strong>'. Did you mean '<a href="#" id="cfp-dym-link" style="font-weight: 700; text-decoration: underline; color: #0f172a;">${productsData.didYouMean}</a>'?`;
+          if (productsData && productsData.didYouMean && /^[a-z]{4,}$/i.test(query.trim())) {
+            dymContainer.innerHTML = `${productsData.products?.length ? '' : `No matches found for '<strong>${highlightSearchText(query, '')}</strong>'. `}Did you mean '<a href="#" id="cfp-dym-link" style="font-weight: 700; text-decoration: underline; color: #0f172a;">${highlightSearchText(productsData.didYouMean, '')}</a>'?`;
             dymContainer.style.display = "block";
             
             document.getElementById("cfp-dym-link").addEventListener("click", (e) => {

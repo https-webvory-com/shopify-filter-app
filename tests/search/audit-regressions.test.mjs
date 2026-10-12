@@ -1,3 +1,4 @@
+import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -82,6 +83,7 @@ test('available product IDs exclude products with only unavailable matching comb
 
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+   if(name === "../utils/spellingCorrection.js")return {spellingCorrection};
    if(name in mocks)return mocks[name];
    if(name==='../utils/merchandisingCondition.js')return {normalizeCondition,validConditions};
    if(name.startsWith('../components/')||['react','react-router','@shopify/app-bridge-react'].includes(name))return {};

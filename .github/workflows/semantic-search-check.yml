@@ -1,103 +1,52 @@
 name: Verify semantic search
-
 on:
   workflow_dispatch:
-
+    inputs:
+      shop:
+        type: choice
+        default: another-shpyfy-store.myshopify.com
+        options:
+          - another-shpyfy-store.myshopify.com
+          - thedressoutlet.myshopify.com
+      query:
+        type: string
+        default: equipment for winter sports
 permissions:
   contents: read
-
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Check deployed Meilisearch and search relevance
+      - name: Read deployed provider and verify semantic retrieval
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          AUDIT_SHOP: ${{ inputs.shop }}
+          AUDIT_QUERY: ${{ inputs.query }}
         with:
+          envs: AUDIT_SHOP,AUDIT_QUERY
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 5m
+          command_timeout: 3m
           script: |
             set -eu
-            python3 - <<'PY'
-            import subprocess, json
-            import socket
-            print('SERVER_NETWORK', json.dumps({'hostnameAddresses': subprocess.check_output(['hostname', '-I'], text=True).strip().split(), 'googleAddresses': sorted(set(item[4][0] for item in socket.getaddrinfo('generativelanguage.googleapis.com', 443)))}))
-            service = subprocess.run(['systemctl', 'show', 'meilisearch', '-p', 'ActiveState', '-p', 'FragmentPath'], capture_output=True, text=True)
-            print('MEILISEARCH_SERVICE', service.stdout.strip())
-            listeners = subprocess.run(['ss', '-lnt'], capture_output=True, text=True)
-            print('MEILISEARCH_LOCAL_LISTENERS', json.dumps([line for line in listeners.stdout.splitlines() if ':7700 ' in line]))
-            rows = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}} {{.Image}}'], text=True).splitlines()
-            for row in rows:
-                name, image = row.split(' ', 1)
-                if 'meili' not in (image + ' ' + name).lower():
-                    continue
-                stats = subprocess.check_output(['docker', 'stats', '--no-stream', '--format', '{{.CPUPerc}} {{.MemUsage}}', name], text=True).strip()
-                logs = subprocess.run(['docker', 'logs', '--tail', '1000', name], capture_output=True, text=True)
-                lines = (logs.stdout + logs.stderr).lower().splitlines()
-                print('ENGINE_HEALTH', json.dumps({'container': name, 'resources': stats, 'recent429Lines': sum('429' in line or 'resource_exhausted' in line for line in lines), 'recentEmbeddingErrorLines': sum('error' in line and 'embed' in line for line in lines)}))
-            PY
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import fs from 'node:fs';
-            const shop = 'thedressoutlet.myshopify.com';
-            const query = 'i want a red dress for office';
-            // Read the deployed client's configuration without logging credentials.
-            const file = ['app/services/meiliClient.server.js', '/app/app/services/meiliClient.server.js'].find(p => fs.existsSync(p));
-            if (!file) { console.log('CHECK_FAILED: deployed Meilisearch client source unavailable'); process.exit(1); }
-            const source = fs.readFileSync(file, 'utf8');
-            const key = source.match(/apiKey:\s*["']([^"']+)["']/)?.[1];
-            const hostVariable = source.match(/host:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,/)?.[1];
-            const host = hostVariable ? source.match(new RegExp('(?:const|let)\\s+' + hostVariable + '\\s*=\\s*["\']([^"\']+)["\']'))?.[1] : source.match(/host:\s*["']([^"']+)["']/)?.[1];
-            if (!key || !host) { console.log('CHECK_FAILED: unsupported client configuration'); process.exit(1); }
-            console.log('CONFIG', JSON.stringify({ shop, query, semanticDisabled: process.env.SEMANTIC_SEARCH_ENABLED === 'false', geminiKeyPresent: !!process.env.GEMINI_API_KEY }));
-            async function request(path, body) {
-              const response = await fetch(host + path, {
-                headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(45000),
-                ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
-              });
-              const result = await response.json();
-              if (!response.ok) { const error = new Error('Meilisearch request failed'); error.code = result.code; error.status = response.status; throw error; }
-              return result;
-            }
-            if (process.env.GEMINI_API_KEY) {
-              const { geminiEmbedder } = await import('./app/utils/semanticSearch.js');
-              const config = geminiEmbedder(process.env.GEMINI_API_KEY);
-              try {
-                const response = await fetch(config.url, {method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(45000), body:JSON.stringify({...config.request,content:{parts:[{text:'red office dress'}]}})});
-                const probe = await response.json();
-                console.log('PROVIDER_HEALTH',JSON.stringify({status:response.status,errorStatus:probe.error?.status,dimensions:probe.embedding?.values?.length,quota:probe.error?.details?.flatMap(detail=>(detail.violations||[]).map(v=>({metric:v.quotaMetric,id:v.quotaId,value:v.quotaValue,dimensions:v.quotaDimensions}))),retryDelay:probe.error?.details?.find(detail=>detail.retryDelay)?.retryDelay}));
-              } catch(error) { console.log('PROVIDER_HEALTH',JSON.stringify({failed:true,code:error.name})); }
-            }
-            let failures = 0;
-            async function check(name, run) {
-              try { console.log(name, JSON.stringify(await run())); }
-              catch (error) { failures++; console.log(name, JSON.stringify({ failed: true, status: error.status, code: error.code || error.cause?.code || error.name })); }
-            }
-            await check('EMBEDDERS', async () => {
-              const settings = await request('/indexes/products/settings/embedders');
-              return Object.fromEntries(Object.entries(settings || {}).map(([name, value]) => [name, { source: value.source, model: value.model, dimensions: value.dimensions }]));
-            });
-            await check('INDEX_STATS', async () => {
-              const stats = await request('/indexes/products/stats');
-              return { numberOfDocuments: stats.numberOfDocuments, isIndexing: stats.isIndexing, numberOfEmbeddedDocuments: stats.numberOfEmbeddedDocuments, numberOfEmbeddings: stats.numberOfEmbeddings };
-            });
-            await check('RECENT_SETTINGS_TASKS', async () => {
-              const result = await request('/tasks?indexUids=products&types=settingsUpdate&limit=5');
-              return result.results.map(task => ({ uid: task.uid, status: task.status, startedAt: task.startedAt, finishedAt: task.finishedAt, duration: task.duration, errorCode: task.error?.code, errorMessage: task.error?.message?.replaceAll(key, "[redacted]").replaceAll(process.env.GEMINI_API_KEY || "__unused__", "[redacted]").replace(/https?:\/\/\S+/g, "[url redacted]") }));
-            });
-            for (const [mode, ratio] of [['KEYWORD', null], ['SEMANTIC_ONLY', 1], ['HYBRID', 0.5]]) {
-              await check(mode, async () => {
-                const result = await request('/indexes/products/search', {
-                  q: query,
-                  filter: [`shop = '${shop}'`, "status = 'ACTIVE'"],
-                  limit: 5,
-                  attributesToRetrieve: ['title', 'productType', 'tags', 'option_Color'],
-                  ...(ratio === null ? {} : { hybrid: { embedder: 'default', semanticRatio: ratio } }),
-                });
-                return { semanticHitCount: result.semanticHitCount, estimatedTotalHits: result.estimatedTotalHits, processingTimeMs: result.processingTimeMs, hits: result.hits };
-              });
-            }
-            process.exitCode = failures ? 1 : 0;
+            docker exec -i -e AUDIT_SHOP -e AUDIT_QUERY shopify-filter-app node --input-type=module <<'NODE'
+            import client from './app/services/meiliClient.server.js';
+            import {semanticProvider} from './app/utils/semanticSearch.js';
+            const shop=process.env.AUDIT_SHOP || 'another-shpyfy-store.myshopify.com';
+            if(!['another-shpyfy-store.myshopify.com','thedressoutlet.myshopify.com'].includes(shop))throw Error('Unsupported audit scope');
+            const query=process.env.AUDIT_QUERY || 'equipment for winter sports';
+            const provider=semanticProvider();
+            console.log('RUNTIME',JSON.stringify({shop,query,provider,openaiKeyPresent:!!process.env.OPENAI_API_KEY,semanticDisabled:process.env.SEMANTIC_SEARCH_ENABLED==='false',autoSetupEnabled:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
+            const index=client.index('products');
+            let failures=0;
+            async function check(name,fn){try{console.log(name,JSON.stringify(await fn()));}catch(error){failures++;console.log(name,JSON.stringify({failed:true,status:error.status||error.httpStatus,code:error.code||error.cause?.code||error.name}));}}
+            await check('EMBEDDERS',async()=>Object.fromEntries(Object.entries((await index.getSettings()).embedders || {}).map(([name,c])=>[name,{source:c.source,model:c.model,dimensions:c.dimensions,relayProvider:c.request?.provider}])));
+            await check('INDEX_STATS',async()=>{const s=await index.getStats();return {documents:s.numberOfDocuments,isIndexing:s.isIndexing,embeddedDocuments:s.numberOfEmbeddedDocuments,embeddings:s.numberOfEmbeddings};});
+            await check('RECENT_SETTINGS_TASKS',async()=>{const r=await client.tasks.getTasks({indexUids:['products'],types:['settingsUpdate'],limit:5});return r.results.map(t=>({uid:t.uid,status:t.status,errorCode:t.error?.code,startedAt:t.startedAt,finishedAt:t.finishedAt}));});
+            await check('EMBEDDING_PROGRESS',async()=>{const t=(await client.tasks.getTasks({indexUids:['products'],types:['settingsUpdate'],limit:1})).results[0];if(!t)return {status:'no_settings_tasks'};const config=t.details?.embedders?.openai;let progress;if(t.batchUid!=null&&client.batches){const b=await client.batches.getBatch(t.batchUid);progress=b.progress;}return {uid:t.uid,status:t.status,source:config?.source,model:config?.model,dimensions:config?.dimensions,progress};});
+            if(process.env.OPENAI_API_KEY)await check('OPENAI_PROBE',async()=>{const r=await fetch('https://api.openai.com/v1/embeddings',{method:'POST',headers:{Authorization:'Bearer '+process.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'text-embedding-3-small',dimensions:768,input:'snowboard'}),signal:AbortSignal.timeout(20000)});const d=await r.json();return {status:r.status,dimensions:d.data?.[0]?.embedding?.length,errorCode:d.error?.code};});
+            for(const [mode,ratio] of [['KEYWORD',null],['SEMANTIC_ONLY',1],['HYBRID',0.5]])await check(mode,async()=>{const r=await index.search(query,{filter:[`shop = '${shop}'`,"status = 'ACTIVE'"],limit:6,attributesToRetrieve:['id','title','productType'],...(ratio===null?{}:{hybrid:{embedder:'openai',semanticRatio:ratio}})});return {semanticHitCount:r.semanticHitCount,total:r.estimatedTotalHits,processingTimeMs:r.processingTimeMs,products:r.hits};});
+            process.exitCode=failures ? 1 : 0;
             NODE
