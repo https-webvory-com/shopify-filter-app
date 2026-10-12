@@ -129,3 +129,11 @@ When the user asks about previous ranking work, use these notes as historical co
 - Explicit color intent is a hard filter in instant search and all full-search tiers/facets; zero matching catalog colors does not broaden to other colors. Wrong-color pins are excluded before pin pagination validation. Compound colors such as Slate Blue match Blue; Navy/Periwinkle require configured aliases to Blue.
 - Search cards use a matching available variant when possible, its link and market price, and its color image. Same-color sister variants may supply a missing image; unrelated product images and unverified hover images are suppressed for explicit color results. Color/Colour and option positions 1?3 are supported.
 - Backend and both Shopify extension assets need deployment. These changes are local; no live fixed-behavior claim or deployment has been made. Tests and build should be checked against the final worktree before reporting.
+
+
+## Search color alias follow-up ? 2026-10-12
+
+- User screenshot 163930 query `blue wedding dress for mother of bride` still showed Deep Green, Champagne and Gold. Fresh production API confirmed the new selectedVariantId/searchColor metadata was deployed, but explicitly selected those unrelated colors. This was a backend selection/eligibility issue, not solely browser cache.
+- The previous resolver expanded any merged group containing a matched source, making broad groups pull in unrelated colors. Local follow-up expands only a group whose target is the requested color and rejects known unrelated color families in its aliases. Direct compound-color matches remain supported. Literal requested-color available variants take priority over earlier aliases.
+- Exact production merged-value records were not retrieved: local Prisma read failed initialization. The resolver defect is demonstrated by regression fixtures; don't claim individual production alias records were inspected.
+- 228 search/sync/webhook tests passed. Follow-up backend changes remain local and need deployment; production fixed parity has not been verified. Shopify and SoBooster settings were unchanged.

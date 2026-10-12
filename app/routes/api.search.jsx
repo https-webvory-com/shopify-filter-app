@@ -217,7 +217,7 @@ export const loader = async ({ request }) => {
       })
       .map(p => {
         if (!parsedQuery?.colorIntent?.requested.length) return p;
-        const variant = selectSearchColorVariant(p, parsedQuery.colorIntent.values);
+        const variant = selectSearchColorVariant(p, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         if (!variant || (globalSettings?.showOnlyInStock && variant.available === false)) return null;
         return { ...p, selectedVariantId: variant.id, searchColor: variant.searchColor,
           searchColorImage: variant.imageUrl, merchandisingImage: variant.imageUrl,

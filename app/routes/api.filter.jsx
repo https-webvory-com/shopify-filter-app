@@ -555,7 +555,7 @@ export const loader = async ({ request }) => {
       });
       const validIds = new Set(validPins.filter(product => {
         if (!parsedQuery?.colorIntent?.requested.length) return true;
-        const variant = selectSearchColorVariant(product, parsedQuery.colorIntent.values);
+        const variant = selectSearchColorVariant(product, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         return variant && (!globalSettings?.showOnlyInStock || variant.available !== false);
       }).map(product => product.id));
       activePinnedList = activePinnedList.filter(id => validIds.has(id));
@@ -1020,7 +1020,7 @@ export const loader = async ({ request }) => {
             Object.entries(optionsFilters).every(([name, values]) => {
               const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
               return index < 0 || values.some(value => String(value).toLowerCase() === String(v[`option${index + 1}`] || '').toLowerCase());
-            })) }, parsedQuery.colorIntent.values) : null;
+            })) }, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested) : null;
       if (activeVariant) {
         const index = localVariantPrices.findIndex(v => String(v.id) === String(activeVariant.id));
         if (index >= 0) localVariantPrices[index] = activeVariant;

@@ -29,6 +29,29 @@ test('selects an available matching Colour variant and borrows only a same-color
   assert.equal(color.selectSearchColorVariant({...product,variants:[product.variants[0],product.variants[2]]},['Slate Blue']).imageUrl,null);
 });
 
+test('blue cannot expand through unrelated merged groups or acquire green, champagne and gold', () => {
+  const colors=['Slate Blue','Dusty Blue','Navy','Periwinkle','Deep Green','Champagne','Gold'];
+  const aliases=[
+    {filterType:'Color',targetValue:'Formal Colors',sourceValues:colors},
+    {filterType:'Color',targetValue:'Gold',sourceValues:['Dusty Blue','Champagne']},
+    {filterType:'Color',targetValue:'Blue',sourceValues:['Navy','Periwinkle','Deep Green','Champagne','Gold']}
+  ];
+  const intent=color.resolveSearchColor('blue wedding dress for mother of bride',colors,aliases);
+  assert.deepEqual(intent.values,['Slate Blue','Dusty Blue','Navy','Periwinkle']);
+  assert.deepEqual(color.resolveSearchColor('blue dress',colors,aliases.slice(0,2)).values,['Slate Blue','Dusty Blue']);
+  assert.deepEqual(color.resolveSearchColor('blue dress',colors,[...aliases].reverse()).values,intent.values);
+});
+
+test('a literal blue variant wins over an earlier available Navy alias', () => {
+  const product={options:[{name:'Color'}],variants:[
+    {id:'navy',option1:'Navy',available:true,imageUrl:'navy.jpg'},
+    {id:'blue',option1:'Slate Blue',available:true,imageUrl:'blue.jpg'},
+    {id:'gold',option1:'Gold',available:true,imageUrl:'gold.jpg'}
+  ]};
+  const selected=color.selectSearchColorVariant(product,['Slate Blue','Navy'],['blue']);
+  assert.equal(selected.id,'blue');assert.equal(selected.imageUrl,'blue.jpg');
+});
+
 test('parser facets and color aliases are isolated by shop',async()=>{
   const requests=[];
   const mocks={
