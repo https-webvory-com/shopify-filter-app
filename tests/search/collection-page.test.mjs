@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
 import fs from "node:fs/promises";
 import vm from "node:vm";
-import { buildCollectionSequence, readRankedCollectionPage } from '../../app/utils/rankedCollectionPage.js';
+import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory } from '../../app/utils/rankedCollectionPage.js';
 import { transform } from "esbuild";
 
 function fixture(documents) {
@@ -190,7 +190,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../shopify.server": {},
     "../services/rateLimiter.server": { rateLimit: async () => true },
     "../utils/collectionPage.js": { fetchCollectionPage },
-    "../utils/rankedCollectionPage.js": { buildCollectionSequence, readRankedCollectionPage },
+    "../utils/rankedCollectionPage.js": { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory },
     "../services/collectionRankingSession.server.js": {
       collectionRankingFingerprint: () => 'fixture',
       getCollectionRankingSession: async (_shop, _fingerprint, token) => token ? sessions.get(token) : null,

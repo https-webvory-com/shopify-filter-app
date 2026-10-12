@@ -17,7 +17,7 @@ import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
-import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory } from "../utils/rankedCollectionPage.js";
+import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory, hydrateCollectionPrices } from "../utils/rankedCollectionPage.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -774,7 +774,7 @@ export const loader = async ({ request }) => {
         let result;
         if (useRankedCollectionPagination) {
           if (!rankingSession) {
-            const preparedKey = `collectionPreparedSequence:${shop}:${JSON.stringify([
+            const preparedKey = `collectionPreparedSequence:${shop}:zero-price-last-v1:${JSON.stringify([
               rankingFingerprint, sortBy, allFiltersList, collectionBestSellingState.revision ?? collectionBestSellingState.updatedAt, activeRule, activePinningRule,
               userHasFilters, globalSettings, mergedValues, tiers.map(tier => tier.total),
             ])}`;
@@ -784,8 +784,12 @@ export const loader = async ({ request }) => {
                 query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
                 conditions: activeRule?.conditions,
                 sortBy,
-                hydrateRanking: activeRule?.conditions?.some(c => c.field?.toLowerCase() === 'available')
-                  ? products => hydrateCollectionInventory(products, prisma.variant) : null,
+                hydrateRanking: async products => {
+                  if (needsShopifyOrder) await hydrateCollectionPrices(products, prisma.product, shop);
+                  if (activeRule?.conditions?.some(c => c.field?.toLowerCase() === 'available')) {
+                    await hydrateCollectionInventory(products, prisma.variant);
+                  }
+                },
                 pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
                 arrange: products => {
                   const ranked = applyMerchandisingRules(products, activeRule, sortBy,

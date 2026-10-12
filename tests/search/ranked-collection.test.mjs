@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
-import { buildCollectionSequence, readRankedCollectionPage, collectionRankingFields, hydrateCollectionInventory } from '../../app/utils/rankedCollectionPage.js';
+import { buildCollectionSequence, readRankedCollectionPage, collectionRankingFields, hydrateCollectionInventory, hydrateCollectionPrices } from '../../app/utils/rankedCollectionPage.js';
 
 const context = { module: { exports: {} }, exports: {}, console, require: () => ({ __esModule: true, default: {} }) };
 vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js', 'utf8'), { format: 'cjs' })).code, context);
@@ -17,9 +17,64 @@ const build = (docs, conditions, extra = {}) => buildCollectionSequence(indexFor
   arrange: products => apply(products, { conditions }, 'best-selling', null, [], { preserveCollectionBestSellingOrder: true }), ...extra,
 });
 
+test('Hydrogen best selling keeps Shopify order with zero-price products last', async () => {
+  const docs = [{id:'liquid',priceMin:0},{id:'oxygen',priceMin:1025},{id:'hydrogen',priceMin:0}];
+  assert.deepEqual(await build(docs, [], {sortBy:'best-selling'}), ['oxygen','liquid','hydrogen']);
+});
+
+test('Accessories partitions the full collection before pagination and preserves both groups', async () => {
+  const docs = [{id:'liquid',priceMin:0},{id:'oxygen',priceMin:1025},{id:'hydrogen',priceMin:0},
+    {id:'shirt',priceMin:2111},{id:'product2',priceMin:10},{id:'product1',priceMin:10},
+    {id:'compare',priceMin:785.95},{id:'complete',priceMin:699.95}];
+  const ids = await build(docs, [], {sortBy:'best-selling'});
+  assert.deepEqual(ids, ['oxygen','shirt','product2','product1','compare','complete','liquid','hydrogen']);
+  const pages = [];
+  for (let page=1; page<=3; page++) {
+    const result = await readRankedCollectionPage(indexFor(docs), {ids,page,limit:3});
+    assert.equal(result.total, 8);
+    pages.push(...result.hits.map(p=>p.id));
+  }
+  assert.deepEqual(pages, ids);
+});
+
+test('missing and invalid prices are not classified as zero', async () => {
+  const docs = [{id:'free',priceMin:'0'},{id:'missing'},{id:'null',priceMin:null},
+    {id:'empty',priceMin:''},{id:'invalid',priceMin:'unknown'},{id:'paid',priceMin:1}];
+  assert.deepEqual(await build(docs, [], {sortBy:'bestselling'}), ['missing','null','empty','invalid','paid','free']);
+});
+
+test('other collection sorts do not move zero-price products to the end', async () => {
+  const docs = [{id:'free',priceMin:0},{id:'paid',priceMin:5}];
+  for (const sortBy of ['price-ascending','price-descending','title-ascending','created-descending','manual']) {
+    assert.deepEqual(await build(docs, [], {sortBy,arrange:products=>products}), ['free','paid']);
+  }
+});
+
+test('pins awaiting indexing hydrate prices from the same shop before zero-price partitioning', async () => {
+  let query;
+  const docs = [{id:'paid',priceMin:10}];
+  const ids = await build(docs, [], {sortBy:'best-selling',pinnedIds:['free-pin'],
+    hydrateRanking:products=>hydrateCollectionPrices(products,{findMany:async options=>{
+      query=options;
+      return [{id:'gid://shopify/Product/free-pin',priceMin:0}];
+    }},'test-shop'),
+    arrange:products=>apply(products,null,'best-selling',{products:[{id:'gid://shopify/Product/free-pin'}]},[],{preserveCollectionBestSellingOrder:true})});
+  assert.deepEqual(query.where, {shop:'test-shop',id:{in:['gid://shopify/Product/free-pin']}});
+  assert.deepEqual(ids, ['paid','free-pin']);
+});
+
+test('paid pins and boosts retain priority while zero-price products stay in the final group', async () => {
+  const docs = [{id:'free',priceMin:0,tags:['boost']},{id:'ordinary',priceMin:5},
+    {id:'boost',priceMin:10,tags:['boost']},{id:'pin',priceMin:20}];
+  const conditions = [{action:'Boost',field:'Tags',value:'boost'}];
+  const ids = await build(docs, conditions, {sortBy:'best-selling',pinnedIds:['pin'],
+    arrange:products=>apply(products,{conditions},'best-selling',{products:[{id:'gid://shopify/Product/pin'}]},[],{preserveCollectionBestSellingOrder:true})});
+  assert.deepEqual(ids, ['pin','boost','ordinary','free']);
+});
+
 test('tag-only ranking avoids transferring variant arrays; option rules retain variant and image data', () => {
-  assert.deepEqual(collectionRankingFields([{field:'Tags'}], 'best-selling'), ['id', 'tags']);
-  assert.deepEqual(collectionRankingFields([], 'best-selling'), ['id']);
+  assert.deepEqual(collectionRankingFields([{field:'Tags'}], 'best-selling'), ['id', 'priceMin', 'tags']);
+  assert.deepEqual(collectionRankingFields([], 'best-selling'), ['id', 'priceMin']);
   assert.ok(collectionRankingFields([], 'best-selling', false).includes('bestSellingScore'));
   assert.ok(collectionRankingFields([{field:'Color (product option)'}], 'best-selling').includes('variantPrices'));
   assert.ok(collectionRankingFields([{field:'Color (product option)'}], 'best-selling').includes('images'));
@@ -39,7 +94,7 @@ test('legacy inventory is hydrated in batches and zero bounds exclude sold-out p
   const ids=await build(docs,conditions,{conditions,sortBy:'best-selling',hydrateRanking:products=>hydrateCollectionInventory(products,{groupBy:async query=>{requested=query.where.productId.in;return [{productId:'gid://shopify/Product/2',_sum:{inventory:4}},{productId:'gid://shopify/Product/3',_sum:{inventory:0}}];}})});
   assert.deepEqual(Array.from(requested),['gid://shopify/Product/2','gid://shopify/Product/3']);
   assert.deepEqual(Array.from(ids),['1','2']);
-  assert.deepEqual(collectionRankingFields(conditions,'best-selling'),['id','inventoryTotal']);
+  assert.deepEqual(collectionRankingFields(conditions,'best-selling'),['id','priceMin','inventoryTotal']);
 });
 
 test('all merchandising score levels are globally ordered before page boundaries', async () => {

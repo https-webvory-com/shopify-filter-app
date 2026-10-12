@@ -1,6 +1,18 @@
 const cleanId = id => String(id).split('/').pop();
 const fullRankingFields = ['id', 'title', 'vendor', 'productType', 'tags', 'priceMin', 'inventoryTotal', 'variantPrices', 'options', 'images', 'collections', 'collection_titles', 'bestSellingScore', 'trendingScore', 'createdAt'];
 
+export async function hydrateCollectionPrices(products, productModel, shop) {
+  const missing = products.filter(p => p.priceMin == null || p.priceMin === '' || !Number.isFinite(Number(p.priceMin)));
+  for (let offset = 0; offset < missing.length; offset += 1000) {
+    const batch = missing.slice(offset, offset + 1000);
+    const rows = await productModel.findMany({
+      where: {shop, id: {in: batch.map(p => p.id)}}, select: {id: true, priceMin: true},
+    });
+    const prices = new Map(rows.map(row => [row.id, row.priceMin]));
+    for (const product of batch) if (prices.has(product.id)) product.priceMin = prices.get(product.id);
+  }
+}
+
 // Old index documents did not contain inventory. Never treat missing inventory
 // as zero: a global sold-out exclusion would otherwise remove the whole store.
 export async function hydrateCollectionInventory(products, variantModel) {
@@ -20,6 +32,7 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
   // transfer tens of thousands of products' variant arrays just to rank IDs.
   if (!Array.isArray(conditions)) return fullRankingFields;
   const fields = new Set(['id']);
+  if (['best-selling', 'bestselling'].includes(sortBy)) fields.add('priceMin');
   if (!hasShopifyOrder && ['best-selling', 'bestselling'].includes(sortBy)) fields.add('bestSellingScore');
   if (sortBy?.startsWith('price')) fields.add('priceMin');
   if (['created-ascending', 'created-descending'].includes(sortBy)) fields.add('createdAt');
@@ -72,7 +85,16 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
     collections: p.collection_titles?.map(title => ({ collection: { title } })) || p.collections || [],
   }));
   if (hydrateRanking) await hydrateRanking(products);
-  return arrange(products).map(product => cleanId(product.id));
+  const ranked = arrange(products);
+  // Partition the complete ranking before pagination. Keep Shopify's relative
+  // order in each group; unknown prices must not be treated as free products.
+  if (ranks && ['best-selling', 'bestselling'].includes(sortBy)) {
+    const isFree = product => product.priceMin != null && product.priceMin !== '' &&
+      Number.isFinite(Number(product.priceMin)) && Number(product.priceMin) === 0;
+    return [...ranked.filter(product => !isFree(product)), ...ranked.filter(isFree)]
+      .map(product => cleanId(product.id));
+  }
+  return ranked.map(product => cleanId(product.id));
 }
 
 export async function readRankedCollectionPage(index, { ids, page, limit, attributes }) {

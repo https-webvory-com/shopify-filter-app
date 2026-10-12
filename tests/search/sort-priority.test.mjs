@@ -4,14 +4,14 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { fetchCollectionPage } from "../../app/utils/collectionPage.js";
-import { buildCollectionSequence, readRankedCollectionPage } from '../../app/utils/rankedCollectionPage.js';
+import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory } from '../../app/utils/rankedCollectionPage.js';
 
 async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
     if (name in mocks) return mocks[name];
     if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingState: async()=>({ ids: Array.from({ length: 180 }, (_, i) => String(180 - i)), status: 'ready' })};
-    if (name === "../utils/rankedCollectionPage.js") return { buildCollectionSequence, readRankedCollectionPage };
+    if (name === "../utils/rankedCollectionPage.js") return { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory };
     if (name === "../services/collectionRankingSession.server.js") return {
       collectionRankingFingerprint: () => 'fixture', getCollectionRankingSession: async () => null,
       saveCollectionRankingSession: async (_shop, fingerprint, ids, updatedAt, metadata) => ({ token: 'fixture-token', fingerprint, ids, updatedAt, metadata }),
