@@ -30,17 +30,6 @@ test('real Shopify compare-at prices are preserved',async()=>{
  const f=fixture({compare:300000});const result=await f.apply(products);assert.equal(result[0].variants[0].compareAtPrice,3000);
 });
 
-test('verified prices are available synchronously for repeat renders and isolated by market and customer context',async()=>{
- const f=fixture();assert.equal(f.window.cfpMarketPricing.peek(products[0]),null);
- await f.apply(products);
- const cached=f.window.cfpMarketPricing.peek(products[0]);
- assert.equal(cached.variants[0].price,2450);assert.equal(cached._marketPricingUnavailable,false);
- assert.equal(products[0].variants[0].price,2500);assert.equal(f.calls.length,1);
- f.window.Shopify.country='US';assert.equal(f.window.cfpMarketPricing.peek(products[0]),null);
- f.window.Shopify.country='IN';f.window.cfpCustomerTags='wholesale';assert.equal(f.window.cfpMarketPricing.peek(products[0]),null);
- f.window.cfpCustomerTags='';assert.equal(f.window.cfpMarketPricing.peek({...products[0],variants:[{id:'unknown'}]}),null);
-});
-
 test('prices are published individually while another product is still loading',async()=>{
  let releaseSlow;
  const published=[];

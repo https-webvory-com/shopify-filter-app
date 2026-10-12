@@ -151,7 +151,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   };
   let failSearch = false;
   const index = {
-    async search(_q, options) { if (failSearch) throw new Error('Search unavailable'); const ids = String(options.filter).match(/id IN (\[[^\]]*\])/); return { hits: ids ? documents.filter(p => JSON.parse(ids[1]).includes(String(p.id))) : matching(options.filter).slice(options.offset, options.offset + options.limit) }; },
+    async search(_q, options) { if (failSearch) throw new Error('Search unavailable'); return { hits: matching(options.filter).slice(options.offset, options.offset + options.limit) }; },
     async getDocument(id) { return documents.find(p => p.id === id); },
     async getDocuments() { throw new Error("Unsupported ids request"); },
   };

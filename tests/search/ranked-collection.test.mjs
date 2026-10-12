@@ -17,55 +17,6 @@ const build = (docs, conditions, extra = {}) => buildCollectionSequence(indexFor
   arrange: products => apply(products, { conditions }, 'best-selling', null, [], { preserveCollectionBestSellingOrder: true }), ...extra,
 });
 
-test('large collections fetch at most four batches concurrently and preserve exact order', async () => {
-  const docs = Array.from({length: 5501}, (_, index) => ({id: String(index), priceMin: 1}));
-  let active = 0, peak = 0;
-  const offsets = [];
-  const index = {search: async (_q, options) => {
-    active++; peak = Math.max(peak, active); offsets.push(options.offset);
-    assert.deepEqual(options.attributesToRetrieve, ['id', 'priceMin']);
-    await new Promise(resolve => setTimeout(resolve, options.offset === 1000 ? 15 : 1));
-    active--;
-    return {hits: docs.slice(options.offset, options.offset + options.limit), estimatedTotalHits: docs.length};
-  }};
-  const ids = await buildCollectionSequence(index, {
-    query: {q: '', filter: ['shop = "fixture"']}, conditions: [], sortBy: 'best-selling',
-    orderedIds: docs.map(doc => doc.id), pinnedIds: [], arrange: products => products,
-  });
-  assert.equal(peak, 4); assert.deepEqual(offsets, [0, 1000, 2000, 3000, 4000, 5000]);
-  assert.deepEqual(ids, docs.map(doc => doc.id));
-});
-
-test('parallel ranking rejects changing totals and partial batches', async () => {
-  for (const changedTotal of [true, false]) {
-    const index = {search: async (_q, options) => ({
-      hits: Array.from({length: options.offset ? (changedTotal ? 500 : 499) : 1000}, (_, n) => ({id: String(options.offset + n)})),
-      estimatedTotalHits: options.offset && changedTotal ? 1501 : 1500,
-    })};
-    await assert.rejects(buildCollectionSequence(index, {
-      query: {q: ''}, conditions: [], sortBy: 'best-selling', pinnedIds: [], arrange: products => products,
-    }), /Incomplete/);
-  }
-});
-
-test('page products use one shop-scoped query and retain token order and missing pin slots', async () => {
-  const calls=[];
-  const index={search:async(q, options)=>{
-    calls.push(options);assert.equal(q,'');
-    return {hits:[{id:'1',status:'ACTIVE'},{id:'3',status:'ACTIVE'}]};
-  }};
-  const result=await readRankedCollectionPage(index,{ids:['3','missing-pin','1'],page:1,limit:25,shop:'fixture',attributes:['id','status']});
-  assert.equal(calls.length,1);assert.deepEqual(calls[0].filter,['shop = "fixture"','id IN ["3","missing-pin","1"]']);
-  assert.deepEqual(result.hits.map(product=>product.id),['3','missing-pin','1']);assert.equal(result.total,3);
-  assert.deepEqual(calls[0].attributesToRetrieve,['id','status']);
-});
-
-test('bulk page retrieval rejects inactive products and propagates service errors', async () => {
-  const options={ids:['1'],page:1,limit:25,shop:'fixture'};
-  await assert.rejects(readRankedCollectionPage({search:async()=>({hits:[{id:'1',status:'ARCHIVED'}]})},options),/session expired/);
-  await assert.rejects(readRankedCollectionPage({search:async()=>{throw Error('Search unavailable');}},options),/Search unavailable/);
-});
-
 test('Hydrogen best selling keeps Shopify order with zero-price products last', async () => {
   const docs = [{id:'liquid',priceMin:0},{id:'oxygen',priceMin:1025},{id:'hydrogen',priceMin:0}];
   assert.deepEqual(await build(docs, [], {sortBy:'best-selling'}), ['oxygen','liquid','hydrogen']);

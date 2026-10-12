@@ -69,44 +69,21 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
   const documents = [];
   const seen = new Set();
   const batchSize = 1000;
-  const fetchBatch = offset => index.search(q, {
+  for (let offset = 0; ; offset += batchSize) {
+    const result = await index.search(q, {
       ...options, offset, limit: batchSize,
       attributesToRetrieve: collectionRankingFields(conditions, sortBy, Array.isArray(orderedIds)),
     });
-  const appendBatch = result => {
     for (const product of result.hits) {
       const id = cleanId(product.id);
       if (seen.has(id)) throw new Error('Collection changed while ranking; retry the request');
       seen.add(id);
       documents.push({ ...product, id });
     }
-  };
-  const first = await fetchBatch(0);
-  appendBatch(first);
-  const expected = first.totalHits ?? first.estimatedTotalHits;
-  if (Number.isSafeInteger(expected) && expected >= 0) {
-    // Bound concurrent work, then append in offset order rather than completion
-    // order so equal-score Shopify ordering and pagination stay unchanged.
-    for (let offset = batchSize; offset < expected; offset += batchSize * 4) {
-      const offsets = Array.from({ length: 4 }, (_, index) => offset + index * batchSize)
-        .filter(value => value < expected);
-      const batches = await Promise.all(offsets.map(fetchBatch));
-      for (let index = 0; index < batches.length; index++) {
-        const result = batches[index];
-        if ((result.totalHits ?? result.estimatedTotalHits ?? expected) !== expected ||
-            result.hits.length !== Math.min(batchSize, expected - offsets[index])) {
-          throw new Error('Incomplete collection ranking results');
-        }
-        appendBatch(result);
-      }
-    }
-    if (documents.length !== expected) throw new Error('Incomplete collection ranking results');
-  } else {
-    // Some search adapters omit totals; retain the bounded sequential reader.
-    let previous = first;
-    for (let offset = batchSize; previous.hits.length === batchSize; offset += batchSize) {
-      previous = await fetchBatch(offset);
-      appendBatch(previous);
+    if (result.hits.length < batchSize) {
+      const expected = result.totalHits ?? result.estimatedTotalHits;
+      if (expected != null && documents.length !== expected) throw new Error('Incomplete collection ranking results');
+      break;
     }
   }
   const ranks = orderedIds ? new Map(orderedIds.map((id, rank) => [cleanId(id), rank])) : null;
@@ -133,25 +110,9 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
   return ranked.map(product => cleanId(product.id));
 }
 
-export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop }) {
+export async function readRankedCollectionPage(index, { ids, page, limit, attributes }) {
   const selected = ids.slice((page - 1) * limit, page * limit);
   const documents = new Map();
-  if (shop) {
-    for (let offset = 0; offset < selected.length; offset += 200) {
-      const batch = selected.slice(offset, offset + 200);
-      const result = await index.search('', {
-        filter: [`shop = ${JSON.stringify(shop)}`, `id IN ${JSON.stringify(batch)}`],
-        limit: batch.length, offset: 0, attributesToRetrieve: attributes,
-      });
-      for (const product of result.hits) {
-        if (product.status && product.status.toUpperCase() !== 'ACTIVE') {
-          throw new Error('Collection ranking session expired; product eligibility changed');
-        }
-        documents.set(cleanId(product.id), product);
-      }
-    }
-    return { hits: selected.map(id => documents.get(id) || { id }), total: ids.length };
-  }
   for (let offset = 0; offset < selected.length; offset += 8) {
     await Promise.all(selected.slice(offset, offset + 8).map(async id => {
       try {
