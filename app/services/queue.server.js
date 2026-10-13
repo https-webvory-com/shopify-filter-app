@@ -33,6 +33,17 @@ webhookQueue = global.__webhookQueue;
 
 export { webhookQueue };
 
+// Ranking scans have their own lane so they cannot occupy webhook/sync slots.
+if (!global.__collectionRankingQueue) {
+  global.__collectionRankingQueue = new Queue('collectionRankingQueue', {
+    connection: redisOptions,
+    defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: true, removeOnFail: { count: 50, age: 3600 } },
+  });
+  global.__collectionRankingQueue.on('error', error => console.error('CFP Ranking Queue:', error.message));
+}
+export const collectionRankingQueue = global.__collectionRankingQueue;
+
 /**
  * Enqueue a webhook job into BullMQ queue.
  */

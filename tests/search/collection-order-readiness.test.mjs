@@ -51,3 +51,10 @@ test('failed refreshes are retried instead of rendering fallback products', asyn
 test('search failures are surfaced rather than rendered as a successful empty collection', async () => {
   await assert.rejects(load(() => {})({ crash: true, error: 'Search unavailable' }, '/api/filter', new AbortController().signal), /Search unavailable/);
 });
+
+test('ready Shopify order still waits for background collection ranking',async()=>{
+  const pendingRanking={products:[],debug:{collectionBestSellingStatus:'ready',collectionRankingStatus:'pending'}};
+  const ready={products:['pin','boost','ordinary'],debug:{collectionBestSellingStatus:'ready',collectionRankingStatus:'ready'}};
+  let calls=0;const wait=load(async()=>{calls++;return {json:async()=>ready};});
+  assert.equal(await wait(pendingRanking,'/api/filter',new AbortController().signal),ready);assert.equal(calls,1);
+});

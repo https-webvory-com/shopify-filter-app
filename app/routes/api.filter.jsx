@@ -20,7 +20,8 @@ import { unauthenticated } from "../shopify.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
-import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionInventory, hydrateCollectionPrices, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
+import { readRankedCollectionPage, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
+import { getCollectionPreparationRevision, getPreparedCollectionRanking, registerCollectionWarmup } from "../services/collectionPreparation.server.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 
@@ -34,7 +35,7 @@ import { semanticMultiSearch } from "../services/semanticSearch.server";
  *  4. Facet query is separate (limit:0) so product data is not transferred for counts
  *  5. Pinning + merchandising rule DB calls run in parallel
  */
-export const loader = async ({ request }) => {
+export const loader = async ({ request, context }) => {
   const startTime = Date.now();
   console.log("API Filter Request: ", request.url);
   try {
@@ -45,7 +46,7 @@ export const loader = async ({ request }) => {
       return data({ error: "Missing shop parameter" }, { status: 400 });
     }
 
-    const isAllowed = await rateLimit(request);
+    const isAllowed = context?.rankingWarmup === true || await rateLimit(request);
     if (!isAllowed) {
       return data({ error: "Too Many Requests" }, { 
         status: 429, 
@@ -83,6 +84,10 @@ export const loader = async ({ request }) => {
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
     const limit = Math.min(250, Math.max(1, parseInt(url.searchParams.get("limit") || "25") || 25));
     const country = url.searchParams.get("country");
+    // Capture before reading cached configuration, so a concurrent admin save
+    // cannot publish a sequence built from a mixture of configuration versions.
+    const preparationRevision = !isSearch && !searchQuery && sortBy !== "manual"
+      ? await getCollectionPreparationRevision(shop) : null;
 
     let vendors = [
       ...url.searchParams.getAll("vendor[]"),
@@ -699,6 +704,11 @@ export const loader = async ({ request }) => {
 
     // ── 9. Execute Meilisearch multiSearch ─────────────────────────────
     const meiliStart = Date.now();
+    let collectionRankingStatus = "inactive";
+    if (useRankedCollectionPagination && !context?.rankingWarmup) {
+      try { await registerCollectionWarmup(shop, request.url); }
+      catch (error) { console.error('CFP: Could not register collection warmup:', error.name); }
+    }
     let meiliRes = { hits: [], estimatedTotalHits: 0 };
     let facetDistribution = {};
     let facetRes = null;
@@ -777,40 +787,30 @@ export const loader = async ({ request }) => {
         let result;
         if (useRankedCollectionPagination) {
           if (!rankingSession) {
-            const preparedKey = `collectionPreparedSequence:${shop}:zero-price-last-v1:${JSON.stringify([
-              rankingFingerprint, sortBy, allFiltersList, collectionBestSellingState.revision ?? collectionBestSellingState.updatedAt, activeRule, activePinningRule,
-              userHasFilters, globalSettings, mergedValues, tiers.map(tier => tier.total),
-            ])}`;
-            const prepared = await getCached(preparedKey, async () => {
-              const metadata = {};
-              const ids = await buildCollectionSequence(meiliClient.index("products"), {
-                query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
-                conditions: activeRule?.conditions,
-                sortBy,
-                hydrateRanking: async products => {
-                  if (needsShopifyOrder) await hydrateCollectionPrices(products, prisma.product, shop);
-                  if (activeRule?.conditions?.some(c => c.field === "SKU")) await hydrateCollectionSkus(products, prisma.variant, shop);
-                  if (activeRule?.conditions?.some(c => c.field?.toLowerCase() === 'available')) {
-                    await hydrateCollectionInventory(products, prisma.variant);
-                  }
-                },
-                pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
-                arrange: products => {
-                  const ranked = applyMerchandisingRules(products, activeRule, sortBy,
-                    userHasFilters ? null : activePinningRule, mergedValues,
-                    { ...globalSettings, preserveCollectionBestSellingOrder: needsShopifyOrder });
-                  for (const p of ranked) {
-                    if (p.merchandisingScore || p.merchandisingImage) metadata[p.id.split('/').pop()] = {
-                      merchandisingScore: p.merchandisingScore, merchandisingImage: p.merchandisingImage,
-                    };
-                  }
-                  return ranked;
-                },
-              });
-              return { ids, metadata };
-            }, 600);
+            const prepared = await getPreparedCollectionRanking({
+              shop, revision: preparationRevision, sortBy, needsShopifyOrder,
+              query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
+              pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
+              orderRevision: collectionBestSellingState.revision ?? null,
+              rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
+              globalSettings, mergedValues,
+            }, { warmup: context?.rankingWarmup === true });
+            collectionRankingStatus = prepared.status;
+            if (prepared.status !== 'ready') {
+              return data({ products: [], totalCount: 0, debug: {
+                collectionRankingStatus: prepared.status,
+                // Older extension assets poll this readiness field. Keep them
+                // waiting too, rather than rendering an empty pending response.
+                collectionBestSellingStatus: prepared.status,
+                collectionOrderSnapshotStatus: collectionBestSellingState.status,
+                collectionBestSellingApplied: false,
+              } }, { status: prepared.status === 'failed' ? 503 : 202,
+                headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Retry-After': '1' } });
+            }
+            if (context?.rankingWarmup) return data({ warmup: true });
             rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, collectionBestSellingState.updatedAt ?? null, prepared.metadata);
           }
+          collectionRankingStatus = 'ready';
           result = await readRankedCollectionPage(meiliClient.index("products"), {
             ids: rankingSession.ids, page, limit, attributes: mainQuery.attributesToRetrieve,
           });
@@ -1404,6 +1404,7 @@ export const loader = async ({ request }) => {
       debug: {
         collectionPaginationApplied,
         collectionRankingApplied,
+        collectionRankingStatus,
         collectionBestSellingApplied,
         collectionBestSellingPending: collectionBestSellingState.status === "pending",
         collectionBestSellingStatus: collectionBestSellingState.status,
@@ -1487,12 +1488,6 @@ export const loader = async ({ request }) => {
         },
       },
     };
-
-    // Save in Redis Cache for 30s
-    try {
-      const responseCacheKey = `api_filter_res_${shop}_${encodeURIComponent(request.url)}`;
-      await getCached(responseCacheKey, async () => responsePayload, 30);
-    } catch (e) {}
 
     return data(responsePayload, { headers: responseHeaders });
   } catch (err) {

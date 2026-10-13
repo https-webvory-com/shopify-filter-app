@@ -228,6 +228,36 @@ PRISMA_CLIENT_ENGINE_TYPE=binary
 
 This forces Prisma to use the binary engine mode, which runs the query engine as a separate process and can work via emulation on Windows ARM64.
 
+## Collection ranking preparation and loading
+
+Non-manual collection rankings are prepared on the `collectionRankingQueue` by
+the dedicated background process. A missing current ranking returns HTTP 202;
+the storefront polls with cancellation and a bounded retry limit. It does not
+render fallback ordering. Cached pages keep Shopify Best selling ordering,
+merchandising, pins, exclusions, zero-price grouping and immutable pagination
+sessions. The existing individual document reads remain in place; no new `id`
+filter or index-settings migration is required.
+
+Rule and pin mutations advance the shop ranking revision and invalidate prepared
+rankings. An older in-flight build cannot publish after that revision changes.
+Existing browsing tokens retain their sequence for up to an hour; new sessions
+use the new revision. Shopify collection changes remain asynchronous through
+webhooks and snapshot refreshes. Shopify manual drag-and-drop sorting is unchanged.
+
+The app remembers up to 20 anonymous unfiltered collection contexts per shop for
+one day and warms them after invalidation or changed Shopify order. Customer tags
+and filtered URLs are not replayed as anonymous requests. Active visitor jobs
+have priority over background warmups. Valid prepared rankings have a ten-minute
+TTL and can refresh in the background during their last two minutes. A truly cold
+collection still needs preparation; worker backlog or continuous changes can
+require Retry. Skeletons display immediately, and longer waits show a loading
+message. Images and verified market prices update independently after cards render.
+
+Deploy both the backend/worker image and the Shopify theme-extension JS/CSS.
+Worker readiness and shutdown include the ranking worker. Backend pending
+responses also retain the older extension's readiness signal for compatibility.
+The Docker workflow does not publish Shopify theme-extension assets.
+
 ## Resources
 
 React Router:

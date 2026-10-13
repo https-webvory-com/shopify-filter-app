@@ -170,6 +170,8 @@ async function handleProductDelete(shop, payload) {
   await prisma.product.deleteMany({ where: { id: productId } });
   const numericId = payload.id.toString();
   await meiliClient.index("products").deleteDocument(numericId);
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  await invalidateShop(shop);
   console.log(`CFP Worker: Product ${productId} deleted from DB & Meilisearch.`);
 }
 
@@ -195,6 +197,8 @@ async function handleCollectionUpdate(shop, payload) {
 async function handleCollectionDelete(shop, payload) {
   const collectionId = `gid://shopify/Collection/${payload.id}`;
   await prisma.collection.deleteMany({ where: { id: collectionId } });
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  await invalidateShop(shop);
   console.log(`CFP Worker: Collection ${collectionId} deleted.`);
 }
 
@@ -204,6 +208,16 @@ async function handleAppUninstalled(shop) {
 }
 
 export function initWebhookWorker() {
+  if (!global.__collectionRankingWorker) {
+    global.__collectionRankingWorker = new Worker('collectionRankingQueue', async job => {
+      const { processCollectionPreparation, processCollectionWarmups } = await import('../services/collectionPreparation.server.js');
+      if (job.name === 'COLLECTION_RANKING_PREPARE') return processCollectionPreparation(job.data);
+      if (job.name === 'COLLECTION_RANKING_WARM') return processCollectionWarmups(job.data.shop);
+      throw Error('Unknown collection ranking job');
+    }, { connection: { ...redisOptions, maxRetriesPerRequest: null }, concurrency: 1 });
+    global.__collectionRankingWorker.on('error', error => console.error('CFP Ranking Worker:', error.message));
+    global.__collectionRankingWorker.on('failed', (job, error) => console.error('CFP Ranking Worker failed:', job?.id, error.message));
+  }
   if (!global.__webhookWorker) {
     global.__webhookWorker = new Worker("webhookQueue", processWebhookJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },
