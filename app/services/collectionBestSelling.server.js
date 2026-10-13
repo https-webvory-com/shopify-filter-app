@@ -1,5 +1,5 @@
 import redis from './redis.server.js';
-import { webhookQueue } from './queue.server.js';
+import { webhookQueue, collectionRankingQueue } from './queue.server.js';
 import { unauthenticated } from '../shopify.server.js';
 import { readCollectionBestSellingIds } from '../utils/collectionBestSelling.js';
 import { createHash } from 'node:crypto';
@@ -11,10 +11,15 @@ const jobId = (shop, collectionId) => `collection-order-${encodeURIComponent(sho
 
 // Publish only complete snapshots. A failed refresh leaves the last good order intact.
 export async function refreshCollectionBestSelling(shop, collectionId) {
+  const previous = await redis.get(snapshotKey(shop, collectionId));
   const { admin } = await unauthenticated.admin(shop);
   const ids = await readCollectionBestSellingIds(admin, collectionId);
   const revision = createHash('sha256').update(JSON.stringify(ids)).digest('hex');
   await redis.set(snapshotKey(shop, collectionId), JSON.stringify({ ids, updatedAt: Date.now(), revision }));
+  if (!previous || JSON.parse(previous).revision !== revision) {
+    // Rebuild registered first pages only when the actual Shopify sequence changed.
+    await collectionRankingQueue.add('COLLECTION_RANKING_WARM', { shop, collectionIds:[String(collectionId).split('/').pop()] }, { priority: 10 });
+  }
   return ids;
 }
 

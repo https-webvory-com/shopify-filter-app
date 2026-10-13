@@ -1,5 +1,6 @@
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
+import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import * as availableVariants from "../../app/utils/availableVariants.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -194,6 +195,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/rateLimiter.server": { rateLimit: async () => true },
     "../utils/collectionPage.js": { fetchCollectionPage },
     "../utils/rankedCollectionPage.js": { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory },
+    "../services/collectionPreparation.server.js": readyPreparation({index,prisma:{product:{findMany:async()=>pins}},arrange:merchandising.applyMerchandisingRules}),
     "../services/collectionRankingSession.server.js": {
       collectionRankingFingerprint: () => 'fixture',
       getCollectionRankingSession: async (_shop, _fingerprint, token) => token ? sessions.get(token) : null,
@@ -252,6 +254,17 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   sourceOrder = { ids: null, status: 'failed', refreshState: 'failed' };
   assert.equal((await load('page=1'))._status, 503);
   sourceOrder = { ids: Array.from({ length: 23110 }, (_, i) => String(i + 1)), status: 'ready' };
+  const normalPreparation = mocks['../services/collectionPreparation.server.js'].getPreparedCollectionRanking;
+  for (const status of ['pending','failed']) {
+    mocks['../services/collectionPreparation.server.js'].getPreparedCollectionRanking=async()=>({status});
+    const waiting=await load('page=1');
+    assert.equal(waiting._status,status==='failed'?503:202);assert.equal(waiting.products.length,0);
+    assert.equal(waiting.debug.collectionRankingStatus,status);
+    assert.equal(waiting.debug.collectionBestSellingStatus,status,'Older extension assets must also keep polling');
+    const sessionPage=await load('page=2&rankingToken=fixture-token-0');
+    assert.equal(sessionPage._status,200);assert.equal(sessionPage.products.length,25);
+  }
+  mocks['../services/collectionPreparation.server.js'].getPreparedCollectionRanking=normalPreparation;
   failSearch = true;
   cache.clear();
   const unavailable = await load('page=1');

@@ -228,6 +228,85 @@ PRISMA_CLIENT_ENGINE_TYPE=binary
 
 This forces Prisma to use the binary engine mode, which runs the query engine as a separate process and can work via emulation on Windows ARM64.
 
+## Collection ranking preparation and loading
+
+Non-manual collection rankings are prepared on the `collectionRankingQueueV2` by
+the dedicated background process. A missing current ranking returns HTTP 202;
+the storefront polls with cancellation and a bounded retry limit. It does not
+render fallback ordering. Cached pages keep Shopify Best selling ordering,
+merchandising, pins, exclusions, zero-price grouping and immutable pagination
+sessions. The existing individual document reads remain in place; no new `id`
+filter or index-settings migration is required.
+
+Rule and pin mutations advance the shop ranking revision and invalidate prepared
+rankings. An older in-flight build cannot publish after that revision changes.
+Existing browsing tokens retain their sequence for up to an hour; new sessions
+use the new revision. Shopify collection changes remain asynchronous through
+webhooks and snapshot refreshes. Shopify manual drag-and-drop sorting is unchanged.
+
+Cache deletion is restricted to owned cache prefixes; BullMQ hashes, locks and
+queue sets are never deleted by shop invalidation. Revisioned configuration
+cache keys also prevent late writes from another process restoring old settings.
+The V2 queue and prepared-cache namespace bypass damaged jobs from the earlier
+implementation without purging its queue.
+
+Product webhooks wait for indexing before comparing the indexed documents.
+Unchanged documents skip invalidation. Changed documents advance data revisions
+only for affected collections (plus the shared product-data caches), rather than
+advancing the strict rule/pin revision. A usable prepared sequence remains available
+while its product data refreshes. Updates during a cold build permit that build
+to publish and schedule a follow-up refresh; they cannot repeatedly discard it.
+This means product-driven ranking and eligibility changes are eventual during
+refresh; it does not promise instant product-update visibility. Rule/pin saves
+still reject the old configuration for new sessions.
+
+The app remembers up to 20 anonymous unfiltered collection contexts per shop for
+one day and warms them after invalidation or changed Shopify order. Customer tags
+and filtered URLs are not replayed as anonymous requests. Active visitor jobs
+have priority over background warmups. Valid prepared rankings have a ten-minute
+TTL and can refresh in the background during their last two minutes. A truly cold
+collection still needs preparation; worker backlog or unavailable services can
+require Retry. Skeletons display immediately, and longer waits show a loading
+message. Images and verified market prices update independently after cards render.
+
+Deploy both the backend/worker image and the Shopify theme-extension JS/CSS.
+Worker readiness and shutdown include the ranking worker. Backend pending
+responses also retain the older extension's readiness signal for compatibility.
+The Docker workflow does not publish Shopify theme-extension assets.
+
+The deployment workflow runs regressions and memory checks on Node 20 before
+publishing an image. If replacement app or worker startup fails, it attempts to
+restore their previous image IDs and reports deployment failure. After both
+startup checks pass, unused-image cleanup cannot trigger a rollback.
+
+Ranking retains one batch of full product data and sorts compact records using
+the shared merchandising comparator. Tag-only preparation scans 1000 products
+per request; variant-dependent rules use 25 to bound memory. Both paths scan
+sequentially. These smaller variant batches add requests, so large-catalog cold
+latency still needs measurement after deployment.
+
+Selected maximum prices are sent independently of changing facet maxima, so
+choosing another filter cannot silently remove an explicit price cap.
+
+Local verification commands:
+
+```powershell
+node scripts/run-regression-tests.mjs
+node tests/collection-loading/run-redis-regressions.mjs
+node tests/collection-loading/run-headless.mjs --real-redis
+node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs tags
+node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs variants
+node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs dense-variants
+npm.cmd run build
+```
+
+Redis checks use a unique temporary namespace and remove only their own keys.
+Set `TEST_REDIS_HOST` and `TEST_REDIS_PORT` to use a test Redis service; the default
+is the existing app Redis endpoint. Headless checks use installed Chrome,
+unmodified storefront assets, the actual API loader/ranking code and real
+Redis/BullMQ. Catalog, index, settings and session data are fixtures. Passing these
+checks verifies queue behavior and browser flows, not live store latency or parity.
+
 ## Resources
 
 React Router:

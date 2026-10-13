@@ -1032,7 +1032,8 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     // Also remove from Meilisearch
     try {
       const numericId = productId.split("/").pop();
-      await meiliClient.index("products").deleteDocument(numericId);
+      const task=await meiliClient.index("products").deleteDocument(numericId);
+      if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product removal indexing failed');}
       console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
     } catch (e) {
       console.error("CFP: Failed to delete document from Meilisearch", e);
@@ -1141,7 +1142,8 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     meiliClient
       .index("products")
       .addDocuments([meiliDoc])
-      .then((task) => {
+      .then(async (task) => {
+        if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product indexing failed');}
         console.log(
           `CFP: Pushed product ${meiliDoc.id} to Meilisearch (Task ID: ${task.taskUid})`,
         );

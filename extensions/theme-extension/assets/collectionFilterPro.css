@@ -933,6 +933,12 @@ facet-filters-form,
   gap: 16px;
 }
 
+.cfp-loading-notice {
+  grid-column: 1 / -1;
+  text-align: center;
+  margin: 12px 0;
+}
+
 .cfp-no-products p {
   margin: 0;
   font-size: 18px;

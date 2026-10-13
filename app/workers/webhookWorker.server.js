@@ -3,6 +3,8 @@ import { redisOptions } from "../services/queue.server.js";
 import prisma from "../db.server.js";
 import { calculateProductScores, pushScoresToMeili } from "../services/orders.server.js";
 import meiliClient from "../services/meiliClient.server.js";
+import {productRankingFingerprint} from '../utils/shopCacheInvalidation.js';
+import {processCollectionRankingJob} from '../utils/processCollectionRankingJob.js';
 
 let webhookWorker;
 
@@ -30,11 +32,11 @@ async function processWebhookJob(job) {
 
       case "PRODUCTS_CREATE":
       case "PRODUCTS_UPDATE":
-        await handleProductUpdate(shop, payload);
+        await handleProductUpdate(shop, payload, job);
         break;
 
       case "PRODUCTS_DELETE":
-        await handleProductDelete(shop, payload);
+        await handleProductDelete(shop, payload, job);
         break;
 
       case "COLLECTIONS_CREATE":
@@ -152,7 +154,7 @@ async function handleOrderCancelled(shop, orderPayload) {
   }
 }
 
-async function handleProductUpdate(shop, payload) {
+async function handleProductUpdate(shop, payload, job) {
   if (!payload.id) throw new Error("Product webhook is missing its product ID");
   const productId = payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`;
   // Load at processing time to avoid the Redis -> worker -> sync -> Redis cycle.
@@ -160,16 +162,40 @@ async function handleProductUpdate(shop, payload) {
   const { syncSingleProduct } = await import("../services/sync.server.js");
   const { invalidateShop } = await import("../services/shopCache.server.js");
   const { admin } = await unauthenticated.admin(shop);
+  const beforeLinks=await prisma.productCollection.findMany({where:{productId,product:{shop}},select:{collectionId:true}});
+  const index=meiliClient.index('products');
+  const read=async()=>{try{const doc=await index.getDocument(String(productId).split('/').pop());if(doc.shop!==shop)throw Error('Product tenant mismatch');return doc;}catch(error){if(error.code==='document_not_found')return null;throw error;}};
+  const before=await read();
+  // Preserve the original comparison across BullMQ retries. Indexing may finish
+  // before cache invalidation fails; the next attempt must not mistake that for
+  // an unchanged webhook and permanently skip the invalidation.
+  if (!job.data.rankingBefore) {
+    await job.updateData({...job.data, rankingBefore: {
+      fingerprint: productRankingFingerprint(before),
+      collectionIds: [...new Set([...beforeLinks.map(link=>link.collectionId),...(before?.collections||[])])],
+    }});
+  }
   await syncSingleProduct(shop, admin, productId, { retrySearchErrors: true });
-  await invalidateShop(shop);
+  const after=await read();
+  if(job.data.rankingBefore.fingerprint!==productRankingFingerprint(after)) {
+    const collectionIds=[...new Set([...job.data.rankingBefore.collectionIds,...beforeLinks.map(link=>link.collectionId),...(after?.collections||[])])];
+    await invalidateShop(shop,{kind:'products',collectionIds});
+  }
   console.log(`CFP Worker: Product update synced for ${productId}`);
 }
 
-async function handleProductDelete(shop, payload) {
+async function handleProductDelete(shop, payload, job) {
+  if (!payload.id) throw new Error('Product webhook is missing its product ID');
   const productId = `gid://shopify/Product/${payload.id}`;
-  await prisma.product.deleteMany({ where: { id: productId } });
+  const links=await prisma.productCollection.findMany({where:{productId,product:{shop}},select:{collectionId:true}});
+  if (!job.data.deletedCollectionIds) await job.updateData({...job.data,deletedCollectionIds:links.map(link=>link.collectionId)});
+  await prisma.product.deleteMany({ where: { id: productId, shop } });
   const numericId = payload.id.toString();
-  await meiliClient.index("products").deleteDocument(numericId);
+  const task=await meiliClient.index("products").deleteDocument(numericId);
+  const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});
+  if(completed.status!=='succeeded')throw Error('Product deletion indexing failed');
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  await invalidateShop(shop,{kind:'products',collectionIds:job.data.deletedCollectionIds});
   console.log(`CFP Worker: Product ${productId} deleted from DB & Meilisearch.`);
 }
 
@@ -195,6 +221,8 @@ async function handleCollectionUpdate(shop, payload) {
 async function handleCollectionDelete(shop, payload) {
   const collectionId = `gid://shopify/Collection/${payload.id}`;
   await prisma.collection.deleteMany({ where: { id: collectionId } });
+  const { invalidateShop } = await import("../services/shopCache.server.js");
+  await invalidateShop(shop);
   console.log(`CFP Worker: Collection ${collectionId} deleted.`);
 }
 
@@ -204,6 +232,14 @@ async function handleAppUninstalled(shop) {
 }
 
 export function initWebhookWorker() {
+  if (!global.__collectionRankingWorker) {
+    global.__collectionRankingWorker = new Worker('collectionRankingQueueV2', async job => {
+      const { processCollectionPreparation, processCollectionWarmups, scheduleCollectionWarmup } = await import('../services/collectionPreparation.server.js');
+      return processCollectionRankingJob(job,{prepare:processCollectionPreparation,warm:processCollectionWarmups,schedule:scheduleCollectionWarmup});
+    }, { connection: { ...redisOptions, maxRetriesPerRequest: null }, concurrency: 1 });
+    global.__collectionRankingWorker.on('error', error => console.error('CFP Ranking Worker:', error.message));
+    global.__collectionRankingWorker.on('failed', (job, error) => console.error('CFP Ranking Worker failed:', job?.id, error.message));
+  }
   if (!global.__webhookWorker) {
     global.__webhookWorker = new Worker("webhookQueue", processWebhookJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },

@@ -708,6 +708,12 @@ export function applyMerchandisingRules(
     filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; });
   }
 
+  filteredProducts.sort(createMerchandisingComparator(sortBy, pinnedIds, globalSettings));
+
+  return filteredProducts;
+}
+
+export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSettings = null) {
   // Priority toggles (SoBooster defaults: false -> rules and pinning have priority)
   const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
   const prioritizeSortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
@@ -718,7 +724,7 @@ export function applyMerchandisingRules(
   pinnedIds.forEach((id, idx) => pinMap.set(id, idx));
 
   // Fast O(1) Sort logic
-  filteredProducts.sort((a, b) => {
+  return (a, b) => {
     // When a customer explicitly selects a manual sort order (e.g. Price: Low to High, Price: High to Low),
     // customer sort takes precedence over default rules so price sorting is 100% accurate.
     const isCustomSortSelected = hasCustomSort;
@@ -787,9 +793,8 @@ export function applyMerchandisingRules(
 
     // 3. Fallback to default sort comparison
     return defaultSortComparison(a, b, sortBy);
-  });
+  };
 
-  return filteredProducts;
 }
 
 /**

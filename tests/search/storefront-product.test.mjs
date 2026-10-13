@@ -25,7 +25,7 @@ async function loadSync({ product, deleteError } = {}) {
     },
   };
   const index = {
-    deleteDocument: async id => { calls.push(["deleteIndex", id]); if (deleteError) throw deleteError; },
+    deleteDocument: async id => { calls.push(["deleteIndex", id]); if (deleteError) throw deleteError; return {taskUid:1}; },
     addDocuments: async docs => { calls.push(["addIndex", docs]); return { taskUid: 1 }; },
   };
   const mocks = {

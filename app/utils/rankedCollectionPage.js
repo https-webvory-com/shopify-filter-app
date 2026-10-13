@@ -64,7 +64,8 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
 }
 
 // Rank and exclude the complete eligible set before allocating any page slots.
-export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking }) {
+export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking, compare }) {
+  if (compare) return buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare});
   const { indexUid, q, ...options } = query;
   const documents = [];
   const seen = new Set();
@@ -110,13 +111,49 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
   return ranked.map(product => cleanId(product.id));
 }
 
-export async function readRankedCollectionPage(index, { ids, page, limit, attributes }) {
+// Keep at most one batch of variant/image data. Rule evaluation is per product;
+// the shared merchandising comparator orders compact results across all batches.
+async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare}) {
+  const {indexUid,q,...options}=query;
+  const ranks=orderedIds?new Map(orderedIds.map((id,i)=>[cleanId(id),i])):null;
+  const seen=new Set(),ranked=[];
+  const fields=collectionRankingFields(conditions,sortBy,Array.isArray(orderedIds));
+  // Variant arrays can dominate a response even when few products match.
+  const batchSize=fields.includes('variantPrices')?25:1000;
+  let scanned=0;
+  async function consume(documents) {
+    const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));
+    if(hydrateRanking)await hydrateRanking(products);
+    for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,merchandisingScore:p.merchandisingScore});
+  }
+  for(let offset=0;;offset+=batchSize) {
+    const result=await index.search(q,{...options,offset,limit:batchSize,attributesToRetrieve:fields},{signal:AbortSignal.timeout(30000)});
+    const documents=result.hits.map(product=>{
+      const id=cleanId(product.id);if(seen.has(id))throw Error('Collection changed while ranking; retry the request');
+      const sequence=scanned++;seen.add(id);
+      return {...product,id,_originalIndex:ranks?(ranks.get(id)??orderedIds.length+sequence):sequence};
+    });
+    await consume(documents);
+    if(result.hits.length<batchSize){const expected=result.totalHits??result.estimatedTotalHits;if(expected!=null&&scanned!==expected)throw Error('Incomplete collection ranking results');break;}
+  }
+  const missing=[...new Set((pinnedIds||[]).map(cleanId))].filter(id=>!seen.has(id));
+  for(let offset=0;offset<missing.length;offset+=1000)await consume(missing.slice(offset,offset+1000).map((id,i)=>({id,_originalIndex:(orderedIds?.length||0)+scanned+offset+i})));
+  ranked.sort((a,b)=>compare(a,b)||(a._originalIndex??0)-(b._originalIndex??0));
+  if(ranks&&['best-selling','bestselling'].includes(sortBy)){
+    const isFree=p=>p.priceMin!=null&&p.priceMin!==''&&Number.isFinite(Number(p.priceMin))&&Number(p.priceMin)===0;
+    return [...ranked.filter(p=>!isFree(p)),...ranked.filter(isFree)].map(p=>cleanId(p.id));
+  }
+  return ranked.map(p=>cleanId(p.id));
+}
+
+export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop }) {
   const selected = ids.slice((page - 1) * limit, page * limit);
   const documents = new Map();
   for (let offset = 0; offset < selected.length; offset += 8) {
     await Promise.all(selected.slice(offset, offset + 8).map(async id => {
       try {
-        const product = await index.getDocument(id, { fields: attributes });
+        const product = await index.getDocument(id, { fields: shop && attributes ? [...new Set([...attributes,'shop'])] : attributes },{signal:AbortSignal.timeout(30000)});
+        if (shop && product.shop && product.shop !== shop) throw new Error('Collection ranking session expired; product tenant changed');
         if (product.status && product.status.toUpperCase() !== 'ACTIVE') {
           throw new Error('Collection ranking session expired; product eligibility changed');
         }

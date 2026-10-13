@@ -278,8 +278,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   // Resolve that order before rendering; otherwise the fallback stays on screen.
   const collectionRankingTokens = new Map();
   let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
+  async function fetchCollectionResponse(requestUrl, signal) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+      const payload = await response.json();
+      if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
+          !['pending', 'failed'].includes(payload?.debug?.collectionRankingStatus)) {
+        throw new Error(payload?.error || 'Products are temporarily unavailable. Please retry.');
+      }
+      return { status: response.status, json: async () => payload };
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+    }
+  }
   async function waitForCollectionOrder(data, requestUrl, signal) {
-    const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus);
+    const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus) ||
+      ['pending', 'failed'].includes(value.debug?.collectionRankingStatus);
     for (let attempt = 0; attempt < 30 && unresolved(data); attempt++) {
       await new Promise((resolve, reject) => {
         const onAbort = () => {
@@ -294,11 +314,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         signal.addEventListener('abort', onAbort, { once: true });
         if (signal.aborted) onAbort();
       });
-      const response = await fetch(requestUrl, { signal, cache: 'no-store' });
+      const response = await fetchCollectionResponse(requestUrl, signal);
+      if (response.status === 409) throw Object.assign(new Error('Collection ranking session expired'), { collectionSessionExpired: true });
       data = await response.json();
     }
     if (unresolved(data)) throw new Error('Product order is temporarily unavailable. Please retry.');
     if (data.crash || data.error) throw new Error(data.error || 'Products are temporarily unavailable. Please retry.');
+    if (!Array.isArray(data.products)) throw new Error('Invalid product response. Please retry.');
     return data;
   }
 
@@ -309,6 +331,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
+    let loadingNoticeTimer;
+    let loadingNotice;
+    let rankingKey;
 
     syncStateToURL(); // Sync URL
 
@@ -350,7 +375,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       // Price range
       if (activeFilters.minPrice > 0) queryParams.append('minPrice', activeFilters.minPrice);
-      if (activeFilters.maxPrice < maxPriceLimit) queryParams.append('maxPrice', activeFilters.maxPrice);
+      if (activeFilters.maxPrice < 999999) queryParams.append('maxPrice', activeFilters.maxPrice);
 
       // Basic arrays
       activeFilters.vendors.forEach(v => queryParams.append('vendor[]', v));
@@ -377,7 +402,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
       rankingKeyParams.sort();
-      const rankingKey = rankingKeyParams.toString();
+      rankingKey = rankingKeyParams.toString();
       const rankedCollection = templateName !== 'search' && activeFilters.sortBy !== 'manual';
       const rankingToken = rankedCollection ? collectionRankingTokens.get(rankingKey) || initialRankingToken : null;
       initialRankingToken = null;
@@ -390,6 +415,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!isLoadMore) {
           renderSkeleton();
         }
+        loadingNoticeTimer = setTimeout(() => {
+          if (fetchSignal.aborted) return;
+          loadingNotice = document.createElement('p');
+          loadingNotice.className = 'cfp-loading-notice';
+          loadingNotice.setAttribute('role', 'status');
+          loadingNotice.textContent = 'Loading products. This is taking longer than usual.';
+          getProductContainer().prepend(loadingNotice);
+        }, 4000);
         let data = null;
         if (window._cfpEarlyFetch && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
           try {
@@ -398,7 +431,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           } catch(e) {}
         }
         if (!data) {
-          const response = await fetch(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, { signal: fetchSignal, cache: 'no-store' });
+          const response = await fetchCollectionResponse(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
           if (response.status === 409 && allowSessionRestart) {
             collectionRankingTokens.delete(rankingKey);
             activeFilters.page = 1;
@@ -461,6 +494,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     } catch (e) {
       if (fetchSignal.aborted) return;
+      if (e.collectionSessionExpired && allowSessionRestart) {
+        collectionRankingTokens.delete(rankingKey);
+        activeFilters.page = 1;
+        return fetchAndRenderData(false, false);
+      }
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
       const container = getProductContainer();
@@ -476,6 +514,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
       container.appendChild(error);
+    } finally {
+      clearTimeout(loadingNoticeTimer);
+      loadingNotice?.remove();
     }
   }
 

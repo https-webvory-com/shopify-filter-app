@@ -1,5 +1,6 @@
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
+import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import * as availableVariants from "../../app/utils/availableVariants.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +17,10 @@ async function loadModule(file, mocks) {
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
     if (name in mocks) return mocks[name];
+    if (name === '../services/collectionPreparation.server.js') return readyPreparation({
+      index: mocks['../services/meiliClient.server'].default.index('products'),
+      prisma: mocks['../db.server'].default, arrange: mocks['../services/merchandising.server'].applyMerchandisingRules,
+    });
     if (name === "../services/collectionBestSelling.server.js") return {getCollectionBestSellingState: async()=>({ ids: Array.from({ length: 180 }, (_, i) => String(180 - i)), status: 'ready' })};
     if (name === "../utils/rankedCollectionPage.js") return { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPrices, hydrateCollectionInventory };
     if (name === "../services/collectionRankingSession.server.js") return {

@@ -59,6 +59,7 @@ async function mockedModule(file, mocks) {
     console,
     require(name) {
       if (name in mocks) return mocks[name];
+      if (name === '../services/shopCache.server.js' || name === '../services/shopCache.server') return { invalidateShop: async () => {} };
       if (name === "../utils/availablePins.server.js") return { availablePins };
       if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter, pinProductTagSuggestions };
       if (name.startsWith("../components/")) return {};

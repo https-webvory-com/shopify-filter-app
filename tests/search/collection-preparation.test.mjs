@@ -1,0 +1,154 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createCollectionPreparation, preparationKey, preparationRevisionKey} from '../../app/utils/collectionPreparation.js';
+import {productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
+
+function fixture() {
+  const values=new Map(),jobs=new Map(),queued=[];let clock=100000,builds=0;
+  const redis={get:async key=>values.get(key),ttl:async()=>600,setex:async(key,_ttl,value)=>values.set(key,value),del:async key=>values.delete(key)};
+  const queue={getJob:async id=>jobs.get(id),add:async(name,data,{jobId,priority})=>{
+    if(jobs.has(jobId))return jobs.get(jobId);
+    const job={name,data,opts:{priority},finishedOn:0,state:'waiting',getState:async()=>job.state,remove:async()=>jobs.delete(jobId),changePriority:async({priority})=>{job.opts.priority=priority;}};
+    jobs.set(jobId,job);queued.push(job);return job;
+  }};
+  const result={ids:['pin','boost','ordinary'],metadata:{pin:{merchandisingImage:'pin.jpg'}}};
+  const service=createCollectionPreparation({redis,queue,prepare:async()=>{builds++;return result;},now:()=>clock});
+  const spec={shop:'fixture.myshopify.com',revision:'0',sortBy:'best-selling',query:{q:'',filter:["shop = 'fixture.myshopify.com'"]},rule:{conditions:[]}};
+  return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
+}
+
+test('a missing ranking queues once across concurrent requests without scanning on the web request',async()=>{
+  const f=fixture();const results=await Promise.all([f.service.get(f.spec),f.service.get(f.spec)]);
+  assert.deepEqual(results,[{status:'pending'},{status:'pending'}]);assert.equal(f.queued.length,1);assert.equal(f.builds(),0);
+  await f.service.process(f.queued[0].data);
+  assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});assert.equal(f.builds(),1);
+});
+
+test('admin invalidation cannot publish a build that started under an older revision',async()=>{
+  const f=fixture();let finish;
+  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>new Promise(resolve=>finish=resolve)});
+  await service.get(f.spec);const task=service.process(f.queued[0].data);
+  await new Promise(resolve=>setImmediate(resolve));
+  f.values.set(preparationRevisionKey(f.spec.shop),'1');finish(f.result);
+  assert.deepEqual(await task,{superseded:true});assert.equal(f.values.has(preparationKey(f.spec)),false);
+  assert.deepEqual(await service.get(f.spec),{status:'pending'});
+  const updated={...f.spec,revision:'1'};await service.get(updated);assert.equal(f.queued.length,2);
+});
+
+test('invalidation after reading a cached value rejects the old sequence',async()=>{
+  const f=fixture();f.values.set(preparationKey(f.spec),JSON.stringify(f.result));
+  const original=f.redis.get;f.redis.get=async key=>{const value=await original(key);if(key===preparationKey(f.spec))f.values.set(preparationRevisionKey(f.spec.shop),'1');return value;};
+  assert.deepEqual(await f.service.get(f.spec),{status:'pending'});
+});
+
+test('keys are compact, stable across queue serialization, and isolate pins, rules, orders, markets and shops',()=>{
+  const f=fixture();const dated={...f.spec,rule:{updatedAt:new Date('2026-10-13'),conditions:[]}};
+  assert.equal(preparationKey(dated),preparationKey(JSON.parse(JSON.stringify(dated))));
+  assert.equal(preparationKey(f.spec),preparationKey({...f.spec,query:{filter:f.spec.query.filter,q:''}}));
+  assert.ok(preparationKey({...f.spec,mergedValues:Array(10000).fill('blue')}).length<160);
+  for(const change of [{shop:'other.myshopify.com'},{revision:'1'},{pinnedIds:['other']},{rule:{conditions:[{action:'Exclude',field:'Tags',value:'sold'}]}},{orderedIds:['2','1']},{globalSettings:{prioritizeSortOverPinning:true}},{query:{...f.spec.query,filter:["country = 'CA'"]}}])assert.notEqual(preparationKey(f.spec),preparationKey({...f.spec,...change}));
+});
+
+test('failed preparation jobs respect cooldown and retry instead of serving fallback ordering',async()=>{
+  const f=fixture();await f.service.get(f.spec);const job=f.queued[0];job.state='failed';job.finishedOn=100000;
+  assert.deepEqual(await f.service.get(f.spec),{status:'failed'});assert.equal(f.queued.length,1);
+  f.advance(31000);assert.deepEqual(await f.service.get(f.spec),{status:'pending'});assert.equal(f.queued.length,2);
+});
+
+test('expired prepared records schedule a new job even if the previous job completed',async()=>{
+  const f=fixture();await f.service.get(f.spec);f.queued[0].state='completed';
+  assert.deepEqual(await f.service.get(f.spec),{status:'pending'});assert.equal(f.queued.length,2);
+});
+
+test('a valid ranking remains available if proactive refresh scheduling fails',async()=>{
+  const f=fixture();f.values.set(preparationKey(f.spec),JSON.stringify(f.result));f.redis.ttl=async()=>10;f.queue.add=async()=>{throw Error('queue down');};
+  assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
+});
+
+test('invalid worker identity and failed scans cannot populate prepared cache',async()=>{
+  const f=fixture();await assert.rejects(f.service.process({key:'wrong',spec:f.spec}),/identity/);
+  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>{throw Error('incomplete scan');}});
+  await assert.rejects(service.process({key:preparationKey(f.spec),spec:f.spec}),/incomplete scan/);
+  assert.equal(f.values.has(preparationKey(f.spec)),false);
+});
+
+test('an active visitor promotes a queued background warmup without duplicating the build',async()=>{
+  const f=fixture();await f.service.get(f.spec,{warmup:true});assert.equal(f.queued[0].opts.priority,10);
+  await f.service.get(f.spec);assert.equal(f.queued.length,1);assert.equal(f.queued[0].opts.priority,1);
+});
+
+test('relevant product updates permit a cold build to publish and request a follow-up refresh',async()=>{
+  const f=fixture();f.spec.collectionId='1';let finish;
+  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>new Promise(resolve=>finish=resolve)});
+  await service.get(f.spec);const task=service.process(f.queued[0].data);
+  await new Promise(resolve=>setImmediate(resolve));
+  f.values.set(productRevisionKey(f.spec.shop,'1'),'27');finish(f.result);
+  assert.deepEqual(await task,{products:3,refreshRequired:true});
+  assert.deepEqual(await service.get(f.spec),{status:'ready',...f.result});
+  assert.equal(JSON.parse(f.values.get(preparationKey(f.spec))).productRevision,'0');
+});
+
+test('unrelated product updates preserve the collection data version and cached ranking',async()=>{
+  const f=fixture();f.spec.collectionId='1';await f.service.get(f.spec);
+  f.values.set(productRevisionKey(f.spec.shop,'2'),'100');
+  assert.deepEqual(await f.service.process(f.queued[0].data),{products:3,refreshRequired:false});
+  assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
+  assert.equal(f.queued.length,1);
+  assert.equal(preparationKey(f.spec),preparationKey({...f.spec,productRevision:'999'}));
+});
+
+test('page size, offsets and response fields reuse the complete ranking but filters stay isolated',()=>{
+  const f=fixture();const a={...f.spec,query:{...f.spec.query,limit:25,offset:0,attributesToRetrieve:['title']}};
+  const b={...f.spec,query:{...f.spec.query,limit:250,offset:5000,attributesToRetrieve:['images'],facets:['vendor']}};
+  assert.equal(preparationKey(a),preparationKey(b));
+  assert.notEqual(preparationKey(a),preparationKey({...b,query:{...b.query,filter:["vendor = 'Other'"]}}));
+});
+
+test('corrupt cached records queue recovery and cannot render or delete a concurrent publication',async()=>{
+  for(const raw of ['{broken',JSON.stringify({ids:['duplicate','duplicate'],metadata:{}}),JSON.stringify({ids:[],metadata:null}),JSON.stringify({ids:[null],metadata:{}})]){
+    const f=fixture();f.values.set(preparationKey(f.spec),raw);
+    assert.deepEqual(await f.service.get(f.spec),{status:'pending'});assert.equal(f.queued.length,1);
+    await f.service.process(f.queued[0].data);assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
+  }
+});
+
+test('invalid scan output never replaces a usable prepared ranking',async()=>{
+  const f=fixture();const raw=JSON.stringify({...f.result,productRevision:'0'});f.values.set(preparationKey(f.spec),raw);
+  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>({ids:['1','1'],metadata:{}})});
+  await assert.rejects(service.process({key:preparationKey(f.spec),spec:f.spec}),/Invalid prepared/);
+  assert.equal(f.values.get(preparationKey(f.spec)),raw);
+});
+
+test('empty collections are valid ready results rather than endless pending jobs',async()=>{
+  const f=fixture();const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>({ids:[],metadata:{}})});
+  await service.get(f.spec);await service.process(f.queued[0].data);
+  assert.deepEqual(await service.get(f.spec),{status:'ready',ids:[],metadata:{}});
+});
+
+test('updates while waiting in a backlog do not require another build if data stays stable during the scan',async()=>{
+  const f=fixture();f.spec.collectionId='1';await f.service.get(f.spec);
+  f.values.set(productRevisionKey(f.spec.shop,'1'),'20');
+  assert.deepEqual(await f.service.process(f.queued[0].data),{products:3,refreshRequired:false});
+  assert.equal(JSON.parse(f.values.get(preparationKey(f.spec))).productRevision,'20');
+});
+
+test('obsolete first-page preparation can be discarded without deleting existing browsing sessions',async()=>{
+  const f=fixture();await f.service.get(f.spec);await f.service.process(f.queued[0].data);
+  f.values.set('collectionRankingSession:fixture.myshopify.com:token','session');
+  await f.service.discard(f.spec);assert.equal(f.values.has(preparationKey(f.spec)),false);
+  assert.equal(f.values.get('collectionRankingSession:fixture.myshopify.com:token'),'session');
+});
+
+test('configuration change immediately after publication removes the outdated record',async()=>{
+  const f=fixture();const original=f.redis.setex;
+  f.redis.setex=async(...args)=>{await original(...args);f.values.set(preparationRevisionKey(f.spec.shop),'1');};
+  await f.service.get(f.spec);assert.deepEqual(await f.service.process(f.queued[0].data),{superseded:true});
+  assert.equal(f.values.has(preparationKey(f.spec)),false);
+});
+
+test('Redis and queue failures are surfaced instead of silently serving fallback order',async()=>{
+  const f=fixture();f.queue.add=async()=>{throw Error('Queue unavailable');};
+  await assert.rejects(f.service.get(f.spec),/Queue unavailable/);
+  f.redis.get=async()=>{throw Error('Redis unavailable');};
+  await assert.rejects(f.service.get(f.spec),/Redis unavailable/);
+});

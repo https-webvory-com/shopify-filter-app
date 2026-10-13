@@ -19,6 +19,25 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # A failing test must stop the release before images or live containers change.
+      - name: Set up production Node version for checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Check ranking, cache, webhook and storefront regressions
+        run: |
+          node scripts/run-regression-tests.mjs
+          node --check extensions/theme-extension/assets/collectionFilterPro.js
+          node --check extensions/theme-extension/assets/instantSearch.js
+          node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs tags
+          node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs variants
+          node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs dense-variants
+
       - name: Create .env
         run: |
           echo "${{ secrets.ENV_FILE }}" > .env
@@ -138,6 +157,43 @@ jobs:
             $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             npx prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma
 
+            # Keep the exact previous image IDs so a failed startup can restore
+            # the last app/worker pair instead of leaving the new app without ranking.
+            previous_app_image=$(docker inspect --format '{{.Image}}' shopify-filter-app 2>/dev/null || true)
+            previous_worker_image=$(docker inspect --format '{{.Image}}' shopify-filter-sync-worker 2>/dev/null || true)
+            replacement_started=false
+            restore_previous_containers() {
+              task_failure_code="$1"
+              trap - EXIT
+              if [ "$task_failure_code" -eq 0 ] || [ "$replacement_started" != true ]; then return; fi
+              if [ -z "$previous_app_image" ]; then
+                echo "Startup failed and no previous app image is available for rollback."
+                exit "$task_failure_code"
+              fi
+              echo "Startup failed. Restoring the previous app and worker images."
+              set +e
+              docker rm -f shopify-filter-sync-worker shopify-filter-app >/dev/null 2>&1
+              docker run -d --name shopify-filter-app --env-file .env -e CFP_WORKER_MODE=web \
+                -p 3005:3005 --restart always --log-opt max-size=10m --log-opt max-file=3 "$previous_app_image"
+              restore_app_code=$?
+              restore_worker_code=0
+              if [ -n "$previous_worker_image" ]; then
+                docker run -d --name shopify-filter-sync-worker --env-file .env -e CFP_WORKER_MODE=worker \
+                  -e CFP_WEBHOOK_CONCURRENCY=2 -e NODE_OPTIONS=--max-old-space-size=256 \
+                  --memory=512m --memory-swap=512m --cpu-shares=256 --restart always \
+                  --log-opt max-size=10m --log-opt max-file=3 "$previous_worker_image" node scripts/run-background-worker.mjs
+                restore_worker_code=$?
+              fi
+              if [ "$restore_app_code" -ne 0 ] || [ "$restore_worker_code" -ne 0 ]; then
+                echo "Automatic rollback could not start every previous container; manual recovery is required."
+              else
+                echo "Previous containers started; this deployment remains failed."
+              fi
+              exit "$task_failure_code"
+            }
+            trap 'restore_previous_containers "$?"' EXIT
+            replacement_started=true
+
             docker stop --time 30 shopify-filter-sync-worker || true
             docker rm shopify-filter-sync-worker || true
 
@@ -199,6 +255,10 @@ jobs:
               exit 1
             fi
 
-            docker image prune -f
+            # Both processes passed startup checks; cleanup must not roll back
+            # a healthy release after deleting its unused previous image.
+            replacement_started=false
+            trap - EXIT
+            docker image prune -f || echo "Unused-image cleanup failed."
 
             echo "Deployment completed successfully."

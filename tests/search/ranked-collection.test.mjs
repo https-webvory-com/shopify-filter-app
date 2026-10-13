@@ -150,3 +150,9 @@ test('a missing indexed product preserves its session slot for DB hydration', as
 test('products made inactive during browsing require a fresh eligible sequence', async () => {
   await assert.rejects(readRankedCollectionPage({ getDocument: async () => ({ id: '1', status: 'ARCHIVED' }) }, { ids: ['1'], page: 1, limit: 25 }), /session expired/);
 });
+
+test('ranked document reads reject a different shop without requiring id filtering',async()=>{
+  let fields;
+  await assert.rejects(readRankedCollectionPage({getDocument:async(_id,options)=>{fields=options.fields;return {id:'1',shop:'other.myshopify.com',status:'ACTIVE'};}}, {ids:['1'],page:1,limit:25,shop:'fixture.myshopify.com',attributes:['id','title']}),/tenant changed/);
+  assert.ok(fields.includes('shop'));
+});
