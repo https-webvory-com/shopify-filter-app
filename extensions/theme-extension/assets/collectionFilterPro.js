@@ -2256,7 +2256,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
               else if (name === 'product_type') updateFilterArray(activeFilters.types, cbVal, false);
               else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
-              else if (name === 'tag' || name === 'tags') updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
+              else if (name === 'tag' || name === 'tags') {
+                updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
+                updateFilterArray(activeFilters.tags, cbVal, false);
+              }
               else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
               else if (name === 'title') updateFilterArray(activeFilters.titles, cbVal, false);
               else if (name.startsWith('option-')) {
@@ -2282,7 +2285,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         } else if (name === 'collection') {
           updateFilterArray(activeFilters.collections, val, checked);
         } else if (name === 'tag' || name === 'tags') {
-          updateFilterArray(activeFilters.tags, getCleanLabel('tag', val).cleanVal, checked);
+          updateFilterArray(activeFilters.tags, getCleanLabel('tag', val).cleanVal, false);
+          updateFilterArray(activeFilters.tags, val, checked);
         } else if (name === 'price') {
           updateFilterArray(activeFilters.priceRanges, val, checked);
           if (activeFilters.priceRanges.length > 0) {
