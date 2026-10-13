@@ -279,8 +279,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   const collectionRankingTokens = new Map();
   let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
   async function waitForCollectionOrder(data, requestUrl, signal) {
-    const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus) ||
-      ['pending', 'failed'].includes(value.debug?.collectionRankingStatus);
+    const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus);
     for (let attempt = 0; attempt < 30 && unresolved(data); attempt++) {
       await new Promise((resolve, reject) => {
         const onAbort = () => {
@@ -310,8 +309,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
-    let loadingNoticeTimer;
-    let loadingNotice;
 
     syncStateToURL(); // Sync URL
 
@@ -393,14 +390,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!isLoadMore) {
           renderSkeleton();
         }
-        loadingNoticeTimer = setTimeout(() => {
-          if (fetchSignal.aborted) return;
-          loadingNotice = document.createElement('p');
-          loadingNotice.className = 'cfp-loading-notice';
-          loadingNotice.setAttribute('role', 'status');
-          loadingNotice.textContent = 'Loading products. This is taking longer than usual.';
-          getProductContainer().prepend(loadingNotice);
-        }, 4000);
         let data = null;
         if (window._cfpEarlyFetch && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
           try {
@@ -487,9 +476,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
       container.appendChild(error);
-    } finally {
-      clearTimeout(loadingNoticeTimer);
-      loadingNotice?.remove();
     }
   }
 

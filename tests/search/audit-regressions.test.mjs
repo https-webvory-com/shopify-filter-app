@@ -1,6 +1,5 @@
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
-import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -88,8 +87,6 @@ async function route(file,mocks){
     if (name === "../utils/searchColor.js") return searchColor;
    if(name === "../utils/spellingCorrection.js")return {spellingCorrection};
    if(name in mocks)return mocks[name];
-   if(name==='../services/shopCache.server.js')return {invalidateShop:async()=>{}};
-   if(name==='../services/collectionPreparation.server.js')return readyPreparation({index:mocks['../services/meiliClient.server'].default.index('products'),prisma:mocks['../db.server'].default,arrange:mocks['../services/merchandising.server'].applyMerchandisingRules});
    if(name==='../utils/merchandisingCondition.js')return {normalizeCondition,validConditions};
    if(name.startsWith('../components/')||['react','react-router','@shopify/app-bridge-react'].includes(name))return {};
    throw Error('Unexpected import '+name);

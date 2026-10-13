@@ -1,6 +1,5 @@
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { invalidateShop } from '../services/shopCache.server.js';
 
 /**
  * POST /api/import-pins-batch
@@ -187,9 +186,6 @@ export const action = async ({ request }) => {
       }
     }
 
-    if (importedIds.length) {
-      await invalidateShop(shop);
-    }
     return Response.json({
       imported: importedIds.length,
       skipped: skippedRows.length,

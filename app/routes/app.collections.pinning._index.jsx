@@ -12,7 +12,6 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { matchesRuleFilters } from "../utils/ruleFilters";
 import prisma from "../db.server";
-import { invalidateShop } from "../services/shopCache.server";
 import FilterModal from "../components/merchandising/FilterModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
 import ImportCollectionPinsModal from "../components/merchandising/ImportCollectionPinsModal";
@@ -27,14 +26,12 @@ export const action = async ({ request }) => {
   if (actionType === "deleteRule") {
     const id = formData.get("id");
     await prisma.pinnedProductRule.deleteMany({ where: { id, shop } });
-    await invalidateShop(shop);
     return { success: true, action: "deleteRule" };
   }
 
   if (actionType === "bulkDeleteRules") {
     const ids = JSON.parse(formData.get("ids") || "[]");
     await prisma.pinnedProductRule.deleteMany({ where: { id: { in: ids }, shop } });
-    await invalidateShop(shop);
     return { success: true, action: "bulkDeleteRules", count: ids.length };
   }
 
@@ -54,7 +51,6 @@ export const action = async ({ request }) => {
           products: originalRule.products,
         },
       });
-      await invalidateShop(shop);
       return { success: true, action: "duplicateRule" };
     }
     return { success: false, message: "Rule not found" };
@@ -64,10 +60,9 @@ export const action = async ({ request }) => {
     const id = formData.get("id");
     const status = formData.get("status") === "true";
     await prisma.pinnedProductRule.update({
-      where: { id, shop },
+      where: { id },
       data: { status },
     });
-    await invalidateShop(shop);
     return { success: true, action: "toggleStatus", status };
   }
 

@@ -114,7 +114,6 @@ export const action = async ({ request, params }) => {
         data,
       });
     }
-    await invalidateShop(shop);
     return redirect("/app/collections/pinning");
   }
 

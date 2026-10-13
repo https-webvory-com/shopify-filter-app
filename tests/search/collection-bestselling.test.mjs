@@ -53,7 +53,7 @@ async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
  const mocks={
   'node:crypto':crypto,
   './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
-  './queue.server.js':{collectionRankingQueue:{add:async(name,data)=>{calls.push({name,data});return {};}},webhookQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
+  './queue.server.js':{webhookQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
   '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };

@@ -36,7 +36,7 @@ async function runner({failReady=false,missingWorkers=false}={}) {
   const ctx={global:{},console:{log(){},error(){}},process:{env:{CFP_WORKER_MODE:"web"},pid:42,
     once:(signal,callback)=>{signals[signal]=callback;},exit:code=>calls.push("exit:"+code)},
     fs:{rmSync:path=>files.delete(path),writeFileSync:(path,value)=>files.set(path,value)},delay:async()=>{},
-    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");}},
+    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");}},
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
@@ -44,8 +44,8 @@ async function runner({failReady=false,missingWorkers=false}={}) {
   await vm.runInNewContext("(async()=>{\n"+source+"\n})()",ctx);
   return {files,calls,signals};
 }
-test("worker readiness is published only after all Redis workers are ready",async()=>{
-  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking"]);
+test("worker readiness is published only after both Redis workers are ready",async()=>{
+  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks"]);
   assert.equal(f.files.get("/tmp/cfp-background-worker.ready"),"42");
 });
 test("a failed worker startup reports failure and never publishes readiness",async()=>{
@@ -56,5 +56,4 @@ test("a failed worker startup reports failure and never publishes readiness",asy
 test("worker shutdown closes processors and removes readiness without touching web processes",async()=>{
   const f=await runner();await f.signals.SIGTERM();assert.equal(f.files.size,0);
   assert.ok(f.calls.includes("close:sync"));assert.ok(f.calls.includes("close:webhooks"));assert.equal(f.calls.at(-1),"exit:0");
-  assert.ok(f.calls.includes('close:ranking'));
 });
