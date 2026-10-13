@@ -981,6 +981,21 @@ facet-filters-form,
   box-shadow: none;
 }
 
+/* Reveal new cards independently of image and market-price loading. Limit the
+   stagger so a large page never waits seconds for its last card to appear. */
+.cfp-product-card--reveal {
+  animation: cfp-card-reveal 300ms ease-out var(--cfp-reveal-delay, 0ms) backwards;
+}
+
+@keyframes cfp-card-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cfp-product-card--reveal { animation: none; }
+}
+
 .cfp-product-card:hover {
   transform: translateY(-5px);
   box-shadow: none;
@@ -2031,18 +2046,19 @@ facet-filters-form,
   .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { padding: 12px 0; border-top: 0; }
 }
 
-/* Keep filter access below the theme's sticky header while browsing products. */
+/* Keep inline filter layers above cards but below theme headers and mega menus.
+   Dropdown z-index values stay inside these sticky stacking contexts. */
 .cfp-layout-wrapper #cfp-top-bar {
   position: sticky;
   top: var(--cfp-sticky-top, 0px);
-  z-index: 30;
+  z-index: 3;
   background: var(--cfp-bg);
 }
 @media (min-width: 769px) {
   .cfp-horizontal-layout #cfp-sidebar.cfp-sidebar {
     position: sticky !important;
     top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px)) !important;
-    z-index: 25 !important;
+    z-index: 2 !important;
     background: var(--cfp-bg) !important;
   }
   .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { display: none !important; }
@@ -2091,7 +2107,7 @@ facet-filters-form,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar.cfp-sidebar {
     position: sticky !important;
     top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px)) !important;
-    z-index: 25 !important;
+    z-index: 2 !important;
   }
   .cfp-desktop-like-mobile #cfp-sidebar.cfp-sidebar {
     max-height: calc(100dvh - var(--cfp-sticky-top, 0px) - var(--cfp-toolbar-height, 0px) - 16px) !important;

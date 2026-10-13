@@ -1125,7 +1125,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       return `
-        <div class="cfp-product-card" data-pricing-render="${version}" data-pricing-index="${productIndex}">
+        <div class="cfp-product-card cfp-product-card--reveal" style="--cfp-reveal-delay: ${Math.min(productIndex, 5) * 75}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
             <a href="${productUrl}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">
