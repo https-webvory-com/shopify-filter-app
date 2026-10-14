@@ -331,7 +331,7 @@ Internationalization:
 
 Search > Page Redirects supports multiple queries per rule (one per line), a store-relative path or HTTPS destination, and create/edit/enable/disable/delete actions. Matching is exact after Unicode normalization, trimming, whitespace collapsing and lowercasing. Each query belongs to one rule per shop, including disabled rules. Conflicting edits roll back atomically. Search-page destinations and unsafe URL schemes are rejected.
 
-Redirects run on a submitted `/search?q=...` page, including locale-prefixed search paths, when the Collection Filter Pro search-page extension is installed. They do not navigate during autocomplete typing or affect collection browsing. The redirect lookup has a 1.5-second timeout and falls back to ordinary search on failure. Rules are read fresh rather than cached.
+Redirects run on a submitted `/search?q=...` page, including locale-prefixed search paths, when either the AI Instant Search app embed or the Collection Filter Pro search-page block is installed. The embed also supports Shopify's native search page without the filter block. Both share one lookup when installed together. They do not navigate during autocomplete typing or affect collection browsing. The redirect lookup has a 1.5-second timeout and falls back to ordinary search on failure. Rules are read fresh rather than cached.
 
 Deploy the new `SearchRedirect` and `SearchRedirectQuery` tables with the backend, regenerate Prisma Client, and deploy the theme extension. This repository's existing container setup uses `prisma db push`; migration-based environments can apply `20261014000000_search_redirects`. A Shopify extension-only deployment does not deploy the editor, API or database schema.
 

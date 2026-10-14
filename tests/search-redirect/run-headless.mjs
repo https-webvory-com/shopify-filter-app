@@ -14,7 +14,7 @@ const origin='http://127.0.0.1:'+fixture.server.address().port;
 const profile=path.resolve('scratch',`redirect-browser-${process.pid}-${Date.now()}`);
 await fs.mkdir(profile,{recursive:true});
 const chrome=spawn(process.env.HEADLESS_CHROME_PATH||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',[
-  '--headless=new','--disable-gpu','--disable-background-networking','--disable-component-update','--disable-sync',
+  '--headless=new','--disable-gpu','--in-process-gpu','--disable-background-networking','--disable-component-update','--disable-sync',
   '--no-first-run','--no-default-browser-check','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank',
 ],{windowsHide:true,stdio:['ignore','ignore','pipe']});
 let stderr='';chrome.stderr.on('data',chunk=>stderr+=chunk.toString());
@@ -46,10 +46,14 @@ try{
 
   await send('Page.navigate',{url:origin+'/admin-ui'});await wait("!!document.querySelector('textarea[name=queries]')");
   const fill=async(queries,target)=>evaluate(`(() => {for(const [selector,value]of [['textarea[name=queries]',${JSON.stringify(queries)}],['input[name=targetUrl]',${JSON.stringify(target)}]]){const el=document.querySelector(selector);const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new Event('input',{bubbles:true}));}return true;})()`);
-  const click=async(text)=>evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(text)}).click()`);
+  const click=async(text)=>{await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==="+JSON.stringify(text)+"&&!b.disabled)");return evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==="+JSON.stringify(text)+").click()");};
   await fill('Shipping\nshipping policy','/policies/shipping-policy');await click('Create redirect');await wait("document.body.innerText.includes('shipping policy')&&!!document.querySelector('button:not([disabled])')&&document.querySelector('textarea').value===''");
   assert.ok(await evaluate("document.body.innerText.includes('/policies/shipping-policy')"));console.log('PASS browser creates multi-query redirect in real PostgreSQL');
   await send('Page.navigate',{url:origin+'/search?q=SHIPPING'});await wait("location.pathname==='/policies/shipping-policy'");console.log('PASS full storefront redirects submitted query');
+  await send('Page.navigate',{url:origin+'/search?q=shipping&native=1'});await wait("location.pathname==='/policies/shipping-policy'");console.log('PASS native storefront search redirects without filter block');
+  const before=fixture.state.redirectRequests;
+  await send('Page.navigate',{url:origin+'/search?q=shipping&embed=1'});await wait("location.pathname==='/policies/shipping-policy'");assert.equal(fixture.state.redirectRequests-before,1);console.log('PASS embed and filter block share one lookup');
+  await send('Page.navigate',{url:origin+'/search?q=ordinary&native=1'});await wait("!!document.querySelector('#nativeResults')&&!!window.cfpSearchRedirectPromise");await evaluate('window.cfpSearchRedirectPromise');assert.equal(await evaluate('location.pathname'),'/search');console.log('PASS ordinary native search stays available');
   await send('Page.navigate',{url:origin+'/admin-ui'});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Edit')");await click('Edit');await fill('delivery','/pages/delivery');await click('Update redirect');await wait("document.querySelector('textarea').value===''&&document.body.innerText.includes('/pages/delivery')");
   await send('Page.navigate',{url:origin+'/en/search?q=delivery'});await wait("location.pathname==='/pages/delivery'");console.log('PASS browser edit and localized storefront redirect');
   await send('Page.navigate',{url:origin+'/admin-ui'});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Disable')");await click('Disable');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Enable')");

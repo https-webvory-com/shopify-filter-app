@@ -30,3 +30,46 @@ async function navigate({path='/search',query='sale',target='/collections/sale',
 test('storefront redirects submitted searches, including locale-prefixed paths',async()=>{for(const path of ['/search','/en/search']){const result=await navigate({path});assert.equal(result.redirected,true);assert.deepEqual(result.visits,['https://shop.test/collections/sale']);}});
 test('ordinary searches, collection browsing, empty queries and failed lookups do not redirect',async()=>{for(const options of [{target:null},{path:'/collections/sale'},{query:''},{fail:true},{slow:true}]){const result=await navigate(options);assert.equal(result.redirected,false);assert.equal(result.visits.length,0);}assert.equal((await navigate({path:'/collections/sale'})).requests,0);});
 test('storefront ignores malformed, dangerous and looping API targets',async()=>{for(const target of ['javascript:alert(1)','//evil.test','/search?q=sale','https://user:pass@example.com','/bad\\path','/bad path',42])assert.equal((await navigate({target})).redirected,false);});
+
+const instantSource = await fs.readFile('extensions/theme-extension/assets/instantSearch.js', 'utf8');
+const embedCode = instantSource.slice(instantSource.indexOf('// Submitted searches'), instantSource.indexOf('document.addEventListener'));
+test('instant embed redirects native search pages without a filter sidebar and shares one lookup', async () => {
+  let requests = 0;
+  const visits = [];
+  const location = { pathname: '/search', search: '?q=sale', origin: 'https://shop.test', href: 'https://shop.test/search?q=sale', replace: url => visits.push(url) };
+  const context = { window: { location, Shopify: { shop } }, URL, URLSearchParams, AbortController, setTimeout, clearTimeout, API_DOMAIN: 'https://api.test', shop,
+    fetch: async () => { requests++; return { ok: true, json: async () => ({redirectUrl:'/collections/sale'}) }; } };
+  vm.createContext(context);
+  vm.runInContext(embedCode + redirectCode, context);
+  assert.equal(await context.redirectSubmittedSearch(), true);
+  assert.equal(requests, 1);
+  assert.deepEqual(visits, ['https://shop.test/collections/sale']);
+  vm.runInContext(embedCode, context);
+  assert.equal(requests, 1);
+});
+test('instant embed skips ordinary pages, empty searches and missing store context', async () => {
+  for (const [pathname, search, Shopify] of [['/', '?q=sale', {shop}], ['/collections/all', '?q=sale', {shop}], ['/search', '?q=', {shop}], ['/search', '?q=sale', {}]]) {
+    let requests = 0;
+    const context = { window: { location: {pathname,search}, Shopify }, URLSearchParams, AbortController, setTimeout, clearTimeout, fetch: () => { requests++; throw Error('Unexpected lookup'); } };
+    vm.runInNewContext(embedCode, context);
+    if (context.window.cfpSearchRedirectPromise) assert.equal(await context.window.cfpSearchRedirectPromise, false);
+    assert.equal(requests, 0);
+  }
+});
+test('lookup remains shared when the filter block loads before the deferred embed', async () => {
+  let requests = 0;
+  const context = { window: { location: { pathname:'/search',search:'?q=sale',origin:'https://shop.test',href:'https://shop.test/search?q=sale',replace(){} },Shopify:{shop} },shop,URL,URLSearchParams,AbortController,setTimeout,clearTimeout,API_DOMAIN:'https://api.test',fetch:async()=>{requests++;return {ok:true,json:async()=>({redirectUrl:'/collections/sale'})};} };
+  vm.createContext(context);
+  vm.runInContext(redirectCode, context);
+  const lookup = context.redirectSubmittedSearch();
+  vm.runInContext(embedCode, context);
+  assert.equal(await lookup, true);
+  assert.equal(requests, 1);
+});
+test('instant embed preserves native search after failed or unsafe redirect responses', async () => {
+  for (const target of [null, '//evil.test', '/%73earch?q=sale', 'javascript:alert(1)']) {
+    const context = { window: { location: {pathname:'/en/search',search:'?q=sale',origin:'https://shop.test',href:'https://shop.test/en/search?q=sale',replace:()=>assert.fail('Unexpected navigation')}, Shopify:{shop} }, URL, URLSearchParams, AbortController, setTimeout, clearTimeout, API_DOMAIN:'https://api.test',fetch:async()=>({ok:true,json:async()=>({redirectUrl:target})}) };
+    vm.runInNewContext(embedCode, context);
+    assert.equal(await context.window.cfpSearchRedirectPromise, false);
+  }
+});

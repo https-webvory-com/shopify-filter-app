@@ -215,26 +215,29 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   // â”€â”€ 2. Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function redirectSubmittedSearch() {
+    if (window.cfpSearchRedirectPromise) return window.cfpSearchRedirectPromise;
     // Autocomplete typing and collection browsing never trigger navigation.
     if (!/\/search\/?$/i.test(window.location.pathname)) return false;
     const query = new URLSearchParams(window.location.search).get('q')?.trim();
     if (!query || !shop) return false;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1500);
-    try {
-      const params = new URLSearchParams({ shop, q: query });
-      const response = await fetch(`${API_DOMAIN}/api/search-redirect?${params}`, { signal: controller.signal });
-      if (!response.ok) return false;
-      const { redirectUrl } = await response.json();
-      if (typeof redirectUrl !== 'string' || /[\\\u0000-\u0020\u007f]/u.test(redirectUrl)) return false;
-      if (!(redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) && !/^https:\/\//i.test(redirectUrl)) return false;
-      const target = new URL(redirectUrl, window.location.origin);
-      if (target.username || target.password || /\/search\/?$/i.test(decodeURIComponent(target.pathname))) return false;
-      if (target.href === window.location.href) return false;
-      window.location.replace(target.href);
-      return true;
-    } catch { return false; }
-    finally { clearTimeout(timer); }
+    return window.cfpSearchRedirectPromise = (async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1500);
+      try {
+        const params = new URLSearchParams({ shop, q: query });
+        const response = await fetch(`${API_DOMAIN}/api/search-redirect?${params}`, { signal: controller.signal });
+        if (!response.ok) return false;
+        const { redirectUrl } = await response.json();
+        if (typeof redirectUrl !== 'string' || /[\\\u0000-\u0020\u007f]/u.test(redirectUrl)) return false;
+        if (!(redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) && !/^https:\/\//i.test(redirectUrl)) return false;
+        const target = new URL(redirectUrl, window.location.origin);
+        if (target.username || target.password || /\/search\/?$/i.test(decodeURIComponent(target.pathname))) return false;
+        if (target.href === window.location.href) return false;
+        window.location.replace(target.href);
+        return true;
+      } catch { return false; }
+      finally { clearTimeout(timer); }
+    })();
   }
 
   let activeMerchandisingRule = null;

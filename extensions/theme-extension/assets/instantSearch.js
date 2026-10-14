@@ -5,6 +5,32 @@
 
 var API_DOMAIN = 'https://aisearchfilter.webvory.com'; // TODO: Change this to your deployed AWS API domain
 
+// Submitted searches must redirect even when the theme uses its native search
+// page instead of the Collection Filter Pro search block. Share the lookup with
+// that block when both are installed; typing in autocomplete never calls it.
+if (!window.cfpSearchRedirectPromise && /\/search\/?$/i.test(window.location.pathname) && window.Shopify?.shop) {
+  window.cfpSearchRedirectPromise = (async () => {
+    const query = new URLSearchParams(window.location.search).get('q')?.trim();
+    if (!query) return false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+      const params = new URLSearchParams({ shop: window.Shopify.shop, q: query });
+      const response = await fetch(`${API_DOMAIN}/api/search-redirect?${params}`, { signal: controller.signal });
+      if (!response.ok) return false;
+      const { redirectUrl } = await response.json();
+      if (typeof redirectUrl !== 'string' || /[\\\u0000-\u0020\u007f]/u.test(redirectUrl)) return false;
+      if (!(redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) && !/^https:\/\//i.test(redirectUrl)) return false;
+      const target = new URL(redirectUrl, window.location.origin);
+      if (target.username || target.password || /\/search\/?$/i.test(decodeURIComponent(target.pathname))) return false;
+      if (target.href === window.location.href) return false;
+      window.location.replace(target.href);
+      return true;
+    } catch { return false; }
+    finally { clearTimeout(timer); }
+  })();
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
