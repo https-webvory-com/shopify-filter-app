@@ -2,6 +2,7 @@ import { parseQuery } from "../services/queryParser.server.js";
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { buildSearchSuggestions } from "../utils/searchSuggestions.js";
+import { getActiveSuggestionBlacklist } from '../services/suggestionBlacklist.server.js';
 import { data } from "react-router";
 import prisma from "../db.server";
 import { getActivePinningRuleForSearch } from "../services/merchandising.server";
@@ -228,7 +229,16 @@ export const loader = async ({ request }) => {
       .slice(0, limit)
       .map(p => ({ ...p, isPinned: pinnedIds.includes(p.id) }));
 
-    suggestions = buildSearchSuggestions(searchQuery, activeResults, suggestions);
+    let suggestionBlacklist = [];
+    if (searchQuery) {
+      try { suggestionBlacklist = await getActiveSuggestionBlacklist(shop); }
+      catch (error) {
+        console.error('Suggestion blacklist lookup failed:', error.name);
+        // Keep products usable, but do not show unverified suggestions.
+        suggestionBlacklist = null;
+      }
+    }
+    suggestions = suggestionBlacklist === null ? [] : buildSearchSuggestions(searchQuery, activeResults, suggestions, 6, suggestionBlacklist);
 
     // Contextual Pricing
     let contextualPricingApplied = false;
@@ -307,7 +317,9 @@ export const loader = async ({ request }) => {
       globalSettings: globalSettings
     }, {
       headers: {
-        'Cache-Control': 'public, max-age=10, stale-while-revalidate=30',
+        // Product cards retain their storefront session cache; suggestions
+        // must reflect fresh blacklist settings on the next request.
+        'Cache-Control': 'no-store',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',

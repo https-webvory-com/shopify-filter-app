@@ -17,5 +17,6 @@ try{
  }started=true;
  const url='postgresql://fixture@127.0.0.1:'+port+'/postgres';await fs.writeFile('scratch/redirect-db.json',JSON.stringify({directory,port,url,bin}));
  run('psql',['-h','127.0.0.1','-p',String(port),'-U','fixture','-d','postgres','-v','ON_ERROR_STOP=1','-f','prisma/migrations/20261014000000_search_redirects/migration.sql']);
+ run('psql',['-h','127.0.0.1','-p',String(port),'-U','fixture','-d','postgres','-v','ON_ERROR_STOP=1','-f','prisma/migrations/20261014010000_suggestion_blacklist/migration.sql']);
  console.log('Isolated PostgreSQL started and migration applied.');
 }catch(error){if(started)run('pg_ctl',['-D',directory,'-m','fast','-w','stop']);throw error;}

@@ -106,6 +106,7 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../db.server':{__esModule:true,default:{}},
   '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null},
   '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
+  '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
   '../services/filterSettings.server':{},
   '../services/shopCache.server':{getCached:async()=>({})},
   '../services/rateLimiter.server':{rateLimit:async()=>true},

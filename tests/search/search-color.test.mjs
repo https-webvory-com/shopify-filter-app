@@ -82,7 +82,8 @@ test('instant endpoint constrains semantic retrieval and rejects wrong-color pin
     '../db.server':{default:{product:{findMany:async()=>[{id:'pin',status:'ACTIVE',options:[{name:'Color'}],variants:[{option1:'Gold'}]}]}}},
     '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>({products:[{id:'pin'}]})},
     '../services/meiliClient.server':{default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
-    '../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},'../services/rateLimiter.server':{rateLimit:async()=>true},
+    '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
+  '../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/semanticSearch.server':{semanticSearch:async(_q,params)=>{
       assert.ok(params.filter.includes(color.colorSearchFilter(intent)));
       return {hits:[{id:'organic',title:'Evening Dress',status:'ACTIVE',options:[{name:'Color'}],variantPrices:variants,images:['wine.jpg']}]};

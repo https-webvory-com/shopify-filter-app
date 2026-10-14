@@ -2,6 +2,8 @@
   "name": "collection-filter-pro",
   "private": true,
   "scripts": {
+    "test:suggestion-blacklist": "node --test tests/search/suggestion-blacklist.test.mjs",
+    "test:suggestion-blacklist:browser": "node tests/suggestion-blacklist/run.mjs",
     "test:search-redirects": "node --test tests/search/search-redirect.test.mjs",
     "test:search-redirects:browser": "node tests/search-redirect/run.mjs",
     "build": "react-router build",

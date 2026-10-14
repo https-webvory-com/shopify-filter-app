@@ -65,9 +65,9 @@ const cards = [
     title: "Blacklist Suggestions",
     tag: "Filters",
     description:
-      "Hide specific terms or products from search auto-suggestions.",
+      "Hide matching phrases from autocomplete suggestions using Contains or Exact match.",
     path: "/app/search/blacklist",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

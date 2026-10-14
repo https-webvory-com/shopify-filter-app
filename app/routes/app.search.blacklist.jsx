@@ -1,28 +1,83 @@
-import { useNavigate } from "react-router";
-import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
+import { useFetcher, useLoaderData, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { boundary } from '@shopify/shopify-app-react-router/server';
+import { authenticate } from '../shopify.server';
+import prisma from '../db.server';
+import { saveSuggestionBlacklist } from '../services/suggestionBlacklist.server.js';
+import { SuggestionBlacklistValidationError } from '../utils/suggestionBlacklist.js';
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  return { rules: await prisma.searchSuggestionBlacklist.findMany({ where: { shop: session.shop }, orderBy: { createdAt: 'desc' } }) };
 };
-
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  try {
+    await saveSuggestionBlacklist(session.shop, await request.formData());
+    return { success: true };
+  } catch (error) {
+    if (error.code === 'P2002') return { error: 'This term and operator already exist. Edit the existing blacklist rule.' };
+    if (error.code === 'P2025') return { error: 'Blacklist rule not found.' };
+    return { error: error instanceof SuggestionBlacklistValidationError ? error.message : 'Could not save the blacklist rule. Please retry.' };
+  }
+};
+const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
+const buttonStyle = { padding: '8px 14px', borderRadius: 6, border: '1px solid #c9cccf', background: '#fff', cursor: 'pointer' };
 export default function SearchBlacklist() {
+  const { rules } = useLoaderData();
+  const fetcher = useFetcher();
   const navigate = useNavigate();
+  const [editing, setEditing] = useState(null);
+  const [term, setTerm] = useState('');
+  const [operator, setOperator] = useState('contains');
+  const [active, setActive] = useState(true);
+  const busy = fetcher.state !== 'idle';
+  const reset = () => { setEditing(null); setTerm(''); setOperator('contains'); setActive(true); };
+  useEffect(() => {
+    if (fetcher.state === 'idle' && fetcher.data?.success) {
+      setEditing(null); setTerm(''); setOperator('contains'); setActive(true);
+    }
+  }, [fetcher.state, fetcher.data]);
   return (
-    <s-page heading="Search Blacklist">
-      <ui-title-bar title="Search Blacklist">
-        <button variant="breadcrumb" onClick={() => navigate("/app/search")}>
-          Search
-        </button>
-      </ui-title-bar>
-      <s-box padding="base" background="subdued" borderRadius="base">
-        <s-text>This page will allow you to blacklist suggestions.</s-text>
-      </s-box>
+    <s-page heading="Blacklist Suggestions">
+      <ui-title-bar title="Blacklist Suggestions"><button variant="breadcrumb" onClick={() => navigate('/app/search')}>Search</button></ui-title-bar>
+      <div style={{ display: 'grid', gap: 20 }}>
+        <div style={{ background: '#fff', border: '1px solid #e1e3e5', borderRadius: 10, padding: 24 }}>
+          <h2 style={{ marginTop: 0 }}>{editing ? 'Edit blacklist rule' : 'Create blacklist rule'}</h2>
+          <p>Hide matching phrases from autocomplete suggestions. Matching ignores case and extra spaces. Product results stay available.</p>
+          {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
+          {fetcher.data?.success && <p role="status">Blacklist changes saved.</p>}
+          <fetcher.Form method="post" style={{ display: 'grid', gap: 16 }}>
+            <input type="hidden" name="intent" value={editing ? 'update' : 'create'} />
+            {editing && <input type="hidden" name="id" value={editing} />}
+            <label>Suggestion term<input name="term" value={term} onChange={e => setTerm(e.target.value)} required maxLength={200} placeholder="e.g. clearance" style={fieldStyle} /></label>
+            <label>Matching operator<select name="operator" value={operator} onChange={e => setOperator(e.target.value)} style={fieldStyle}><option value="contains">Contains</option><option value="exact">Exact match</option></select></label>
+            <span>Contains hides suggestions containing the phrase. Exact match hides only the complete phrase.</span>
+            <label><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Enabled</label>
+            <input type="hidden" name="isActive" value={String(active)} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button disabled={busy} type="submit" style={{ ...buttonStyle, background: '#5B21B6', color: '#fff' }}>{busy ? 'Saving...' : editing ? 'Update rule' : 'Create rule'}</button>
+              {editing && <button disabled={busy} type="button" onClick={reset} style={buttonStyle}>Cancel</button>}
+            </div>
+          </fetcher.Form>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e1e3e5', borderRadius: 10, padding: 24 }}>
+          <h2 style={{ marginTop: 0 }}>Blacklist rules</h2>
+          {!rules.length && <p>No blacklist rules yet. Create a rule above.</p>}
+          {rules.map(rule => (
+            <div key={rule.id} style={{ padding: '16px 0', borderTop: '1px solid #e1e3e5', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+              <div style={{ flex: '1 1 240px', minWidth: 0, overflowWrap: 'anywhere' }}>
+                <strong>{rule.term}</strong>
+                <div>{rule.operator === 'contains' ? 'Contains' : 'Exact match'}</div><div>{rule.isActive ? 'Enabled' : 'Disabled'}</div>
+              </div>
+              <button disabled={busy} style={buttonStyle} onClick={() => { setEditing(rule.id); setTerm(rule.term); setOperator(rule.operator); setActive(rule.isActive); }}>Edit</button>
+              <button disabled={busy} style={buttonStyle} onClick={() => fetcher.submit({ intent: 'toggle', id: rule.id, isActive: String(!rule.isActive) }, { method: 'post' })}>{rule.isActive ? 'Disable' : 'Enable'}</button>
+              <button disabled={busy} style={buttonStyle} onClick={() => { if (window.confirm('Delete this blacklist rule?')) fetcher.submit({ intent: 'delete', id: rule.id }, { method: 'post' }); }}>Delete</button>
+            </div>
+          ))}
+        </div>
+      </div>
     </s-page>
   );
 }
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
+export const headers = args => boundary.headers(args);

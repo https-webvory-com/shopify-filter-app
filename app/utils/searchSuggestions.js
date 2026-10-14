@@ -1,7 +1,9 @@
+import { filterBlacklistedSuggestions } from './suggestionBlacklist.js';
+
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const words = value => clean(value).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 
-export function buildSearchSuggestions(query, products = [], facets = [], limit = 6) {
+export function buildSearchSuggestions(query, products = [], facets = [], limit = 6, blacklist = []) {
   const tokens = words(query);
   if (!tokens.length) return [];
   const candidates = [];
@@ -23,9 +25,9 @@ export function buildSearchSuggestions(query, products = [], facets = [], limit 
   candidates.push(...facets);
   candidates.push(...fallback);
   const seen = new Set();
-  return candidates.map(clean).filter(value => {
+  return filterBlacklistedSuggestions(candidates.map(clean).filter(value => {
     const key = value.toLowerCase();
     if (!value || seen.has(key)) return false;
     seen.add(key); return true;
-  }).slice(0, limit);
+  }), blacklist).slice(0, limit);
 }

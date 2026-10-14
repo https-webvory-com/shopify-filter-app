@@ -319,6 +319,19 @@ model SearchRedirectQuery {
   @@index([redirectId])
 }
 
+model SearchSuggestionBlacklist {
+  id        String @id @default(cuid())
+  shop      String
+  term      String
+  operator  String
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, term, operator])
+  @@index([shop, isActive])
+}
+
 model Synonym {
   id        String   @id @default(uuid())
   shop      String
