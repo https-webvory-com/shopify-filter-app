@@ -141,7 +141,7 @@ const cards = [
     description:
       "Redirect specific search terms to custom pages or URLs automatically.",
     path: "/app/search/redirects",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

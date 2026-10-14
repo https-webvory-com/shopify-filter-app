@@ -326,3 +326,13 @@ Shopify:
 Internationalization:
 
 - [Internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+
+## Search page redirects
+
+Search > Page Redirects supports multiple queries per rule (one per line), a store-relative path or HTTPS destination, and create/edit/enable/disable/delete actions. Matching is exact after Unicode normalization, trimming, whitespace collapsing and lowercasing. Each query belongs to one rule per shop, including disabled rules. Conflicting edits roll back atomically. Search-page destinations and unsafe URL schemes are rejected.
+
+Redirects run on a submitted `/search?q=...` page, including locale-prefixed search paths, when the Collection Filter Pro search-page extension is installed. They do not navigate during autocomplete typing or affect collection browsing. The redirect lookup has a 1.5-second timeout and falls back to ordinary search on failure. Rules are read fresh rather than cached.
+
+Deploy the new `SearchRedirect` and `SearchRedirectQuery` tables with the backend, regenerate Prisma Client, and deploy the theme extension. This repository's existing container setup uses `prisma db push`; migration-based environments can apply `20261014000000_search_redirects`. A Shopify extension-only deployment does not deploy the editor, API or database schema.
+
+Run `npm run test:search-redirects` for unit, action/API and storefront fallback checks. Run `npm run test:search-redirects:browser` for real PostgreSQL persistence and browser checks. The latter requires PostgreSQL binaries (Windows default: `C:/Program Files/PostgreSQL/18/bin`; override with `POSTGRES_BIN`) and Chrome (`HEADLESS_CHROME_PATH` overrides its path). It creates a separate loopback-only database cluster under ignored `scratch`, applies the new migration, and stops the cluster afterward. Browser fixtures use the actual redirect editor, service, API and storefront code, with fixture Shopify authentication and catalog responses; they do not test live Shopify authentication or a deployed store.

@@ -296,6 +296,29 @@ model SyncJob {
   @@index([shop, status])
 }
 
+model SearchRedirect {
+  id        String @id @default(cuid())
+  shop      String
+  targetUrl String
+  isActive  Boolean @default(true)
+  queries   SearchRedirectQuery[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model SearchRedirectQuery {
+  id         String @id @default(cuid())
+  shop       String
+  query      String
+  redirectId String
+  redirect   SearchRedirect @relation(fields: [redirectId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, query])
+  @@index([redirectId])
+}
+
 model Synonym {
   id        String   @id @default(uuid())
   shop      String

@@ -76,6 +76,8 @@ try{
   await test('changing sort cancels pending polling and cannot overwrite the newer cached result',async()=>{
     await control({hold:true});await evaluate("document.querySelector('[data-value=\"price-ascending\"]').click()");
     await wait("document.querySelectorAll('.cfp-skeleton-card').length===8");
+    // Skeletons render before the asynchronous request reaches the server.
+    await wait("(async()=>{const data=await(await fetch('/__state')).json();return data.requestStarts.some(r=>r.sort==='price-ascending');})()");
     await evaluate("document.querySelector('[data-value=\"best-selling\"]').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     const before=(await(await fetch(origin+'/__state')).json()).requestStarts.filter(r=>r.sort==='price-ascending').length;

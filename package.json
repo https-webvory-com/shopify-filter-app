@@ -2,6 +2,8 @@
   "name": "collection-filter-pro",
   "private": true,
   "scripts": {
+    "test:search-redirects": "node --test tests/search/search-redirect.test.mjs",
+    "test:search-redirects:browser": "node tests/search-redirect/run.mjs",
     "build": "react-router build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
