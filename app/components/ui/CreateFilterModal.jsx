@@ -2,49 +2,7 @@ import React, { useState,useEffect } from "react";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
 
-const Tooltip = ({ content, children }) => {
-  const [show, setShow] = useState(false);
-  return (
-    <div 
-      style={{ position: "relative", display: "inline-flex" }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {children}
-      {show && (
-        <div style={{
-          position: "absolute",
-          bottom: "100%",
-          left: "50%",
-          transform: "translateX(-50%)",
-          marginBottom: "8px",
-          backgroundColor: "#313745",
-          color: "#fff",
-          padding: "12px",
-          borderRadius: "6px",
-          fontSize: "13px",
-          width: "280px",
-          zIndex: 100000,
-          whiteSpace: "pre-wrap",
-          lineHeight: "1.4",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-          textAlign: "left"
-        }}>
-          {content}
-          <div style={{
-            position: "absolute",
-            top: "100%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            borderWidth: "6px",
-            borderStyle: "solid",
-            borderColor: "#313745 transparent transparent transparent"
-          }} />
-        </div>
-      )}
-    </div>
-  );
-};
+import Tooltip from "./Tooltip";
 
 const TooltipIcon = ({ content }) => (
   <Tooltip content={content}>

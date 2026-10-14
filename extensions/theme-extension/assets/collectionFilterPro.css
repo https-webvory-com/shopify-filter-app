@@ -759,12 +759,13 @@ facet-filters-form,
 /* â”€â”€â”€ Button Boxes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cfp-button-grid {
   display: grid !important;
-  grid-template-columns: repeat(3, 1fr) !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)) !important;
+  grid-auto-rows: 1fr;
   gap: 8px !important;
 }
-.cfp-button-chip { position: relative; cursor: pointer; }
+.cfp-button-chip { position: relative; cursor: pointer; display: flex; min-width: 0; }
 .cfp-button-chip input[type="checkbox"] { position: absolute; opacity: 0; width: 0; height: 0; }
-.cfp-button-chip span {
+.cfp-button-chip > span {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -779,7 +780,7 @@ facet-filters-form,
   height: 40px !important;
   transition: all var(--cfp-transition) !important;
 }
-.cfp-button-chip:hover span {
+.cfp-button-chip:hover > span {
   border-color: #000000 !important;
   color: #000000 !important;
 }
@@ -1696,21 +1697,35 @@ facet-filters-form,
 }
 
 /* 3. Fix Button Chips Layout (prevent flex children from wrapping weirdly) */
-.cfp-button-chip span {
+.cfp-button-chip > span {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  padding: 0 10px !important;
+  padding: 6px 8px !important;
   border-radius: 2px !important;
   border: 1px solid #e1e3e5 !important;
   font-size: 13px !important;
   font-weight: 400 !important;
   color: #202223 !important;
   background: #ffffff !important;
-  height: 40px !important;
+  height: auto !important;
+  min-height: 40px;
+  flex: 1;
+  min-width: 0;
   text-align: center !important;
   box-sizing: border-box !important;
   line-height: 1.2 !important;
+}
+
+.cfp-button-chip .cfp-button-chip__text {
+  display: block;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cfp-button-chip .cfp-checkbox__count {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .cfp-button-chip input:checked ~ span {
@@ -1722,7 +1737,8 @@ facet-filters-form,
 
 .cfp-button-grid {
   display: grid !important;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)) !important;
+  grid-auto-rows: 1fr;
   gap: 10px !important;
 }
 

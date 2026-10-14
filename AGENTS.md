@@ -2,6 +2,7 @@
 
 ## Loading/cache completion review and price preservation - 2026-10-13
 
+- User explicitly requested saving this final state for recall in future sessions. Loading/cache work and the price-cap fix are ready for the user to commit/push after the completed checks below. Do not restart the implementation or repeat deployment claims from older historical entries; inspect current Git/runtime state first. This session made no commit, push or deployment for this final package.
 - User requested finishing the pending loading/cache work so they can push everything. Work remains LOCAL, UNCOMMITTED, UNPUSHED and UNDEPLOYED; this request does not authorize this agent to publish it.
 - Corrected deployment rollback cleanup: disable the EXIT rollback trap only AFTER both replacement app and worker pass startup checks. A final image-pruning failure now reports cleanup failure without reverting a healthy release. Startup failures still attempt restoration of the previous app/worker image IDs and preserve the deployment failure status. A Bash regression covers post-startup cleanup failure.
 - Restored getCacheStats size/keys/ttlSec diagnostics using SCAN with deduplication; the unrelated TTL-only diagnostic reduction was removed. Added a regression for the retained response shape.

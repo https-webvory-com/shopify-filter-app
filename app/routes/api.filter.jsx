@@ -637,7 +637,10 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 8.5 Build targeted facets list ────
-    const neededFacetKeys = ["vendor", "productType"];
+    // Always request catalog-wide price statistics. Without this facet an
+    // unfiltered slider falls back to prices from just the current page,
+    // then jumps to different bounds when the disjunctive price query runs.
+    const neededFacetKeys = ["vendor", "productType", "priceMin"];
     if (activeGroupFilters && Array.isArray(activeGroupFilters)) {
       for (const f of activeGroupFilters) {
         if (!f.isEnabled) continue;

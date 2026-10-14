@@ -3,24 +3,12 @@ import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
-const TooltipIcon = ({ text }) => {
-  const [show, setShow] = useState(false);
-  return (
-    <div 
-      style={{ position: "relative", display: "inline-flex", alignItems: "center", marginLeft: "6px", cursor: "help" }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", fontWeight: "bold" }}>?</div>
-      {show && text && (
-        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)", background: "#333e54", color: "#e2e8f0", padding: "12px 16px", borderRadius: "6px", fontSize: "13px", width: "max-content", maxWidth: "250px", zIndex: 100, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", textAlign: "left", lineHeight: "1.5", whiteSpace: "normal", fontWeight: "normal", letterSpacing: "normal" }}>
-          {text}
-          <div style={{ position: "absolute", bottom: "-4px", left: "50%", transform: "translateX(-50%) rotate(45deg)", width: "8px", height: "8px", background: "#333e54" }}></div>
-        </div>
-      )}
-    </div>
-  );
-};
+import Tooltip from "../ui/Tooltip";
+const TooltipIcon = ({ text }) => (
+  <Tooltip content={text}>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "6px", cursor: "help", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", fontWeight: "bold" }}>?</span>
+  </Tooltip>
+);
 
 export default function CreateRuleModal({ 
   isOpen, onClose, ruleToEdit = null, shopifyCollections = [], shopifyVendors = [], shopifyOptions = {},
@@ -42,7 +30,7 @@ export default function CreateRuleModal({
   const [startDate, setStartDate] = useState(todayDate());
   const [endDate, setEndDate] = useState(todayDate());
 
-  const [showRulesTooltip, setShowRulesTooltip] = useState(false);
+
   const [openActionDropdownIndex, setOpenActionDropdownIndex] = useState(null);
   const [openFieldDropdownIndex, setOpenFieldDropdownIndex] = useState(null);
   const [fieldSearch, setFieldSearch] = useState("");
@@ -479,18 +467,7 @@ export default function CreateRuleModal({
           {/* Rules section */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <div style={{ position: "relative", display: "inline-block" }}>
-                <label 
-                  style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "#64748b", marginBottom: "0" }}
-                  onMouseEnter={() => setShowRulesTooltip(true)}
-                  onMouseLeave={() => setShowRulesTooltip(false)}
-                >
-                  Rules <TooltipIcon />
-                </label>
-              
-              {/* Rules Tooltip */}
-              {showRulesTooltip && (
-                <div style={{ position: "absolute", top: "100%", left: 0, background: "#333e54", color: "#e2e8f0", padding: "16px", borderRadius: "8px", fontSize: "12px", width: "350px", zIndex: 50, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}>
+              <Tooltip width={350} content={<>
                   <div style={{ marginBottom: "12px" }}>The merchandising rules.</div>
                   <div style={{ display: "grid", gap: "4px" }}>
                     <div><strong style={{ color: "#fff" }}>Boost:</strong> Boost the matching products.</div>
@@ -502,12 +479,12 @@ export default function CreateRuleModal({
                   <div style={{ marginTop: "12px" }}>
                     <strong style={{ color: "#fff" }}>Dynamic:</strong> Use this advanced rule to set the score for the matching products.
                   </div>
-                  {/* Tooltip arrow */}
-                  <div style={{ position: "absolute", top: "-6px", left: "20px", width: "12px", height: "12px", background: "#333e54", transform: "rotate(45deg)" }}></div>
-                </div>
-              )}
-            </div>
-              
+              </>}>
+                <span style={{ display: "flex", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
+                  Rules <TooltipIcon />
+                </span>
+              </Tooltip>
+
               <button 
                 onClick={addRuleRule}
                 style={{ background: "#5B21B6", color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", transition: "all 0.2s" }}
