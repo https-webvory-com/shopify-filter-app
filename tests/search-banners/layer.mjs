@@ -1,0 +1,14 @@
+import { load, shop, form } from '../search-redirect/layer.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { PrismaClient } from '../../scratch/banner-prisma/index.js';
+import * as helpers from '../../app/utils/searchBanner.js';
+import { normalizeRedirectQuery } from '../../app/utils/searchRedirect.js';
+const config=JSON.parse(await fs.readFile('scratch/redirect-db.json','utf8'));
+if(new URL(config.url).hostname!=='127.0.0.1'||Number(new URL(config.url).port)!==config.port||!path.resolve(config.directory).startsWith(path.resolve('scratch')+path.sep))throw Error('Banner tests require the isolated local database');
+export const db=new PrismaClient({datasources:{db:{url:config.url}}});
+export { shop, form };
+export const service = await load('app/services/searchBanner.server.js', {'../db.server':{__esModule:true,default:db},'../utils/searchBanner.js':helpers,'../utils/searchRedirect.js':{normalizeRedirectQuery}});
+export const admin = await load('app/routes/app.search.banners.jsx', {'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{boundary:{}},'../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},'../db.server':{__esModule:true,default:db},'../services/searchBanner.server.js':service,'../utils/searchBanner.js':helpers});
+export const state = { fail: false, requests: 0 };
+export const api = await load('app/routes/api.search-banners.jsx', {'react-router':{data:(v,i)=>Response.json(v,i)},'../services/searchBanner.server.js':{getSearchBanners:async(...args)=>{state.requests++;if(state.fail)throw Error('Fixture lookup failure');return service.getSearchBanners(...args);}},'../services/rateLimiter.server':{rateLimit:async()=>true}});

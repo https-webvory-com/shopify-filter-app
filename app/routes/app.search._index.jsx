@@ -116,7 +116,7 @@ const cards = [
     description:
       "Display promotional banners on specific search query result pages.",
     path: "/app/search/banners",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

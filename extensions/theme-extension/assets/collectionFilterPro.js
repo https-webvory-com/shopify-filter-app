@@ -749,6 +749,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const resetBtn = document.getElementById('cfp-reset-inline');
       if (resetBtn) resetBtn.addEventListener('click', clearAllFilters);
       renderPagination(grid, totalCount);
+      if (templateName === 'search') {
+        grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
+        document.dispatchEvent(new Event('cfp:search-products-rendered'));
+      }
       return;
     }
 
@@ -1238,6 +1242,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
     renderPagination(grid, totalCount);
+    if (templateName === 'search') {
+      if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
+      document.dispatchEvent(new Event('cfp:search-products-rendered'));
+    }
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);
       updateMarketCardPrice(card, product);

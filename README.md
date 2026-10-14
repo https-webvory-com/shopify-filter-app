@@ -1,5 +1,19 @@
 # Shopify App Template - React Router
 
+## Search banners
+
+Search > Banners creates promotions for exact search queries (case, Unicode width and extra whitespace are normalized). Choose Top or Product grid, an HTTPS image URL, an optional store-relative/HTTPS link, alternative text, heading/content/button label and colors. Grid banners can use text without an image. Upload images separately through Shopify Content / Files and paste their image URLs. In-app file upload is not included.
+
+Position 1 inserts a grid promotion before product 1. A banner beyond the result count stays hidden; banners do not replace products or change counts, ranking, facets or pagination. One banner is allowed per query/placement/position, including disabled campaigns. Edit, enable/disable and delete are shop-scoped. Top banners require an image. Empty searches do not trigger promotions; autocomplete and collection pages are unchanged.
+
+Both our search grid and native Dawn-style `main #product-grid` can display promotions. Native later-page offsets are derived from a first-page theme HTML request. If the theme cannot supply a usable grid/page size, uncertain grid banners stay hidden; top campaigns and products stay available. API errors/timeouts and broken images do not block search. Other theme selectors and live SoBooster behavioral parity remain unverified.
+
+Deploy the backend, generate Prisma and apply `20261014020000_search_banners` (or the existing deployment schema setup), then deploy the Shopify extension containing `searchBanners.js/css` and its Liquid includes. No live deployment was performed during implementation.
+
+Validation: `npm run test:search-banners`, `npm run test:search-banners:database`, and `npm run test:search-banners:browser`. Database/browser runners generate a separate fixture Prisma client and start a fresh loopback-only PostgreSQL cluster under `scratch`, apply the real migrations, and stop the cluster afterward. `POSTGRES_BIN` and `HEADLESS_CHROME_PATH` override tool locations. Browser tests use real editor/service/API/banner assets with fixture Shopify authentication/catalog grids. Reports are ignored under `scratch/banner-headless-results.json`.
+
+For connected-browser fallback, run `node tests/search-banners/prepare-client.mjs`, `node tests/search-redirect/start-postgres.mjs`, and `node tests/search-banners/serve-fixture.mjs`. Open the printed origin's `/test-runner` in an isolated browser context and run `window.runBannerChecks()`. Create `scratch/banner-fixture-stop-<pid>` using the PID in `scratch/banner-fixture.json` to stop the server, then run `node tests/search-redirect/stop-postgres.mjs`.
+
 ## Semantic search providers
 
 OpenAI is the default semantic search provider. Set `OPENAI_API_KEY` in the server environment; do not commit keys. It uses `text-embedding-3-small` with 768 dimensions and a 50/50 keyword/semantic blend. No Gemini key is needed.

@@ -2,6 +2,9 @@
   "name": "collection-filter-pro",
   "private": true,
   "scripts": {
+    "test:search-banners": "node --test tests/search/search-banner.test.mjs",
+    "test:search-banners:database": "node tests/search-banners/run-database.mjs",
+    "test:search-banners:browser": "node tests/search-banners/run-database.mjs --browser",
     "test:suggestion-blacklist": "node --test tests/search/suggestion-blacklist.test.mjs",
     "test:suggestion-blacklist:browser": "node tests/suggestion-blacklist/run.mjs",
     "test:search-redirects": "node --test tests/search/search-redirect.test.mjs",

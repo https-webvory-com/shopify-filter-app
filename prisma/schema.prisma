@@ -332,6 +332,28 @@ model SearchSuggestionBlacklist {
   @@index([shop, isActive])
 }
 
+model SearchBanner {
+  id              String   @id @default(cuid())
+  shop            String
+  query           String
+  placement       String
+  position        Int      @default(1)
+  imageUrl        String   @default("")
+  targetUrl       String   @default("")
+  description     String   @default("")
+  heading         String   @default("")
+  content         String   @default("")
+  buttonLabel     String   @default("")
+  backgroundColor String   @default("#f4f4f5")
+  textColor       String   @default("#18181b")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, query, placement, position])
+  @@index([shop, query, isActive])
+}
+
 model Synonym {
   id        String   @id @default(uuid())
   shop      String

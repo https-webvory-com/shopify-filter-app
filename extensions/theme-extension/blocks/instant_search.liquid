@@ -10,6 +10,10 @@
 </script>
 <script src="{{ 'marketPricing.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'instantSearch.js' | asset_url }}" defer="defer"></script>
+{% if template.name == 'search' %}
+  {{ 'searchBanners.css' | asset_url | stylesheet_tag }}
+  <script src="{{ 'searchBanners.js' | asset_url }}" defer="defer"></script>
+{% endif %}
 {{ 'instantSearch.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'quickViewAdapters.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'quickView.js' | asset_url }}" defer="defer"></script>
