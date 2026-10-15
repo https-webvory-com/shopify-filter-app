@@ -323,9 +323,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
-      if (response.headers?.get('content-type')?.includes('application/x-ndjson')) {
-        return { status: response.status, json: onProducts => readCollectionStream(response, signal, onProducts) };
-      }
       const payload = await response.json();
       if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
           !['pending', 'failed'].includes(payload?.debug?.collectionRankingStatus)) {
@@ -335,69 +332,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
-    }
-  }
-  async function readCollectionStream(response, signal, onProducts) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8', { fatal: true });
-    let buffer = '', products = null, complete = false, failure;
-    const cancel = error => { failure = error; reader.cancel().catch(() => {}); };
-    const abort = () => cancel(new DOMException('Aborted', 'AbortError'));
-    const timer = setTimeout(() => cancel(new Error('Product response timed out. Please retry.')), 30000);
-    signal.addEventListener('abort', abort, { once: true });
-    if (signal.aborted) abort();
-    function unpack(product) {
-      if (!product || typeof product !== 'object' || !Object.hasOwn(product, '__cfpVariantsV1')) return product;
-      const { __cfpVariantsV1: packed, ...rest } = product;
-      const keys = packed?.keys, rows = packed?.rows;
-      if (Object.hasOwn(product, 'variants') || !Array.isArray(keys) || keys.length > 30 || new Set(keys).size !== keys.length || keys.some(k => typeof k !== 'string') || !Array.isArray(rows)) throw Error('Invalid variant response. Please retry.');
-      rest.variants = rows.map(row => {
-        if (!Array.isArray(row) || !Number.isInteger(row[0]) || row[0] < 0 || row[0] >= 2 ** keys.length) throw Error('Invalid variant response. Please retry.');
-        let index = 1; const entries = [];
-        keys.forEach((key, bit) => { if (Math.floor(row[0] / 2 ** bit) % 2) entries.push([key, row[index++]]); });
-        if (index !== row.length) throw Error('Invalid variant response. Please retry.');
-        return Object.fromEntries(entries);
-      });
-      return rest;
-    }
-    async function record(line) {
-      if (failure) throw failure;
-      const value = JSON.parse(line);
-      if (complete || !value?.data || typeof value.data !== 'object' || Array.isArray(value.data)) throw Error('Invalid collection response. Please retry.');
-      if (value.type === 'products' && !products) {
-        if (!Array.isArray(value.data.products) || value.data.products.some(product => !product || typeof product !== 'object' || Array.isArray(product)) ||
-            !Number.isInteger(value.data.totalCount) || value.data.totalCount < 0) throw Error('Invalid product response. Please retry.');
-        products = { ...value.data, products: value.data.products.map(unpack) };
-        if (onProducts) await onProducts(products);
-        // Let the browser paint the cards before parsing the filter frame.
-        await new Promise(resolve => setTimeout(resolve, 0));
-      } else if (value.type === 'complete' && products) {
-        if (!Array.isArray(value.data.settings) || !value.data.facets || typeof value.data.facets !== 'object' || Array.isArray(value.data.facets)) throw Error('Invalid filter response. Please retry.');
-        if (Object.keys(value.data).some(key => Object.hasOwn(products, key))) throw Error('Invalid collection response. Please retry.');
-        products = { ...products, ...value.data }; complete = true;
-      } else throw Error('Invalid collection response. Please retry.');
-    }
-    try {
-      while (true) {
-        if (failure) throw failure;
-        const { value, done } = await reader.read();
-        if (failure) throw failure;
-        buffer += decoder.decode(value, { stream: !done });
-        if (buffer.length > 64 * 1024 * 1024) throw Error('Collection response is too large.');
-        let boundary;
-        while ((boundary = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 1);
-          if (line.trim()) await record(line);
-        }
-        if (done) break;
-      }
-      if (buffer.trim()) await record(buffer);
-      if (failure) throw failure;
-      if (!complete) throw Error('Incomplete collection response. Please retry.');
-      return products;
-    } finally {
-      clearTimeout(timer); signal.removeEventListener('abort', abort);
-      try { await reader.cancel(); } catch {} reader.releaseLock();
     }
   }
   async function takeEarlyCollectionResponse(requestUrl, signal) {
@@ -417,10 +351,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (!result) return null;
       if (result.status >= 400 && result.status !== 409 && !['pending','failed'].includes(result.payload?.debug?.collectionBestSellingStatus) &&
           !['pending','failed'].includes(result.payload?.debug?.collectionRankingStatus)) throw Error(result.payload?.error || 'Products are temporarily unavailable. Please retry.');
-      return { status: result.status, json: onProducts => result.response ? readCollectionStream(result.response, signal, onProducts) : Promise.resolve(result.payload) };
+      return { status: result.status, json: async () => result.payload };
     } finally { signal.removeEventListener('abort', onAbort); }
   }
-  async function waitForCollectionOrder(data, requestUrl, signal, onProducts) {
+  async function waitForCollectionOrder(data, requestUrl, signal) {
     const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus) ||
       ['pending', 'failed'].includes(value.debug?.collectionRankingStatus);
     for (let attempt = 0; attempt < 30 && unresolved(data); attempt++) {
@@ -439,7 +373,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       });
       const response = await fetchCollectionResponse(requestUrl, signal);
       if (response.status === 409) throw Object.assign(new Error('Collection ranking session expired'), { collectionSessionExpired: true });
-      data = await response.json(onProducts);
+      data = await response.json();
     }
     if (unresolved(data)) throw new Error('Product order is temporarily unavailable. Please retry.');
     if (data.crash || data.error) throw new Error(data.error || 'Products are temporarily unavailable. Please retry.');
@@ -447,7 +381,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     return data;
   }
 
-  async function fetchAndRenderData(isLoadMore = false, allowSessionRestart = true, allowProgressive = true) {
+  async function fetchAndRenderData(isLoadMore = false, allowSessionRestart = true) {
     syncSortControls();
     if (activeFetchController) {
       activeFetchController.abort();
@@ -457,7 +391,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     let loadingNoticeTimer;
     let loadingNotice;
     let rankingKey;
-    let earlyProductsRendered = false;
 
     syncStateToURL(); // Sync URL
 
@@ -523,11 +456,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
-      const transportKeys = ['locale','shop','country','collectionHandle','collectionId','sortBy','page','limit'];
-      if (allowProgressive && templateName !== 'search' && activeFilters.sortBy !== 'manual' &&
-          [...queryParams.keys()].every(key => transportKeys.includes(key))) queryParams.set('responseMode', 'stream-v1');
       const rankingKeyParams = new URLSearchParams(queryParams);
-      rankingKeyParams.delete('responseMode');
       rankingKeyParams.delete('page');
       rankingKeyParams.sort();
       rankingKey = rankingKeyParams.toString();
@@ -552,20 +481,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           getProductContainer().prepend(loadingNotice);
         }, 4000);
         let data = null;
-        const onProducts = async frame => {
-          if (fetchSignal.aborted) throw new DOMException('Aborted', 'AbortError');
-          if (frame.globalSettings) {
-            globalSettings = frame.globalSettings; window.cfpGlobalSettings = globalSettings;
-            window.cfpQuickViewInstance?.configure(globalSettings); applyGlobalSettings(globalSettings);
-          }
-          if (frame.rankingToken) {
-            collectionRankingTokens.set(rankingKey, frame.rankingToken);
-            const readyUrl = new URL(window.location.href); readyUrl.searchParams.set('rankingToken', frame.rankingToken);
-            window.history.replaceState(null, '', readyUrl.pathname + readyUrl.search);
-          }
-          await renderProducts(frame.products, frame.totalCount, isLoadMore, frame.mergedValues, frame.contextualPricingApplied);
-          earlyProductsRendered = true; clearTimeout(loadingNoticeTimer); loadingNotice?.remove();
-        };
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
         if (window._cfpEarlyFetch && templateName !== 'search' && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
@@ -584,10 +499,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             activeFilters.page = 1;
             return fetchAndRenderData(false, false);
           }
-          data = await response.json(onProducts);
+          data = await response.json();
         }
 
-      data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal, onProducts);
+      data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
@@ -599,7 +514,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       sidebar.classList.remove('cfp-loading');
 
-      if (data.globalSettings && !earlyProductsRendered) {
+      if (data.globalSettings) {
         globalSettings = data.globalSettings;
         window.cfpGlobalSettings = globalSettings;
         window.cfpQuickViewInstance?.configure(globalSettings);
@@ -626,7 +541,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
          if (dymContainer) dymContainer.style.display = "none";
       }
 
-      if (data.products && !earlyProductsRendered) {
+      if (data.products) {
         renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied);
       }
       if (data.settings && data.facets) {
@@ -649,18 +564,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
       const container = getProductContainer();
-      if (!isLoadMore && !earlyProductsRendered) container.replaceChildren();
+      if (!isLoadMore) container.replaceChildren();
       const error = document.createElement('div');
-      error.className = earlyProductsRendered ? 'cfp-filter-error' : 'cfp-order-error';
+      error.className = 'cfp-order-error';
       error.setAttribute('role', 'status');
       const message = document.createElement('p');
-      message.textContent = earlyProductsRendered ? 'Filters could not finish loading. Please retry.' : 'Products are temporarily unavailable. Please retry.';
+      message.textContent = 'Products are temporarily unavailable. Please retry.';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = 'Retry';
-      retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore, true, false); });
+      retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
-      (earlyProductsRendered ? sidebar.querySelector('.cfp-sidebar__body') || sidebar : container).appendChild(error);
+      container.appendChild(error);
     } finally {
       clearTimeout(loadingNoticeTimer);
       loadingNotice?.remove();

@@ -5,7 +5,6 @@ const lifetimeSeconds = 3600;
 export function collectionRankingFingerprint(requestUrl) {
   const url = new URL(requestUrl);
   url.searchParams.delete('page');
-  url.searchParams.delete('responseMode');
   url.searchParams.delete('rankingToken');
   url.searchParams.sort();
   return createHash('sha256').update(url.pathname + '?' + url.searchParams.toString()).digest('hex');

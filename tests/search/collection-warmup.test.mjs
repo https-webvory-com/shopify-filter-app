@@ -64,14 +64,6 @@ test('a warmup cannot register another shop request under this shop',async()=>{
   assert.equal(f.writes.length,0);
 });
 
-test('public streamed visits register the same JSON warmup without persisting the transport flag',async()=>{
-  const f=await fixture();
-  await f.registerCollectionWarmup('fixture.myshopify.com','https://fixture/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&page=1&responseMode=stream-v1');
-  const record=JSON.parse(f.writes[0][3]);
-  assert.equal(new URL(record.url).searchParams.has('responseMode'),false);
-  assert.equal(new URL(record.url).searchParams.get('page'),'1');
-});
-
 test('corrupt or private warmup records do not stop valid matching collection warmups',async()=>{
   const f=await fixture();const url='https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&page=1';
   f.records.push('{bad',JSON.stringify({url:'invalid',collectionId:'1'}),JSON.stringify({url:url+'&customer_tags=VIP',collectionId:'1'}),JSON.stringify({url,collectionId:'2'}),JSON.stringify({url,collectionId:'1'}));

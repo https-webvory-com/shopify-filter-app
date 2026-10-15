@@ -1,4 +1,3 @@
-import * as collectionTransport from '../../../app/utils/collectionTransport.server.js';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
@@ -8,7 +7,6 @@ import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, console, testParsedQuery: mocks.testParsedQuery || null, require: name => {
-    if(name==='../utils/collectionTransport.server.js')return collectionTransport;
     if (!(name in mocks)) throw Error('Unexpected import ' + name);
     const value = mocks[name];
     return value && 'default' in value ? { __esModule: true, ...value } : value;
