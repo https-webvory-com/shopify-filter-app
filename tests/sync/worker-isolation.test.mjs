@@ -31,19 +31,20 @@ test("local development retains its combined worker mode",async()=>{
   const calls=await redisRole(undefined);assert.ok(calls.some(([name])=>name==="sync"));assert.ok(calls.some(([name])=>name==="keys"));
 });
 
-async function runner({failReady=false,missingWorkers=false}={}) {
-  const files=new Map(),calls=[],signals={};
+async function runner({failReady=false,missingWorkers=false,warmup=async()=>{}}={}) {
+  const files=new Map(),calls=[],signals={},timers=[];
   const worker=name=>({waitUntilReady:async()=>{calls.push("ready:"+name);if(failReady)throw Error("Redis unavailable");},close:async()=>calls.push("close:"+name)});
   const ctx={global:{},console:{log(){},error(){}},process:{env:{CFP_WORKER_MODE:"web"},pid:42,
     once:(signal,callback)=>{signals[signal]=callback;},exit:code=>calls.push("exit:"+code)},
     fs:{rmSync:path=>files.delete(path),writeFileSync:(path,value)=>files.set(path,value)},delay:async()=>{},
-    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");}},
+    setInterval:(callback,ms)=>{const timer={callback,ms,stopped:false,unref(){}};timers.push(timer);return timer;},clearInterval:timer=>{timer.stopped=true;},
+    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__schedulePublicCollectionWarmups=warmup;}},
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
     .replace('await import("../build/server/index.js")','await loadBundle()');
   await vm.runInNewContext("(async()=>{\n"+source+"\n})()",ctx);
-  return {files,calls,signals};
+  return {files,calls,signals,timers};
 }
 test("worker readiness is published only after all Redis workers are ready",async()=>{
   const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking"]);
@@ -58,4 +59,19 @@ test("worker shutdown closes processors and removes readiness without touching w
   const f=await runner();await f.signals.SIGTERM();assert.equal(f.files.size,0);
   assert.ok(f.calls.includes("close:sync"));assert.ok(f.calls.includes("close:webhooks"));assert.equal(f.calls.at(-1),"exit:0");
   assert.ok(f.calls.includes('close:ranking'));
+  assert.equal(f.timers[0].stopped,true);
+});
+
+test('worker warms on startup and periodically without overlapping slow ticks or running after shutdown',async()=>{
+  let count=0,finish;const f=await runner({warmup:async()=>{count++;await new Promise(resolve=>finish=resolve);}});
+  assert.equal(count,1);assert.equal(f.timers[0].ms,240000);await f.timers[0].callback();assert.equal(count,1);
+  finish();await new Promise(resolve=>setImmediate(resolve));
+  const next=f.timers[0].callback();assert.equal(count,2);finish();await next;
+  await f.signals.SIGTERM();await f.timers[0].callback();assert.equal(count,2);
+});
+
+test('warmup scheduler failures do not make healthy workers unready',async()=>{
+  const f=await runner({warmup:async()=>{throw Error('Registry unavailable');}});
+  assert.equal(f.files.size,1);assert.ok(!f.calls.includes('exit:1'));
+  await f.timers[0].callback();assert.equal(f.files.size,1);
 });

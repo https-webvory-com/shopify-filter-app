@@ -36,7 +36,7 @@ try{
   const wait=async(expression,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){if(await evaluate(expression))return;await delay(100);}throw Error('Timed out: '+expression);};
   const cards=()=>evaluate(`[...document.querySelectorAll('.cfp-product-card--reveal')].map(c=>c.querySelector('a').getAttribute('href').match(/dress-(\\d+)/)[1])`);
   const navigate=async(query='')=>{await send('Page.navigate',{url:origin+'/collections/fixture'+query});await wait('window._cfpInitStarted===true');};
-  const test=async(name,fn)=>{try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name);}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
+  const test=async(name,fn)=>{if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
@@ -162,7 +162,25 @@ try{
     const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,1);assert.deepEqual(data.queueFailures,[]);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {variantRuleAcrossBatches:true,firstProducts:(await cards()).slice(0,2)};
   });
-  await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Local unmodified storefront assets and API loader; fixture catalog/index/session data; no live cache/queue keys or settings changed and no push',results},null,2));
+  await test('early first-page request overlaps deferred asset loading without duplicate requests',async()=>{
+    await control({reset:true,delay:10,clockOffset:0,early:false,assetDelay:0,apiDelay:0});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    await control({assetDelay:1000,apiDelay:700,early:false});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const before=await evaluate('cardSnapshots[0].at');const beforeIds=await cards();const stateBefore=await(await fetch(origin+'/__state')).json();
+    await control({early:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const after=await evaluate('cardSnapshots[0].at');const stateAfter=await(await fetch(origin+'/__state')).json();
+    assert.equal(stateAfter.requests.length-stateBefore.requests.length,1);assert.deepEqual(await cards(),beforeIds);assert.equal(stateAfter.state.builds,1);assert.ok(after<before-400,`Early request did not overlap latency: ${before} -> ${after}`);
+    // Remote Redis tests include cross-region round trips from this workstation.
+    // Record that end-to-end latency; only the controlled local fixture checks 2s.
+    if(!redisLayer)assert.ok(after<2000,`Local fixture exceeded two-second target: ${after}`);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {baselineCardsMs:Math.round(before),earlyCardsMs:Math.round(after),savedMs:Math.round(before-after),fixtureAssetDelayMs:1000,fixtureApiDelayMs:700,twoSecondTargetMet:after<2000,liveTiming:false};
+  });
+  await test('new visitor after eleven minutes receives last-good ranking while refresh waits',async()=>{
+    const before=await(await fetch(origin+'/__state')).json();await control({clockOffset:660000,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
+    assert.equal(requests.length,1);assert.equal(requests[0].status,200);assert.equal(after.state.builds,before.state.builds);if(!redisLayer)assert.ok(await evaluate('cardSnapshots[0].at<2000'));assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),simulatedIdleMs:660000,refreshWorkerPaused:true,liveTiming:false};
+  });
+  await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){
   const diagnostic=await(await fetch(origin+'/__state')).json().catch(()=>null);

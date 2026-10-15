@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import {fork} from 'node:child_process';
 import {createRedisTestLayer} from './redis-layer.mjs';
 import {createShopCacheInvalidation,configurationRevisionKey,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
-import {createCollectionPreparation,preparationKey} from '../../app/utils/collectionPreparation.js';
+import {createCollectionPreparation,preparationKey,publicRetentionKey,publicPreparationLimit} from '../../app/utils/collectionPreparation.js';
 
 const layer=await createRedisTestLayer({workerOptions:{lockDuration:3000,stalledInterval:1000}});
 const shop='redis-regression.myshopify.com';
@@ -52,7 +52,7 @@ try{
 
   await layer.reset();
   let builds=0;
-  const stableSpec={...spec,revision:'0',query:{filter:["shop = 'redis-regression.myshopify.com'"]}};
+  const stableSpec={...spec,revision:'0',retainForIdle:true,query:{filter:["shop = 'redis-regression.myshopify.com'"]}};
   const live=createCollectionPreparation({redis:layer.redis,queue:layer.queue,prepare:async()=>{builds++;return {ids:['1','2'],metadata:{}};}});
   layer.setHandler(job=>live.process(job.data));
   const requests=await Promise.all(Array.from({length:40},()=>live.get(stableSpec)));
@@ -60,6 +60,34 @@ try{
   const counts=await layer.queue.getJobCounts('prioritized');assert.equal(counts.prioritized,1);
   layer.worker.resume();await wait(async()=>!!await layer.redis.get(preparationKey(stableSpec)));await layer.worker.pause();assert.equal(builds,1);
   results.push({name:'40 concurrent cold visitors deduplicate to one real queued build',passed:true});
+
+  await wait(async()=>!(await layer.queue.getJobCounts('active')).active);await layer.queue.drain(true);
+  let clock=Date.now()+660000;
+  const retained=createCollectionPreparation({redis:layer.redis,queue:layer.queue,now:()=>clock,prepare:async()=>{builds++;return {ids:['1','2'],metadata:{}};}});
+  assert.ok(await layer.redis.ttl(preparationKey(stableSpec))>85000);
+  assert.equal((await retained.get(stableSpec)).status,'ready');assert.equal(builds,1);
+  const refreshJobs=await layer.queue.getJobs(['prioritized']);assert.equal(refreshJobs.length,1);assert.equal(refreshJobs[0].opts.priority,10);
+  layer.setHandler(job=>retained.process(job.data));layer.worker.resume();await wait(()=>builds===2);await wait(async()=>!(await layer.queue.getJobCounts('active')).active);await layer.worker.pause();
+  assert.equal(JSON.parse(await layer.redis.get(preparationKey(stableSpec))).preparedAt,clock);
+  results.push({name:'Real Redis retains day-long ranking through eleven-minute idle and refreshes with one low-priority job',passed:true});
+
+  await layer.redis.incr(productRevisionKey(shop,'1'));clock+=660000;
+  assert.equal((await retained.get(stableSpec)).status,'pending');
+  const changed=await layer.queue.getJobs(['prioritized']);assert.equal(changed.length,1);assert.equal(changed[0].opts.priority,1);
+  layer.worker.resume();await wait(()=>builds===3);await wait(async()=>!(await layer.queue.getJobCounts('active')).active);await layer.worker.pause();
+  assert.equal((await retained.get(stableSpec)).status,'ready');
+  results.push({name:'Known product changes older than freshness window require a fresh ranking despite day-long idle retention',passed:true});
+
+  const budget=layer.physical(publicRetentionKey(shop));const unrelated=layer.physical('collectionRankingSession:'+shop+':protected');
+  await layer.client.set(unrelated,'keep');await layer.client.zadd(budget,0,unrelated);
+  for(let i=0;i<=publicPreparationLimit;i++){
+    clock++;
+    const different={...stableSpec,orderRevision:'budget-'+i};await retained.process({key:preparationKey(different),spec:different});
+  }
+  assert.equal(await layer.client.zcard(budget),publicPreparationLimit);assert.equal(await layer.client.get(unrelated),'keep');
+  assert.equal(await layer.redis.get(preparationKey({...stableSpec,orderRevision:'budget-0'})),null);
+  assert.ok(await layer.redis.get(preparationKey({...stableSpec,orderRevision:'budget-'+publicPreparationLimit})));
+  results.push({name:'Atomic retention cap bounds public order versions and cannot delete an injected protected session key',passed:true});
 
   await layer.redis.del(preparationKey(stableSpec));await layer.queue.drain(true);
   let attempts=0;

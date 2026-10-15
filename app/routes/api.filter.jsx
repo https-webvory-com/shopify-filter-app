@@ -708,8 +708,8 @@ export const loader = async ({ request, context }) => {
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
     if (useRankedCollectionPagination && !context?.rankingWarmup) {
-      try { await registerCollectionWarmup(shop, request.url, resolvedCollectionId); }
-      catch (error) { console.error('CFP: Could not register collection warmup:', error.name); }
+      registerCollectionWarmup(shop, request.url, resolvedCollectionId)
+        .catch(error => console.error('CFP: Could not register collection warmup:', error.name));
     }
     let meiliRes = { hits: [], estimatedTotalHits: 0 };
     let facetDistribution = {};
@@ -792,6 +792,7 @@ export const loader = async ({ request, context }) => {
           if (!rankingSession) {
             preparedSpec = {
               shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
+              retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
               query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
               pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
               orderRevision: collectionBestSellingState.revision ?? null,

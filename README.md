@@ -1,5 +1,15 @@
 # Shopify App Template - React Router
 
+## Collection first-visit loading
+
+Public collection rankings retain their last usable sequence through idle periods (up to one day, capped at 40 versions per shop). The dedicated worker discovers existing public warmup registries on startup and refreshes recent public collection contexts every four minutes. Configuration revisions still invalidate immediately. Filtered/customer-specific preparations keep their ten-minute retention; known product changes older than the existing freshness window require a rebuilt ranking. Existing tokens retain their own order. No Meilisearch index setting, product sort/comparator, pinning, price, or facet contract changes are required.
+
+The collection request can start from the inline Liquid script while deferred assets load. The consumer reuses it only when the full normalized request URL matches (shop, collection, market, customer, sort, filters and pagination). Mismatches/changes abort it and use the normal request. Search pages retain the published first-load fix and never consume this collection prefetch. Background registry bookkeeping no longer blocks the product response.
+
+This is not a guaranteed two-second load for a never-built collection, a new filter/market context, a required configuration/product rebuild, or an unavailable worker. Before this change, a measured Dress Outlet Formal Dresses reload showed cards at 5,008 ms and its API started at 2,182 ms; the decoded response was about 871 KB. Controlled local browser checks improved request overlap from 1,884 to 1,195 ms (synthetic delays, not live timing). Verify the real storefront after deploying backend **and worker**, then publishing the theme extension. No live speed improvement is claimed from local tests.
+
+Verification: `node scripts/run-regression-tests.mjs`; `node tests/collection-loading/run-headless.mjs` (21 actual-assets/API browser scenarios using synthetic catalog and in-memory queue); `node tests/collection-loading/run-redis-regressions.mjs` (real Redis/BullMQ in a unique temporary namespace, using `TEST_REDIS_HOST` / `TEST_REDIS_PORT` if set); and `node --max-old-space-size=256 tests/collection-loading/run-memory-check.mjs tags` (also `variants`, `dense-variants`). The real Redis suite deletes only its random test-owned namespace. Reports are ignored under `scratch/collection-*`.
+
 ## Search banners
 
 Search > Banners creates promotions for exact search queries (case, Unicode width and extra whitespace are normalized). Choose Top or Product grid, an HTTPS image URL, an optional store-relative/HTTPS link, alternative text, heading/content/button label and colors. Grid banners can use text without an image. Upload images separately through Shopify Content / Files and paste their image URLs. In-app file upload is not included.

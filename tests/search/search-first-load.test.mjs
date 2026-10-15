@@ -8,6 +8,7 @@ const start = source.indexOf('        let data = null;');
 const end = source.indexOf('      data = await waitForCollectionOrder', start);
 assert.ok(start >= 0 && end > start);
 const requestBlock = source.slice(start, end);
+const earlyHelper = source.slice(source.indexOf('  async function takeEarlyCollectionResponse('), source.indexOf('  async function waitForCollectionOrder('));
 async function load({ template = 'search', page = 1, limit = 4, sort = 'relevance', loadMore = false } = {}) {
   const calls = [], expectedOrder = Array.from({ length: 47 }, (_, i) => 'ranked-' + (i + 1));
   const early = { products: expectedOrder.slice(0, 25), source: 'unscoped-early' };
@@ -17,7 +18,7 @@ async function load({ template = 'search', page = 1, limit = 4, sort = 'relevanc
     activeFilters: { page }, queryParams: params, API_DOMAIN: 'https://api.test', fetchSignal: new AbortController().signal,
     fetchCollectionResponse: async url => { calls.push(url); return { status: 200, json: async () => ({ products: expectedOrder.slice((page - 1) * limit, page * limit), source: 'scoped' }) }; },
   };
-  const data = await vm.runInNewContext('(async()=>{' + requestBlock + '\nreturn data;})()', context);
+  const data = await vm.runInNewContext(earlyHelper + '\n(async()=>{' + requestBlock + '\nreturn data;})()', context);
   return { data, calls, early, context };
 }
 

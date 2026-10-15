@@ -335,9 +335,30 @@
       var collHandle = "{{ cfp_collection_handle }}";
       var collId = "{{ cfp_collection_id }}";
       var params = new URLSearchParams(window.location.search);
-      // Ranked collection requests need the final customer/filter context and
-      // one browsing-session token. Let the main script issue that request.
-      if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') return;
+      // Start an ordinary first page while the deferred storefront assets load.
+      // The renderer must compare the complete context before consuming it.
+      if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') {
+        if (params.has('page') && params.get('page') !== '1') return;
+        if ([...params.keys()].some(function(key) { return !['page','sortBy','rankingToken','preview_theme_id','_fd','_sc','pb','gclid','fbclid'].includes(key) && !key.startsWith('utm_'); })) return;
+        var rankedParams = new URLSearchParams();
+        rankedParams.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
+        rankedParams.set('shop', shop);
+        if (window.Shopify?.country) rankedParams.set('country', window.Shopify.country);
+        if (window.cfpCustomerTags) rankedParams.set('customer_tags', window.cfpCustomerTags);
+        if (collHandle) rankedParams.set('collectionHandle', collHandle);
+        else if (collId) rankedParams.set('collectionId', collId);
+        else return;
+        rankedParams.set('sortBy', params.get('sortBy') || 'best-selling');
+        rankedParams.set('page', '1'); rankedParams.set('limit', '25');
+        var earlyUrl = 'https://aisearchfilter.webvory.com/api/filter?' + rankedParams.toString();
+        var controller = new AbortController();
+        var timeout = setTimeout(function() { controller.abort(); }, 30000);
+        window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-store'})
+          .then(async function(response) { return {status:response.status,payload:await response.json()}; })
+          .catch(function() { return null; })
+          .finally(function() { clearTimeout(timeout); })};
+        return;
+      }
       params.set('shop', shop);
       params.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
       if (window.cfpCustomerTags) params.set('customer_tags', window.cfpCustomerTags);

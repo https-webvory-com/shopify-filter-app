@@ -22,15 +22,27 @@ try {
   console.log("CFP: Dedicated background workers are ready");
 
   let shuttingDown = false;
+  let warming = false;
+  const warm = async () => {
+    if (warming || shuttingDown) return;
+    warming = true;
+    try { await global.__schedulePublicCollectionWarmups?.(); }
+    catch (error) { console.error('CFP: Collection warmup scheduler unavailable:', error.name); }
+    finally { warming = false; }
+  };
+  const warmupTimer = setInterval(warm, 240000);
+  warmupTimer.unref();
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    clearInterval(warmupTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
     process.exit(0);
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
+  void warm();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });
   console.error("CFP: Background worker startup failed:", error.message);

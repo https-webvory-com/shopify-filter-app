@@ -334,6 +334,26 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       signal.removeEventListener('abort', abort);
     }
   }
+  async function takeEarlyCollectionResponse(requestUrl, signal) {
+    const early = window._cfpRankedEarlyFetch;
+    if (!early) return null;
+    delete window._cfpRankedEarlyFetch;
+    const canonical = value => { const url = new URL(value); url.searchParams.sort(); return url.toString(); };
+    if (canonical(early.url) !== canonical(requestUrl)) { early.controller.abort(); return null; }
+    let onAbort;
+    try {
+      const cancelled = new Promise((resolve, reject) => {
+        onAbort = () => { early.controller.abort(); reject(new DOMException('Aborted', 'AbortError')); };
+        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) onAbort();
+      });
+      const result = await Promise.race([early.promise, cancelled]);
+      if (!result) return null;
+      if (result.status >= 400 && result.status !== 409 && !['pending','failed'].includes(result.payload?.debug?.collectionBestSellingStatus) &&
+          !['pending','failed'].includes(result.payload?.debug?.collectionRankingStatus)) throw Error(result.payload?.error || 'Products are temporarily unavailable. Please retry.');
+      return { status: result.status, json: async () => result.payload };
+    } finally { signal.removeEventListener('abort', onAbort); }
+  }
   async function waitForCollectionOrder(data, requestUrl, signal) {
     const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus) ||
       ['pending', 'failed'].includes(value.debug?.collectionRankingStatus);
@@ -470,7 +490,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           } catch(e) {}
         }
         if (!data) {
-          const response = await fetchCollectionResponse(`${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
+          const requestUrl = `${API_DOMAIN}/api/filter?${queryParams.toString()}`;
+          const response = templateName !== 'search' && !isLoadMore && activeFilters.page === 1
+            ? await takeEarlyCollectionResponse(requestUrl, fetchSignal) || await fetchCollectionResponse(requestUrl, fetchSignal)
+            : await fetchCollectionResponse(requestUrl, fetchSignal);
           if (response.status === 409 && allowSessionRestart) {
             collectionRankingTokens.delete(rankingKey);
             activeFilters.page = 1;

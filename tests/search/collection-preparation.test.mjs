@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionPreparation, preparationKey, preparationRevisionKey} from '../../app/utils/collectionPreparation.js';
+import {createCollectionPreparation, preparationKey, preparationRevisionKey, preparationLifetime} from '../../app/utils/collectionPreparation.js';
 import {productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 
 function fixture() {
@@ -151,4 +151,41 @@ test('Redis and queue failures are surfaced instead of silently serving fallback
   await assert.rejects(f.service.get(f.spec),/Queue unavailable/);
   f.redis.get=async()=>{throw Error('Redis unavailable');};
   await assert.rejects(f.service.get(f.spec),/Redis unavailable/);
+});
+
+test('idle beyond ten minutes serves the last usable ranking and refreshes in the background',async()=>{
+  const f=fixture();f.spec.retainForIdle=true;let storedLifetime;
+  const original=f.redis.setex;f.redis.setex=async(key,ttl,value)=>{storedLifetime=ttl;return original(key,ttl,value);};
+  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+  assert.equal(storedLifetime,86400);assert.equal(preparationLifetime,86400);
+  f.advance(660000);assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
+  assert.equal(f.builds(),1);assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
+  const oldKey=preparationKey(f.spec);f.values.set(preparationRevisionKey(f.spec.shop),'1');
+  assert.deepEqual(await f.service.get(f.spec),{status:'pending'});
+  assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'pending');
+  assert.notEqual(preparationKey({...f.spec,revision:'1'}),oldKey);
+});
+
+test('filtered or customer-specific contexts keep short retention and retention does not change ranking identity',async()=>{
+  const f=fixture();let storedLifetime;const original=f.redis.setex;
+  f.redis.setex=async(key,ttl,value)=>{storedLifetime=ttl;return original(key,ttl,value);};
+  await f.service.get(f.spec);await f.service.process(f.queued[0].data);assert.equal(storedLifetime,600);
+  assert.equal(preparationKey(f.spec),preparationKey({...f.spec,retainForIdle:true}));
+});
+
+test('long retention cannot keep known product changes stale beyond the existing freshness window',async()=>{
+  const f=fixture();f.spec.retainForIdle=true;f.spec.collectionId='1';
+  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+  f.values.set(productRevisionKey(f.spec.shop,'1'),'1');f.advance(660000);
+  assert.equal((await f.service.get(f.spec)).status,'pending');
+  assert.equal(f.queued.at(-1).opts.priority,1);
+  await f.service.process(f.queued.at(-1).data);
+  assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
+});
+
+test('fresh preparation does not rebuild on every request and legacy records refresh without blanking',async()=>{
+  const f=fixture();await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+  f.advance(240000);await f.service.get(f.spec);assert.equal(f.queued.length,1);
+  f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,productRevision:'0'}));
+  assert.equal((await f.service.get(f.spec)).status,'ready');assert.equal(f.queued.length,2);
 });

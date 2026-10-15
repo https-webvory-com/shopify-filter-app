@@ -15,7 +15,7 @@ import {processCollectionRankingJob} from '../../app/utils/processCollectionRank
 const shop='headless-fixture.myshopify.com';
 export async function createLoadingServer({redisLayer}={}) {
   const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],requestStarts=[];
-  const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false};
+  const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
   const docs=Array.from({length:30},(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
@@ -46,7 +46,7 @@ export async function createLoadingServer({redisLayer}={}) {
     if(!state.hold){const timer=setTimeout(async()=>{timers.delete(timer);job.state='active';try{await dispatch(job);job.state='completed';state.completed++;}catch{job.state='failed';job.finishedOn=Date.now();}},name==='COLLECTION_RANKING_PREPARE'?state.delay:50);timers.add(timer);}
     return job;
   }};
-  preparation=createCollectionPreparation({redis,queue,prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
+  preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
   async function warm(shop,collectionIds){if(collectionIds&&!collectionIds.includes('1'))return;
     await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=25'),params:{},context:{rankingWarmup:true}});
   }
@@ -55,6 +55,7 @@ export async function createLoadingServer({redisLayer}={}) {
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
   const mocks={
+    '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
     '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>({products:[{id:'gid://shopify/Product/'+state.pin}]}),
       getActiveRuleForCollection:async()=>({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
@@ -74,6 +75,9 @@ export async function createLoadingServer({redisLayer}={}) {
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})');
   vm.runInNewContext((await transform(source,{loader:'jsx',format:'cjs'})).code,routeCtx);
   const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/collectionFilterPro.css"><style>body{margin:0;font:16px Arial}header{position:sticky;top:0;z-index:4;background:#fff;height:80px;border-bottom:1px solid}#mega-menu{position:absolute;top:80px;left:0;right:0;height:240px;background:#eee;display:none}#mega-menu.open{display:block}.cfp-v1-app-container{padding:16px;min-height:1600px}.cfp-main-content{width:100%}</style><script>window.Shopify={locale:'en',country:'US',currency:{active:'USD',rate:1},routes:{root:'/'}};window.collectionFilterProSettings={columns_desktop:4,columns_mobile:2};window.browserErrors=[];addEventListener('error',e=>browserErrors.push(e.message));addEventListener('unhandledrejection',e=>browserErrors.push(String(e.reason)));window.cardSnapshots=[];new MutationObserver(()=>{const cards=[...document.querySelectorAll('.cfp-product-card--reveal')];if(cards.length&&!window.inserted){window.inserted=true;cardSnapshots.push({at:performance.now(),cards:cards.length,imagesLoaded:cards.filter(c=>c.querySelector('img').complete&&c.querySelector('img').naturalWidth>0).length,pricesReady:cards.filter(c=>!c.innerText.includes('See product price')).length,delays:cards.slice(0,6).map(c=>getComputedStyle(c).animationDelay)})}}).observe(document.documentElement,{childList:true,subtree:true});</script></head><body><header><button id="menu-open" onclick="document.getElementById('mega-menu').classList.toggle('open')">Open mega menu</button><div id="mega-menu">Header mega menu</div></header><div class="cfp-v1-app-container"><div class="cfp-layout-wrapper"><div id="cfp-top-bar" class="cfp-top-bar"><div class="cfp-top-bar__left"><button id="cfp-drawer-trigger-btn">Filters</button><span class="cfp-product-count"></span></div><div class="cfp-top-bar__right"><div class="cfp-custom-sort"><div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger"><span id="cfp-custom-sort-label">Best selling</span></div><div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown"><div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div><div class="cfp-custom-sort__option" data-value="price-ascending">Price low to high</div></div></div></div></div><aside id="cfp-sidebar" class="cfp-sidebar" data-shop="${shop}" data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"><div class="cfp-sidebar__header"><button id="cfp-close-btn">Close</button></div><div class="cfp-sidebar__body"><div id="cfp-sidebar__filter-groups"></div></div><div class="cfp-sidebar__footer"><button id="cfp-apply-btn">Apply</button><button id="cfp-clear-btn">Clear</button></div></aside><main class="cfp-main-content"><div id="cfp-products-container" class="cfp-products-grid"></div></main></div></div><div id="cfp-overlay" class="cfp-overlay"></div><script src="/assets/marketPricing.js"></script><script src="/assets/collectionFilterPro.js"></script><script>API_DOMAIN=location.origin;</script></body></html>`;
+  const liquid=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
+  const start=liquid.indexOf('  (function() {',liquid.indexOf('Fire API request'));
+  const inline=liquid.slice(start,liquid.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}',shop).replace('{{ cfp_collection_handle }}','fixture').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en').replaceAll("'https://aisearchfilter.webvory.com", "location.origin + '");
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     try{
@@ -94,10 +98,12 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}
       if(url.pathname.startsWith('/assets/')){
         const name=url.pathname.split('/').pop();if(!['collectionFilterPro.js','collectionFilterPro.css','marketPricing.js'].includes(name)){res.writeHead(404).end();return;}
+        if(name==='collectionFilterPro.js'&&state.assetDelay)await new Promise(resolve=>setTimeout(resolve,state.assetDelay));
         res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');res.end(await fs.readFile('extensions/theme-extension/assets/'+name));return;
       }
       if(url.pathname==='/api/filter'){
         requestStarts.push({sort:url.searchParams.get('sortBy'),startedAt:Date.now()});
+        if(state.apiDelay)await new Promise(resolve=>setTimeout(resolve,state.apiDelay));
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
         const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url),params:{},context:{}});
@@ -111,7 +117,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;
       }
-      if(url.pathname.startsWith('/collections/')){res.setHeader('Content-Type','text/html');res.end(html.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body'));return;}
+      if(url.pathname.startsWith('/collections/')){res.setHeader('Content-Type','text/html');let body=html.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body');if(state.early)body=body.replace('<script src="/assets/marketPricing.js">','<script>'+inline+'</script><script src="/assets/marketPricing.js">');res.end(body);return;}
       res.writeHead(404).end();
     }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });

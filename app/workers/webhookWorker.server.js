@@ -232,6 +232,10 @@ async function handleAppUninstalled(shop) {
 }
 
 export function initWebhookWorker() {
+  global.__schedulePublicCollectionWarmups = async () => {
+    const { scheduleRegisteredCollectionWarmups } = await import('../services/collectionPreparation.server.js');
+    return scheduleRegisteredCollectionWarmups();
+  };
   if (!global.__collectionRankingWorker) {
     global.__collectionRankingWorker = new Worker('collectionRankingQueueV2', async job => {
       const { processCollectionPreparation, processCollectionWarmups, scheduleCollectionWarmup } = await import('../services/collectionPreparation.server.js');

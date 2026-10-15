@@ -12,6 +12,9 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
   const redis={
     get:key=>client.get(physical(key)),set:(key,value)=>client.set(physical(key),value),setex:(key,ttl,value)=>client.setex(physical(key),ttl,value),
     ttl:key=>client.ttl(physical(key)),incr:key=>client.incr(physical(key)),del:(...keys)=>keys.length?client.del(...keys.map(physical)):0,
+    // The retention script takes its deletion prefix as the final argument.
+    // Keep both keys AND that prefix inside this test-owned namespace.
+    eval:(script,keyCount,...args)=>{const keys=args.slice(0,keyCount).map(physical);const values=args.slice(keyCount);values[values.length-1]=physical(values.at(-1));return client.eval(script,keyCount,...keys,...values);},
     scan:async(cursor,_match,pattern,_count,count)=>{const [next,keys]=await client.scan(cursor,'MATCH',physical(pattern),'COUNT',count);return [next,keys.map(key=>key.slice(prefix.length+1))];},
   };
   let handler=async()=>{throw Error('Test worker handler not configured');};

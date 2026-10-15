@@ -4,7 +4,7 @@ import prisma from '../db.server.js';
 import meiliClient from './meiliClient.server.js';
 import { applyMerchandisingRules, createMerchandisingComparator } from './merchandising.server.js';
 import { prepareCollectionRanking } from '../utils/prepareCollectionRanking.js';
-import { createCollectionPreparation, warmupContextsKey } from '../utils/collectionPreparation.js';
+import { createCollectionPreparation, warmupContextsKey, warmupShopsKey } from '../utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: spec =>
@@ -32,6 +32,38 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
   await redis.zadd(key, Date.now(), JSON.stringify({url:normalized.toString(),collectionId:String(collectionId||'all').split('/').pop()}));
   await redis.zremrangebyrank(key, 0, -21);
   await redis.expire(key, 86400);
+  await redis.zadd(warmupShopsKey, Date.now(), shop);
+  await redis.zremrangebyscore(warmupShopsKey, '-inf', Date.now() - 86400000);
+}
+
+// Refresh known public contexts even when no browser is currently visiting.
+// This only schedules deduplicated, low-priority jobs; scans stay in the worker.
+let discoveredRegistries = false;
+export async function scheduleRegisteredCollectionWarmups() {
+  // Discover existing public registries after deployment, so the first visitor
+  // does not have to populate the new shop index before warming can start.
+  if (!discoveredRegistries) {
+    let cursor = '0';
+    do {
+      const [next, keys] = await redis.scan(cursor, 'MATCH', 'collectionWarmupContextsV2:*', 'COUNT', 100);
+      cursor = next;
+      for (const key of keys) {
+        const shop = key.slice('collectionWarmupContextsV2:'.length);
+        if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
+        const ttl = await redis.ttl(key);
+        if (ttl <= 0) continue;
+        // Preserve the registry's original remaining lifetime.
+        await redis.zadd(warmupShopsKey, 'NX', Date.now() - (86400 - Math.min(ttl, 86400)) * 1000, shop);
+      }
+    } while (cursor !== '0');
+    discoveredRegistries = true;
+  }
+  const shops = await redis.zrangebyscore(warmupShopsKey, Date.now() - 86400000, '+inf');
+  for (const shop of shops) {
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
+    try { await scheduleCollectionWarmup(shop); }
+    catch (error) { console.error('CFP: Periodic collection warmup failed:', error.name); }
+  }
 }
 
 export async function scheduleCollectionWarmup(shop,collectionIds=null) {
