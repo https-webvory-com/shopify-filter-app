@@ -222,6 +222,9 @@ jobs:
             done
             if [ "$ready" != true ]; then
               echo "App failed its startup health check."
+              # Capture the startup error before the rollback removes this container.
+              docker inspect --format 'Status={{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}} Error={{.State.Error}}' shopify-filter-app || true
+              docker logs --tail 150 shopify-filter-app 2>&1 || true
               exit 1
             fi
 
@@ -252,6 +255,7 @@ jobs:
             if [ "$worker_ready" != true ]; then
               echo "Background worker failed its startup check; the web server remains running."
               docker inspect --format '{{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' shopify-filter-sync-worker
+              docker logs --tail 150 shopify-filter-sync-worker 2>&1 || true
               exit 1
             fi
 
