@@ -4,7 +4,6 @@ import {
   useLoaderData,
   useSubmit,
   useNavigation,
-  useActionData,
   useFetcher,
   redirect,
 } from "react-router";
@@ -17,17 +16,6 @@ import PinSearchField from "../components/merchandising/PinSearchField";
 import { searchPickerProducts } from "../services/searchPicker.server.js";
 import { reorderSearchPins } from "../utils/reorderSearchPins.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
-
-export function parseSearchPinTarget(raw, applyToAll = false) {
-  if (applyToAll) return [];
-  let terms;
-  try { terms = typeof raw === 'string' ? JSON.parse(raw) : raw; }
-  catch { throw new Error('Enter exactly one search term.'); }
-  if (!Array.isArray(terms) || terms.length !== 1 || typeof terms[0] !== 'string' || !terms[0].trim()) {
-    throw new Error('Enter exactly one search term.');
-  }
-  return [terms[0].trim()];
-}
 
 export const action = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -55,9 +43,6 @@ export const action = async ({ request, params }) => {
     ));
 
     const targetQueries = JSON.parse(formData.get('targetQueries') || '[]');
-    if (!targetQueries.length && formData.get('applyToAll') === 'false' && formData.has('targetQueries')) {
-      return Response.json({ products: [], totalCount: 0, targetQueryKey: JSON.stringify(targetQueries), nonMatchingPinnedIds: [] });
-    }
     let targetIds = null;
     if (targetQueries.length) {
       let matches;
@@ -119,24 +104,15 @@ export const action = async ({ request, params }) => {
     const name = formData.get("name") || "Pinning Rule";
     const searchQueriesJSON = formData.get("searchQueries");
     const applyToSearchType = formData.get("applyToSearchType") || "both";
-    const applyToAll = formData.get("applyToAll") === "true";
-    let searchQueries, products;
-    try {
-      searchQueries = parseSearchPinTarget(searchQueriesJSON, applyToAll);
-      products = JSON.parse(productsJSON);
-      if (!Array.isArray(products) || !products.length) throw new Error('Please pin at least one product.');
-    } catch (error) {
-      return Response.json({ error: error.message === 'Enter exactly one search term.' ? error.message : 'Please pin at least one product.' }, { status: 400 });
-    }
 
     const data = {
       shop,
       name,
       ruleType: "search",
-      applyToAll,
-      searchQueries,
+      applyToAll: formData.get("applyToAll") === "true",
+      searchQueries: searchQueriesJSON ? JSON.parse(searchQueriesJSON) : [],
       applyToSearchType,
-      products,
+      products: JSON.parse(productsJSON),
     };
 
     let savedRule;
@@ -144,7 +120,7 @@ export const action = async ({ request, params }) => {
       savedRule = await prisma.pinnedProductRule.create({ data });
     } else {
       savedRule = await prisma.pinnedProductRule.update({
-        where: { id: ruleId, shop, ruleType: "search" },
+        where: { id: ruleId, shop },
         data,
       });
     }
@@ -177,7 +153,7 @@ export const loader = async ({ request, params }) => {
   let rule = null;
   if (ruleId !== "new") {
     rule = await prisma.pinnedProductRule.findFirst({
-      where: { id: ruleId, shop, ruleType: "search" },
+      where: { id: ruleId, shop },
     });
   }
 
@@ -190,7 +166,6 @@ export const headers = (headersArgs) => boundary.headers(headersArgs);
 
 export default function PinningEditor() {
   const { rule, defaultParams } = useLoaderData();
-  const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -214,11 +189,7 @@ export default function PinningEditor() {
 
   const [products, setProducts] = useState(initialProducts);
   const [name, setName] = useState(defaultName);
-  // Legacy multi-term rules stay unchanged until the merchant explicitly
-  // chooses the single term to keep when saving this editor.
-  const initialSearchTerm = initialSearchQueries.length === 1 ? initialSearchQueries[0] : '';
-  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
-  const searchQueries = searchTerm.trim() ? [searchTerm.trim()] : [];
+  const [searchQueries, setSearchQueries] = useState(initialSearchQueries);
   const initialApplyToAll = rule?.applyToAll ?? defaultParams?.applyToAll ?? false;
   const [applyToAll, setApplyToAll] = useState(initialApplyToAll);
   const targetQueryKey = JSON.stringify(applyToAll ? [] : searchQueries);
@@ -236,7 +207,7 @@ export default function PinningEditor() {
   const hasUnsavedChanges =
     JSON.stringify(products) !== JSON.stringify(initialProducts) ||
     name !== defaultName ||
-    searchTerm !== initialSearchTerm ||
+    JSON.stringify(searchQueries) !== JSON.stringify(initialSearchQueries) ||
     applyToAll !== initialApplyToAll ||
     
     applyToInstantSearch !== initialApplyToInstantSearch ||
@@ -358,7 +329,6 @@ export default function PinningEditor() {
 
   const pickerInitialized = useRef(false);
   useEffect(() => {
-    if (!applyToAll && !searchQueries.length) { setSearchResults([]); setTotalCount(0); setIsFetchingMore(false); return; }
     const delay = pickerInitialized.current ? 500 : 0;
     pickerInitialized.current = true;
     const delayDebounceFn = setTimeout(() => {
@@ -373,7 +343,7 @@ export default function PinningEditor() {
             
             
             skip: 0,
-            applyToAll: String(applyToAll), targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id))
           },
           { method: "post" },
@@ -396,7 +366,7 @@ export default function PinningEditor() {
           
           
           skip: currentPage * 9,
-          applyToAll: String(applyToAll), targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
@@ -405,7 +375,7 @@ export default function PinningEditor() {
   }, [products]); // Run whenever a product is pinned/unpinned
 
   useEffect(() => {
-    if (fetcher.data?.products && (applyToAll || searchQueries.length > 0) && fetcher.data.targetQueryKey === targetQueryKey) {
+    if (fetcher.data?.products) {
       if (fetcher.data.totalCount !== undefined) {
         setTotalCount(fetcher.data.totalCount);
         const lastPage = Math.max(0, Math.ceil(fetcher.data.totalCount / 9) - 1);
@@ -413,7 +383,7 @@ export default function PinningEditor() {
           setCurrentPage(lastPage);
           setIsFetchingMore(true);
           fetcher.submit({ intent: 'search', q: searchQuery, searchField, skip: lastPage * 9,
-            applyToAll: String(applyToAll), targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id)) }, { method: 'post' });
           return;
         }
@@ -435,7 +405,7 @@ export default function PinningEditor() {
           
           
           skip: nextPage * 9,
-          applyToAll: String(applyToAll), targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
@@ -455,7 +425,7 @@ export default function PinningEditor() {
           
           
           skip: prevPage * 9,
-          applyToAll: String(applyToAll), targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
@@ -538,7 +508,7 @@ export default function PinningEditor() {
 
   const handleSave = () => {
     if (!applyToAll && searchQueries.length === 0) {
-      shopify.toast.show("Please enter one search term", { isError: true });
+      shopify.toast.show("Please add at least one search query", { isError: true });
       return;
     }
 
@@ -563,6 +533,7 @@ export default function PinningEditor() {
     formData.append("products", JSON.stringify(products));
 
     submit(formData, { method: "POST" });
+    shopify.toast.show("Pinning saved successfully");
   };
 
   return (
@@ -758,24 +729,93 @@ export default function PinningEditor() {
             }}
           >
             
+            {/* Target Search Queries */}
             <div style={{ marginBottom: "20px", padding: "16px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-              <label htmlFor="search-pin-term" style={{ display: "block", fontWeight: "600", marginBottom: "12px" }}>Search term</label>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "#1e293b", marginBottom: "12px" }}>
+                Target Search Queries
+              </div>
               <label style={{ display: "block", marginBottom: "12px" }}>
                 <input type="checkbox" checked={applyToAll} onChange={event => setApplyToAll(event.target.checked)} />
                 Apply to all searches
               </label>
-              {!applyToAll && initialSearchQueries.length > 1 && (
-                <p role="note">This rule currently targets {initialSearchQueries.join(', ')}. Choose one search term before saving. The saved terms remain active until you save.</p>
-              )}
-              <input id="search-pin-term" type="text" value={searchTerm} disabled={applyToAll}
-                placeholder="e.g. blue dresses"
-                onChange={event => {
-                  setSearchTerm(event.target.value); setSearchResults([]); setTotalCount(0); setCurrentPage(0);
-                  setIsFetchingMore(!!event.target.value.trim());
-                }}
-                onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }}
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px" }} />
-              {actionData?.error && <p role="alert" style={{ color: "#b91c1c" }}>{actionData.error}</p>}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                {searchQueries.map(q => (
+                  <div key={q} style={{ 
+                    background: "#ede9fe", 
+                    color: "#4C1D95",
+                    border: "1px solid #ddd6fe",
+                    padding: "4px 10px", 
+                    borderRadius: "16px",
+                    fontSize: "13px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}>
+                    {q}
+                    <button 
+                      onClick={() => setSearchQueries(searchQueries.filter(item => item !== q))}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        color: "#4C1D95",
+                        display: "flex"
+                      }}
+                    >
+                      <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {searchQueries.length === 0 && (
+                  <span style={{ color: "#94a3b8", fontSize: "14px", fontStyle: "italic" }}>No queries added</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input 
+                  type="text" 
+                  id="query-input"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.target.value.trim()) {
+                       if (!searchQueries.includes(e.target.value.trim())) {
+                          setSearchQueries([...searchQueries, e.target.value.trim()]);
+                       }
+                       e.target.value = "";
+                    }
+                  }}
+                  placeholder="Add a search query (e.g. shoes)"
+                  style={{
+                    flex: 1,
+                    padding: "8px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                    outline: "none"
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    const input = document.getElementById("query-input");
+                    if (input && input.value.trim() && !searchQueries.includes(input.value.trim())) {
+                       setSearchQueries([...searchQueries, input.value.trim()]);
+                       input.value = "";
+                    }
+                  }}
+                  style={{
+                    background: "#0f172a",
+                    color: "#fff",
+                    border: "none",
+                    padding: "0 16px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "500"
+                  }}
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             <div

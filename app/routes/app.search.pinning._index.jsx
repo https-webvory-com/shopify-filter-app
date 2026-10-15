@@ -176,17 +176,17 @@ export default function PinningIndex() {
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createApplyToAll, setCreateApplyToAll] = useState(false);
+  const [createSearchQueries, setCreateSearchQueries] = useState([]);
   const [createSearchQuery, setCreateSearchQuery] = useState("");
-  const createSearchQueries = createSearchQuery.trim() ? [createSearchQuery.trim()] : [];
 
   const handleCreateNew = () => {
     setIsCreateModalOpen(true);
     setCreateApplyToAll(false);
+    setCreateSearchQueries([]);
     setCreateSearchQuery("");
   };
 
   const proceedToCreate = () => {
-    if (!createApplyToAll && !createSearchQuery.trim()) return;
     if (createApplyToAll) {
       const existingAll = pinningRules.find(r => r.applyToAll);
       if (existingAll) {
@@ -195,7 +195,7 @@ export default function PinningIndex() {
       }
     } else if (createSearchQueries.length > 0) {
       for (const q of createSearchQueries) {
-        const existing = pinningRules.find(r => r.searchQueries && r.searchQueries.some(term => term.trim().toLowerCase() === q.toLowerCase()));
+        const existing = pinningRules.find(r => r.searchQueries && r.searchQueries.includes(q));
         if (existing) {
           window.shopify?.toast?.show(`A pinning rule already exists for search query: ${q}. Please edit the existing rule.`, { isError: true });
           return;
@@ -938,7 +938,7 @@ export default function PinningIndex() {
                       color: "#5B21B6",
                     }}
                   >
-                    Search term
+                    Target Search Queries
                   </h2>
                   <button
                     onClick={() => setIsCreateModalOpen(false)}
@@ -960,15 +960,88 @@ export default function PinningIndex() {
                 </div>
                 
                 <div style={{ padding: "20px" }}>
-                  <label htmlFor="create-pin-term" style={{ display: "block", marginBottom: "12px", fontSize: "14px", color: "#475569" }}>
-                    Enter the search term where you want to pin products.
-                  </label>
-                  <input id="create-pin-term" type="text" value={createSearchQuery}
-                    onChange={event => setCreateSearchQuery(event.target.value)}
-                    onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); proceedToCreate(); } }}
-                    placeholder="e.g. blue dresses"
-                    style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px" }} />
-
+                  <p style={{ margin: "0 0 16px 0", fontSize: "14px", color: "#475569" }}>
+                    Enter the search queries where you want to pin products.
+                  </p>
+                  
+                  <div style={{ marginBottom: "16px", display: "flex", gap: "8px" }}>
+                    <input 
+                      type="text" 
+                      value={createSearchQuery}
+                      onChange={(e) => setCreateSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && createSearchQuery.trim()) {
+                           if (!createSearchQueries.includes(createSearchQuery.trim())) {
+                              setCreateSearchQueries([...createSearchQueries, createSearchQuery.trim()]);
+                           }
+                           setCreateSearchQuery("");
+                        }
+                      }}
+                      placeholder="e.g. shoes, black dress"
+                      style={{
+                        flex: 1,
+                        padding: "10px 12px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        outline: "none"
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        if (createSearchQuery.trim() && !createSearchQueries.includes(createSearchQuery.trim())) {
+                           setCreateSearchQueries([...createSearchQueries, createSearchQuery.trim()]);
+                           setCreateSearchQuery("");
+                        }
+                      }}
+                      style={{
+                        background: "#5B21B6",
+                        color: "#fff",
+                        border: "none",
+                        padding: "0 16px",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontWeight: "500"
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                  
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", minHeight: "40px" }}>
+                    {createSearchQueries.map(q => (
+                      <div key={q} style={{ 
+                        background: "#f1f5f9", 
+                        border: "1px solid #e2e8f0",
+                        padding: "4px 10px", 
+                        borderRadius: "16px",
+                        fontSize: "13px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
+                      }}>
+                        {q}
+                        <button 
+                          onClick={() => setCreateSearchQueries(createSearchQueries.filter(item => item !== q))}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: 0,
+                            color: "#64748b",
+                            display: "flex"
+                          }}
+                        >
+                          <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                    {createSearchQueries.length === 0 && (
+                      <span style={{ color: "#94a3b8", fontSize: "14px", fontStyle: "italic" }}>No queries added</span>
+                    )}
+                  </div>
                 </div>
 
                 <div
