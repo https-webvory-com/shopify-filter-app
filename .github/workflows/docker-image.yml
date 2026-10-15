@@ -60,6 +60,12 @@ jobs:
         run: |
           docker build -t shopify .
 
+      - name: Smoke-test container startup maintenance
+        # The maintenance check uses an in-container loopback Redis fixture only.
+        # Its actual Alpine/Node process must exit cleanly before EC2 is touched.
+        run: |
+          docker run --rm --network none shopify:latest node --test tests/sync/startup-cache.test.mjs
+
       - name: Tag Docker Image
         run: |
           docker tag shopify:latest \

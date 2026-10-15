@@ -9,6 +9,7 @@ async function redisRole(mode) {
   const calls=[];
   class Redis extends EventEmitter {async keys(pattern){calls.push(["keys",pattern]);return [];} }
   const mocks={ioredis:{__esModule:true,default:Redis},
+    './redisConnection.server.js':{REDIS_URL:'redis://fixture:6379'},
     "../workers/webhookWorker.server.js":{initWebhookWorker:()=>calls.push(["webhooks"])},
     "../workers/productSyncWorker.server.js":{initProductSyncWorker:()=>calls.push(["sync"])},
   };

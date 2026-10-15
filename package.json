@@ -22,7 +22,7 @@
     "config:use": "shopify app config use",
     "env": "shopify app env",
     "start": "node scripts/flush-cache.js || true; react-router-serve ./build/server/index.js",
-    "docker-start": "prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma && npm run setup && node scripts/flush-cache.js && npm run start",
+    "docker-start": "prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma && npm run setup && npm run start",
     "flush-cache": "node scripts/flush-cache.js",
     "semantic:setup": "node scripts/setup-semantic-search.mjs",
     "semantic:status": "node scripts/setup-semantic-search.mjs --check",

@@ -1,9 +1,9 @@
 import Redis from 'ioredis';
+import { REDIS_URL } from './redisConnection.server.js';
 
 
 
 // Use AWS IP in production, and Localhost in development
-const REDIS_URL = 'redis://184.72.37.227:6379';
 
 let redis;
 
