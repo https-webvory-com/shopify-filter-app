@@ -1,4 +1,5 @@
 import test from "node:test";
+import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import vm from "node:vm";
@@ -58,6 +59,7 @@ async function mockedModule(file, mocks) {
     URL,
     console,
     require(name) {
+      if (name === '../utils/csvImportReport.js') return csvImportReport;
       if (name === "../services/searchPicker.server.js") return {};
       if (name === "../utils/reorderSearchPins.js") return {};
       if (name in mocks) return mocks[name];

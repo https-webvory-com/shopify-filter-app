@@ -73,7 +73,7 @@ const settingsCards = [
     description:
       "Customize the widget styling, add custom color swatches, or write custom CSS and Javascript.",
     path: "/app/settings/customization",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

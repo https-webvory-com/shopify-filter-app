@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import Papa from "papaparse";
+import CsvImportReport from "./CsvImportReport";
+import { csvRowMetadata, importSummary } from "../../utils/csvImportReport.js";
+import { postPinImportBatch, unconfirmedPinRows } from "../../utils/pinImportBatch.js";
 import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
     skipped: 0,
     errors: [],
   });
-  const [showErrors, setShowErrors] = useState(false);
+
   const fileInputRef = useRef(null);
   const isUploadingRef = useRef(false);
 
@@ -101,7 +104,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
       setParsedRows([]);
       setUploadState("idle");
       setProgress({ processed: 0, total: 0, imported: 0, skipped: 0, errors: [] });
-      setShowErrors(false);
+
       isUploadingRef.current = false;
     }
   }, [isOpen]);
@@ -146,7 +149,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
           window.shopify?.toast?.show("No valid data found in CSV", { isError: true });
           return;
         }
-        const rows = results.data.map(mapCsvRow);
+        const rows = results.data.map((row, index) => ({ ...mapCsvRow(row), ...csvRowMetadata(row, index, "pinning", results.errors || []) }));
         setParsedRows(rows);
         setStep(2);
       },
@@ -173,6 +176,8 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
 
     let totalImported = 0;
     let totalSkipped = 0;
+    let totalUnconfirmed = 0;
+    const allWarnings = [];
     const allErrors = [];
 
     try {
@@ -181,19 +186,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
 
         const group = batches.slice(i, i + CONCURRENCY);
 
-        const results = await Promise.allSettled(
-          group.map((batch) =>
-            fetch("/api/import-pins-batch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rows: batch, ruleType: "collection" }),
-            }).then((r) => {
-              if (!r.ok) throw new Error(`Server error: ${r.status}`);
-              return r.json();
-            })
-          )
-        );
-
+        const results = await Promise.allSettled(group.map(batch => postPinImportBatch(batch, "collection")));
         let groupProcessed = 0;
         results.forEach((result, idx) => {
           const batchRows = group[idx];
@@ -202,13 +195,10 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
             totalImported += result.value.imported || 0;
             totalSkipped += result.value.skipped || 0;
             allErrors.push(...(result.value.errors || []));
+            allWarnings.push(...(result.value.warnings || []));
           } else {
-            // Whole batch failed — count as skipped
-            totalSkipped += batchRows.length;
-            allErrors.push({
-              id: `batch-${i + idx}`,
-              reason: result.reason?.message || "Batch request failed",
-            });
+            totalUnconfirmed += batchRows.length;
+            allErrors.push(...unconfirmedPinRows(batchRows, result.reason));
           }
         });
 
@@ -218,9 +208,12 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
           imported: totalImported,
           skipped: totalSkipped,
           errors: [...allErrors],
+          warnings: [...allWarnings],
+          unconfirmed: totalUnconfirmed,
         }));
       }
 
+      window.shopify?.toast?.show(importSummary({ imported: totalImported, skipped: totalSkipped, unconfirmed: totalUnconfirmed, warnings: allWarnings }), { duration: 8000 });
       setUploadState("done");
       isUploadingRef.current = false;
 
@@ -237,7 +230,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
   const handleClose = () => {
     if (uploadState === "uploading") {
       window.shopify?.toast?.show(
-        "Import is in progress. It will continue in the background.",
+        "Import is in progress. Keep this window open until the report is ready.",
         { duration: 4000 }
       );
       // Don't close — let user continue using the app
@@ -271,7 +264,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
           borderRadius: "12px",
           padding: "32px",
           width: "560px",
-          maxWidth: "95vw",
+          maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box",
           boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
           position: "relative",
         }}
@@ -528,49 +521,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
             </div>
 
             {/* Error log */}
-            {progress.errors.length > 0 && (
-              <div style={{ marginBottom: "20px" }}>
-                <button
-                  onClick={() => setShowErrors(!showErrors)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#d82c0d",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    padding: 0,
-                  }}
-                >
-                  <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "currentColor", transform: showErrors ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                  {showErrors ? "Hide" : "Show"} {progress.errors.length} skipped rows
-                </button>
-                {showErrors && (
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      maxHeight: "140px",
-                      overflowY: "auto",
-                      background: "#fff8f8",
-                      border: "1px solid #ffd2d2",
-                      borderRadius: "6px",
-                      padding: "8px",
-                    }}
-                  >
-                    {progress.errors.map((err, i) => (
-                      <div key={i} style={{ fontSize: "11px", color: "#d82c0d", padding: "3px 0", borderBottom: i < progress.errors.length - 1 ? "1px solid #ffd2d2" : "none" }}>
-                        <span style={{ fontWeight: "600" }}>{err.id}:</span> {err.reason}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <CsvImportReport report={progress} />
 
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
               {uploadState === "done" || uploadState === "error" ? (
@@ -579,13 +530,10 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
                 </button>
               ) : (
                 <button
-                  onClick={() => {
-                    window.shopify?.toast?.show("Import continues in background.", { duration: 3000 });
-                    onClose();
-                  }}
+                  onClick={handleClose}
                   style={btnSecondary}
                 >
-                  Continue in background
+                  Import in progress
                 </button>
               )}
             </div>

@@ -16,6 +16,7 @@ async function loadRoute(file, { authenticate, prisma }) {
     module: { exports: {} }, exports: {}, Response,
     console: { error() {} },
     require(name) {
+      if (name === '../services/merchandisingImport.server.js') return {};
       if (name === "../services/searchPicker.server.js") return {};
       if (name === "../shopify.server") return { authenticate: { admin: authenticate } };
       if (name === "../db.server") return { __esModule: true, default: prisma };

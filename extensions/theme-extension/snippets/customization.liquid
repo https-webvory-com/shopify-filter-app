@@ -1,0 +1,7 @@
+<script>
+  window.cfpCustomizationContext = window.cfpCustomizationContext || {
+    shop: {{ shop.permanent_domain | json }},
+    themeId: {{ theme.id | append: '' | json }}
+  };
+</script>
+<script src="{{ 'customization.js' | asset_url }}" defer="defer"></script>

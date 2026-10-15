@@ -1,3 +1,4 @@
+import { importMerchandisingRules } from '../services/merchandisingImport.server.js';
 import { normalizeCondition, validConditions } from "../utils/merchandisingCondition.js";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -146,43 +147,15 @@ export const action = async ({ request }) => {
   }
 
   if (actionType === "importRules") {
-    const rules = JSON.parse(formData.get("rules") || "[]");
-    if (!Array.isArray(rules) || rules.some(r => !validConditions(r.conditions))) return Response.json({ error: "Imported rule contains incomplete conditions." }, { status: 400 });
-    let importedCount = 0;
-    
-    for (const r of rules) {
-      const ruleName = r.name || "Untitled";
-      
-      const existingRule = await prisma.merchandisingRule.findFirst({
-        where: { shop, name: ruleName }
-      });
-      
-      if (existingRule) {
-        await prisma.merchandisingRule.delete({
-          where: { id: existingRule.id }
-        });
-      }
-
-      await prisma.merchandisingRule.create({
-        data: {
-          shop,
-          name: ruleName,
-          status: r.status !== undefined ? r.status : true,
-          collections: r.collections || [],
-          customerTags: r.customerTags || "",
-          locales: r.locales || "",
-          startDate: r.startDate ? new Date(r.startDate) : null,
-          endDate: r.endDate ? new Date(r.endDate) : null,
-          conditions: {
-            create: (r.conditions || []).map(normalizeCondition)
-          }
-        }
-      });
-      importedCount++;
+    let rules;
+    try { rules = JSON.parse(formData.get("rules") || "[]"); if (!Array.isArray(rules)) throw Error(); }
+    catch { return Response.json({ intent: "import", error: "Invalid import data. Please select the CSV again." }, { status: 400 }); }
+    const report = await importMerchandisingRules(shop, rules, "collection");
+    if (report.imported) {
+      try { await invalidateShop(shop); }
+      catch { report.warnings.push({ name: "Storefront refresh", reason: "Rules were saved, but refreshing storefront data could not be confirmed. Refresh and check the rules before retrying." }); }
     }
-
-    await invalidateShop(shop);
-    return Response.json({ success: true, intent: "import", count: importedCount });
+    return Response.json({ success: true, intent: "import", count: report.imported, ...report });
   }
 
   return Response.json({ error: "Invalid action" });
@@ -460,7 +433,7 @@ export default function MerchandisingIndex() {
       if (fetcher.data.intent === "duplicate")
         shopify.toast.show("Rule duplicated successfully");
       if (fetcher.data.intent === "import")
-        shopify.toast.show(`Successfully imported ${fetcher.data.count} rule(s)`);
+        shopify.toast.show(`${fetcher.data.count} imported, ${fetcher.data.skipped || 0} skipped. See the import report for details.`, { duration: 8000 });
     }
   }, [fetcher.state, fetcher.data]);
 
@@ -1563,9 +1536,10 @@ export default function MerchandisingIndex() {
         {isImportModalOpen && (
           <ImportMerchandisingRulesModal
             isOpen={isImportModalOpen}
+            importResult={fetcher.data}
+            isSubmitting={fetcher.state !== "idle"}
             onClose={() => setIsImportModalOpen(false)}
             onSubmit={(rules) => {
-              setIsImportModalOpen(false);
               const formData = new FormData();
               formData.append("actionType", "importRules");
               formData.append("rules", JSON.stringify(rules));

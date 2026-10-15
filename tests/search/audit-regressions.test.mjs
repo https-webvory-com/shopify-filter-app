@@ -1,4 +1,5 @@
 import * as searchColor from "../../app/utils/searchColor.js";
+import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import test from 'node:test';
@@ -85,6 +86,8 @@ test('available product IDs exclude products with only unavailable matching comb
 
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+   if(name==='../utils/csvImportReport.js')return csvImportReport;
+   if(name==='../services/merchandisingImport.server.js')return {};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
    if(name === "../utils/spellingCorrection.js")return {spellingCorrection};

@@ -1,9 +1,14 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import CsvImportReport from "./CsvImportReport";
+import { csvRowMetadata, groupMerchandisingImports } from "../../utils/csvImportReport.js";
 import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 
-export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmit, isSubmitting, ruleType = "collection" }) {
+export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmit, isSubmitting, importResult, ruleType = "collection" }) {
   const [step, setStep] = useState(1);
+  const [report, setReport] = useState(null);
+  const awaitingImport = useRef(false);
+  useEffect(() => { if (!isSubmitting && awaitingImport.current && importResult) { setReport(importResult); awaitingImport.current = false; } }, [isSubmitting, importResult]);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [parsedRules, setParsedRules] = useState([]);
@@ -13,6 +18,8 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
   useEffect(() => {
     if (!isOpen) {
       setStep(1);
+      setReport(null);
+      awaitingImport.current = false;
       setSelectedFile(null);
       setParsedRules([]);
     }
@@ -161,28 +168,9 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
         if (results.data && results.data.length > 0) {
           const fields = results.meta.fields || Object.keys(results.data[0] || {});
 
-          const mapped = results.data.map(mapToOurFormat);
-          
-          const grouped = {};
-          for (const rule of mapped) {
-            if (!grouped[rule.name]) {
-              grouped[rule.name] = { ...rule, searchQueries: [...rule.searchQueries], conditions: [...rule.conditions] };
-            } else {
-              const existingQueries = new Set(grouped[rule.name].searchQueries);
-              rule.searchQueries.forEach(q => existingQueries.add(q));
-              grouped[rule.name].searchQueries = Array.from(existingQueries);
-              
-              if (rule.customerTags) {
-                const existingTags = new Set(grouped[rule.name].customerTags ? grouped[rule.name].customerTags.split(',').map(s=>s.trim()) : []);
-                rule.customerTags.split(',').map(s=>s.trim()).forEach(t => existingTags.add(t));
-                grouped[rule.name].customerTags = Array.from(existingTags).join(', ');
-              }
-
-              grouped[rule.name].conditions = grouped[rule.name].conditions.concat(rule.conditions);
-            }
-          }
-          
-          setParsedRules(Object.values(grouped));
+          const mapped = results.data.map((row, index) => ({ ...mapToOurFormat(row), ...csvRowMetadata(row, index, "merchandising", results.errors || []) }));
+          setParsedRules(groupMerchandisingImports(mapped));
+          setReport(null);
           setStep(2);
         } else {
           if (window.shopify && window.shopify.toast) {
@@ -200,6 +188,8 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
 
   const handleImport = () => {
     if (onSubmit) {
+      awaitingImport.current = true;
+      setReport(null);
       onSubmit(parsedRules);
     }
   };
@@ -216,7 +206,7 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
         zIndex: 99999,
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
       }}
     >
       <div
@@ -225,13 +215,17 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
           borderRadius: "12px",
           padding: "32px",
           width: "550px",
+          maxWidth: "95vw",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxSizing: "border-box",
           boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
           position: "relative",
         }}
       >
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={() => { if (!isSubmitting) onClose(); }}
           style={{
             position: "absolute",
             top: "16px",
@@ -258,10 +252,10 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
             color: "#202223",
           }}
         >
-          {step === 1 ? "Step 1 of 2: Select a source file" : "Step 2 of 2: Import Details"}
+          {report ? "CSV import results" : step === 1 ? "Step 1 of 2: Select a source file" : "Step 2 of 2: Import Details"}
         </h2>
 
-        {step === 1 ? (
+        {report ? <><CsvImportReport report={report} /><button type="button" onClick={onClose} style={{ padding: "10px 18px" }}>Done</button></> : step === 1 ? (
           <>
             {/* Upload Area */}
             <SampleCsvDownload href={`/samples/${ruleType === "search" ? "search" : "collection"}-merchandising.csv`}>
@@ -436,11 +430,12 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div style={{ color: "#1E1B4B", fontSize: "14px" }}>
-                  Successfully parsed <strong>{parsedRules.length}</strong> {parsedRules.length === 1 ? "rule" : "rules"} from your CSV.
+                  Found <strong>{parsedRules.length}</strong> {parsedRules.length === 1 ? "rule" : "rules"} from your CSV.
                 </div>
               </div>
             </div>
 
+            {parsedRules.some(r => r.importError) && <CsvImportReport preview report={{ imported: 0, skipped: parsedRules.filter(r => r.importError).length, errors: parsedRules.filter(r => r.importError).map(r => ({ row: r.sourceRow, name: r.name, reason: r.importError })) }} />}
             {/* Footer Actions */}
             <div
               style={{

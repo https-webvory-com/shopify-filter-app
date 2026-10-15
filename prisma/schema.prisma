@@ -354,6 +354,17 @@ model SearchBanner {
   @@index([shop, query, isActive])
 }
 
+model ThemeCustomization {
+  id        String   @id @default(cuid())
+  shop      String
+  themeId   String
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, themeId])
+}
+
 model SearchSetting {
   shop      String   @id
   config    Json

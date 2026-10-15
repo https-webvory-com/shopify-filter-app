@@ -1,3 +1,4 @@
+import { normalizePinImportRow, importRowInfo, importWriteError } from '../utils/csvImportReport.js';
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { invalidateShop } from '../services/shopCache.server.js';
@@ -15,15 +16,18 @@ export const action = async ({ request }) => {
     const shop = session.shop;
 
     const body = await request.json();
-    const { rows = [], ruleType = "collection" } = body;
+    let { rows = [], ruleType = "collection" } = body;
+    if (!["collection", "search"].includes(ruleType)) return Response.json({ error: "Invalid rule type." }, { status: 400 });
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return Response.json({ imported: 0, skipped: 0, errors: [] });
     }
 
     // ─── Batch-validate all product IDs at once ───────────────────────────
+    rows = rows.map(normalizePinImportRow);
     const allProductIds = new Set();
     for (const row of rows) {
+      if (row.importError) continue;
       for (const p of row.products || []) {
         const numericId = p.Id ?? p.id;
         if (numericId) {
@@ -49,6 +53,7 @@ export const action = async ({ request }) => {
     const allCollectionIds = new Set();
     const collectionGid = id => String(id).startsWith("gid://shopify/Collection/") ? String(id) : `gid://shopify/Collection/${id}`;
     for (const row of rows) {
+      if (row.importError) continue;
       for (const id of row.collectionIds || []) {
         if (id) allCollectionIds.add(collectionGid(id));
       }
@@ -71,10 +76,14 @@ export const action = async ({ request }) => {
     // ─── Process each row individually with try/catch ─────────────────────
     const importedIds = [];
     const skippedRows = [];
+    const warnings = [];
 
     for (const row of rows) {
       try {
         const externalId = row.externalId || "imported-row";
+        const info = importRowInfo(row);
+        if (row.importError) { skippedRows.push({ id: externalId, ...info, reason: row.importError }); continue; }
+        const rowWarnings = [];
 
         // Map and validate products
         const validProducts = [];
@@ -101,10 +110,13 @@ export const action = async ({ request }) => {
         if (validProducts.length === 0) {
           skippedRows.push({
             id: externalId,
-            reason: "No matching products found in database",
+            ...info,
+            reason: "No matching products were found in this store’s synced catalog. Product IDs from another Shopify store cannot be reused; check the IDs and sync products first.",
           });
           continue;
         }
+
+        if (validProducts.length < row.products.length) rowWarnings.push({ ...info, reason: `${row.products.length - validProducts.length} product(s) were not found or have no ID; this rule was imported with ${validProducts.length} matching product(s).` });
 
         // Stable IDs survive renamed collections; titles support older exports.
         let validCollections = row.collectionTitles || [];
@@ -115,17 +127,23 @@ export const action = async ({ request }) => {
           if (validCollections.length === 0) {
             skippedRows.push({
               id: externalId,
+              ...info,
               reason: `Collection(s) not found in store: ${(row.collectionTitles || []).join(", ") || (row.collectionIds || []).join(", ")}`,
             });
             continue;
           }
         }
 
+        if (ruleType === "collection" && validCollections.length && validCollections.length < Math.max(row.collectionIds.length, row.collectionTitles.length)) rowWarnings.push({ ...info, reason: "Some target collections were not found; only the matching collections were imported." });
+
         // Determine applyToSearchType
         const applyToSearchType = row.applyToSearchType === "search" ? "page" : row.applyToSearchType || "both";
         const searchQueries = Array.isArray(row.searchQueries)
           ? row.searchQueries.filter(query => typeof query === "string" && query.trim()).map(query => query.trim())
           : row.searchQuery ? [row.searchQuery] : [];
+
+        if (ruleType === "search" && applyToSearchType === "none") rowWarnings.push({ ...info, reason: "Neither instant search nor the search results page is selected in this CSV. The saved rule will not apply to either surface." });
+        if (ruleType === "search" && row.applyToAll === false && !searchQueries.length) { skippedRows.push({ id: externalId, ...info, reason: "Search queries are missing and ApplyToAll is false." }); continue; }
 
         // Determine rule name and applyToAll
         let ruleName = "Imported Pin";
@@ -179,27 +197,31 @@ export const action = async ({ request }) => {
         });
 
         importedIds.push(externalId);
+        warnings.push(...rowWarnings);
       } catch (rowErr) {
         skippedRows.push({
           id: row.externalId || "unknown",
-          reason: rowErr.message || "Unknown error",
+          ...importRowInfo(row),
+          reason: importWriteError(rowErr),
         });
       }
     }
 
     if (importedIds.length) {
-      await invalidateShop(shop);
+      try { await invalidateShop(shop); }
+      catch { warnings.push({ name: "Storefront refresh", reason: "Rules were saved, but storefront refresh could not be confirmed. Check the saved rules before retrying." }); }
     }
     return Response.json({
       imported: importedIds.length,
       skipped: skippedRows.length,
       errors: skippedRows,
+      warnings,
     });
   } catch (err) {
     if (err instanceof Response) throw err;
     console.error("[import-pins-batch] Fatal error:", err);
     return Response.json(
-      { imported: 0, skipped: 0, errors: [{ id: "batch", reason: err.message }] },
+      { imported: 0, skipped: 0, errors: [{ id: "batch", reason: "The batch could not be confirmed. Check existing rules before retrying." }] },
       { status: 500 }
     );
   }

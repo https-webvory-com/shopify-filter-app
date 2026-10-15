@@ -1,5 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
+import CsvImportReport from "./CsvImportReport";
+import { csvRowMetadata, importSummary } from "../../utils/csvImportReport.js";
+import { postPinImportBatch, unconfirmedPinRows } from "../../utils/pinImportBatch.js";
 import { SampleCsvDownload } from "../ui/SampleCsvDownload";
 import { searchPinScopeFromCsv } from "../../utils/searchPinCsv";
 
@@ -49,7 +52,7 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
   const [parsedRows, setParsedRows] = useState([]);
   const [uploadState, setUploadState] = useState("idle");
   const [progress, setProgress] = useState({ processed: 0, total: 0, imported: 0, skipped: 0, errors: [] });
-  const [showErrors, setShowErrors] = useState(false);
+
   const fileInputRef = useRef(null);
   const isUploadingRef = useRef(false);
 
@@ -60,7 +63,7 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
       setParsedRows([]);
       setUploadState("idle");
       setProgress({ processed: 0, total: 0, imported: 0, skipped: 0, errors: [] });
-      setShowErrors(false);
+
       isUploadingRef.current = false;
     }
   }, [isOpen]);
@@ -88,9 +91,9 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
       complete: (results) => {
         if (!results.data?.length) { window.shopify?.toast?.show("No valid data found in CSV", { isError: true }); return; }
         const fields = results.meta.fields || [];
-        const hasSearchQuery = fields.some((f) => f.toLowerCase() === "searchquery");
+        const hasSearchQuery = fields.some((f) => ["searchquery", "searchqueries"].includes(f.toLowerCase()));
         if (!hasSearchQuery) { window.shopify?.toast?.show("Invalid CSV: Missing 'SearchQuery' column", { isError: true }); return; }
-        setParsedRows(results.data.map(mapCsvRow));
+        setParsedRows(results.data.map((row, index) => ({ ...mapCsvRow(row), ...csvRowMetadata(row, index, "pinning", results.errors || []) })));
         setStep(2);
       },
       error: () => window.shopify?.toast?.show("Failed to parse CSV", { isError: true }),
@@ -110,21 +113,15 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
     setProgress({ processed: 0, total, imported: 0, skipped: 0, errors: [] });
 
     let totalImported = 0, totalSkipped = 0;
+    let totalUnconfirmed = 0;
+    const allWarnings = [];
     const allErrors = [];
 
     try {
       for (let i = 0; i < batches.length; i += CONCURRENCY) {
         if (!isUploadingRef.current) break;
         const group = batches.slice(i, i + CONCURRENCY);
-        const results = await Promise.allSettled(
-          group.map((batch) =>
-            fetch("/api/import-pins-batch", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rows: batch, ruleType: "search" }),
-            }).then((r) => { if (!r.ok) throw new Error(`Server error: ${r.status}`); return r.json(); })
-          )
-        );
+        const results = await Promise.allSettled(group.map(batch => postPinImportBatch(batch, "search")));
         let groupProcessed = 0;
         results.forEach((result, idx) => {
           groupProcessed += group[idx].length;
@@ -132,13 +129,15 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
             totalImported += result.value.imported || 0;
             totalSkipped += result.value.skipped || 0;
             allErrors.push(...(result.value.errors || []));
+            allWarnings.push(...(result.value.warnings || []));
           } else {
-            totalSkipped += group[idx].length;
-            allErrors.push({ id: `batch-${i + idx}`, reason: result.reason?.message || "Batch failed" });
+            totalUnconfirmed += group[idx].length;
+            allErrors.push(...unconfirmedPinRows(group[idx], result.reason));
           }
         });
-        setProgress((prev) => ({ processed: prev.processed + groupProcessed, total, imported: totalImported, skipped: totalSkipped, errors: [...allErrors] }));
+        setProgress((prev) => ({ processed: prev.processed + groupProcessed, total, imported: totalImported, skipped: totalSkipped, errors: [...allErrors], warnings: [...allWarnings], unconfirmed: totalUnconfirmed }));
       }
+      window.shopify?.toast?.show(importSummary({ imported: totalImported, skipped: totalSkipped, unconfirmed: totalUnconfirmed, warnings: allWarnings }), { duration: 8000 });
       setUploadState("done");
       isUploadingRef.current = false;
       if (onImportComplete) onImportComplete();
@@ -150,7 +149,7 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
 
   const handleClose = () => {
     if (uploadState === "uploading") {
-      window.shopify?.toast?.show("Import is in progress. It will continue in the background.", { duration: 4000 });
+      window.shopify?.toast?.show("Import is in progress. Keep this window open until the report is ready.", { duration: 4000 });
       return;
     }
     onClose();
@@ -161,7 +160,7 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999 }}
       onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div style={{ background: "#fff", borderRadius: "12px", padding: "32px", width: "560px", maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", position: "relative" }}>
+      <div style={{ background: "#fff", borderRadius: "12px", padding: "32px", width: "560px", maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", position: "relative" }}>
 
         <button onClick={handleClose} style={{ position: "absolute", top: "16px", right: "16px", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           <svg viewBox="0 0 20 20" style={{ width: "20px", height: "20px", fill: "#5c5f62" }}>
@@ -308,30 +307,13 @@ export default function ImportSearchPinsModal({ isOpen, onClose, onImportComplet
                 <div style={{ fontSize: "12px", color: "#6d7175" }}>Skipped</div>
               </div>
             </div>
-            {progress.errors.length > 0 && (
-              <div style={{ marginBottom: "20px" }}>
-                <button onClick={() => setShowErrors(!showErrors)} style={{ background: "none", border: "none", cursor: "pointer", color: "#d82c0d", fontSize: "13px", fontWeight: "600", display: "flex", alignItems: "center", gap: "4px", padding: 0 }}>
-                  <svg viewBox="0 0 20 20" style={{ width: "14px", height: "14px", fill: "currentColor", transform: showErrors ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                  {showErrors ? "Hide" : "Show"} {progress.errors.length} skipped rows
-                </button>
-                {showErrors && (
-                  <div style={{ marginTop: "8px", maxHeight: "140px", overflowY: "auto", background: "#fff8f8", border: "1px solid #ffd2d2", borderRadius: "6px", padding: "8px" }}>
-                    {progress.errors.map((err, i) => (
-                      <div key={i} style={{ fontSize: "11px", color: "#d82c0d", padding: "3px 0", borderBottom: i < progress.errors.length - 1 ? "1px solid #ffd2d2" : "none" }}>
-                        <span style={{ fontWeight: "600" }}>{err.id}:</span> {err.reason}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <CsvImportReport report={progress} />
+
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
               {uploadState === "done" || uploadState === "error" ? (
                 <button onClick={onClose} style={btnPrimary}>Close</button>
               ) : (
-                <button onClick={() => { window.shopify?.toast?.show("Import continues in background.", { duration: 3000 }); onClose(); }} style={btnSecondary}>Continue in background</button>
+                <button onClick={handleClose} style={btnSecondary}>Import in progress</button>
               )}
             </div>
           </>

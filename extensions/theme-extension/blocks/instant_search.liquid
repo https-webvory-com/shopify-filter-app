@@ -1,3 +1,4 @@
+{% render 'customization' %}
 <script>
   window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
   window.cfpCustomerTags = {{ customer.tags | join: ',' | json }};

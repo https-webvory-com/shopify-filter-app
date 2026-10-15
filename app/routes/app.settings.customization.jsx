@@ -1,474 +1,109 @@
-import { useNavigate } from "react-router";
-import { useState } from "react";
-import { authenticate } from "../shopify.server";
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useEffect, useState } from 'react';
+import { useFetcher, useLoaderData, useNavigate } from 'react-router';
+import { boundary } from '@shopify/shopify-app-react-router/server';
+import { authenticate } from '../shopify.server';
+import { GET_THEME } from '../graphql/queries';
+import { getCustomization, saveCustomization, resetCustomization } from '../services/customization.server.js';
+import { CustomizationValidationError, DEFAULT_CUSTOMIZATION, normalizeThemeId } from '../utils/customization.js';
 
-export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
-};
-
-export default function Customization() {
-  const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState("style");
-  const [cssCode, setCssCode] = useState(
-    "/* Write custom CSS here */\n.cfp-filter-title {\n  font-weight: bold;\n}",
-  );
-  const [jsCode, setJsCode] = useState(
-    "// Write custom Javascript here\nconsole.log('AI Search & Filter initialized');",
-  );
-
-  const [swatches, setSwatches] = useState([
-    { color: "Red", hex: "#FF0000" },
-    { color: "Blue", hex: "#0000FF" },
-    { color: "Green", hex: "#00FF00" },
-    { color: "Black", hex: "#000000" },
-    { color: "White", hex: "#FFFFFF" },
-  ]);
-
-  const [newColor, setNewColor] = useState("");
-  const [newHex, setNewHex] = useState("#ffffff");
-
-  const handleAddSwatch = () => {
-    if (!newColor) return;
-    setSwatches([...swatches, { color: newColor, hex: newHex }]);
-    setNewColor("");
-    setNewHex("#ffffff");
-  };
-
-  return (
-    <s-page heading="Customization">
-      <ui-title-bar title="Customization">
-        <button variant="breadcrumb" onClick={() => navigate("/app/settings")}>
-          Settings
-        </button>
-      </ui-title-bar>
-
-      <div
-        style={{
-          marginBottom: "20px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          fontSize: "14px",
-        }}
-      >
-        <a
-          href="/app/settings"
-          onClick={(e) => {
-            e.preventDefault();
-            navigate("/app/settings");
-          }}
-          style={{
-            color: "#006e52",
-            textDecoration: "none",
-            fontWeight: "500",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
-        >
-          <svg
-            style={{ width: "16px", height: "16px" }}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            ></path>
-          </svg>
-          Back to Settings
-        </a>
-      </div>
-
-      <s-button slot="primary-action">Save Customization</s-button>
-
-      <s-stack direction="block" gap="base">
-        {/* Navigation tabs */}
-        <div
-          style={{
-            display: "flex",
-            borderBottom: "1px solid #e1e3e5",
-            gap: "16px",
-          }}
-        >
-          <button
-            onClick={() => setActiveTab("style")}
-            style={{
-              padding: "12px 8px",
-              border: "none",
-              background: "none",
-              borderBottom:
-                activeTab === "style" ? "2px solid #008060" : "none",
-              color: activeTab === "style" ? "#008060" : "#6d7175",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            Widget Styling
-          </button>
-          <button
-            onClick={() => setActiveTab("swatches")}
-            style={{
-              padding: "12px 8px",
-              border: "none",
-              background: "none",
-              borderBottom:
-                activeTab === "swatches" ? "2px solid #008060" : "none",
-              color: activeTab === "swatches" ? "#008060" : "#6d7175",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            Color Swatches
-          </button>
-          <button
-            onClick={() => setActiveTab("code")}
-            style={{
-              padding: "12px 8px",
-              border: "none",
-              background: "none",
-              borderBottom: activeTab === "code" ? "2px solid #008060" : "none",
-              color: activeTab === "code" ? "#008060" : "#6d7175",
-              cursor: "pointer",
-              fontWeight: "600",
-              fontSize: "14px",
-            }}
-          >
-            Custom CSS / JS
-          </button>
-        </div>
-
-        {/* Tab content: Style */}
-        {activeTab === "style" && (
-          <s-layout>
-            <s-layout-section>
-              <s-card heading="General Settings">
-                <s-stack direction="block" gap="base">
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                      Filter Sidebar Position
-                    </label>
-                    <select
-                      style={{
-                        padding: "8px 12px",
-                        border: "1px solid #ccc",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                      }}
-                    >
-                      <option>Left Sidebar</option>
-                      <option>Right Sidebar</option>
-                      <option>Top Toolbar (Horizontal)</option>
-                    </select>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                      Products Per Page
-                    </label>
-                    <input
-                      type="number"
-                      defaultValue="16"
-                      style={{
-                        padding: "8px 12px",
-                        border: "1px solid #ccc",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                        width: "120px",
-                      }}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                      Theme Accent Color
-                    </label>
-                    <input
-                      type="color"
-                      defaultValue="#008060"
-                      style={{
-                        width: "60px",
-                        height: "40px",
-                        border: "1px solid #ccc",
-                        borderRadius: "4px",
-                      }}
-                    />
-                  </div>
-                </s-stack>
-              </s-card>
-            </s-layout-section>
-
-            <s-layout-section variant="secondary">
-              <s-card heading="Facet Options">
-                <s-stack direction="block" gap="base">
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      defaultChecked
-                      id="show-count"
-                      style={{ width: "16px", height: "16px" }}
-                    />
-                    <label htmlFor="show-count" style={{ fontSize: "14px" }}>
-                      Show product count badge on filters
-                    </label>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      defaultChecked
-                      id="hide-empty"
-                      style={{ width: "16px", height: "16px" }}
-                    />
-                    <label htmlFor="hide-empty" style={{ fontSize: "14px" }}>
-                      Hide filter values with 0 products
-                    </label>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      id="multi-select"
-                      defaultChecked
-                      style={{ width: "16px", height: "16px" }}
-                    />
-                    <label htmlFor="multi-select" style={{ fontSize: "14px" }}>
-                      Allow multi-selection in facets
-                    </label>
-                  </div>
-                </s-stack>
-              </s-card>
-            </s-layout-section>
-          </s-layout>
-        )}
-
-        {/* Tab content: Swatches */}
-        {activeTab === "swatches" && (
-          <s-layout>
-            <s-layout-section>
-              <s-card heading="Manage Color Hex Mapping">
-                <s-paragraph>
-                  Provide hex codes for color filters to render actual color
-                  circles/swatches instead of basic text options.
-                </s-paragraph>
-                <div
-                  style={{
-                    marginTop: "16px",
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "16px",
-                  }}
-                >
-                  {swatches.map((swatch, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        border: "1px solid #e1e3e5",
-                        padding: "8px 12px",
-                        borderRadius: "6px",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          background: swatch.hex,
-                          display: "inline-block",
-                          border: "1px solid #ccc",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "600", fontSize: "13px" }}>
-                          {swatch.color}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#6d7175" }}>
-                          {swatch.hex}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setSwatches(swatches.filter((_, i) => i !== idx))
-                        }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#d82c0d",
-                          cursor: "pointer",
-                          fontWeight: "600",
-                        }}
-                      >
-                        âœ•
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </s-card>
-            </s-layout-section>
-
-            <s-layout-section variant="secondary">
-              <s-card heading="Add Custom Swatch">
-                <s-stack direction="block" gap="base">
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                      Color Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Navy Blue"
-                      value={newColor}
-                      onChange={(e) => setNewColor(e.target.value)}
-                      style={{
-                        padding: "8px 12px",
-                        border: "1px solid #ccc",
-                        borderRadius: "6px",
-                        fontSize: "14px",
-                      }}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                    }}
-                  >
-                    <label style={{ fontWeight: "600", fontSize: "14px" }}>
-                      Hex Code
-                    </label>
-                    <input
-                      type="color"
-                      value={newHex}
-                      onChange={(e) => setNewHex(e.target.value)}
-                      style={{
-                        width: "60px",
-                        height: "40px",
-                        border: "1px solid #ccc",
-                        borderRadius: "4px",
-                        padding: 0,
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={handleAddSwatch}
-                    style={{
-                      background: "#008060",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      padding: "10px 18px",
-                      fontWeight: "600",
-                      fontSize: "14px",
-                      cursor: "pointer",
-                      marginTop: "10px",
-                    }}
-                  >
-                    Add Swatch
-                  </button>
-                </s-stack>
-              </s-card>
-            </s-layout-section>
-          </s-layout>
-        )}
-
-        {/* Tab content: Code */}
-        {activeTab === "code" && (
-          <s-stack direction="block" gap="base">
-            <s-card heading="Custom Styling (CSS)">
-              <s-paragraph>
-                Add custom styles to override default widget design elements.
-              </s-paragraph>
-              <textarea
-                value={cssCode}
-                onChange={(e) => setCssCode(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: "150px",
-                  fontFamily: "monospace",
-                  padding: "12px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  fontSize: "13px",
-                  marginTop: "8px",
-                }}
-              />
-            </s-card>
-            <s-card heading="Custom Scripting (JS)">
-              <s-paragraph>
-                Insert custom Javascript hooks or trackers that run upon
-                search/filter loads.
-              </s-paragraph>
-              <textarea
-                value={jsCode}
-                onChange={(e) => setJsCode(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: "150px",
-                  fontFamily: "monospace",
-                  padding: "12px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  fontSize: "13px",
-                  marginTop: "8px",
-                }}
-              />
-            </s-card>
-          </s-stack>
-        )}
-      </s-stack>
-    </s-page>
-  );
+async function readThemes(admin) {
+  const response = await admin.graphql(GET_THEME), result = await response.json();
+  if (result.errors || !result.data?.themes?.edges) throw Error('Could not load themes. Please reload and retry.');
+  return result.data.themes.edges.map(({ node }) => ({ id: normalizeThemeId(node.id), name: node.name, role: node.role }));
 }
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
+export const loader = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const themes = await readThemes(admin);
+  const requested = new URL(request.url).searchParams.get('themeId');
+  const themeId = requested ? normalizeThemeId(requested) : (themes.find(t => t.role === 'MAIN') || themes[0])?.id || '';
+  if (themeId && !themes.some(t => t.id === themeId)) throw new Response('Theme not found.', { status: 404 });
+  return { themes, themeId, shop: session.shop, customization: themeId ? await getCustomization(session.shop, themeId) : null };
 };
+export const action = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const form = await request.formData();
+  let themeId;
+  try {
+    themeId = normalizeThemeId(form.get('themeId'));
+    const themes = await readThemes(admin);
+    if (!themes.some(t => t.id === themeId)) return { error: 'This theme no longer exists in your store.' };
+    if (form.get('intent') === 'reset') {
+      await resetCustomization(session.shop, themeId);
+      return { success: true, themeId, customization: null };
+    }
+    if (form.get('intent') !== 'save') return { error: 'Unknown customization action.' };
+    let config;
+    try { config = JSON.parse(String(form.get('customization') || '')); }
+    catch { return { error: 'Invalid customization data.' }; }
+    const customization = await saveCustomization(session.shop, themeId, config);
+    return { success: true, themeId, customization };
+  } catch (error) {
+    // Validation errors are actionable; persistence errors must not expose server details.
+    return { error: error instanceof CustomizationValidationError ? error.message : 'Could not save customization. Please retry.' };
+  }
+};
+
+const field = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
+const button = { padding: '10px 16px', border: '1px solid #c9cccf', borderRadius: 6, background: '#fff', cursor: 'pointer' };
+export default function Customization() {
+  const loaded = useLoaderData(), navigate = useNavigate(), fetcher = useFetcher();
+  const initial = loaded.customization || DEFAULT_CUSTOMIZATION;
+  const [values, setValues] = useState(initial), [saved, setSaved] = useState(initial);
+  const [tab, setTab] = useState('css'), [color, setColor] = useState(''), [hex, setHex] = useState('#000000'), [localError, setLocalError] = useState('');
+  const busy = fetcher.state !== 'idle', dirty = JSON.stringify(values) !== JSON.stringify(saved);
+  useEffect(() => { const value = loaded.customization || DEFAULT_CUSTOMIZATION; setValues(value); setSaved(value); setColor(''); setLocalError(''); }, [loaded.themeId, loaded.customization]);
+  useEffect(() => {
+    if (!busy && fetcher.data?.success && fetcher.data.themeId === loaded.themeId) {
+      const value = fetcher.data.customization || DEFAULT_CUSTOMIZATION;
+      setValues(value); setSaved(value); setLocalError('');
+    }
+  }, [busy, fetcher.data, loaded.themeId]);
+  useEffect(() => {
+    const prevent = event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', prevent); return () => window.removeEventListener('beforeunload', prevent);
+  }, [dirty]);
+  const update = (key, value) => setValues(v => ({ ...v, [key]: value }));
+  const changeTheme = event => {
+    if (dirty && !window.confirm('Discard unsaved customization changes and switch themes?')) return;
+    navigate('/app/settings/customization?themeId=' + encodeURIComponent(event.target.value));
+  };
+  const submit = intent => {
+    if (intent === 'reset' && !window.confirm('Restore this theme’s customization defaults? Other themes are unchanged.')) return;
+    setLocalError(''); fetcher.submit({ intent, themeId: loaded.themeId, customization: JSON.stringify(values) }, { method: 'post' });
+  };
+  const addSwatch = () => {
+    const name = color.normalize('NFKC').trim().replace(/\s+/g, ' ');
+    if (!name || name.length > 100) { setLocalError('Enter a color name of 1–100 characters.'); return; }
+    if (values.swatches.some(v => v.color.toLowerCase() === name.toLowerCase())) { setLocalError('This filter swatch already exists.'); return; }
+    if (values.swatches.length >= 200) { setLocalError('Use at most 200 filter swatches.'); return; }
+    update('swatches', [...values.swatches, { color: name, hex }]); setColor(''); setLocalError('');
+  };
+  const theme = loaded.themes.find(t => t.id === loaded.themeId);
+  const preview = `https://${loaded.shop}/collections/all?preview_theme_id=${loaded.themeId}`;
+  return <s-page heading="Customization">
+    <ui-title-bar title="Customization"><button variant="breadcrumb" onClick={() => { if (!dirty || window.confirm('Discard unsaved customization changes?')) navigate('/app/settings'); }}>Settings</button></ui-title-bar>
+    <style>{`.cfp-customization{max-width:1100px;display:grid;gap:20px}.cfp-customization *{box-sizing:border-box}.cfp-customization textarea{tab-size:2;resize:vertical}.cfp-customization label{display:grid;gap:8px}.cfp-customization fieldset{min-width:0;border:1px solid #ddd;border-radius:10px;padding:20px;display:grid;gap:16px}.cfp-customization .swatch-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px;border:1px solid #eee;border-radius:8px}.cfp-customization .swatch-name{flex:1;min-width:0;overflow-wrap:anywhere}.cfp-customization button:focus-visible,.cfp-customization textarea:focus-visible{outline:2px solid #5b21b6;outline-offset:3px}`}</style>
+    <div className="cfp-customization">
+      <p>Customize this app’s collection filters, results grid and instant search for a selected theme. Save applies on the next storefront page load. The app widget must be installed on that theme.</p>
+      <label>Theme<select aria-label="Theme" style={field} value={loaded.themeId} disabled={busy || !loaded.themes.length} onChange={changeTheme}>{loaded.themes.map(t => <option key={t.id} value={t.id}>{t.name}{t.role === 'MAIN' ? ' (Published)' : ''}</option>)}</select></label>
+      {!loaded.themes.length && <p role="status">No themes are available.</p>}
+      {loaded.themeId && <>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}><a href={preview} target="_blank" rel="noreferrer">Preview {theme?.name}</a><a href={preview + '&cfp_disable_customization=1'} target="_blank" rel="noreferrer">Preview without customization</a></div>
+        {(localError || fetcher.data?.error) && <p role="alert" style={{ color: '#b42318' }}>{localError || fetcher.data.error}</p>}
+        {!busy && fetcher.data?.success && fetcher.data.themeId === loaded.themeId && <p role="status">Customization {fetcher.data.customization ? 'saved' : 'restored to defaults'} for this theme.</p>}
+        <fieldset disabled={busy}>
+          <legend>Theme customization</legend>
+          <label style={{ display: 'flex', alignItems: 'center' }}><input type="checkbox" name="enabled" checked={values.enabled} onChange={e => update('enabled', e.target.checked)} /> Enable customization for this theme</label>
+          <div role="tablist" aria-label="Customization editors" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{[['css', 'Stylesheets'], ['javascript', 'JavaScript'], ['swatches', 'Filter swatches']].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} aria-controls={'customization-' + id} id={'tab-' + id} onClick={() => setTab(id)} style={{ ...button, background: tab === id ? '#ede9fe' : '#fff' }}>{label}</button>)}</div>
+          <div role="tabpanel" id={'customization-' + tab} aria-labelledby={'tab-' + tab}>
+            {tab === 'css' && <><p>Use this app’s <code>.cfp-</code> classes to style filters, product cards or instant search. CSS is applied only to this selected theme. Example: <code>.cfp-product-card__title {'{ color: #5b21b6; }'}</code></p><label>Custom CSS<textarea name="css" spellCheck={false} rows={18} maxLength={100000} style={{ ...field, fontFamily: 'monospace' }} value={values.css} onChange={e => update('css', e.target.value)} /></label></>}
+            {tab === 'javascript' && <><label style={{ display: 'flex', alignItems: 'center' }}><input type="checkbox" name="javascriptEnabled" checked={values.javascriptEnabled} onChange={e => update('javascriptEnabled', e.target.checked)} /> Run custom JavaScript</label><p>For developers: scripts run once per page after the document is ready. Use <code>document.addEventListener('cfp:customization-ready', …)</code> for initialization and <code>cfp:search-products-rendered</code> after collection/search results update. This app uses its own markup and events; SoBooster SDK templates are not compatible. Test on an unpublished theme first.</p><label>Custom JavaScript<textarea name="javascript" spellCheck={false} rows={18} maxLength={100000} style={{ ...field, fontFamily: 'monospace' }} value={values.javascript} onChange={e => update('javascript', e.target.value)} /></label></>}
+            {tab === 'swatches' && <><p>Override the displayed color of exact filter values, such as “Navy Blue”. Matching ignores case and extra spaces. These overrides do not change product images or filtering rules.</p><div style={{ display: 'grid', gap: 12 }}>{values.swatches.map((s, index) => <div className="swatch-row" key={s.color}><span aria-hidden="true" style={{ width: 28, height: 28, flexShrink: 0, borderRadius: '50%', background: s.hex, border: '1px solid #aaa' }} /><span className="swatch-name">{s.color}</span><input aria-label={'Color for ' + s.color} type="color" value={s.hex} onChange={e => update('swatches', values.swatches.map((v, i) => i === index ? { ...v, hex: e.target.value } : v))} /><button type="button" style={button} aria-label={'Remove ' + s.color} onClick={() => update('swatches', values.swatches.filter((_, i) => i !== index))}>Remove</button></div>)}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 16, alignItems: 'end' }}><label style={{ flex: '1 1 180px', minWidth: 0 }}>Color name<input value={color} maxLength={100} style={field} onChange={e => setColor(e.target.value)} /></label><label>Color<input type="color" value={hex} onChange={e => setHex(e.target.value)} /></label><button type="button" style={button} onClick={addSwatch}>Add swatch</button></div></>}
+          </div>
+        </fieldset>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}><button type="button" disabled={busy || !dirty} style={{ ...button, background: '#5b21b6', color: '#fff' }} onClick={() => submit('save')}>{busy ? 'Saving…' : 'Save customization'}</button><button type="button" disabled={busy} style={button} onClick={() => submit('reset')}>Restore defaults</button><span role="status">{dirty ? 'Unsaved changes' : ''}</span></div>
+      </>}
+    </div>
+  </s-page>;
+}
+export const headers = args => boundary.headers(args);

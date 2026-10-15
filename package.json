@@ -2,6 +2,9 @@
   "name": "collection-filter-pro",
   "private": true,
   "scripts": {
+    "test:customization": "node --test tests/search/customization.test.mjs",
+    "test:customization:database": "node tests/customization/run.mjs",
+    "test:customization:browser": "node tests/customization/run.mjs --browser",
     "test:search-settings": "node --test tests/search/search-settings.test.mjs",
     "test:search-settings:database": "node tests/search-settings/run-database.mjs",
     "test:search-settings:fixture": "node tests/search-settings/serve-fixture.mjs",
