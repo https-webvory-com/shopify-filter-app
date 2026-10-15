@@ -1,6 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
+import { loadModule } from './helpers/search-ranking.mjs';
+
+test('exhaustive keyword retrieval bypasses hybrid preparation and retains its complete scope', async () => {
+  const calls = [];
+  const service = await loadModule('app/services/semanticSearch.server.js', {
+    './meiliClient.server': { default: { index: name => {
+      assert.equal(name, 'products');
+      return { search: async (query, options) => { calls.push({query, options}); return {hits: []}; } };
+    } } },
+    './shopCache.server': { getCached: () => { throw Error('must not consult semantic readiness'); } },
+    '../utils/semanticSearch.js': { withSemanticSearch, semanticFallback, semanticProvider },
+  });
+  const options = { filter: ["shop = 'fixture'", "status = 'ACTIVE'", 'option_Color IN ["Red"]'],
+    sort: ['priceMin:asc'], offset: 1000, limit: 1000 };
+  await service.keywordSearch('red dress for wedding', options);
+  assert.deepEqual(calls, [{query:'red dress for wedding', options}]);
+  assert.equal(calls[0].options.hybrid, undefined);
+});
 
 test("semantic requests retain tenant, filters, page and explicit sort", () => {
   const query = { q: "dress for beach wedding", filter: ["shop = 'fixture'", "available = true"], sort: ["priceMin:asc"], offset: 25, limit: 25 };

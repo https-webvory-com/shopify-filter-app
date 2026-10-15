@@ -170,10 +170,84 @@ test('candidate cache reuses retrieval while applying changed rules freshly and 
   const boost = id => ({ conditions: [{ action: 'Boost', field: 'Product', value: 'Dress ' + id }] });
   assert.equal((await service.rankSearchResults({ ...f.spec, rule: boost(3) })).products[0].id, gid(3));
   assert.equal((await service.rankSearchResults({ ...f.spec, rule: boost(2) })).products[0].id, gid(2));
-  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls.length, 2);
   assert.ok([...cached.values()][0].hits.every(p => p.merchandisingScore === undefined));
   await service.rankSearchResults({ ...f.spec, query: 'different phrase' });
   assert.equal(cached.size, 2);
+});
+
+test('wedding sentence uses one semantic window instead of overlapping hybrid pages or scanning the catalog', async () => {
+  const f = await fixture({ docs: [] });
+  const semanticCalls = [], keywordCalls = [], cache = new Map();
+  const semantic = async (query, options) => {
+    semanticCalls.push(options);
+    // Production hybrid offsets overlapped. Any second hybrid page would
+    // contain duplicate IDs and used to fail the whole storefront request.
+    return { hits: Array.from({ length: options.limit }, (_, i) => product(i + 1)),
+      estimatedTotalHits: 50582, semanticHitCount: options.limit };
+  };
+  const keyword = async (_query, options) => {
+    keywordCalls.push(options);
+    return { hits: [product(1), product(900)], estimatedTotalHits: 2 };
+  };
+  const service = await loadRanking(f.prisma, semantic, async (key, read) => {
+    if (!cache.has(key)) cache.set(key, await read());
+    return cache.get(key);
+  }, keyword);
+  const spec = { ...f.spec, query: 'i am looking for red dress for wedding  for the mother' };
+  const first = await service.rankSearchResults(spec);
+  const second = await service.rankSearchResults({ ...spec, page: 2 });
+  assert.equal(semanticCalls.length, 1);
+  assert.equal(semanticCalls[0].offset, 0);
+  assert.equal(semanticCalls[0].limit, 200);
+  assert.equal(keywordCalls.length, 1);
+  assert.equal(first.total, 201);
+  assert.equal(first.semanticHitCount, 200);
+  const ids = [...first.products, ...second.products].map(p => p.id);
+  assert.equal(new Set(ids).size, 50);
+});
+
+test('all lexical matches survive the semantic window, including a boost beyond 2000 results', async () => {
+  const f = await fixture({ docs: [] });
+  const docs = Array.from({ length: 2501 }, (_, i) => product(i + 1,
+    { tags: i === 2500 ? ['featured'] : [] }));
+  let semanticCalls = 0;
+  const offsets = [];
+  const service = await loadRanking(f.prisma, async () => {
+    semanticCalls++;
+    return { hits: docs.slice(0, 200), semanticHitCount: 0 };
+  }, undefined, async (_query, options) => {
+    offsets.push(options.offset);
+    return { hits: docs.slice(options.offset, options.offset + options.limit) };
+  });
+  const result = await service.rankSearchResults({ ...f.spec,
+    rule: { conditions: [{ action: 'Boost', field: 'Tags', value: 'featured' }] } });
+  assert.equal(result.total, 2501);
+  assert.equal(result.products[0].id, gid(2501));
+  assert.equal(semanticCalls, 1);
+  assert.deepEqual(offsets, [0, 1000, 2000]);
+});
+
+test('empty lexical matches still return semantic products and exact full lexical batches terminate', async () => {
+  const f = await fixture({ docs: [] });
+  const service = await loadRanking(f.prisma, async () => ({ hits: [product(1)], semanticHitCount: 1 }),
+    undefined, async () => ({ hits: [] }));
+  assert.equal((await service.rankSearchResults(f.spec)).products[0].id, gid(1));
+  const full = await fixture({ docs: Array.from({ length: 2000 }, (_, i) => product(i + 1)) });
+  assert.equal((await full.service.rankSearchResults(full.spec)).total, 2000);
+  assert.equal(full.calls.filter(c => c.options.limit === 200).length, 1);
+  assert.deepEqual(full.calls.filter(c => c.options.limit === 1000).map(c => c.options.offset), [0, 1000, 2000]);
+});
+
+test('invalid lexical pagination cannot loop forever or silently claim complete results', async () => {
+  const f = await fixture({ docs: [] });
+  const semantic = async () => ({ hits: [] });
+  const broken = await loadRanking(f.prisma, semantic, undefined,
+    async () => ({ hits: Array.from({ length: 1000 }, (_, i) => product(i + 1)) }));
+  await assert.rejects(broken.rankSearchResults(f.spec), /pagination did not advance/);
+  const incomplete = await loadRanking(f.prisma, semantic, undefined,
+    async () => ({ hits: [product(1)], totalHits: 2 }));
+  await assert.rejects(incomplete.rankSearchResults(f.spec), /Incomplete keyword/);
 });
 
 test('facets and price bounds describe all eligible ranked products, including external pins and exclusions', async () => {

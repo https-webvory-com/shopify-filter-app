@@ -15,11 +15,11 @@ export async function loadModule(file, mocks) {
   vm.runInNewContext((await transform(source, { loader: file.endsWith('.jsx') ? 'jsx' : 'js', format: 'cjs' })).code, context);
   return context.module.exports;
 }
-export async function loadRanking(prisma, semanticSearch, getCached = async (_key, read) => read()) {
+export async function loadRanking(prisma, semanticSearch, getCached = async (_key, read) => read(), keywordSearch = semanticSearch) {
   const merchandising = await loadModule('app/services/merchandising.server.js', { '../db.server.js': { default: prisma } });
   const service = await loadModule('app/services/searchRanking.server.js', {
     'node:crypto': { createHash }, './shopCache.server': { getCached },
-    '../db.server': { default: prisma }, './semanticSearch.server': { semanticSearch },
+    '../db.server': { default: prisma }, './semanticSearch.server': { semanticSearch, keywordSearch },
     './merchandising.server': merchandising, '../utils/searchColor.js': color,
     '../utils/rankedCollectionPage.js': ranking,
   });

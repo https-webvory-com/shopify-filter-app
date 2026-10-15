@@ -23,6 +23,12 @@ export async function semanticSearch(query, options) {
   return semanticFallback(async ([{ q, ...params }]) => meiliClient.index("products").search(q, params), [prepared]);
 }
 
+// Ranking scans must not page through a changing hybrid blend. Keep the
+// exhaustive lexical pass separate from the fixed semantic relevance window.
+export async function keywordSearch(query, options) {
+  return meiliClient.index("products").search(query, options);
+}
+
 export async function semanticMultiSearch(queries) {
   const provider = semanticProvider();
   const enabled = queries.some(query => query.q?.trim()) && await isReady(provider);

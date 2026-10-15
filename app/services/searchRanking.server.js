@@ -1,7 +1,7 @@
 import prisma from '../db.server';
 import { createHash } from 'node:crypto';
 import { getCached } from './shopCache.server';
-import { semanticSearch } from './semanticSearch.server';
+import { semanticSearch, keywordSearch } from './semanticSearch.server';
 import { applyMerchandisingRules, buildMeiliIncludeFilters, selectMerchandisingVariant } from './merchandising.server';
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import { hydrateCollectionInventory, hydrateCollectionSkus } from '../utils/rankedCollectionPage.js';
@@ -17,27 +17,44 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
   const seen = new Set(), products = [];
   const { limit: ignoredLimit, offset: ignoredOffset, sortBy, facets, attributesToHighlight,
     attributesToRetrieve, ...searchOptions } = options;
-  const batchSize = 200;
+  const batchSize = 1000;
+  const semanticWindow = 200;
   const includes = buildMeiliIncludeFilters(rule?.conditions?.filter(c => c.action === 'Include') || []);
   searchOptions.filter = [...(Array.isArray(searchOptions.filter) ? searchOptions.filter : [searchOptions.filter].filter(Boolean)), ...includes];
-  const cacheKey = `searchRankingCandidates:${shop}:${createHash('sha256').update(JSON.stringify([query, searchOptions])).digest('hex')}`;
+  const cacheKey = `searchRankingCandidates:${shop}:${createHash('sha256').update(JSON.stringify(['lexical-and-semantic-v2', query, searchOptions])).digest('hex')}`;
   const candidates = await getCached(cacheKey, async () => {
     const hits = [], ids = new Set();
-    let semanticHitCount = 0;
-    for (let offset = 0; ; offset += batchSize) {
-      const result = await semanticSearch(query, { ...searchOptions, offset, limit: batchSize });
-      semanticHitCount += result.semanticHitCount || 0;
+    // Semantic search can match the entire catalog. Use one fixed relevance
+    // window, shared by both surfaces/pages, rather than scanning its tail.
+    // Retain EVERY lexical match, including late products targeted by rules.
+    const [semantic, firstKeyword] = await Promise.all([
+      semanticSearch(query, { ...searchOptions, offset: 0, limit: semanticWindow }),
+      keywordSearch(query, { ...searchOptions, offset: 0, limit: batchSize }),
+    ]);
+    const append = result => {
       for (const h of result.hits || []) {
         const id = gid(h.id);
-        if (ids.has(id)) throw Error('Search results changed while ranking; retry the request');
+        if (ids.has(id)) continue;
         ids.add(id); hits.push(h);
       }
-      if ((result.hits || []).length < batchSize) {
-        if (result.totalHits != null && hits.length !== result.totalHits) throw Error('Incomplete search ranking results');
-        break;
+    };
+    append(semantic);
+    const keywordIds = new Set((firstKeyword.hits || []).map(h => gid(h.id)));
+    append(firstKeyword);
+    let result = firstKeyword;
+    for (let offset = batchSize; (result.hits || []).length === batchSize; offset += batchSize) {
+      result = await keywordSearch(query, { ...searchOptions, offset, limit: batchSize });
+      const previousSize = keywordIds.size;
+      for (const h of result.hits || []) keywordIds.add(gid(h.id));
+      if ((result.hits || []).length && keywordIds.size === previousSize) {
+        throw Error('Keyword search pagination did not advance');
       }
+      append(result);
     }
-    return { hits, semanticHitCount };
+    if (result.totalHits != null && keywordIds.size !== result.totalHits) {
+      throw Error('Incomplete keyword search ranking results');
+    }
+    return { hits, semanticHitCount: semantic.semanticHitCount || 0 };
   }, 15);
   const semanticHitCount = candidates.semanticHitCount;
   for (const h of candidates.hits) {
