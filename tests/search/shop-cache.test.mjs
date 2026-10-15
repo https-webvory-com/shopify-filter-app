@@ -32,6 +32,14 @@ test('failed ranking preparations can be retried',async()=>{
  assert.equal(await getCached('ranking',async()=>42),42);
 });
 
+test('search ranking candidates follow product revisions written by another process',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com',key='searchRankingCandidates:'+shop+':phrase';
+ assert.equal(await f.getCached(key,async()=>1,15),1);
+ f.values.set('collectionProductRevision:'+shop+':all','1');
+ assert.equal(await f.getCached(key,async()=>2,15),2);
+ assert.ok(f.values.has(key+':revision:0:1'));
+});
+
 test('admin invalidation preserves browsing sessions, advances revision and schedules warmup',async()=>{
  const f=await fixture();
  for(const prefix of ['collectionRankingSession:','collectionOrderSnapshot:','collectionWarmupContexts:'])f.values.set(prefix+'shop','retained');

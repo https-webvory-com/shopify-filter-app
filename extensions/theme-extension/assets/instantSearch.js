@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function instantCacheMarket() {
-    return [window.Shopify?.country, window.Shopify?.currency?.active, window.Shopify?.locale, window.Shopify?.routes?.root].join('|');
+    return [window.Shopify?.country, window.Shopify?.currency?.active, window.Shopify?.locale, window.Shopify?.routes?.root, window.cfpCustomerTags || ''].join('|');
   }
 
   async function fetchSearchJSON(url) {
@@ -801,6 +801,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (window.Shopify && window.Shopify.country) {
          countryParam = `&country=${window.Shopify.country}`;
       }
+      countryParam += `&locale=${encodeURIComponent(window.Shopify?.locale || '')}`;
+      if (window.cfpCustomerTags) countryParam += `&customer_tags=${encodeURIComponent(window.cfpCustomerTags)}`;
       
       // 1. Fetch 4 popular products in background
       const productsPromise = fetchSearchJSON(
@@ -965,6 +967,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       // 1. Fetch products from OUR API in background
+      countryParam += `&locale=${encodeURIComponent(window.Shopify?.locale || '')}`;
+      if (window.cfpCustomerTags) countryParam += `&customer_tags=${encodeURIComponent(window.cfpCustomerTags)}`;
       const productsPromise = fetchSearchJSON(
         `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}${countryParam}`
       );

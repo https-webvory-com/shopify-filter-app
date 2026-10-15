@@ -209,6 +209,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   const source = (await fs.readFile("app/routes/api.filter.jsx", "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
   const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require: name => {
     if (name === "../utils/searchColor.js") return searchColor;
+    if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
     if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);

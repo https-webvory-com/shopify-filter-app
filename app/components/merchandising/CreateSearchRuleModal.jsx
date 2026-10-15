@@ -14,6 +14,7 @@ export default function CreateSearchRuleModal({
   shopifyLocations = [], shopifyProductTypes = [], shopifyTags = [], shopifyProducts = [], shopifySkus = [], shopifyBarcodes = []
 }) {
   const fetcher = useFetcher();
+  const productFetcher = useFetcher();
   const shopify = useAppBridge();
   const [ruleName, setRuleName] = useState("");
   const [customerTags, setCustomerTags] = useState("");
@@ -23,6 +24,10 @@ export default function CreateSearchRuleModal({
   const [isSearchQueriesDropdownOpen, setIsSearchQueriesDropdownOpen] = useState(false);
   const [searchQueryInput, setSearchQueryInput] = useState("");
   const [searchQueries, setSearchQueries] = useState([]);
+  const queryKey = JSON.stringify(searchQueries);
+  useEffect(() => {
+    if (isOpen && searchQueries.length) productFetcher.submit({ actionType: 'searchProducts', searchQueries: queryKey }, { method: 'post' });
+  }, [isOpen, queryKey]);
 
   const [isDateRangeChecked, setIsDateRangeChecked] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -694,7 +699,9 @@ export default function CreateSearchRuleModal({
                                           else if (r.field === "Product type") currentOptions = shopifyProductTypes || [];
                                           else if (r.field === "Tags") currentOptions = shopifyTags || [];
                                           else if (r.field === "Locations") currentOptions = shopifyLocations || [];
-                                          else if (r.field === "Product") currentOptions = shopifyProducts || [];
+                                          else if (r.field === "Product") currentOptions = searchQueries.length
+                                            ? (productFetcher.data?.queryKey === queryKey ? productFetcher.data.products || [] : [])
+                                            : shopifyProducts || [];
                                           else if (r.field === "SKU") currentOptions = shopifySkus || [];
                                           else if (r.field === "Barcode") currentOptions = shopifyBarcodes || [];
                                           else if (r.field && r.field.endsWith("(product option)")) {
@@ -748,7 +755,10 @@ export default function CreateSearchRuleModal({
                                               })}
                                               {filteredOptions.length === 0 && (
                                                 <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
-                                                  No options found.
+                                                  {r.field === 'Product' && searchQueries.length && productFetcher.state !== 'idle'
+                                                    ? 'Loading matching products...'
+                                                    : r.field === 'Product' && productFetcher.data?.queryKey === queryKey && productFetcher.data?.error
+                                                      ? productFetcher.data.error : 'No options found.'}
                                                 </div>
                                               )}
                                             </>

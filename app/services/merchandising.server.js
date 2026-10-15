@@ -115,6 +115,7 @@ export async function getActiveRuleForSearch(
   shop,
   searchQuery,
   currentCustomerTags = [],
+  locale = "",
 ) {
   if (!shop || !searchQuery) return null;
 
@@ -139,13 +140,16 @@ export async function getActiveRuleForSearch(
     orderBy: { createdAt: "desc" },
   });
 
-  const queryLower = searchQuery.toLowerCase();
+  const queryLower = searchQuery.toLowerCase().trim();
 
   for (const rule of rules) {
-    if (!rule.searchQueries || rule.searchQueries.length === 0) continue;
+    if (rule.locales?.trim()) {
+      const locales = rule.locales.split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
+      if (!locales.includes(locale.toLowerCase())) continue;
+    }
 
     // Check if any of the search queries match the user's query
-    if (rule.searchQueries.some((q) => q.toLowerCase() === queryLower)) {
+    if (!rule.searchQueries?.length || rule.searchQueries.some((q) => q.toLowerCase().trim() === queryLower)) {
       if (!rule.customerTags || rule.customerTags.trim() === "") {
         return rule; // Rule applies to everyone
       }
@@ -778,10 +782,10 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
     if (!prioritizeSortOverMerchandising) {
       const aBaseScore = sortBy === "price-ascending" ? -parseFloat(a.priceMin || 0) : 
                          sortBy === "price-descending" ? parseFloat(a.priceMin || 0) : 
-                         (a.bestSellingScore || 0);
+                         (globalSettings?.preserveSearchRelevance && ["relevance", "r"].includes(sortBy) ? 0 : a.bestSellingScore || 0);
       const bBaseScore = sortBy === "price-ascending" ? -parseFloat(b.priceMin || 0) : 
                          sortBy === "price-descending" ? parseFloat(b.priceMin || 0) : 
-                         (b.bestSellingScore || 0);
+                         (globalSettings?.preserveSearchRelevance && ["relevance", "r"].includes(sortBy) ? 0 : b.bestSellingScore || 0);
                          
       const aTotalScore = a.merchandisingScore + aBaseScore;
       const bTotalScore = b.merchandisingScore + bBaseScore;

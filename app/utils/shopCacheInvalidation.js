@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
-const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPageIds','fullApiResponse','merch','pinning'];
-const productCaches = ['queryParserFacets','availableVariants','contextualPricing','collectionPageIds'];
+const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
+const productCaches = ['queryParserFacets','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
 export function isOwnedShopCache(key, shop, productOnly = false) {
   return (productOnly ? productCaches : owned).some(prefix => key === `${prefix}:${shop}` || key.startsWith(`${prefix}:${shop}:`)) ||
     (!productOnly && key.startsWith(`api_filter_res_${shop}_`));

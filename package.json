@@ -2,6 +2,8 @@
   "name": "collection-filter-pro",
   "private": true,
   "scripts": {
+    "test:search-pinning": "node --test tests/search/search-ranking.test.mjs",
+    "test:search-pinning:fixture": "node tests/search-pinning/serve-fixture.mjs",
     "test:search-banners": "node --test tests/search/search-banner.test.mjs",
     "test:search-banners:database": "node tests/search-banners/run-database.mjs",
     "test:search-banners:browser": "node tests/search-banners/run-database.mjs --browser",

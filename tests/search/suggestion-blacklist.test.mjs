@@ -91,9 +91,9 @@ export async function searchApi(getRules) {
     '../services/queryParser.server.js':{parseQuery:async()=>null},
     '../utils/searchColor.js':{selectSearchColorVariant},'../utils/spellingCorrection.js':{spellingCorrection},'../utils/searchSuggestions.js':{buildSearchSuggestions},
     '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:getRules},'react-router':{data:(v,i)=>Response.json(v,i)},
-    '../db.server':{__esModule:true,default:{}},'../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null},
+    '../db.server':{__esModule:true,default:{}},'../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
     '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
-    '../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},'../services/rateLimiter.server':{rateLimit:async()=>true},
+    '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/semanticSearch.server':{semanticSearch:async()=>({hits:products})},
   });
 }

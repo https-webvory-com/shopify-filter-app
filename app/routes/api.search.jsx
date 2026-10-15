@@ -5,7 +5,8 @@ import { buildSearchSuggestions } from "../utils/searchSuggestions.js";
 import { getActiveSuggestionBlacklist } from '../services/suggestionBlacklist.server.js';
 import { data } from "react-router";
 import prisma from "../db.server";
-import { getActivePinningRuleForSearch } from "../services/merchandising.server";
+import { getActivePinningRuleForSearch, getActiveRuleForSearch } from "../services/merchandising.server";
+import { rankSearchResults } from "../services/searchRanking.server.js";
 import meiliClient from "../services/meiliClient.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import { getCached } from "../services/shopCache.server";
@@ -20,7 +21,7 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   let query = url.searchParams.get("q") || "";
-  const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10) || 10));
   const sortBy = url.searchParams.get("sortBy");
 
   if (!shop) {
@@ -29,8 +30,8 @@ export const loader = async ({ request }) => {
 
   const isAllowed = await rateLimit(request);
   if (!isAllowed) {
-    return data({ error: "Too Many Requests" }, { 
-      status: 429, 
+    return data({ error: "Too Many Requests" }, {
+      status: 429,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -42,31 +43,31 @@ export const loader = async ({ request }) => {
   try {
     const globalSettings = await getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop));
     let organicProducts = [];
-    
+
     const searchQuery = query ? query.trim() : "";
-    
+
     const parsedQuery = searchQuery ? await parseQuery(searchQuery, shop) : null;
 
     // -- TIER 1: NLP Intent Extraction (DISABLED) --
     // const aiExtracted = await extractFiltersFromQuery(searchQuery);
     const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
     const cleanSearchQuery = typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
-    
+
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
-    
+
     if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
 
     if (globalSettings?.showOnlyInStock) {
       meiliFilters.push(`available = true`);
     }
-    
+
     if (aiExtracted.min_price !== undefined && aiExtracted.min_price !== null) {
         meiliFilters.push(`priceMin >= ${aiExtracted.min_price}`);
     }
     if (aiExtracted.max_price !== undefined && aiExtracted.max_price !== null) {
         meiliFilters.push(`priceMin <= ${aiExtracted.max_price}`);
     }
-    
+
     // Dynamically apply any extra attributes (size, color, material etc)
     if (aiExtracted.attributes && typeof aiExtracted.attributes === 'object') {
         for (const [key, value] of Object.entries(aiExtracted.attributes)) {
@@ -101,7 +102,19 @@ export const loader = async ({ request }) => {
         }
     }
 
-    const meiliRes = await semanticSearch(cleanSearchQuery, meiliSearchParams);
+    // 2. Fetch Active Pinning Rule
+    const [pinningRule, merchandisingRule] = await Promise.all([
+      getActivePinningRuleForSearch(shop, query, "instant"),
+      getActiveRuleForSearch(shop, query, (url.searchParams.get('customer_tags') || '').split(',').map(t => t.trim()).filter(Boolean), url.searchParams.get('locale') || ''),
+    ]);
+
+    const ranking = pinningRule || merchandisingRule ? await rankSearchResults({
+      shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy },
+      rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
+      mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
+    }) : null;
+    const meiliRes = ranking ? { hits: ranking.products, semanticHitCount: ranking.semanticHitCount }
+      : await semanticSearch(cleanSearchQuery, meiliSearchParams);
 
     const didYouMean = spellingCorrection(cleanSearchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 
@@ -125,14 +138,14 @@ export const loader = async ({ request }) => {
              filter: [`shop = '${shop}'`]
           }).catch(() => ({ facetHits: [] })) // catch in case option_Color doesn't exist
         ]);
-        
+
         // Combine and extract top 4 unique suggestions
         const combined = [
-          ...(tagFacets.facetHits || []), 
+          ...(tagFacets.facetHits || []),
           ...(typeFacets.facetHits || []),
           ...(colorFacets.facetHits || [])
         ].sort((a, b) => b.count - a.count);
-        
+
         const uniqueVals = new Set();
         combined.forEach(hit => {
            if (hit.value && hit.value.trim() !== "") {
@@ -144,10 +157,10 @@ export const loader = async ({ request }) => {
         console.error("Facet search error:", e);
       }
     }
-    
+
     // ✅ Map Meilisearch hits to match frontend expectations
     // Meili now contains handle, images, variantPrices — no extra Prisma query needed
-    organicProducts = meiliRes.hits.map(h => ({
+    organicProducts = ranking ? [] : meiliRes.hits.map(h => ({
       ...h,
       id: `gid://shopify/Product/${h.id}`,
       // Normalize variantPrices → variants shape for frontend
@@ -163,51 +176,9 @@ export const loader = async ({ request }) => {
       })),
     }));
 
-    // 2. Fetch Active Pinning Rule
-    const pinningRule = await getActivePinningRuleForSearch(shop, query);
-    
-    // 3. Merge Pinned Products and Organic Products
     let pinnedIds = [];
-    let pinnedProducts = [];
-
-    if (pinningRule && pinningRule.products) {
-      try {
-        const parsedPins = typeof pinningRule.products === "string" 
-          ? JSON.parse(pinningRule.products) 
-          : pinningRule.products;
-          
-        if (Array.isArray(parsedPins)) {
-          pinnedIds = parsedPins.map(p => p.id);
-          
-          // For pinned products, fetch from Prisma (they may not be in Meili results)
-          const dbPinnedProducts = await prisma.product.findMany({
-            where: { 
-              shop, 
-              id: { in: pinnedIds },
-              status: { equals: "ACTIVE", mode: "insensitive" }
-            },
-            include: { variants: true }
-          });
-          
-          pinnedProducts = pinnedIds.map(id => {
-            const p = dbPinnedProducts.find(prod => prod.id === id);
-            if (p) {
-              p.isPinned = true;
-              return p;
-            }
-            return null;
-          }).filter(Boolean);
-        }
-      } catch (e) {
-        console.error("Error parsing pinned products in api.search:", e);
-      }
-    }
-
-    // Remove any organic products that are already in the pinned list to avoid duplicates
-    const filteredOrganicProducts = organicProducts.filter(p => !pinnedIds.includes(p.id));
-
-    // Combine them (Pinned items first)
-    const mergedResults = [...pinnedProducts, ...filteredOrganicProducts];
+    const mergedResults = ranking ? ranking.products : organicProducts;
+    if (ranking) pinnedIds = mergedResults.filter(p => p.isPinned).map(p => p.id);
 
     // ✅ No extra Prisma query for handles/images/variants — Meili has it all
     let activeResults = mergedResults
@@ -309,7 +280,7 @@ export const loader = async ({ request }) => {
     return data({
       query: query,
       totalCount: activeResults.length,
-      pinnedCount: pinnedProducts.length,
+      pinnedCount: activeResults.filter(p => p.isPinned).length,
       products: activeResults,
       suggestions: suggestions,
       didYouMean: didYouMean,
@@ -328,7 +299,7 @@ export const loader = async ({ request }) => {
 
   } catch (error) {
     console.error("Error in api.search.jsx:", error);
-    return data({ error: "Internal Server Error" }, { 
+    return data({ error: "Internal Server Error" }, {
       status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',

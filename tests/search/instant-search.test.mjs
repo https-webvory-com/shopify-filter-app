@@ -48,6 +48,22 @@ test('cache expires, bounds entries and size, and preserves unrelated storage',(
  f.context.writeInstantCache('cfp_instant_search_fixture_oversized',{products:[{title:'x'.repeat(160000)}]},{});
  assert.equal(f.store.getItem('cfp_instant_search_fixture_oversized'),null);
 });
+
+test('instant cache separates customer merchandising contexts',()=>{
+ const f=fixture();f.context.window.cfpCustomerTags='vip';const vip=f.context.instantCacheMarket();
+ f.context.window.cfpCustomerTags='';assert.notEqual(f.context.instantCacheMarket(),vip);
+});
+
+test('typed searches send locale and customer context for merchandising',async()=>{
+ const f=fixture(),urls=[];const original=f.context.fetch;
+ f.context.window.Shopify.locale='fr';f.context.window.cfpCustomerTags='vip,trade';
+ f.context.fetch=async url=>{urls.push(String(url));return original(url);};
+ await f.context.performSearch('blue dress');
+ const request=new URL(urls.find(url=>url.includes('/api/search?')));
+ assert.equal(request.searchParams.get('locale'),'fr');
+ assert.equal(request.searchParams.get('customer_tags'),'vip,trade');
+ assert.equal(request.searchParams.get('searchType'),'instant');
+});
 test('failure of optional collections does not suppress products or suggestions',async()=>{
  const f=fixture();const fetch=f.context.fetch;
  f.context.fetch=async url=>String(url).includes('suggest.json')?Promise.reject(Error('collection unavailable')):fetch(url);
@@ -104,10 +120,10 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../utils/searchSuggestions.js':{buildSearchSuggestions},
   '../utils/spellingCorrection.js':{spellingCorrection},
   '../db.server':{__esModule:true,default:{}},
-  '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null},
+  '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
   '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
   '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
-  '../services/filterSettings.server':{},
+  '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},
   '../services/shopCache.server':{getCached:async()=>({})},
   '../services/rateLimiter.server':{rateLimit:async()=>true},
   '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},

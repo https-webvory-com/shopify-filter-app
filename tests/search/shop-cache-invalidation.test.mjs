@@ -21,10 +21,12 @@ test('configuration invalidation only deletes owned cache namespaces and preserv
 test('product invalidation advances only relevant data versions and keeps usable prepared sequences',async()=>{
   const f=fixture();const prepared=`collectionPreparedSequence:${shop}:background-v2:hash`;
   f.values.set(prepared,'ranking');f.values.set(`availableVariants:${shop}:query`,'old');
+  f.values.set(`searchRankingCandidates:${shop}:query`,'old');
   await f.invalidate(shop,{kind:'products',collectionIds:['gid://shopify/Collection/1','1','all']});
   assert.equal(f.values.get(productRevisionKey(shop,'1')),'1');assert.equal(f.values.get(productRevisionKey(shop,'all')),'1');
   assert.equal(f.values.has(productRevisionKey(shop,'2')),false);assert.equal(f.values.has(configurationRevisionKey(shop)),false);
   assert.equal(f.values.get(prepared),'ranking');assert.equal(f.values.has(`availableVariants:${shop}:query`),false);
+  assert.equal(f.values.has(`searchRankingCandidates:${shop}:query`),false);
   assert.deepEqual(f.calls,[[shop,['1','all']]]);
 });
 test('no-op indexed updates have the same fingerprint while ranking-relevant changes differ',()=>{

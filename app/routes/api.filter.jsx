@@ -24,6 +24,7 @@ import { readRankedCollectionPage, hydrateCollectionSkus } from "../utils/ranked
 import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup } from "../services/collectionPreparation.server.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
+import { rankSearchResults } from "../services/searchRanking.server.js";
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -79,7 +80,7 @@ export const loader = async ({ request, context }) => {
       url.searchParams.get("sort_by") ||
       url.searchParams.get("sort") ||
       url.searchParams.get("usf_sort") ||
-      "best-selling";
+      (isSearch ? "relevance" : "best-selling");
     const normalizedSort = rawSort.toLowerCase().replace(/_/g, "-");
     const sortBy = normalizedSort === "bestselling" ? "best-selling" : normalizedSort;
     const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
@@ -366,10 +367,7 @@ export const loader = async ({ request, context }) => {
       Object.values(optionsFilters).some((v) => v.length > 0) ||
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
-      maxPrice < 9999999 ||
-      // A collection sort selection is not a product filter. Its two priority
-      // settings decide whether pins and merchandising continue to apply.
-      (isSearch ? (sortBy !== "relevance" && sortBy !== "best-selling") : false);
+      maxPrice < 9999999;
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
@@ -379,7 +377,7 @@ export const loader = async ({ request, context }) => {
         : getActivePinningRuleForCollection(shop, resolvedCollectionTitle),
 
       isSearch && searchQuery
-        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags)
+        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "")
         : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || ""),
     ]);
 
@@ -721,6 +719,7 @@ export const loader = async ({ request, context }) => {
     let collectionPaginationApplied = false;
     let collectionBestSellingApplied = false;
     let collectionRankingApplied = false;
+    let searchRankingApplied = false;
     const rankingFingerprint = collectionRankingFingerprint(request.url);
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
@@ -861,6 +860,16 @@ export const loader = async ({ request, context }) => {
       }
     }
 
+    if (isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule)) {
+      const result = await rankSearchResults({ shop, query: searchQuery,
+        options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
+        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: targetFacets });
+      meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
+      collectionPageTotal = result.total;
+      facetDistribution = result.facetDistribution;
+      facetRes = { ...(facetRes || {}), totalHits: result.total, facetDistribution, facetStats: result.facetStats };
+      searchRankingApplied = true;
+    }
     const meiliTime = Date.now() - meiliStart;
 
     // ── 10. Map Meilisearch hits → product objects ─────────────────────
@@ -890,7 +899,7 @@ export const loader = async ({ request, context }) => {
     const totalPinned = activePinnedList.length;
 
     let pagePinnedIds = [];
-    if (!collectionPaginationApplied && totalPinned > 0) {
+    if (!collectionPaginationApplied && !searchRankingApplied && totalPinned > 0) {
       const pinStart = (page - 1) * limit;
       const pinEnd = page * limit;
       if (pinStart < totalPinned) {
@@ -910,7 +919,7 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
-    const finalProducts = collectionRankingApplied ? allMatchedProducts : applyMerchandisingRules(
+    const finalProducts = collectionRankingApplied || searchRankingApplied ? allMatchedProducts : applyMerchandisingRules(
       allMatchedProducts,
       activeRule,
       sortBy,
@@ -1191,7 +1200,7 @@ export const loader = async ({ request, context }) => {
     });
 
     // Sort products by match score so the most relevant colors appear first on the page
-    if (!collectionRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
+    if (!collectionRankingApplied && !searchRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
       products.sort((a, b) => b._matchScore - a._matchScore);
     }
 
@@ -1418,6 +1427,7 @@ export const loader = async ({ request, context }) => {
         resolvedCollectionId,
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,
+        searchRankingApplied,
         pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: pinnedIds.length,
         hasMerchandisingRule: !!activeRule,

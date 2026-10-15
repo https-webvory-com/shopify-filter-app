@@ -13,6 +13,8 @@ import prisma from "../db.server";
 import { availablePins } from "../utils/availablePins.server.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinProductSearch.server";
 import PinSearchField from "../components/merchandising/PinSearchField";
+import { searchPickerProducts } from "../services/searchPicker.server.js";
+import { reorderSearchPins } from "../utils/reorderSearchPins.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const action = async ({ request, params }) => {
@@ -39,6 +41,19 @@ export const action = async ({ request, params }) => {
     Object.assign(whereClause, await pinProductSearchFilter(
       prisma, shop, query, formData.get("searchField"),
     ));
+
+    const targetQueries = JSON.parse(formData.get('targetQueries') || '[]');
+    let targetIds = null;
+    if (targetQueries.length) {
+      let matches;
+      try { matches = await searchPickerProducts(shop, targetQueries); }
+      catch {
+        return Response.json({ products: [], totalCount: 0, targetQueryKey: JSON.stringify(targetQueries),
+          error: 'Could not load matching products. Please retry.', nonMatchingPinnedIds: [] });
+      }
+      targetIds = matches.map(p => p.id);
+      whereClause.AND = [...(whereClause.AND || []), { id: { in: targetIds } }];
+    }
 
 
     const skip = parseInt(formData.get("skip") || "0", 10);
@@ -80,7 +95,8 @@ export const action = async ({ request, params }) => {
       };
     });
 
-    return Response.json({ products, totalCount });
+    return Response.json({ products, totalCount, targetQueryKey: JSON.stringify(targetQueries),
+      nonMatchingPinnedIds: targetIds ? excludedIds.filter(id => !targetIds.includes(id)) : [] });
   }
 
   if (intent === "save") {
@@ -176,8 +192,11 @@ export default function PinningEditor() {
   const [searchQueries, setSearchQueries] = useState(initialSearchQueries);
   const initialApplyToAll = rule?.applyToAll ?? defaultParams?.applyToAll ?? false;
   const [applyToAll, setApplyToAll] = useState(initialApplyToAll);
+  const targetQueryKey = JSON.stringify(applyToAll ? [] : searchQueries);
+  const nonMatchingPinCount = fetcher.data?.targetQueryKey === targetQueryKey
+    ? fetcher.data.nonMatchingPinnedIds?.length || 0 : 0;
   const initialApplyToInstantSearch = rule ? (rule.applyToSearchType === "instant" || rule.applyToSearchType === "both") : true;
-  const initialApplyToSearchResults = rule ? (rule.applyToSearchType === "page" || rule.applyToSearchType === "both") : true;
+  const initialApplyToSearchResults = rule ? (rule.applyToSearchType === "page" || rule.applyToSearchType === "search" || rule.applyToSearchType === "both") : true;
 
   const [applyToInstantSearch, setApplyToInstantSearch] = useState(initialApplyToInstantSearch);
   const [applyToSearchResults, setApplyToSearchResults] = useState(initialApplyToSearchResults);
@@ -253,11 +272,7 @@ export default function PinningEditor() {
     if (dragItem.current !== null) {
       const fromIndex = dragItem.current;
       if (fromIndex !== position) {
-        const newProducts = [...products];
-        const draggedItem = newProducts[fromIndex];
-        newProducts.splice(fromIndex, 1);
-        newProducts.splice(position, 0, draggedItem);
-        setProducts(newProducts);
+        setProducts(reorderSearchPins(products, fromIndex, position, selectedPinnedIds));
       }
       dragItem.current = null;
       dragOverItem.current = null;
@@ -289,11 +304,7 @@ export default function PinningEditor() {
     // Check if it's a reorder (internal drag) dropped at the end
     if (dragItem.current !== null) {
       const fromIndex = dragItem.current;
-      const newProducts = [...products];
-      const draggedItem = newProducts[fromIndex];
-      newProducts.splice(fromIndex, 1);
-      newProducts.push(draggedItem);
-      setProducts(newProducts);
+      setProducts(reorderSearchPins(products, fromIndex, products.length, selectedPinnedIds));
       dragItem.current = null;
       dragOverItem.current = null;
       return;
@@ -316,7 +327,10 @@ export default function PinningEditor() {
     dragOverItem.current = null;
   };
 
+  const pickerInitialized = useRef(false);
   useEffect(() => {
+    const delay = pickerInitialized.current ? 500 : 0;
+    pickerInitialized.current = true;
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery !== undefined) {
         setCurrentPage(0);
@@ -329,18 +343,21 @@ export default function PinningEditor() {
             
             
             skip: 0,
+            targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
             excludedIds: JSON.stringify(products.map(p => p.id))
           },
           { method: "post" },
         );
       }
-    }, 500);
+    }, delay);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, searchField]);
+  }, [searchQuery, searchField, JSON.stringify(searchQueries), applyToAll]);
 
   // When products (pinned list) changes, we should refetch the current page 
   // so the backend naturally replenishes the missing slots
+  const pinListInitialized = useRef(false);
   useEffect(() => {
+    if (!pinListInitialized.current) { pinListInitialized.current = true; return; }
     if (searchQuery !== undefined) {
       fetcher.submit(
         {
@@ -349,7 +366,8 @@ export default function PinningEditor() {
           
           
           skip: currentPage * 9,
-          excludedIds: JSON.stringify(products.map(p => p.id))
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
       );
@@ -358,10 +376,19 @@ export default function PinningEditor() {
 
   useEffect(() => {
     if (fetcher.data?.products) {
-      setSearchResults(fetcher.data.products);
       if (fetcher.data.totalCount !== undefined) {
         setTotalCount(fetcher.data.totalCount);
+        const lastPage = Math.max(0, Math.ceil(fetcher.data.totalCount / 9) - 1);
+        if (currentPage > lastPage) {
+          setCurrentPage(lastPage);
+          setIsFetchingMore(true);
+          fetcher.submit({ intent: 'search', q: searchQuery, searchField, skip: lastPage * 9,
+            targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            excludedIds: JSON.stringify(products.map(p => p.id)) }, { method: 'post' });
+          return;
+        }
       }
+      setSearchResults(fetcher.data.products);
       setIsFetchingMore(false);
     }
   }, [fetcher.data]);
@@ -378,7 +405,8 @@ export default function PinningEditor() {
           
           
           skip: nextPage * 9,
-          excludedIds: JSON.stringify(products.map(p => p.id))
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
       );
@@ -397,7 +425,8 @@ export default function PinningEditor() {
           
           
           skip: prevPage * 9,
-          excludedIds: JSON.stringify(products.map(p => p.id))
+          targetQueries: JSON.stringify(applyToAll ? [] : searchQueries),
+            excludedIds: JSON.stringify(products.map(p => p.id))
         },
         { method: "post" },
       );
@@ -890,7 +919,7 @@ export default function PinningEditor() {
             >
               {searchResults.length === 0 ? (
                 <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
-                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : (searchQuery ? "No products found." : "No products available.")}
+                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : fetcher.data?.error || "No matching products found."}
                 </div>
               ) : (
                 <>
@@ -1028,6 +1057,12 @@ export default function PinningEditor() {
                   dragItem.current !== null ? "move" : "copy";
               }}
             >
+              {nonMatchingPinCount > 0 && (
+                <p role="status" style={{ color: '#92400e', background: '#fffbeb', padding: '12px', borderRadius: '8px', overflowWrap: 'anywhere' }}>
+                  {nonMatchingPinCount} saved {nonMatchingPinCount === 1 ? 'product does' : 'products do'} not match the target search terms.
+                  {' '}Choose matching products to make them appear as pins in those searches.
+                </p>
+              )}
               <div
                 style={{
                   display: "flex",

@@ -8,6 +8,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { searchPickerProducts } from "../services/searchPicker.server.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import FilterModal from "../components/merchandising/FilterModal";
 import CreateSearchRuleModal from "../components/merchandising/CreateSearchRuleModal";
@@ -20,6 +21,17 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const actionType = formData.get("actionType");
+
+  if (actionType === 'searchProducts') {
+    const queries = JSON.parse(formData.get('searchQueries') || '[]');
+    try {
+      const products = await searchPickerProducts(shop, queries);
+      return { queryKey: JSON.stringify(queries), products: products.map(p => ({ title: p.title,
+        image: p.images?.[0]?.url || p.images?.[0]?.src || p.images?.[0] || null })) };
+    } catch {
+      return { queryKey: JSON.stringify(queries), products: [], error: 'Could not load matching products. Please retry.' };
+    }
+  }
 
   if (actionType === "createRule") {
     const name = formData.get("name") || "Untitled Rule";

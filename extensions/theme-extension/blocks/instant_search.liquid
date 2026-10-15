@@ -1,5 +1,6 @@
 <script>
   window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
+  window.cfpCustomerTags = {{ customer.tags | join: ',' | json }};
   window.cfpCurrencySymbol = {{ cart.currency.symbol | json }};
   window.cfpCurrencyCode = {{ cart.currency.iso_code | json }};
   window.CFP_InstantSearchSettings = {
