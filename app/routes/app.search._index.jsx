@@ -164,9 +164,9 @@ const cards = [
     title: "Search Settings",
     tag: "Advanced",
     description:
-      "Configure general search behavior, layout, and advanced options.",
+      "Configure instant search, suggestion counts, manual suggestions, and search result display.",
     path: "/app/search/settings",
-    comingSoon: true,
+    comingSoon: false,
     icon: (
       <svg
         width="26"

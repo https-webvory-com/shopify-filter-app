@@ -71,7 +71,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   // Production build - debug logs removed
 
   // â”€â”€ 1. Global Filter State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const PAGE_SIZE = 25;
+  let PAGE_SIZE = 25;
   let activeFetchController = null;
 
   let activeFilters = {
@@ -261,6 +261,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     parseURLState();
 
     if (/\/search\/?$/i.test(window.location.pathname) && await redirectSubmittedSearch()) return;
+    if (templateName === 'search') {
+      await window.cfpSearchSettingsReady;
+      const settings = window.cfpSearchSettings;
+      if (settings) {
+        if (Number.isInteger(settings.pageSize) && settings.pageSize >= 1 && settings.pageSize <= 40) PAGE_SIZE = settings.pageSize;
+        const form = document.querySelector('.cfp-inline-search-form');
+        if (form && settings.showSearchInput === false) form.hidden = true;
+      }
+    }
     
     // Make sure we inject the UI into the correct container now that sidebar is ready
     findAndInject();
@@ -658,7 +667,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (product.available !== false) {
       card.querySelector('.cfp-product-card__badge')?.remove();
       const position = window.collectionFilterProSettings?.sale_label_position || 'top-left';
-      if (sale && position !== 'none') {
+      const showSale = templateName !== 'search' || window.cfpSearchSettings?.showSale !== false;
+      if (sale && position !== 'none' && showSale) {
         const badge = document.createElement('span');
         badge.className = `cfp-product-card__badge cfp-badge--${position}`;
         badge.style.cssText = 'background-color:var(--cfp-sale-bg,#e11d48);color:var(--cfp-sale-text,#ffffff);z-index:2';
@@ -1161,16 +1171,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
       
       let badgesHtml = '';
+      const searchDisplay = templateName === 'search' ? (window.cfpSearchSettings || {}) : {};
       const s = window.collectionFilterProSettings || {};
       // If product available status is false, or we assume it's true unless specified
       if (product.available === false) {
           const pos = s.sold_out_label_position || 'top-right';
-           if (pos !== 'none') {
+           if (pos !== 'none' && searchDisplay.showSoldOut !== false) {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text); z-index: 2;">Sold out</span>`;
            }
       } else if (onSale && !product._marketPricingUnavailable) {
          const pos = s.sale_label_position || 'top-left';
-           if (pos !== 'none') {
+           if (pos !== 'none' && searchDisplay.showSale !== false) {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg, #e11d48); color: var(--cfp-sale-text, #ffffff); z-index: 2;">ON SALE</span>`;
            }
       }
@@ -1212,7 +1223,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           </div>
           <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
             <div class="cfp-product-card__info">
-              <span class="cfp-product-card__vendor">${product.vendor}</span>
+              ${searchDisplay.showVendor === false ? '' : `<span class="cfp-product-card__vendor">${product.vendor}</span>`}
               <h3 class="cfp-product-card__title">${product.title}</h3>
               ${swatchesHtml}
               ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `

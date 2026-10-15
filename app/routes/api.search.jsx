@@ -209,7 +209,9 @@ export const loader = async ({ request }) => {
         suggestionBlacklist = null;
       }
     }
-    suggestions = suggestionBlacklist === null ? [] : buildSearchSuggestions(searchQuery, activeResults, suggestions, 6, suggestionBlacklist);
+    const rawSuggestionLimit = url.searchParams.get('suggestionLimit');
+    const suggestionLimit = rawSuggestionLimit !== null && /^\d+$/.test(rawSuggestionLimit) ? Math.min(10, Number(rawSuggestionLimit)) : 6;
+    suggestions = suggestionBlacklist === null || suggestionLimit === 0 ? [] : buildSearchSuggestions(searchQuery, activeResults, suggestions, suggestionLimit, suggestionBlacklist);
 
     // Contextual Pricing
     let contextualPricingApplied = false;

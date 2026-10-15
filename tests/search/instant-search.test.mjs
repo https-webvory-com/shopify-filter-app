@@ -133,6 +133,12 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
  assert.equal(response.status,200);
  assert.deepEqual((await response.json()).suggestions,['Blue Pleated Satin Evening Dress']);
+ for (const [value, expected] of [['0', 0], ['1', 1], ['-1', 1], ['bad', 1], ['999', 1]]) {
+   const result = await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress&suggestionLimit='+value)});
+   const body = await result.json();
+   assert.equal(body.suggestions.length, expected);
+   assert.equal(body.products.length, 1, 'Suggestion count must not change eligible products');
+ }
 });
 
 test('a stale phrase correction is hidden rather than replacing a natural language query',async()=>{

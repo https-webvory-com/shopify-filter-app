@@ -31,13 +31,20 @@ if (!window.cfpSearchRedirectPromise && /\/search\/?$/i.test(window.location.pat
   })();
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
+  await window.cfpSearchSettingsReady;
+  const searchSettings = window.cfpSearchSettings || {};
+  if (searchSettings.instantEnabled === false) return;
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
-    minChars: 2,
+    minChars: searchSettings.minChars ?? 2,
     debounceTime: 300,
-    productLimit: userSettings.productLimit || 6,
+    productLimit: searchSettings.productLimit ?? (userSettings.productLimit || 6),
+    suggestionLimit: searchSettings.suggestionLimit ?? 6,
+    collectionLimit: searchSettings.collectionLimit ?? 5,
+    recentLimit: searchSettings.recentLimit ?? 4,
+    manualSuggestions: searchSettings.manualSuggestions || [],
     customSelector: userSettings.customTriggerSelector || "",
     apiUrl: `${API_DOMAIN}/api/search`,
   };
@@ -94,7 +101,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function instantCacheMarket() {
-    return [window.Shopify?.country, window.Shopify?.currency?.active, window.Shopify?.locale, window.Shopify?.routes?.root, window.cfpCustomerTags || ''].join('|');
+    return [window.Shopify?.country, window.Shopify?.currency?.active, window.Shopify?.locale, window.Shopify?.routes?.root, window.cfpCustomerTags || '', JSON.stringify(window.cfpSearchSettings || null)].join('|');
   }
 
   async function fetchSearchJSON(url) {
@@ -579,6 +586,11 @@ document.addEventListener("DOMContentLoaded", function () {
       const query = e.target.value.trim();
       clearTimeout(debounceTimer);
 
+      if (!query) {
+        fetchDefaultView();
+        return;
+      }
+
       if (query.length < CONFIG.minChars) {
         document.getElementById("cfp-search-body").classList.remove("cfp-has-results");
         return;
@@ -602,12 +614,21 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function saveRecentSearch(query) {
-    if (!query) return;
-    let searches = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
-    searches = searches.filter(q => q.toLowerCase() !== query.toLowerCase()); // Remove duplicates
-    searches.unshift(query); // Add to beginning
-    if (searches.length > 4) searches = searches.slice(0, 4); // Keep only 4
-    localStorage.setItem('cfp_recent_searches', JSON.stringify(searches));
+    if (!query || CONFIG.recentLimit === 0) return;
+    try {
+      let searches = readRecentSearches();
+      searches = searches.filter(q => q.toLowerCase() !== query.toLowerCase()); // Remove duplicates
+      searches.unshift(query); // Add to beginning
+      searches = searches.slice(0, CONFIG.recentLimit ?? 4);
+      localStorage.setItem('cfp_recent_searches', JSON.stringify(searches));
+    } catch {} // Storage restrictions must not prevent search submission.
+  }
+
+  function readRecentSearches() {
+    try {
+      const value = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
+      return Array.isArray(value) ? value.filter(s => typeof s === 'string' && s.length <= 200).slice(0, CONFIG.recentLimit ?? 4) : [];
+    } catch { return []; }
   }
 
   function openModal(triggerElement) {
@@ -811,10 +832,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // 2. Fetch all/popular collections in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
-      const collectionsPromise = fetch(`${rootUrl}collections.json?limit=5`)
+      const collectionsPromise = CONFIG.collectionLimit === 0 ? Promise.resolve({collections:[]}) : fetch(`${rootUrl}collections.json?limit=${CONFIG.collectionLimit ?? 5}`)
         .then(res => {
            if(res.ok) return res.json();
-           return fetch(`${rootUrl}search/suggest.json?q=a&resources[type]=collection&resources[limit]=5`).then(r => r.json());
+           return fetch(`${rootUrl}search/suggest.json?q=a&resources[type]=collection&resources[limit]=${CONFIG.collectionLimit ?? 5}`).then(r => r.json());
         }).catch(() => ({collections:[]}));
 
       const [productsData, collectionsData] = await Promise.all([
@@ -859,7 +880,8 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    const searches = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
+    if (CONFIG.manualSuggestions?.length) { renderSuggestions(CONFIG.manualSuggestions, ''); return; }
+    const searches = readRecentSearches();
     if (searches.length === 0) {
       if (container) container.style.display = "none";
       if (collectionsTitle) collectionsTitle.style.display = "block";
@@ -879,9 +901,9 @@ document.addEventListener("DOMContentLoaded", function () {
         <li class="cfp-recent-search-item">
           <a href="/search?q=${encodeURIComponent(s)}" class="cfp-recent-search-link">
             <svg class="cfp-history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            ${s}
+            ${highlightSearchText(s, '')}
           </a>
-          <button class="cfp-remove-recent-btn" data-query="${s}" aria-label="Remove search">
+          <button class="cfp-remove-recent-btn" data-query="${highlightSearchText(s, '')}" aria-label="Remove search">
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </li>
@@ -902,13 +924,19 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function removeRecentSearch(query) {
-    let searches = JSON.parse(localStorage.getItem('cfp_recent_searches') || '[]');
+    let searches = readRecentSearches();
     searches = searches.filter(q => q !== query);
-    localStorage.setItem('cfp_recent_searches', JSON.stringify(searches));
+    try { localStorage.setItem('cfp_recent_searches', JSON.stringify(searches)); } catch {}
     renderRecentSearches("");
   }
 
   function renderSuggestions(suggestions, query) {
+    suggestions = suggestions.slice(0, query ? (CONFIG.suggestionLimit ?? 6) : 10);
+    if (!suggestions.length) {
+      const container = document.getElementById('cfp-recent-searches-container');
+      if (container) container.style.display = 'none';
+      return;
+    }
     const container = document.getElementById("cfp-recent-searches-container");
     const list = document.getElementById("cfp-recent-searches-list");
     const collectionsTitle = document.getElementById("cfp-collections-title");
@@ -970,13 +998,13 @@ document.addEventListener("DOMContentLoaded", function () {
       countryParam += `&locale=${encodeURIComponent(window.Shopify?.locale || '')}`;
       if (window.cfpCustomerTags) countryParam += `&customer_tags=${encodeURIComponent(window.cfpCustomerTags)}`;
       const productsPromise = fetchSearchJSON(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}${countryParam}`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}&suggestionLimit=${CONFIG.suggestionLimit ?? 6}${countryParam}`
       );
 
       // 2. Fetch collections from Shopify Predictive Search API in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
-      const collectionsPromise = fetchSearchJSON(
-        `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=5`
+      const collectionsPromise = CONFIG.collectionLimit === 0 ? Promise.resolve({resources:{results:{collections:[]}}}) : fetchSearchJSON(
+        `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=${CONFIG.collectionLimit ?? 5}`
       ).catch(() => ({resources:{results:{collections:[]}}}));
 
       const [productsData, collectionsData] = await Promise.all([
@@ -1038,6 +1066,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderCollections(data, query, isDefault = false) {
     const list = document.getElementById("cfp-search-collections");
     const titleElement = document.getElementById("cfp-collections-title");
+    if (CONFIG.collectionLimit === 0) {
+      if (list) list.innerHTML = '';
+      if (titleElement) titleElement.style.display = 'none';
+      return;
+    }
     let collections = [];
 
     if (data.resources && data.resources.results && data.resources.results.collections) {
@@ -1064,13 +1097,13 @@ document.addEventListener("DOMContentLoaded", function () {
       html += `
         <li>
           <a href="/search?q=${encodeURIComponent(query)}" style="font-weight: 700; color: #000;">
-            ${query}
+            ${highlightSearchText(query, '')}
           </a>
         </li>
       `;
     }
 
-    collections.forEach((c) => {
+    collections.slice(0, CONFIG.collectionLimit ?? 5).forEach((c) => {
       const collectionUrl = c.url || `/collections/${c.handle}`;
       const displayTitle = highlightSearchText(c.title, query);
 
