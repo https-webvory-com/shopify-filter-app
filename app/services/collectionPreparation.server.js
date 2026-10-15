@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: spec =>
   prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator }),
 });
-const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit']);
+const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseMode']);
 
 export const getCollectionPreparationRevision = preparation.revision;
 export const getPreparedCollectionRanking = preparation.get;
@@ -26,7 +26,7 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
   const keys = [...url.searchParams.keys()];
   if (new Set(keys).size !== keys.length || keys.some(key => !allowed.has(key)) || url.searchParams.get('page') !== '1') return;
   const normalized = new URL('https://ranking.internal/api/filter');
-  for (const [key, value] of url.searchParams) if (!['page','limit'].includes(key)) normalized.searchParams.set(key, value);
+  for (const [key, value] of url.searchParams) if (!['page','limit','responseMode'].includes(key)) normalized.searchParams.set(key, value);
   normalized.searchParams.set('page', '1'); normalized.searchParams.set('limit', '25'); normalized.searchParams.sort();
   const key = warmupContextsKey(shop);
   await redis.zadd(key, Date.now(), JSON.stringify({url:normalized.toString(),collectionId:String(collectionId||'all').split('/').pop()}));

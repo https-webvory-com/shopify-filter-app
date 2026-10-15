@@ -60,11 +60,12 @@
         else return;
         rankedParams.set('sortBy', params.get('sortBy') || 'best-selling');
         rankedParams.set('page', '1'); rankedParams.set('limit', '25');
+        if (!window.cfpCustomerTags) rankedParams.set('responseMode', 'stream-v1');
         var earlyUrl = 'https://aisearchfilter.webvory.com/api/filter?' + rankedParams.toString();
         var controller = new AbortController();
         var timeout = setTimeout(function() { controller.abort(); }, 30000);
         window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-store'})
-          .then(async function(response) { return {status:response.status,payload:await response.json()}; })
+          .then(async function(response) { return response.headers?.get('content-type')?.includes('application/x-ndjson') ? {status:response.status,response:response} : {status:response.status,payload:await response.json()}; })
           .catch(function() { return null; })
           .finally(function() { clearTimeout(timeout); })};
         return;

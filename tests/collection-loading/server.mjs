@@ -1,3 +1,5 @@
+import {brotliDecompressSync,gunzipSync} from 'node:zlib';
+import * as collectionTransport from '../../app/utils/collectionTransport.server.js';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
@@ -15,7 +17,7 @@ import {processCollectionRankingJob} from '../../app/utils/processCollectionRank
 const shop='headless-fixture.myshopify.com';
 export async function createLoadingServer({redisLayer}={}) {
   const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],requestStarts=[];
-  const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
+  const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,streamMetadataDelay:0,streamFailure:null,compression:null,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
   const docs=Array.from({length:30},(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
@@ -55,6 +57,7 @@ export async function createLoadingServer({redisLayer}={}) {
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
   const mocks={
+    '../utils/collectionTransport.server.js':collectionTransport,
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
     '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>({products:[{id:'gid://shopify/Product/'+state.pin}]}),
@@ -64,7 +67,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>({ids:docs.map(p=>p.id).reverse(),revision:'native-order-v1',status:'ready',updatedAt:1})},
     '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,
-    '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.sort();return u.search;},
+    '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.delete('responseMode');u.searchParams.sort();return u.search;},
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
       saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const token='fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:spec=>{lastSpec=spec;return preparation.get(spec);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{}},
@@ -83,7 +86,7 @@ export async function createLoadingServer({redisLayer}={}) {
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null});}
+        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,streamMetadataDelay:0,streamFailure:null,compression:null});}
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
         if(updates.invalidate){state.revision++;await invalidate(shop);}
@@ -107,9 +110,19 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.apiDelay)await new Promise(resolve=>setTimeout(resolve,state.apiDelay));
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
-        const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url),params:{},context:{}});
-        const text=await response.text();const data=JSON.parse(text);requests.push({page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
-        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(text);return;
+        const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url,{headers:state.compression?{'accept-encoding':state.compression}:{}}),params:{},context:{}});
+        let text='', data;
+        if(response.headers.get('content-type')?.includes('application/x-ndjson')){
+          res.writeHead(response.status,Object.fromEntries(response.headers));
+          const reader=response.body.getReader(),chunks=[];let frame=0;
+          while(true){const chunk=await reader.read();if(chunk.done)break;chunks.push(Buffer.from(chunk.value));
+            if(frame++>0){if(state.streamMetadataDelay)await new Promise(resolve=>setTimeout(resolve,state.streamMetadataDelay));if(state.streamFailure==='tail'){res.end();return;}}
+            res.write(state.streamFailure==='before'?'invalid\n':chunk.value);
+          }
+          res.end();reader.releaseLock();const bytes=Buffer.concat(chunks),encoding=response.headers.get('content-encoding');text=(encoding==='br'?brotliDecompressSync(bytes):encoding==='gzip'?gunzipSync(bytes):bytes).toString();const records=text.trim().split('\n').map(line=>JSON.parse(line));data={...records[0].data,...records[1].data};
+        }else{text=await response.text();data=JSON.parse(text);}
+        requests.push({page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
+        if(!res.headersSent){res.writeHead(response.status,Object.fromEntries(response.headers));res.end(text);}return;
       }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));

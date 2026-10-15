@@ -36,7 +36,7 @@ try{
   const wait=async(expression,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){if(await evaluate(expression))return;await delay(100);}throw Error('Timed out: '+expression);};
   const cards=()=>evaluate(`[...document.querySelectorAll('.cfp-product-card--reveal')].map(c=>c.querySelector('a').getAttribute('href').match(/dress-(\\d+)/)[1])`);
   const navigate=async(query='')=>{await send('Page.navigate',{url:origin+'/collections/fixture'+query});await wait('window._cfpInitStarted===true');};
-  const test=async(name,fn)=>{if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
+  const test=async(name,fn)=>{if(process.argv.includes('--transport-only')&&!/streamed|pending filter metadata|truncated filter frame|malformed first stream/.test(name))return;if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
@@ -161,6 +161,50 @@ try{
     assert.ok(await evaluate("document.querySelector('.cfp-product-card--reveal img').src.includes('/image/1.svg')"));
     const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,1);assert.deepEqual(data.queueFailures,[]);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {variantRuleAcrossBatches:true,firstProducts:(await cards()).slice(0,2)};
+  });
+  for(const encoding of ['br','gzip'])await test('streamed '+encoding+' HTTP response decompresses progressively in Chrome',async()=>{
+    await control({reset:true,early:true,delay:10,assetDelay:0,apiDelay:0,compression:encoding,streamMetadataDelay:2000});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.equal(await evaluate('window._cfpInitialized===true'),false);
+    const ids=await cards();await wait('window._cfpInitialized===true');assert.deepEqual(await cards(),ids);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('streamed cards and prices render before delayed filter metadata without duplicate cards',async()=>{
+    await control({reset:true,early:true,delay:10,assetDelay:0,apiDelay:0,streamMetadataDelay:2500,priceDelay:50,imageDelay:50});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const ids=await cards();
+    assert.equal(await evaluate('window._cfpInitialized===true'),false);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')"),true);
+    await wait("document.querySelector('.cfp-product-card--reveal .cfp-product-card__price').textContent!=='See product price'");
+    assert.equal(await evaluate('window._cfpInitialized===true'),false);
+    const first=await evaluate('cardSnapshots[0].at');await wait('window._cfpInitialized===true');
+    const complete=await evaluate('performance.now()');assert.ok(complete-first>1500);
+    assert.deepEqual(await cards(),ids);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {cardsMs:Math.round(first),completeMs:Math.round(complete),injectedMetadataDelayMs:2500,liveTiming:false};
+  });
+  await test('load more during pending filter metadata retains first-page cards and ranking token',async()=>{
+    await control({reset:true,early:true,delay:10,streamMetadataDelay:3000});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const token=await evaluate("new URL(location.href).searchParams.get('rankingToken')");assert.ok(token);
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
+    assert.equal(new Set(await cards()).size,30);await delay(3300);
+    assert.equal((await cards()).length,30);assert.equal(await evaluate("new URL(location.href).searchParams.get('rankingToken')"),token);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('a truncated filter frame keeps usable cards and Retry recovers with ordinary JSON',async()=>{
+    await control({reset:true,early:true,delay:10,streamFailure:'tail'});await navigate();
+    await wait("!!document.querySelector('.cfp-filter-error button')");assert.equal((await cards()).length,25);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
+    await control({streamFailure:null});await evaluate("document.querySelector('.cfp-filter-error button').click()");
+    await wait('window._cfpInitialized===true');assert.equal((await cards()).length,25);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-filter-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('a malformed first stream frame shows product Retry and does not render partial products',async()=>{
+    await control({reset:true,early:true,delay:10,streamFailure:'before'});await navigate();
+    await wait("!!document.querySelector('.cfp-order-error button')");assert.equal((await cards()).length,0);
+    await control({streamFailure:null});await evaluate("document.querySelector('.cfp-order-error button').click()");
+    await wait('window._cfpInitialized===true');assert.equal((await cards()).length,25);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('early first-page request overlaps deferred asset loading without duplicate requests',async()=>{
     await control({reset:true,delay:10,clockOffset:0,early:false,assetDelay:0,apiDelay:0});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");

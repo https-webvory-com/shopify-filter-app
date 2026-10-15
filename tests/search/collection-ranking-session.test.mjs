@@ -37,3 +37,7 @@ test('expired, cross-shop and changed-filter tokens require a restart', async ()
   await assert.rejects(get('shop', 'filters', session.token), /expired/);
   await assert.rejects(get('shop', 'filters', 'invalid'), /Invalid/);
 });
+
+test('stream transport does not change ranking tokens between the first page and JSON pagination',()=>{
+  assert.equal(fingerprint('https://app.test/api/filter?shop=s&page=1&limit=25&responseMode=stream-v1'),fingerprint('https://app.test/api/filter?limit=25&shop=s&page=2&rankingToken=x'));
+});

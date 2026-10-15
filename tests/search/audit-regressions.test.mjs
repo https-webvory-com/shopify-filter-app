@@ -1,3 +1,4 @@
+import * as collectionTransport from '../../app/utils/collectionTransport.server.js';
 import * as searchColor from "../../app/utils/searchColor.js";
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
@@ -85,7 +86,8 @@ test('available product IDs exclude products with only unavailable matching comb
 });
 
 async function route(file,mocks){
- const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+ const context={module:{exports:{}},exports:{},Response,URL,console,require: name => {
+    if(name==='../utils/collectionTransport.server.js')return collectionTransport;
    if(name==='../utils/csvImportReport.js')return csvImportReport;
    if(name==='../services/merchandisingImport.server.js')return {};
     if (name === "../utils/searchColor.js") return searchColor;

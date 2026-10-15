@@ -1,3 +1,4 @@
+import { canStreamCollection, collectionStreamResponse } from '../utils/collectionTransport.server.js';
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
@@ -1505,6 +1506,9 @@ export const loader = async ({ request, context }) => {
       },
     };
 
+    if (canStreamCollection(request, { ranked: useRankedCollectionPagination, page, filtered: userHasFilters, customerTags: customerTagsStr, search: searchQuery || isSearch })) {
+      return collectionStreamResponse(responsePayload, request, responseHeaders);
+    }
     return data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {
