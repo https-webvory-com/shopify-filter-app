@@ -991,7 +991,7 @@ facet-filters-form,
 /* Reveal new cards independently of image and market-price loading. Limit the
    stagger so a large page never waits seconds for its last card to appear. */
 .cfp-product-card--reveal {
-  animation: cfp-card-reveal 300ms ease-out var(--cfp-reveal-delay, 0ms) backwards;
+  animation: cfp-card-reveal var(--cfp-reveal-duration, 300ms) ease-out var(--cfp-reveal-delay, 0ms) backwards;
 }
 
 @keyframes cfp-card-reveal {

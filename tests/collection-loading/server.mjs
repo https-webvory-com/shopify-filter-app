@@ -98,6 +98,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}
       if(url.pathname.startsWith('/assets/')){
         const name=url.pathname.split('/').pop();if(!['collectionFilterPro.js','collectionFilterPro.css','marketPricing.js'].includes(name)){res.writeHead(404).end();return;}
+        if(name==='collectionFilterPro.css'&&state.cssDelay)await new Promise(resolve=>setTimeout(resolve,state.cssDelay));
         if(name==='collectionFilterPro.js'&&state.assetDelay)await new Promise(resolve=>setTimeout(resolve,state.assetDelay));
         res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');res.end(await fs.readFile('extensions/theme-extension/assets/'+name));return;
       }
@@ -117,7 +118,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;
       }
-      if(url.pathname.startsWith('/collections/')){res.setHeader('Content-Type','text/html');let body=html.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body');if(state.early)body=body.replace('<script src="/assets/marketPricing.js">','<script>'+inline+'</script><script src="/assets/marketPricing.js">');res.end(body);return;}
+      if(url.pathname.startsWith('/collections/')){res.setHeader('Content-Type','text/html');let body=html.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body');if(state.early){const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+inline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}
       res.writeHead(404).end();
     }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });

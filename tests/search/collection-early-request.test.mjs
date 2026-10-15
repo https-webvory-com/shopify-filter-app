@@ -35,3 +35,16 @@ test('early pending and failures retain ordinary readiness and Retry semantics',
   for(const status of [202,503]){const f=fixture();f.window._cfpRankedEarlyFetch.promise=Promise.resolve({status,payload:{products:[],debug:{collectionRankingStatus:'pending'}}});assert.equal((await f.take(f.calls[0].url,new AbortController().signal)).status,status);}
   const f=fixture();f.window._cfpRankedEarlyFetch.promise=Promise.resolve({status:429,payload:{error:'Too many requests'}});await assert.rejects(f.take(f.calls[0].url,new AbortController().signal),/Too many/);
 });
+
+test('the first-page request is emitted before blocking stylesheets and widget markup',()=>{
+  const start=liquid.indexOf('Fire API request');
+  assert.ok(start>liquid.indexOf('assign cfp_collection_handle'));
+  assert.ok(start<liquid.indexOf('stylesheet_tag'));
+  assert.ok(start<liquid.indexOf('<div id="cfp-sidebar"'));
+  assert.ok(liquid.indexOf('window.cfpCustomerTags')<start);
+  assert.equal(liquid.split('Fire API request').length-1,1);
+});
+test('collection cards are visible immediately while search retains its reveal timing',()=>{
+  assert.ok(js.includes("templateName === 'search' ? Math.min(productIndex, 5) * 75 : 0"));
+  assert.ok(js.includes("templateName === 'search' ? 300 : 0"));
+});

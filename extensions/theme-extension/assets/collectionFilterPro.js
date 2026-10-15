@@ -510,7 +510,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         readyUrl.searchParams.set('rankingToken', data.rankingToken);
         window.history.replaceState(null, '', readyUrl.pathname + readyUrl.search);
       }
-      console.log('[CFP] API Response:', data);
+      console.log('[CFP] API response:', { products: data.products?.length, totalCount: data.totalCount });
 
       sidebar.classList.remove('cfp-loading');
 
@@ -1234,7 +1234,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       return `
-        <div class="cfp-product-card cfp-product-card--reveal" style="--cfp-reveal-delay: ${Math.min(productIndex, 5) * 75}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
+        <div class="cfp-product-card cfp-product-card--reveal" style="--cfp-reveal-delay: ${templateName === 'search' ? Math.min(productIndex, 5) * 75 : 0}ms; --cfp-reveal-duration: ${templateName === 'search' ? 300 : 0}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
             <a href="${productUrl}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">

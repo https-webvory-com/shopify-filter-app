@@ -48,7 +48,7 @@ try{
     await wait("!!document.querySelector('.cfp-loading-notice')",15000);assert.equal((await cards()).length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);
     const snapshot=await evaluate('cardSnapshots[0]');assert.equal(snapshot.imagesLoaded,0);assert.equal(snapshot.pricesReady,0);
-    assert.deepEqual(snapshot.delays,['0s','0.075s','0.15s','0.225s','0.3s','0.375s']);
+    assert.deepEqual(snapshot.delays,['0s','0s','0s','0s','0s','0s']);
     assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
     assert.deepEqual((await cards()).slice(0,2),['1','2']);
     await wait("document.querySelector('.cfp-product-card--reveal .cfp-product-card__price').textContent!=='See product price'",15000);
@@ -173,6 +173,18 @@ try{
     // Record that end-to-end latency; only the controlled local fixture checks 2s.
     if(!redisLayer)assert.ok(after<2000,`Local fixture exceeded two-second target: ${after}`);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {baselineCardsMs:Math.round(before),earlyCardsMs:Math.round(after),savedMs:Math.round(before-after),fixtureAssetDelayMs:1000,fixtureApiDelayMs:700,twoSecondTargetMet:after<2000,liveTiming:false};
+  });
+  await test('early first-page request starts before a slow stylesheet without changing products or duplicating requests',async()=>{
+    await control({reset:true,early:true,earlyBeforeStyles:false,cssDelay:1000,assetDelay:0,apiDelay:700,delay:10});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const before=await evaluate('cardSnapshots[0].at');const ids=await cards();const old=await(await fetch(origin+'/__state')).json();
+    await control({earlyBeforeStyles:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const after=await evaluate('cardSnapshots[0].at');const current=await(await fetch(origin+'/__state')).json();
+    assert.deepEqual(await cards(),ids);assert.equal(current.requests.length-old.requests.length,1);
+    assert.ok(after<before-350, 'CSS overlap did not improve timing: '+before+' -> '+after);
+    assert.deepEqual(await evaluate('browserErrors'),[]);await control({cssDelay:0,earlyBeforeStyles:false});
+    return {baselineCardsMs:Math.round(before),earlyCardsMs:Math.round(after),savedMs:Math.round(before-after),fixtureStylesheetDelayMs:1000,fixtureApiDelayMs:700,liveTiming:false};
   });
   await test('new visitor after eleven minutes receives last-good ranking while refresh waits',async()=>{
     const before=await(await fetch(origin+'/__state')).json();await control({clockOffset:660000,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
