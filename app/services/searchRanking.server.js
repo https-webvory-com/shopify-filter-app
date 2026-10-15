@@ -5,6 +5,7 @@ import { semanticSearch, keywordSearch } from './semanticSearch.server';
 import { applyMerchandisingRules, buildMeiliIncludeFilters, selectMerchandisingVariant } from './merchandising.server';
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import { hydrateCollectionInventory, hydrateCollectionSkus } from '../utils/rankedCollectionPage.js';
+import { rankNativeSearchPage } from './nativeSearchPage.server.js';
 
 const gid = id => `gid://shopify/Product/${String(id).split('/').pop()}`;
 const variants = rows => (rows || []).map(v => ({ ...v,
@@ -14,6 +15,13 @@ const variants = rows => (rows || []).map(v => ({ ...v,
 // Never inject an inactive product or a pin that violates the query's color.
 export async function rankSearchResults({ shop, query, options, rule, pinningRule,
   parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [] }) {
+  try {
+    const result = await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
+      parsedQuery, globalSettings, mergedValues, page, limit, facetKeys });
+    if (result) return result;
+  } catch (error) {
+    console.error('Native search page unavailable; using compatible ranking:', error.name);
+  }
   const seen = new Set(), products = [];
   const { limit: ignoredLimit, offset: ignoredOffset, sortBy, facets, attributesToHighlight,
     attributesToRetrieve, ...searchOptions } = options;
@@ -129,5 +137,5 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
       images: selection.imageUrl ? [selection.imageUrl, ...(p.images || []).filter(image => image !== selection.imageUrl)] : p.images,
     } : {}) };
   }),
-    total: ranked.length, pinnedCount: effectiveIds.size, semanticHitCount, facetDistribution, facetStats };
+    total: ranked.length, pinnedCount: effectiveIds.size, semanticHitCount, facetDistribution, facetStats, rankingMode: 'compatible' };
 }

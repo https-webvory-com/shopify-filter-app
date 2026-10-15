@@ -264,6 +264,7 @@ test('facets and price bounds describe all eligible ranked products, including e
 });
 
 test('actual full search loader preserves the same pins, boosts, counts and page slots as instant ranking', async () => {
+  let ordinaryQueries = 0;
   const f = await fixture({ docs: [product(1), product(2), product(3), product(4)],
     saved: [product(4, { id: gid(4), variants: product(4).variantPrices })] });
   const pins = { products: [{ id: gid(4) }] };
@@ -274,7 +275,7 @@ test('actual full search loader preserves the same pins, boosts, counts and page
       getActivePinningRuleForSearch: async (_s, _q, scope) => { assert.equal(scope, 'page'); return pins; }, getActiveRuleForSearch: async () => rule },
     '../utils/searchColor.js': color, '../utils/availableVariants.js': availableVariants,
     '../utils/spellingCorrection.js': { spellingCorrection }, '../utils/rankedCollectionPage.js': {}, '../utils/collectionPage.js': {},
-    '../services/semanticSearch.server': { semanticMultiSearch: async queries => ({ results: await Promise.all(queries.map(q => f.search(q.q, q))) }) },
+    '../services/semanticSearch.server': { semanticMultiSearch: async queries => { ordinaryQueries++; return { results: await Promise.all(queries.map(q => f.search(q.q, q))) }; } },
     '../services/meiliClient.server': {}, '../services/filterSettings.server': {}, '../shopify.server': {},
     '../services/rateLimiter.server': { rateLimit: async () => true }, '../services/collectionBestSelling.server.js': {},
     '../services/collectionPreparation.server.js': {}, '../services/collectionRankingSession.server.js': { collectionRankingFingerprint: () => '' },
@@ -288,6 +289,7 @@ test('actual full search loader preserves the same pins, boosts, counts and page
     pages.push(r.products.map(p => p.id));
   }
   assert.deepEqual(pages, [[gid(4), gid(3)], [gid(1), gid(2)], []]);
+  assert.equal(ordinaryQueries, 0, 'ranked searches must not perform an ordinary search that is discarded');
 });
 
 test('authenticated pin picker retains target-query scope when searching by title or excluding saved pins', async () => {

@@ -720,6 +720,7 @@ export const loader = async ({ request, context }) => {
     let collectionBestSellingApplied = false;
     let collectionRankingApplied = false;
     let searchRankingApplied = false;
+    let searchRankingMode = null;
     const rankingFingerprint = collectionRankingFingerprint(request.url);
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
@@ -744,6 +745,10 @@ export const loader = async ({ request, context }) => {
         headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
     }
 
+    // Ranked search owns its counts, facets and page retrieval. Do not run a
+    // second ordinary search whose products would immediately be discarded.
+    const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
+    if (!needsRankedSearch) {
     try {
       const multiSearchRes = await semanticMultiSearch(queries);
       const tier1Res = multiSearchRes.results[0];
@@ -861,7 +866,8 @@ export const loader = async ({ request, context }) => {
       }
     }
 
-    if (isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule)) {
+    }
+    if (needsRankedSearch) {
       const result = await rankSearchResults({ shop, query: searchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
         rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: targetFacets });
@@ -870,6 +876,7 @@ export const loader = async ({ request, context }) => {
       facetDistribution = result.facetDistribution;
       facetRes = { ...(facetRes || {}), totalHits: result.total, facetDistribution, facetStats: result.facetStats };
       searchRankingApplied = true;
+      searchRankingMode = result.rankingMode || 'compatible';
     }
     const meiliTime = Date.now() - meiliStart;
 
@@ -1429,6 +1436,7 @@ export const loader = async ({ request, context }) => {
         resolvedCollectionTitle,
         hasActivePinningRule: !!activePinningRule,
         searchRankingApplied,
+        searchRankingMode,
         pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: pinnedIds.length,
         hasMerchandisingRule: !!activeRule,

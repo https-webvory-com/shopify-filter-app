@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
+import * as searchProjection from '../../app/utils/searchIndexProjection.js';
 
 async function fixture({ failSetup = false, failIndex = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
   const updates = [];
@@ -25,6 +26,7 @@ async function fixture({ failSetup = false, failIndex = false, finalizationGate,
     addDocuments: async () => { if(failIndex) throw Error("index unavailable"); return {taskUid:1}; },
   }, {get: (target,key) => target[key] || (async () => ({}))});
   const mocks = {
+    '../utils/searchIndexProjection.js': searchProjection,
     "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },
     "../db.server": {__esModule:true,default:prisma},
     "./meiliClient.server": {__esModule:true,default:{index:()=>index,tasks:{waitForTask:async()=>({status:"succeeded"})}}},

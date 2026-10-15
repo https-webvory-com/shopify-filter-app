@@ -1,0 +1,32 @@
+name: Prepare paged search index
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Add missing filter fields (reindexes existing documents; does not delete data)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check or add search page filter fields
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APPLY_SEARCH_FIELDS: ${{ inputs.apply }}
+        with:
+          envs: APPLY_SEARCH_FIELDS
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 22m
+          script: |
+            set -eu
+            if [ "$APPLY_SEARCH_FIELDS" = true ]; then
+              docker exec shopify-filter-app node scripts/prepare-search-page-index.mjs --apply
+            else
+              docker exec shopify-filter-app node scripts/prepare-search-page-index.mjs
+            fi

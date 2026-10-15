@@ -293,6 +293,7 @@ export const loader = async ({ request }) => {
         // Product cards retain their storefront session cache; suggestions
         // must reflect fresh blacklist settings on the next request.
         'Cache-Control': 'no-store',
+        'X-CFP-Search-Ranking': ranking?.rankingMode || 'direct',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',

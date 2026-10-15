@@ -10,7 +10,7 @@ export async function getCached(key,fetchFn,ttl=TTL_SEC) {
   if(shop) {
     try {
       const config=await redis.get(configurationRevisionKey(shop)) ?? '0';
-      const products=/^(availableVariants|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
+      const products=/^(availableVariants|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates|searchNativeReady):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
       cacheKey=`${key}:revision:${config}:${products}`;
     } catch(error) {console.error('CFP: Cache revision unavailable:',error.name);}
   }

@@ -29,6 +29,20 @@ export async function keywordSearch(query, options) {
   return meiliClient.index("products").search(query, options);
 }
 
+// A ranked page may use several count/page queries. Never mix semantic counts
+// with keyword hits when an embedding request fails halfway through the plan.
+export async function searchPageBatch(queries, mode) {
+  const provider = semanticProvider();
+  const semantic = mode !== false && queries.some(q => q.q?.trim()) && await isReady(provider);
+  if (mode === true && !semantic) throw Error('Semantic search mode changed during page retrieval');
+  try {
+    return { ...(await meiliClient.multiSearch({ queries: queries.map(q => withSemanticSearch(q, semantic, provider)) })), semantic };
+  } catch (error) {
+    if (!semantic || mode === true) throw error;
+    return { ...(await meiliClient.multiSearch({ queries })), semantic: false };
+  }
+}
+
 export async function semanticMultiSearch(queries) {
   const provider = semanticProvider();
   const enabled = queries.some(query => query.q?.trim()) && await isReady(provider);

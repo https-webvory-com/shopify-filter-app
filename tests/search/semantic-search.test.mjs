@@ -3,6 +3,21 @@ import assert from "node:assert/strict";
 import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
 import { loadModule } from './helpers/search-ranking.mjs';
 
+test('page batches use a consistent provider mode and defer keyword restart to the whole page plan', async () => {
+  const calls=[];
+  const service=await loadModule('app/services/semanticSearch.server.js',{
+    './meiliClient.server':{default:{index:()=>({getEmbedders:async()=>({openai:{source:'openAi'}})}),
+      multiSearch:async({queries})=>{calls.push(queries);if(queries.some(q=>q.hybrid))throw Error('embedding unavailable');return {results:[{hits:[]}]};}}},
+    './shopCache.server':{getCached:async(_k,read)=>read()},
+    '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider:()=> 'openai'},
+  });
+  const queries=[{indexUid:'products',q:'mother wedding dress',filter:["shop = 'fixture'"],page:0,hitsPerPage:1}];
+  assert.equal((await service.searchPageBatch(queries)).semantic,false);
+  assert.equal(calls.length,2);assert.equal(calls[1][0].hybrid,undefined);
+  await assert.rejects(service.searchPageBatch(queries,true),/embedding unavailable/);
+  assert.equal((await service.searchPageBatch(queries,false)).semantic,false);
+});
+
 test('exhaustive keyword retrieval bypasses hybrid preparation and retains its complete scope', async () => {
   const calls = [];
   const service = await loadModule('app/services/semanticSearch.server.js', {
