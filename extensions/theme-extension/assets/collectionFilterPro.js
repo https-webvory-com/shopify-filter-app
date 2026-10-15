@@ -461,7 +461,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           getProductContainer().prepend(loadingNotice);
         }, 4000);
         let data = null;
-        if (window._cfpEarlyFetch && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
+        // Early collection responses lack search scope, settings, filters and page size.
+        // Submitted search must use the fully parameterized request built above.
+        if (window._cfpEarlyFetch && templateName !== 'search' && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
           try {
             data = await window._cfpEarlyFetch;
             delete window._cfpEarlyFetch;
