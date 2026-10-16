@@ -1,0 +1,471 @@
+{
+  "source": "Read-only Formal Dresses storefront observations, 2026-10-16",
+  "rules": [
+    {
+      "id": "Top Formal",
+      "name": "Top Formal",
+      "collections": [
+        "Formal Dresses"
+      ],
+      "ordinal": 3,
+      "conditions": [
+        {
+          "action": "Dynamic",
+          "field": "Tags",
+          "value": "TopFormal",
+          "minValue": null,
+          "maxValue": "",
+          "operator": "Set",
+          "operand": "99",
+          "dateValue": ""
+        },
+        {
+          "action": "Include",
+          "field": "Tags",
+          "value": "TopFormal",
+          "minValue": null,
+          "maxValue": "",
+          "operator": "contains",
+          "operand": "",
+          "dateValue": ""
+        },
+        {
+          "action": "Dynamic",
+          "field": "Tags",
+          "value": "BestFormal",
+          "minValue": null,
+          "maxValue": "",
+          "operator": "Set",
+          "operand": "1000",
+          "dateValue": ""
+        }
+      ]
+    },
+    {
+      "id": "sold out",
+      "name": "sold out",
+      "collections": [],
+      "ordinal": 32,
+      "conditions": [
+        {
+          "action": "Exclude",
+          "field": "Available",
+          "value": "-999",
+          "minValue": "-999",
+          "maxValue": "0",
+          "operator": "contains",
+          "operand": "",
+          "dateValue": ""
+        }
+      ]
+    },
+    {
+      "id": "In-Store Styling Appointment Deposit",
+      "name": "In-Store Styling Appointment Deposit",
+      "collections": [],
+      "ordinal": 111,
+      "conditions": [
+        {
+          "action": "Exclude",
+          "field": "Id",
+          "value": "15265518944627",
+          "minValue": null,
+          "maxValue": "",
+          "operator": "contains",
+          "operand": "",
+          "dateValue": ""
+        }
+      ]
+    },
+    {
+      "id": "Champagne Prom Dresses",
+      "name": "Champagne Prom Dresses",
+      "collections": [],
+      "ordinal": 116,
+      "conditions": [
+        {
+          "action": "Pin",
+          "field": "Tags",
+          "value": "Champagne, Champagne Gold, Ivory/Champagne/Honey, Ivory/Champagne, Champagne/Gold, Champagne/Silver, Ivory Champagne, Black/Champagne, Light Champagne, Champagne Multi, Champagne Silver",
+          "minValue": null,
+          "maxValue": "",
+          "operator": "contains",
+          "operand": "",
+          "dateValue": ""
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "gid://shopify/Product/11737278410",
+      "title": "Mother of the Bride Long Evening Jacket Dress by R&M Richards 7300",
+      "tags": [
+        "Champagne"
+      ],
+      "_originalIndex": 0,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15290794082675",
+      "title": "Long Corset Prom Dresss with Beaded Drape Slit",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 181,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15045867766131",
+      "title": "Adora 3079 Beaded Long Slit Formal Sequin Prom Dress",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 506,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15290808369523",
+      "title": "Off Shoulder Corset Prom Formal Gown",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 584,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15281012965747",
+      "title": "Beaded Sequin Fitted Long Formal Prom Dress LaDivine CC494",
+      "tags": [
+        "BestFormal",
+        "Champagne Gold",
+        "TopFormal"
+      ],
+      "_originalIndex": 585,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15542983229811",
+      "title": "Sequin Beaded Off Shoulder Formal Evening Gown",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 641,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15245394215283",
+      "title": "Mermaid Beaded Formal Long Corset Prom Dress LaDivine KV1129",
+      "tags": [
+        "BestFormal",
+        "CHAMPAGNE",
+        "TopFormal"
+      ],
+      "_originalIndex": 1029,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15454486036851",
+      "title": "Long Formal Strapless Corset Fitted Gown",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 3387,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15293163045235",
+      "title": "Corset Beaded Long Slit Formal Sequin Fitted Prom Dress Nox Anabel G1796",
+      "tags": [
+        "BestFormal",
+        "Champagne",
+        "TopFormal"
+      ],
+      "_originalIndex": 10399,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/6842994884669",
+      "title": "Off the Shoulder Satin Corset Evening Gown",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 5,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15023349465459",
+      "title": "Long Lace Short Sleeve Formal Black Evening Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 8,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/7222430662717",
+      "title": "Fitted Off Shoulder Sequin Prom Formal Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 12,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/7118471659581",
+      "title": "Long Off Shoulder Corset Formal Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 30,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15285238268275",
+      "title": "Long Off Shoulder Sleeve Formal Couture Evening Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 41,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15194254836083",
+      "title": "Sleeveless Eggplant Formal Ball Gown with Statement Bow",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 56,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15292313239923",
+      "title": "Sweetheart Neckline Corset High Slit Prom Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 109,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15194256638323",
+      "title": "Sculpted Shoulder Formal Evening Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 169,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15224286413171",
+      "title": "LaDivine J888 Beaded Fitted Long Formal Sequin Evening Prom Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 182,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15285087895923",
+      "title": "Off-Shoulder Beaded Long Formal Evening Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 204,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/6613406711869",
+      "title": "Prom Long Ruffled Ball Gown By Mac Duggal 48856",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 221,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15313851416947",
+      "title": "Long A Line Off Shoulder Formal Floral Evening Gown",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 224,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/4345644843069",
+      "title": "Long One Shoulder Metallic Prom Ball Gown by Mac Duggal 67297",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 248,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15285236695411",
+      "title": "Lace Evening Dress with Off Shoulder Corset Bodice",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 315,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15285235384691",
+      "title": "Figure Hugging Fitted Strapless Formal Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 390,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15452651258227",
+      "title": "Pleated Velvet Long Formal Corset Dress",
+      "tags": [
+        "BestFormal",
+        "TopFormal"
+      ],
+      "_originalIndex": 3394,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15036601794931",
+      "title": "Long Stretch Formal Off Shoulder Dress",
+      "tags": [
+        "TopFormal"
+      ],
+      "_originalIndex": 50,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    },
+    {
+      "id": "gid://shopify/Product/15396485955955",
+      "title": "Off The Shoulder Sequin Evening Formal Dress",
+      "tags": [
+        "TopFormal"
+      ],
+      "_originalIndex": 1413,
+      "priceMin": 10,
+      "inventoryTotal": 5
+    }
+  ],
+  "pins": [
+    {
+      "id": "gid://shopify/Product/15452651258227"
+    },
+    {
+      "id": "gid://shopify/Product/15285087895923"
+    },
+    {
+      "id": "gid://shopify/Product/7222430662717"
+    },
+    {
+      "id": "gid://shopify/Product/15285238268275"
+    },
+    {
+      "id": "gid://shopify/Product/15292313239923"
+    },
+    {
+      "id": "gid://shopify/Product/15023349465459"
+    },
+    {
+      "id": "gid://shopify/Product/15396485955955"
+    },
+    {
+      "id": "gid://shopify/Product/15285236695411"
+    },
+    {
+      "id": "gid://shopify/Product/15194256638323"
+    },
+    {
+      "id": "gid://shopify/Product/15285235384691"
+    },
+    {
+      "id": "gid://shopify/Product/15313851416947"
+    },
+    {
+      "id": "gid://shopify/Product/15194254836083"
+    },
+    {
+      "id": "gid://shopify/Product/15036601794931"
+    }
+  ],
+  "expectedFirst25": [
+    "gid://shopify/Product/15452651258227",
+    "gid://shopify/Product/15285087895923",
+    "gid://shopify/Product/7222430662717",
+    "gid://shopify/Product/15285238268275",
+    "gid://shopify/Product/15292313239923",
+    "gid://shopify/Product/15023349465459",
+    "gid://shopify/Product/15396485955955",
+    "gid://shopify/Product/15285236695411",
+    "gid://shopify/Product/15194256638323",
+    "gid://shopify/Product/15285235384691",
+    "gid://shopify/Product/15313851416947",
+    "gid://shopify/Product/15194254836083",
+    "gid://shopify/Product/15036601794931",
+    "gid://shopify/Product/15290794082675",
+    "gid://shopify/Product/15045867766131",
+    "gid://shopify/Product/15290808369523",
+    "gid://shopify/Product/15281012965747",
+    "gid://shopify/Product/15542983229811",
+    "gid://shopify/Product/15454486036851",
+    "gid://shopify/Product/15293163045235",
+    "gid://shopify/Product/6842994884669",
+    "gid://shopify/Product/7118471659581",
+    "gid://shopify/Product/15224286413171",
+    "gid://shopify/Product/6613406711869",
+    "gid://shopify/Product/4345644843069"
+  ]
+}

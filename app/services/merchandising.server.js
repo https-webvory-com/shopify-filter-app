@@ -86,7 +86,7 @@ export async function getActiveRuleForCollection(
   }
 
   if (applicableRules.length === 0) return null;
-  if (applicableRules.length === 1) return applicableRules[0];
+  if (applicableRules.length === 1) return { ...applicableRules[0], collectionTagMatching: "exact" };
 
   // Merchandising rules are calculated from bottom to top.
   // The lower rule (bottom rule / older) runs first, and its result is then adjusted by the upper rule (top rule / newer).
@@ -105,6 +105,9 @@ export async function getActiveRuleForCollection(
     name: applicableRules.map((r) => r.name).join(" + "),
     collections: applicableRules[0].collections,
     conditions: combinedConditions,
+    // Keep higher-priority collection rules ahead of lower rules when ranking.
+    collectionTagMatching: "exact",
+    ruleGroups: applicableRules.map(r => ({ id: r.id, conditions: r.conditions || [] })),
   };
 }
 
@@ -260,7 +263,7 @@ export async function getActivePinningRuleForSearch(
  * Helper to check if a product matches a rule condition.
  * Supports Merged Values rules expansion for options like Color/Size.
  */
-function checkRuleMatch(product, condition, mergedValues = []) {
+function checkRuleMatch(product, condition, mergedValues = [], caseSensitiveTags = false) {
   const field = condition.field || "";
   if (field === "Date") {
     const [start, end] = String(condition.dateValue || "").split(" - ");
@@ -392,6 +395,10 @@ function checkRuleMatch(product, condition, mergedValues = []) {
     return rawValues.includes((product.productType || "").toLowerCase())
       ? { matchType: "exact" }
       : false;
+  if (field === "Tags" && caseSensitiveTags) {
+    const values = valueString.split(",").map(value => value.trim()).filter(Boolean);
+    return product.tags?.some(tag => values.includes(tag)) ? { matchType: "exact" } : false;
+  }
   if (field === "Tags")
     return product.tags &&
       product.tags.some((v) => rawValues.includes((v || "").toLowerCase()))
@@ -646,7 +653,7 @@ export function applyMerchandisingRules(
 
       const matchesExclude = rule.conditions.some(
         (cond) =>
-          cond.action === "Exclude" && checkRuleMatch(p, cond, mergedValues),
+          cond.action === "Exclude" && checkRuleMatch(p, cond, mergedValues, rule.collectionTagMatching === "exact"),
       );
       if (matchesExclude) return false;
 
@@ -655,66 +662,75 @@ export function applyMerchandisingRules(
 
     // 2. Scoring Phase: Assign scores based on conditions
     filteredProducts.forEach((p) => {
-      p.merchandisingScore = 0;
-      p._rulePinned = false;
-      const totalConds = rule.conditions.length;
-      
-      rule.conditions.forEach((cond, index) => {
-        if (cond.action === "Exclude") return;
-
-        const matchResult = checkRuleMatch(p, cond, mergedValues);
-        if (matchResult) {
-          const isExact =
-            typeof matchResult === "object" &&
-            matchResult.matchType === "exact";
-          const imageUrl =
-            typeof matchResult === "object" ? matchResult.imageUrl : null;
-
-          if (imageUrl && !p.merchandisingImage && !pinnedIds.includes(p.id)) {
-            p.merchandisingImage = imageUrl;
-          }
-
-          // Positional weight: Top condition (index 0) gets the highest power of 10.
-          // This mathematically ensures the "bottom to top" prioritization requested by SoBooster logic.
-          const tierBaseWeight = Math.pow(10, totalConds - index + 3);
-          const positionalWeight = isExact ? tierBaseWeight * 2 : tierBaseWeight;
-
-          if (cond.action === "Boost") {
-            p.merchandisingScore += positionalWeight;
-          } else if (cond.action === "Bury") {
-            p.merchandisingScore -= positionalWeight;
-          } else if (cond.action === "Pin") {
-            p._rulePinned = true;
-            p.merchandisingScore += 100000000;
-          } else if (cond.action === "Dynamic") {
-            const numStr = cond.operand || cond.value || "";
-            const num = parseFloat(numStr);
-            if (!isNaN(num)) {
-              const op = (cond.operator || "Add").trim();
-              if (op === "Set") {
-                p.merchandisingScore = num;
-              } else if (op === "Add" || !op || op === "Operator") {
-                p.merchandisingScore += num;
-              } else if (op === "Subtract") {
-                p.merchandisingScore -= num;
-              } else if (op === "Multiply") {
-                p.merchandisingScore *= num;
-              } else if (op === "Divide" && num !== 0) {
-                p.merchandisingScore /= num;
-              }
-            }
-          }
-        }
-      });
+      const rank = scoreMerchandisingConditions(p, rule.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact");
+      p.merchandisingScore = rank.score;
+      p._rulePinned = rank.pinned;
+      p._collectionRuleRanks = rule.ruleGroups?.map(group =>
+        scoreMerchandisingConditions(p, group.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact"));
     });
   } else {
     // Ensure score is 0 if no rules
-    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; });
+    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionRuleRanks = undefined; });
   }
 
   filteredProducts.sort(createMerchandisingComparator(sortBy, pinnedIds, globalSettings));
 
   return filteredProducts;
+}
+
+function scoreMerchandisingConditions(p, conditions, pinnedIds, mergedValues, caseSensitiveTags) {
+  let merchandisingScore = 0;
+  let rulePinned = false;
+  const totalConds = conditions.length;
+
+  conditions.forEach((cond, index) => {
+    if (cond.action === "Exclude") return;
+
+    const matchResult = checkRuleMatch(p, cond, mergedValues, caseSensitiveTags);
+    if (matchResult) {
+      const isExact =
+        typeof matchResult === "object" &&
+        matchResult.matchType === "exact";
+      const imageUrl =
+        typeof matchResult === "object" ? matchResult.imageUrl : null;
+
+      if (imageUrl && !p.merchandisingImage && !pinnedIds.includes(p.id)) {
+        p.merchandisingImage = imageUrl;
+      }
+
+      // Positional weight: Top condition (index 0) gets the highest power of 10.
+      // This mathematically ensures the "bottom to top" prioritization requested by SoBooster logic.
+      const tierBaseWeight = Math.pow(10, totalConds - index + 3);
+      const positionalWeight = isExact ? tierBaseWeight * 2 : tierBaseWeight;
+
+      if (cond.action === "Boost") {
+        merchandisingScore += positionalWeight;
+      } else if (cond.action === "Bury") {
+        merchandisingScore -= positionalWeight;
+      } else if (cond.action === "Pin") {
+        rulePinned = true;
+        merchandisingScore += 100000000;
+      } else if (cond.action === "Dynamic") {
+        const numStr = cond.operand || cond.value || "";
+        const num = parseFloat(numStr);
+        if (!isNaN(num)) {
+          const op = (cond.operator || "Add").trim();
+          if (op === "Set") {
+            merchandisingScore = num;
+          } else if (op === "Add" || !op || op === "Operator") {
+            merchandisingScore += num;
+          } else if (op === "Subtract") {
+            merchandisingScore -= num;
+          } else if (op === "Multiply") {
+            merchandisingScore *= num;
+          } else if (op === "Divide" && num !== 0) {
+            merchandisingScore /= num;
+          }
+        }
+      }
+    }
+  });
+  return { score: merchandisingScore, pinned: rulePinned };
 }
 
 export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSettings = null) {
@@ -752,14 +768,27 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
       if (bIsPinned) return 1;
     }
 
+    // Compare each collection rule independently, from higher to lower priority.
+    // A global Pin may break ties within a specific rule's group, never jump it.
+    const layered = sortBy !== "manual" && Array.isArray(a._collectionRuleRanks) &&
+      Array.isArray(b._collectionRuleRanks);
+    if (layered && !prioritizeSortOverMerchandising) {
+      for (let i = 0; i < Math.max(a._collectionRuleRanks.length, b._collectionRuleRanks.length); i++) {
+        const ar = a._collectionRuleRanks[i] || { score: 0, pinned: false };
+        const br = b._collectionRuleRanks[i] || { score: 0, pinned: false };
+        if (ar.pinned !== br.pinned) return ar.pinned ? -1 : 1;
+        if (ar.score !== br.score) return br.score - ar.score;
+      }
+    }
+
     // A Dynamic Set changes the numeric score, not a matched rule's Pin action.
     // Keep the excluded manual path's legacy comparison unchanged.
-    if (sortBy !== "manual" && !prioritizeSortOverMerchandising && a._rulePinned !== b._rulePinned) {
+    if (!layered && sortBy !== "manual" && !prioritizeSortOverMerchandising && a._rulePinned !== b._rulePinned) {
       return a._rulePinned ? -1 : 1;
     }
 
     if (hasCustomSort) {
-      if (!prioritizeSortOverMerchandising) {
+      if (!layered && !prioritizeSortOverMerchandising) {
         const difference = (b.merchandisingScore || 0) - (a.merchandisingScore || 0);
         if (difference) return difference;
       }
@@ -771,25 +800,25 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
     // may outrank it, never our store-wide sales-score tie breakers.
     if (globalSettings?.preserveCollectionBestSellingOrder && ["best-selling", "bestselling"].includes(sortBy)) {
       const tierDifference = (b.merchandisingScore || 0) - (a.merchandisingScore || 0);
-      if (!prioritizeSortOverMerchandising && tierDifference) return tierDifference;
+      if (!layered && !prioritizeSortOverMerchandising && tierDifference) return tierDifference;
       return (a._originalIndex ?? 0) - (b._originalIndex ?? 0);
     }
 
     // 2. Merchandising score priority (unless prioritizeSortOverMerchandising is true)
     // We add the base sorting score (bestSellingScore) to the merchandising score.
-    // This allows Dynamic (+50) rules to correctly tweak the base score and compete, 
+    // This allows Dynamic (+50) rules to correctly tweak the base score and compete,
     // while Boost/Bury (which use millions of points) will completely override the base score.
-    if (!prioritizeSortOverMerchandising) {
-      const aBaseScore = sortBy === "price-ascending" ? -parseFloat(a.priceMin || 0) : 
-                         sortBy === "price-descending" ? parseFloat(a.priceMin || 0) : 
+    if (!layered && !prioritizeSortOverMerchandising) {
+      const aBaseScore = sortBy === "price-ascending" ? -parseFloat(a.priceMin || 0) :
+                         sortBy === "price-descending" ? parseFloat(a.priceMin || 0) :
                          (globalSettings?.preserveSearchRelevance && ["relevance", "r"].includes(sortBy) ? 0 : a.bestSellingScore || 0);
-      const bBaseScore = sortBy === "price-ascending" ? -parseFloat(b.priceMin || 0) : 
-                         sortBy === "price-descending" ? parseFloat(b.priceMin || 0) : 
+      const bBaseScore = sortBy === "price-ascending" ? -parseFloat(b.priceMin || 0) :
+                         sortBy === "price-descending" ? parseFloat(b.priceMin || 0) :
                          (globalSettings?.preserveSearchRelevance && ["relevance", "r"].includes(sortBy) ? 0 : b.bestSellingScore || 0);
-                         
+
       const aTotalScore = a.merchandisingScore + aBaseScore;
       const bTotalScore = b.merchandisingScore + bBaseScore;
-      
+
       if (aTotalScore !== bTotalScore) {
         return bTotalScore - aTotalScore;
       }
@@ -828,7 +857,7 @@ function defaultSortComparison(a, b, sortBy) {
     const scoreB = b.bestSellingScore !== undefined ? parseFloat(b.bestSellingScore) : 0;
     if (scoreB !== scoreA) return scoreB - scoreA;
   }
-  
+
   if (sortBy === "trending") {
     const scoreA = a.trendingScore !== undefined ? parseFloat(a.trendingScore) : 0;
     const scoreB = b.trendingScore !== undefined ? parseFloat(b.trendingScore) : 0;
@@ -970,7 +999,7 @@ export function buildMeiliRuleFilter(ruleConditions) {
 
   // Focus Tier 1 Meilisearch filter on the highest-scoring boost condition(s)
   const maxScore = getCondScore(sortedConditions[0]);
-  const topConditions = maxScore > 0 
+  const topConditions = maxScore > 0
     ? sortedConditions.filter((c) => getCondScore(c) >= maxScore * 0.9)
     : [sortedConditions[0]];
 
