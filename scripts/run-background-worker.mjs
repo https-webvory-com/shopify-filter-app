@@ -10,8 +10,8 @@ try {
   await import("../build/server/index.js");
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker) {
-      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker];
+    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__collectionOrderWorker) {
+      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__collectionOrderWorker];
       break;
     }
     await delay(1000);

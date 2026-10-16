@@ -1,5 +1,5 @@
 import redis from './redis.server.js';
-import { webhookQueue, collectionRankingQueue } from './queue.server.js';
+import { collectionOrderQueue, collectionRankingQueue } from './queue.server.js';
 import { unauthenticated } from '../shopify.server.js';
 import { readCollectionBestSellingIds } from '../utils/collectionBestSelling.js';
 import { createHash } from 'node:crypto';
@@ -44,7 +44,7 @@ export async function getCollectionBestSellingState(shop, collectionId) {
     }
     // BullMQ's unique job ID deduplicates refreshes across web instances.
     const id = jobId(shop, collectionId);
-    let job = await webhookQueue.getJob(id);
+    let job = await collectionOrderQueue.getJob(id);
     let state = job ? await job.getState() : null;
     if (state === 'failed') {
       if (Date.now() - (job.finishedOn ?? 0) < retryCooldownMs) {
@@ -58,7 +58,7 @@ export async function getCollectionBestSellingState(shop, collectionId) {
       job = null;
     }
     if (!job) {
-      job = await webhookQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId }, { jobId: id });
+      job = await collectionOrderQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId }, { jobId: id });
       state = 'waiting';
     }
     return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'pending', refreshState: state, updatedAt: snapshot?.updatedAt ?? null, revision: snapshot?.revision };

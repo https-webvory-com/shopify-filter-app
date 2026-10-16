@@ -236,6 +236,17 @@ export function initWebhookWorker() {
     const { scheduleRegisteredCollectionWarmups } = await import('../services/collectionPreparation.server.js');
     return scheduleRegisteredCollectionWarmups();
   };
+  if (!global.__collectionOrderWorker) {
+    // An independent, bounded lane for first visits without a saved Shopify
+    // order. Keep the legacy webhook handler above for already queued jobs.
+    global.__collectionOrderWorker = new Worker('collectionOrderQueueV1', async job => {
+      if (job.name !== 'COLLECTION_BEST_SELLING_REFRESH') throw new Error('Unknown collection order job');
+      const { refreshCollectionBestSelling } = await import('../services/collectionBestSelling.server.js');
+      await refreshCollectionBestSelling(job.data.shop, job.data.collectionId);
+    }, { connection: { ...redisOptions, maxRetriesPerRequest: null }, concurrency: 1 });
+    global.__collectionOrderWorker.on('error', error => console.error('CFP Collection Order Worker:', error.message));
+    global.__collectionOrderWorker.on('failed', (job, error) => console.error('CFP Collection Order Worker failed:', job?.id, error.message));
+  }
   if (!global.__collectionRankingWorker) {
     global.__collectionRankingWorker = new Worker('collectionRankingQueueV2', async job => {
       const { processCollectionPreparation, processCollectionWarmups, scheduleCollectionWarmup } = await import('../services/collectionPreparation.server.js');

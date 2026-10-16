@@ -38,7 +38,7 @@ async function runner({failReady=false,missingWorkers=false,warmup=async()=>{}}=
     once:(signal,callback)=>{signals[signal]=callback;},exit:code=>calls.push("exit:"+code)},
     fs:{rmSync:path=>files.delete(path),writeFileSync:(path,value)=>files.set(path,value)},delay:async()=>{},
     setInterval:(callback,ms)=>{const timer={callback,ms,stopped:false,unref(){}};timers.push(timer);return timer;},clearInterval:timer=>{timer.stopped=true;},
-    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__schedulePublicCollectionWarmups=warmup;}},
+    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__collectionOrderWorker=worker("order");ctx.global.__schedulePublicCollectionWarmups=warmup;}},
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
@@ -47,7 +47,7 @@ async function runner({failReady=false,missingWorkers=false,warmup=async()=>{}}=
   return {files,calls,signals,timers};
 }
 test("worker readiness is published only after all Redis workers are ready",async()=>{
-  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking"]);
+  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking","ready:order"]);
   assert.equal(f.files.get("/tmp/cfp-background-worker.ready"),"42");
 });
 test("a failed worker startup reports failure and never publishes readiness",async()=>{
@@ -58,7 +58,7 @@ test("a failed worker startup reports failure and never publishes readiness",asy
 test("worker shutdown closes processors and removes readiness without touching web processes",async()=>{
   const f=await runner();await f.signals.SIGTERM();assert.equal(f.files.size,0);
   assert.ok(f.calls.includes("close:sync"));assert.ok(f.calls.includes("close:webhooks"));assert.equal(f.calls.at(-1),"exit:0");
-  assert.ok(f.calls.includes('close:ranking'));
+  assert.ok(f.calls.includes('close:ranking'));assert.ok(f.calls.includes('close:order'));
   assert.equal(f.timers[0].stopped,true);
 });
 

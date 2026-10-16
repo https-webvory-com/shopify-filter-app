@@ -53,7 +53,7 @@ async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
  const mocks={
   'node:crypto':crypto,
   './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
-  './queue.server.js':{collectionRankingQueue:{add:async(name,data)=>{calls.push({name,data});return {};}},webhookQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
+  './queue.server.js':{collectionRankingQueue:{add:async(name,data)=>{calls.push({name,data});return {};}},webhookQueue:{getJob:()=>{throw Error('Must not wait on the webhook backlog');},add:()=>{throw Error('Must not enqueue behind webhooks');}},collectionOrderQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
   '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };
@@ -84,6 +84,20 @@ test('fresh snapshots serve immediately without scheduling Shopify reads',async(
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
  const state=await service.getCollectionBestSellingState('shop','collection');
  assert.equal(state.status,'ready');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls.length,0);
+});
+
+test('pending order jobs deduplicate in the dedicated queue without touching webhooks',async()=>{
+ for(const queueState of ['waiting','active','delayed','prioritized']) {
+  const service=await loadOrderService({job:{getState:async()=>queueState}});
+  const state=await service.getCollectionBestSellingState('shop','collection');
+  assert.equal(state.status,'pending');assert.equal(state.refreshState,queueState);
+  assert.equal(service.calls.length,0);
+ }
+ const service=await loadOrderService();
+ await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(service.calls[0].opts.jobId,'collection-order-shop-collection');
+ assert.equal(service.calls[0].data.shop,'shop');
+ assert.equal(service.calls[0].data.collectionId,'collection');
 });
 
 test('unchanged Shopify refreshes retain the same ranking revision',async()=>{

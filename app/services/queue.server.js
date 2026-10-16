@@ -44,6 +44,18 @@ if (!global.__collectionRankingQueue) {
 }
 export const collectionRankingQueue = global.__collectionRankingQueue;
 
+// Shopify order snapshots unblock storefront pages. Never put them behind
+// catalog webhooks or full ranking scans, and keep retries durable.
+if (!global.__collectionOrderQueue) {
+  global.__collectionOrderQueue = new Queue('collectionOrderQueueV1', {
+    connection: redisOptions,
+    defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: { count: 1000 }, removeOnFail: { count: 1000 } },
+  });
+  global.__collectionOrderQueue.on('error', error => console.error('CFP Collection Order Queue:', error.message));
+}
+export const collectionOrderQueue = global.__collectionOrderQueue;
+
 /**
  * Enqueue a webhook job into BullMQ queue.
  */
