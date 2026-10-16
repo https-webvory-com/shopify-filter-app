@@ -22,6 +22,7 @@ async function loadRoute(file, { authenticate, prisma }) {
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
       if (name === '../services/merchandisingImport.server.js') return {};
       if (name === "../services/searchPicker.server.js") return {};
+      if (name === "../services/shopCache.server") return {};
       if (name === "../shopify.server") return { authenticate: { admin: authenticate } };
       if (name === "../db.server") return { __esModule: true, default: prisma };
       if (name === "../utils/ruleFilters") return { matchesRuleFilters };
@@ -35,6 +36,20 @@ async function loadRoute(file, { authenticate, prisma }) {
 
 const pinningFile = "app/routes/app.search.pinning._index.jsx";
 const merchandisingFile = "app/routes/app.search.merchandising.jsx";
+
+test('collection pin display resolves legacy IDs from the scoped catalog beyond the dropdown first page', async () => {
+  const rules=[{id:'legacy',collections:['Beyond first page'],products:[]},{id:'source',collections:['Renamed'],collectionSortKey:'[1,9]',products:[]}];
+  const route=await loadRoute('app/routes/app.collections.pinning._index.jsx',{
+    authenticate:async()=>({session:{shop},admin:{graphql:async()=>({json:async()=>({data:{collections:{nodes:[{id:'gid://shopify/Collection/1',title:'Dropdown collection'}]}}})})}}),
+    prisma:{pinnedProductRule:{findMany:async({where})=>{assert.equal(where.shop,shop);assert.equal(where.ruleType,'collection');return rules;}},
+      collection:{findMany:async({where,select})=>{assert.equal(where.shop,shop);assert.deepEqual(Array.from(where.title.in),['Beyond first page','Renamed']);assert.equal(select.id,true);return [{id:'gid://shopify/Collection/999',title:'Beyond first page'}];}}},
+  });
+  const data=await route.loader({request});
+  assert.equal(data.pinningRules[0].collectionSortKey,'[999]');
+  assert.equal(data.pinningRules[1].collectionSortKey,'[1,9]');
+  assert.equal(data.collections.length,1);
+  assert.equal(rules[0].collectionSortKey,undefined);
+});
 
 test("Product Pinning loads shop rules without a Shopify API lookup", async () => {
   const rules = [{ id: "pin-1", searchQueries: ["dress"], products: [] }];

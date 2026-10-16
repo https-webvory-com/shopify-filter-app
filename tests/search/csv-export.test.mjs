@@ -61,3 +61,9 @@ for (const kind of ['Collection','Search']) test(`${kind} pin export retains CSV
   assert.deepEqual(rows.map(r=>r.Id),['first','second']);
   assert.deepEqual(JSON.parse(rows[0].Products).map(p=>String(p.Id||p.id).split('/').pop()),['2','1']);
 });
+
+test('collection pin export retains the source collection IDs alongside current titles', async () => {
+  const rows = await exportModal('app/components/merchandising/ExportCollectionPinsModal.jsx', { selectedRuleIds:['one'],allRules:[{id:'one',collections:['Renamed collection'],collectionSortKey:'[11,99]',products:[]}] });
+  assert.equal(rows[0].Collections,'[11,99]');
+  assert.deepEqual(JSON.parse(rows[0].CollectionTitles),['Renamed collection']);
+});

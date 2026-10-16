@@ -46,7 +46,7 @@ export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRul
       }
       
       if (selectedFields.includes("CollectionTitles")) row["CollectionTitles"] = JSON.stringify(rule.collections || []);
-      if (selectedFields.includes("Collections")) row["Collections"] = "[]";
+      if (selectedFields.includes("Collections")) row["Collections"] = rule.collectionSortKey || "[]";
       if (selectedFields.includes("ForCollections")) row["ForCollections"] = "True";
       if (selectedFields.includes("Id")) row["Id"] = rule.id;
       

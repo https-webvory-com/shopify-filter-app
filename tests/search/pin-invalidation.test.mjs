@@ -9,7 +9,7 @@ async function route(file) {
   const model={
     deleteMany:async args=>mutations.push(args),update:async args=>mutations.push(args),
     create:async args=>mutations.push(args),
-    findFirst:async()=>({shop:'fixture.myshopify.com',name:'Pins',status:true,collections:['Collection'],products:[]}),
+    findFirst:async()=>({shop:'fixture.myshopify.com',name:'Pins',status:true,applyToAll:false,collections:['Collection'],products:[],collectionSortKey:'[99]',collectionSortPosition:7}),
   };
   const source=(await fs.readFile(file,'utf8')).replace('await import("../services/shopCache.server")','require("../services/shopCache.server")');
   const ctx={module:{exports:{}},exports:{},Response,console,require:name=>{
@@ -29,6 +29,23 @@ for(const actionType of ['deleteRule','bulkDeleteRules','duplicateRule','toggleS
   assert.equal((await f.action({request:new Request('https://fixture/app/collections/pinning',{method:'POST',body:form})})).success,true);
   assert.deepEqual(f.invalidations,['fixture.myshopify.com']);
   assert.equal(f.mutations[0].where?.shop??f.mutations[0].data.shop,'fixture.myshopify.com');
+});
+
+test('collection pin duplicate retains source display metadata',async()=>{
+  const f=await route('app/routes/app.collections.pinning._index.jsx');
+  await f.action({request:new Request('https://fixture/app/collections/pinning',{method:'POST',body:new URLSearchParams({actionType:'duplicateRule',id:'pin'})})});
+  assert.equal(f.mutations[0].data.collectionSortKey,'[99]');
+  assert.equal(f.mutations[0].data.collectionSortPosition,7);
+});
+
+test('collection pin edits preserve source order for product-only changes and clear it for new targets',async()=>{
+  for(const [collections,all,changed] of [['["Collection"]','false',false],['["Other"]','false',true],['[]','true',true]]) {
+    const f=await route('app/routes/app.collections.pinning.$id.jsx');
+    const form=new URLSearchParams({intent:'save',name:'Pins',products:'[{"id":"new-product"}]',collections,applyToAll:all});
+    await f.action({request:new Request('https://fixture/app/collections/pinning/pin',{method:'POST',body:form}),params:{id:'pin'}});
+    assert.equal(f.mutations[0].data.collectionSortKey,changed?null:undefined);
+    assert.equal(f.mutations[0].data.collectionSortPosition,changed?null:undefined);
+  }
 });
 
 for(const id of ['new','existing'])test(`collection pin editor ${id} save invalidates its ranking`,async()=>{

@@ -254,6 +254,8 @@ model PinnedProductRule {
   searchQueries     String[]
 
   importOrder       String?
+  collectionSortKey String?
+  collectionSortPosition Int?
 
   @@unique([shop, name, ruleType])
   @@index([shop])

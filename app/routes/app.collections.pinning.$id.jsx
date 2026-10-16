@@ -110,6 +110,11 @@ export const action = async ({ request, params }) => {
     if (ruleId === "new") {
       savedRule = await prisma.pinnedProductRule.create({ data });
     } else {
+      const original = await prisma.pinnedProductRule.findFirst({ where: { id: ruleId, shop, ruleType: 'collection' } });
+      if (original && (Boolean(original.applyToAll) !== applyToAll || JSON.stringify(original.collections || []) !== JSON.stringify(data.collections))) {
+        data.collectionSortKey = null;
+        data.collectionSortPosition = null;
+      }
       savedRule = await prisma.pinnedProductRule.update({
         where: { id: ruleId, shop },
         data,

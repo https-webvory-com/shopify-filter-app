@@ -1,4 +1,4 @@
-import { sortPinningRules } from "../utils/pinImportOrder.js";
+import { sortPinningRules, withCollectionPinSortKeys } from "../utils/pinImportOrder.js";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -53,6 +53,8 @@ export const action = async ({ request }) => {
           applyToAll: originalRule.applyToAll,
           collections: originalRule.collections,
           products: originalRule.products,
+          collectionSortKey: originalRule.collectionSortKey,
+          collectionSortPosition: originalRule.collectionSortPosition,
         },
       });
       await invalidateShop(shop);
@@ -101,7 +103,11 @@ export const loader = async ({ request }) => {
       ?.map((c) => ({ id: c.id, title: c.title }))
       .sort((a, b) => a.title.localeCompare(b.title)) || [];
 
-  return { pinningRules, collections };
+  const titles = [...new Set(pinningRules.flatMap(rule => rule.collections || []))];
+  const sortCollections = titles.length ? await prisma.collection.findMany({
+    where: { shop, title: { in: titles } }, select: { id: true, title: true },
+  }) : [];
+  return { pinningRules: withCollectionPinSortKeys(pinningRules, sortCollections), collections };
 };
 
 export default function PinningIndex() {
@@ -172,7 +178,7 @@ export default function PinningIndex() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
-  const [sortOption, setSortOption] = useState("default");
+  const [sortOption, setSortOption] = useState("collection-asc");
 
   const filteredRules = pinningRules.filter((rule) => {
     let matchesSearch =
@@ -828,16 +834,24 @@ export default function PinningIndex() {
                     borderRadius: "8px",
                     boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
                     zIndex: 50,
-                    width: "160px",
+                    width: "220px",
                   }}
                 >
+                  <div
+                    onClick={() => { setSortOption('collection-asc'); setIsSortDropdownOpen(false); }}
+                    style={{ padding: '12px 16px', cursor: 'pointer', fontSize: '14px', color: sortOption === 'collection-asc' ? '#5B21B6' : '#334155' }}
+                  >Collection order (SoBooster)</div>
+                  <div
+                    onClick={() => { setSortOption('collection-desc'); setIsSortDropdownOpen(false); }}
+                    style={{ padding: '12px 16px', cursor: 'pointer', fontSize: '14px', color: sortOption === 'collection-desc' ? '#5B21B6' : '#334155' }}
+                  >Reverse collection order</div>
                   <div
                     onClick={() => { setSortOption("default"); setIsSortDropdownOpen(false); }}
                     style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "default" ? "#5B21B6" : "#334155", fontWeight: sortOption === "default" ? "500" : "400" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
-                    Default order
+                    CSV order
                   </div>
                   <div
                     onClick={() => {
@@ -1617,6 +1631,7 @@ export default function PinningIndex() {
                     .map((c) => (
                       <th
                         key={c.id}
+                        aria-sort={c.id === 'Collection' ? (sortOption === 'collection-asc' ? 'ascending' : sortOption === 'collection-desc' ? 'descending' : 'none') : undefined}
                         style={{
                           padding: "12px 16px",
                           textAlign: c.id === "Actions" ? "right" : "left",
@@ -1626,7 +1641,11 @@ export default function PinningIndex() {
                           fontWeight: "600",
                         }}
                       >
-                        {c.label}
+                        {c.id === 'Collection' ? <button type="button" aria-label="Sort by collection order"
+                          onClick={() => setSortOption(sortOption === 'collection-asc' ? 'collection-desc' : 'collection-asc')}
+                          style={{ border: 0, background: 'transparent', padding: 0, color: 'inherit', font: 'inherit', textTransform: 'inherit', cursor: 'pointer' }}>
+                          {c.label}{sortOption === 'collection-asc' ? ' \u2191' : sortOption === 'collection-desc' ? ' \u2193' : ''}
+                        </button> : c.label}
                       </th>
                     ))}
                 </tr>

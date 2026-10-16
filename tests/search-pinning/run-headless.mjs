@@ -80,6 +80,9 @@ try {
   assert.deepEqual(await evaluate('window.browserErrors'), []); check('new-rule editor has no browser errors');
   await evaluate(await fs.readFile('tests/search-pinning/list-sort-checks.js', 'utf8'));
   const sorting = await evaluate('window.runPinningListSortChecks()');
+  await evaluate(await fs.readFile('tests/search-pinning/collection-list-sort-checks.js', 'utf8'));
+  const collectionSorting = await evaluate('window.runCollectionPinningListSortChecks()');
+  for (const result of collectionSorting.checks) check(result.name, result.pass);
   for (const result of sorting.checks) check(result.name, result.pass);
   console.log('PINNING BROWSER CHECKS PASSED: ' + report.checks.length);
 } catch (error) { report.error = error.stack; console.error(error.stack); process.exitCode = 1; }

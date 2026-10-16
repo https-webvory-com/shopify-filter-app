@@ -1,4 +1,4 @@
-import { parsePinImportOrder } from "../utils/pinImportOrder.js";
+import { parsePinImportOrder, collectionPinSortKey } from "../utils/pinImportOrder.js";
 import { normalizePinImportRow, importRowInfo, importWriteError } from '../utils/csvImportReport.js';
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -89,6 +89,11 @@ export const action = async ({ request }) => {
           continue;
         }
         const orderData = row.importOrder == null ? {} : { importOrder: row.importOrder };
+        if (ruleType === 'collection' && (row.collectionIds.length || !row.collectionTitles.length)) {
+          const key = collectionPinSortKey(row.collectionIds);
+          if (key === null) { skippedRows.push({ id: externalId, ...info, reason: 'Collection IDs must be valid Shopify collection IDs.' }); continue; }
+          orderData.collectionSortKey = key;
+        }
         const rowWarnings = [];
 
         // Map and validate products
