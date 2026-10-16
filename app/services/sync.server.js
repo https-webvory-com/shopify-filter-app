@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { completeProductCollections } from "./productCollections.server.js";
 import { semanticEmbedderSettings, semanticProvider } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
@@ -419,6 +420,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
             values
           }
           collections(first: 250) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               id
               title
@@ -529,6 +531,9 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       }
       // Filter: only ACTIVE status AND published to Online Store (publishedAt is not null)
       const products = productsData.nodes.filter(isStorefrontProduct);
+
+      // Complete membership reads before any DB/index writes for this batch.
+      for (const product of products) await completeProductCollections(admin, product);
 
       // Remove stale drafts, archived products, and products unpublished from the Online Store.
       const unpublishedProducts = productsData.nodes.filter((p) => !isStorefrontProduct(p));
@@ -927,6 +932,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
           values
         }
         collections(first: 250) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             id
             title
@@ -1048,6 +1054,8 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
 
   // ✅ Run DB upsert and build Meilisearch doc in parallel from Shopify data
   // No need to re-read from Postgres — we have all the data from the API response
+  await completeProductCollections(admin, product);
+
   const available = product.variants.nodes.some((v) => v.availableForSale);
   const prices = product.variants.nodes.map((v) => parseFloat(v.price));
   const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
