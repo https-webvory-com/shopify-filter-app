@@ -6,6 +6,7 @@ import {pinProductSearchFilter, pinProductTagSuggestions} from '../../app/utils/
 const shop = 'fixture.myshopify.com';
 const normalize = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const common = prisma => ({
+  '../utils/merchandisingSelection.js': {},
   '../shopify.server': {authenticate: {admin: async () => ({session: {shop}})}},
   '../db.server': {default: prisma}, 'react-router': {}, react: {},
   '../utils/availablePins.server.js': {}, '../utils/pinProductSearch.server': {pinProductSearchFilter, pinProductTagSuggestions},

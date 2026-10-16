@@ -1,3 +1,4 @@
+import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import * as searchColor from "../../app/utils/searchColor.js";
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
@@ -86,6 +87,7 @@ test('available product IDs exclude products with only unavailable matching comb
 
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+      if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;
    if(name==='../services/merchandisingImport.server.js')return {};
     if (name === "../utils/searchColor.js") return searchColor;

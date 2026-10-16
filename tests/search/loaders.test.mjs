@@ -1,3 +1,4 @@
+import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -16,6 +17,7 @@ async function loadRoute(file, { authenticate, prisma }) {
     module: { exports: {} }, exports: {}, Response,
     console: { error() {} },
     require(name) {
+      if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
       if (name === '../services/merchandisingImport.server.js') return {};
       if (name === "../services/searchPicker.server.js") return {};
       if (name === "../shopify.server") return { authenticate: { admin: authenticate } };

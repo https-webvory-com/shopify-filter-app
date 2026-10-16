@@ -1,3 +1,4 @@
+import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -10,6 +11,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 export async function loadImportModule(file, mocks) {
   const code = (await transform((await fs.readFile(file, 'utf8')).replaceAll('await import("../services/shopCache.server")', '({invalidateShop: async()=>{}})'), { loader: file.endsWith('jsx') ? 'jsx' : 'js', format: 'cjs' })).code;
   const context = { module: { exports: {} }, exports: {}, Response, URL, console: { error() {} }, require(name) {
+    if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
     if (name in mocks) return mocks[name];
     if (name === '../utils/csvImportReport.js') return reportHelpers;
     if (name === '../utils/merchandisingCondition.js') return conditions;

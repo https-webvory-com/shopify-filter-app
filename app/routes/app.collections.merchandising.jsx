@@ -1,3 +1,4 @@
+import { merchandisingRuleIds } from "../utils/merchandisingSelection.js";
 import { importMerchandisingRules } from '../services/merchandisingImport.server.js';
 import { normalizeCondition, validConditions } from "../utils/merchandisingCondition.js";
 import { useNavigate } from "react-router";
@@ -98,6 +99,17 @@ export const action = async ({ request }) => {
     });
     await invalidateShop(shop);
     return Response.json({ success: true, intent: "edit", rule: updatedRule });
+  }
+
+  if (actionType === "bulkDeleteRules") {
+    let ids;
+    try { ids = merchandisingRuleIds(formData.get("ids")); }
+    catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
+    const result = await prisma.merchandisingRule.deleteMany({
+      where: { shop, ruleType: "collection", id: { in: ids } },
+    });
+    await invalidateShop(shop);
+    return Response.json({ success: true, intent: "bulkDelete", count: result.count });
   }
 
   if (actionType === "deleteRule") {
@@ -429,6 +441,10 @@ export default function MerchandisingIndex() {
         shopify.toast.show("Rule created successfully");
       if (fetcher.data.intent === "edit")
         shopify.toast.show("Rule updated successfully");
+      if (fetcher.data.intent === "bulkDelete") {
+        setSelectedRules([]);
+        shopify.toast.show(`${fetcher.data.count} rule${fetcher.data.count === 1 ? "" : "s"} deleted successfully`);
+      }
       if (fetcher.data.intent === "delete")
         shopify.toast.show("Rule deleted successfully");
       if (fetcher.data.intent === "toggle")
@@ -437,6 +453,9 @@ export default function MerchandisingIndex() {
         shopify.toast.show("Rule duplicated successfully");
       if (fetcher.data.intent === "import")
         shopify.toast.show(`${fetcher.data.count} imported, ${fetcher.data.skipped || 0} skipped. See the import report for details.`, { duration: 8000 });
+    }
+    if (fetcher.state === "idle" && fetcher.data?.error) {
+      shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.state, fetcher.data]);
 
@@ -780,20 +799,48 @@ export default function MerchandisingIndex() {
             </div>
 
             {/* Create rule button & Export logic */}
-            {selectedRules.length > 0 ? (
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontSize: "14px", color: "#64748b" }}>
-                  {selectedRules.length} rule{selectedRules.length > 1 ? "s" : ""} selected
-                </span>
-                <button
-                  className="merch-btn-secondary"
-                  onClick={() => setIsExportModalOpen(true)}
-                  style={{ gap: "8px", border: "1px solid #5B21B6", color: "#5B21B6" }}
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              {selectedRules.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setRuleToDelete({ ids: selectedRules.slice() })}
+                    disabled={fetcher.state !== "idle"}
+                    aria-label="Delete Selected"
+                    title="Delete Selected"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "#fff",
+                      border: "1px solid #fca5a5",
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      color: "#dc2626",
+                    }}
+                  >
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  </button>
+                  <button
+                    onClick={() => setIsExportModalOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: "#fff",
+                    border: "1px solid #cbd5e1",
+                    padding: "8px 16px",
+                    borderRadius: "20px",
+                    cursor: "pointer",
+                    color: "#334155",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                  }}
                 >
-                  Export selected
+                  Export
                 </button>
-              </div>
-            ) : (
+                </>
+              )}
               <div style={{ position: "relative" }} className="create-dropdown-inside">
                 <div
                   className="merch-btn-primary"
@@ -882,7 +929,7 @@ export default function MerchandisingIndex() {
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Right side search */}
@@ -1029,7 +1076,7 @@ export default function MerchandisingIndex() {
                                 style={{ marginRight: "12px", accentColor: "#5B21B6", cursor: "pointer" }}
                                 checked={
                                   filteredRules.length > 0 &&
-                                  selectedRules.length === filteredRules.length
+                                  filteredRules.every(rule => selectedRules.includes(rule.id))
                                 }
                                 onChange={(e) => {
                                   if (e.target.checked) {
@@ -1424,8 +1471,100 @@ export default function MerchandisingIndex() {
           }}
         />
 
+          {ruleToDelete?.ids && (
+            <div
+              onClick={() => setRuleToDelete(null)}
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                background: "rgba(0,0,0,0.5)",
+                zIndex: 100,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: "#fff",
+                  borderRadius: "8px",
+                  width: "400px",
+                  maxWidth: "90%",
+                  padding: "24px",
+                  boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                }}
+              >
+                <h2
+                  style={{
+                    margin: "0 0 16px 0",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                    color: "#1e293b",
+                  }}
+                >
+                  Bulk Delete Merchandising Rules
+                </h2>
+                <p
+                  style={{
+                    margin: "0 0 24px 0",
+                    color: "#475569",
+                    fontSize: "14px",
+                    lineHeight: "1.5",
+                  }}
+                >
+                  Are you sure you want to delete {ruleToDelete.ids.length} rules? This action cannot be undone.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "12px",
+                  }}
+                >
+                  <button
+                    onClick={() => setRuleToDelete(null)}
+                    style={{
+                      background: "#fff",
+                      border: "1px solid rgba(91, 33, 182, 0.2)",
+                      color: "#1E1B4B",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      fetcher.submit({ actionType: "bulkDeleteRules", ids: JSON.stringify(ruleToDelete.ids) }, { method: "POST" });
+                      setRuleToDelete(null);
+                    }}
+                    style={{
+                      background: "#ef4444",
+                      border: "none",
+                      color: "#fff",
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete Rules
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         {/* Delete Confirmation Modal */}
-        {ruleToDelete && (
+        {ruleToDelete && !ruleToDelete.ids && (
           <div
             style={{
               position: "fixed",
