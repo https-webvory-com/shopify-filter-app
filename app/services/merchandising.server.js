@@ -1,5 +1,27 @@
 import prisma from "../db.server.js";
 
+// Reuse a single literal alternation for a condition's option values. Building
+// a new regex for every value of every variant can monopolize the ranking worker.
+const optionValueMatchers = new Map();
+export function createOptionValueMatcher(values) {
+  const key = JSON.stringify(values);
+  const cached = optionValueMatchers.get(key);
+  if (cached) {
+    optionValueMatchers.delete(key);
+    optionValueMatchers.set(key, cached);
+    return cached;
+  }
+  const exact = new Set(values);
+  const terms = values.filter(Boolean).map(value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = terms.length
+    ? new RegExp(`(?:^|[\\s\\/\\-\\_,.])(?:${terms.join("|")})(?:$|[\\s\\/\\-\\_,.])`, "i")
+    : null;
+  const matcher = text => exact.has((text || "").toLowerCase().trim()) || Boolean(text && pattern?.test(text));
+  optionValueMatchers.set(key, matcher);
+  if (optionValueMatchers.size > 64) optionValueMatchers.delete(optionValueMatchers.keys().next().value);
+  return matcher;
+}
+
 /**
  * Fetches the active merchandising rule for a given shop and collection.
  */
@@ -498,41 +520,11 @@ function checkRuleMatch(product, condition, mergedValues = [], caseSensitiveTags
       return gallery[0] || null;
     };
 
-    const containsWholeWord = (text, word) => {
-      if (!text || !word) return false;
-      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(?:^|[\\s\\/\\-\\_,.])${escaped}(?:$|[\\s\\/\\-\\_,.])`, "i");
-      return regex.test(text);
-    };
-
-    const exactMatchesList = (v, list) =>
-      list.some(
-        (val) =>
-          (v.option1 || "").toLowerCase().trim() === val ||
-          (v.option2 || "").toLowerCase().trim() === val ||
-          (v.option3 || "").toLowerCase().trim() === val ||
-          containsWholeWord(v.option1, val) ||
-          containsWholeWord(v.option2, val) ||
-          containsWholeWord(v.option3, val)
-      );
-
-    const mergedMatchesList = (v, list) =>
-      list.some((val) => {
-        const opt1 = (v.option1 || "").toLowerCase().trim();
-        const opt2 = (v.option2 || "").toLowerCase().trim();
-        const opt3 = (v.option3 || "").toLowerCase().trim();
-        return (
-          opt1 === val ||
-          opt2 === val ||
-          opt3 === val ||
-          containsWholeWord(opt1, val) ||
-          containsWholeWord(opt2, val) ||
-          containsWholeWord(opt3, val)
-        );
-      });
-
     // Priority 1: Check for Exact Match (e.g. "Red", "Burgundy", "Wine", "Deep Red") -> +2000 score (only in-stock variants)
     const mergedList = [...mergedValuesExpanded, ...rawValues];
+    const matchesValue = createOptionValueMatcher(mergedList);
+    const exactMatchesList = v => [v.option1, v.option2, v.option3].some(matchesValue);
+    const mergedMatchesList = v => [v.option1, v.option2, v.option3].some(value => matchesValue((value || "").toLowerCase().trim()));
     let exactVariant = variants.find(
       (v) => v.available !== false && getVarImg(v) && exactMatchesList(v, mergedList),
     );
