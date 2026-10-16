@@ -343,7 +343,7 @@ export const loader = async ({ request }) => {
 
   const merchandisingRules = await prisma.merchandisingRule.findMany({
     where: { shop, ruleType: "search" },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ ordinal: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
     include: { conditions: true },
   });
 

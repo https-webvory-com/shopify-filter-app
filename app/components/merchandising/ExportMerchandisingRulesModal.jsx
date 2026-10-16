@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Papa from "papaparse";
+import { sortMerchandisingRules } from "../../utils/csvImportReport.js";
 
 export default function ExportMerchandisingRulesModal({ isOpen, onClose, selectedRuleIds, allRules }) {
   const disabledFields = [
@@ -27,14 +28,14 @@ export default function ExportMerchandisingRulesModal({ isOpen, onClose, selecte
   if (!isOpen) return null;
 
   const handleExport = () => {
-    const rulesToExport = allRules.filter(r => selectedRuleIds.includes(r.id));
+    const rulesToExport = sortMerchandisingRules(allRules.filter(r => selectedRuleIds.includes(r.id)));
     
     const exportData = rulesToExport.map(rule => {
       const row = {};
       
       if (selectedFields.includes("Identifier")) row["Id"] = rule.id;
       if (selectedFields.includes("Item name")) row["Name"] = rule.name;
-      if (selectedFields.includes("Ordinal")) row["Ordinal"] = 0;
+      if (selectedFields.includes("Ordinal")) row["Ordinal"] = rule.ordinal ?? "";
       
       if (selectedFields.includes("Rule conditions")) {
         const conditions = (rule.conditions || []).map(c => {

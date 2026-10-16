@@ -34,6 +34,40 @@ export async function merchandisingFixture() {
   return { service, prisma, rows: () => rows };
 }
 const rule = (name, extra = {}) => ({ name, sourceName: name, sourceRow: 2, collections: ['Summer'], searchQueries: ['dress'], conditions: [{ action: 'Boost', field: 'Tags', value: 'Summer' }], ...extra });
+test('merchandising imports retain fractional and negative ordinals across updates and both scopes', async () => {
+  for (const scope of ['search', 'collection']) {
+    const f = await merchandisingFixture();
+    const inputs = [rule('Plus Size', { ordinal: '-0.25' }), rule('Wedding', { ordinal: '-0.375' }), rule('MOB', { ordinal: '-1' }), rule('Prom', { ordinal: '-0.5' }), rule('Formal', { ordinal: '0' }), rule('Graduation', { ordinal: '18.25' })];
+    assert.equal((await f.service.importMerchandisingRules('owner', inputs, scope)).imported, 6);
+    assert.deepEqual(reportHelpers.sortMerchandisingRules(f.rows()).map(r => r.name), ['MOB', 'Prom', 'Wedding', 'Plus Size', 'Formal', 'Graduation']);
+    await f.service.importMerchandisingRules('owner', [rule('MOB')], scope);
+    assert.equal(f.rows().find(r => r.name === 'MOB').ordinal, -1);
+    await f.service.importMerchandisingRules('owner', [rule('MOB', { ordinal: 22 })], scope);
+    assert.equal(f.rows().length, 6);
+    assert.equal(reportHelpers.sortMerchandisingRules(f.rows()).at(-1).name, 'MOB');
+    assert.deepEqual(f.rows().find(r => r.name === 'Prom').searchQueries, ['dress']);
+  }
+});
+test('invalid ordinals are reported without overwriting existing merchandising rules', async () => {
+  const f = await merchandisingFixture();
+  await f.service.importMerchandisingRules('owner', [rule('saved', { ordinal: -1 })], 'search');
+  const before = plain(f.rows());
+  for (const ordinal of [null, true, '', ' ', 'bad', 'Infinity', {}, [], Infinity, NaN]) {
+    const result = await f.service.importMerchandisingRules('owner', [rule('saved', { ordinal })], 'search');
+    assert.equal(result.skipped, 1); assert.match(result.errors[0].reason, /Ordinal/);
+  }
+  assert.deepEqual(f.rows(), before);
+});
+test('merchandising admin loaders use numeric ordinal ascending with legacy rules last', async () => {
+  for (const scope of ['search', 'collections']) {
+    const source = await fs.readFile(`app/routes/app.${scope}.merchandising.jsx`, 'utf8');
+    assert.match(source, /orderBy: \[\{ ordinal: \{ sort: "asc", nulls: "last" \} \}, \{ createdAt: "desc" \}\]/);
+  }
+  const legacy = { name: 'legacy', createdAt: '2026-10-16' };
+  const input = [legacy, { name: 'same1', ordinal: 0 }, { name: 'same2', ordinal: 0 }, { name: 'first', ordinal: -1 }];
+  assert.deepEqual(reportHelpers.sortMerchandisingRules(input).map(r => r.name), ['first', 'same1', 'same2', 'legacy']);
+  assert.equal(input[0], legacy);
+});
 test('CSV metadata retains rule names/rows and reports malformed arrays instead of silently widening scope', () => {
   const row = { Name: 'Summer', Conditions: '[]', CollectionTitles: '{bad', SearchQueries: '[]' };
   const value = reportHelpers.csvRowMetadata(row, 7, 'merchandising');

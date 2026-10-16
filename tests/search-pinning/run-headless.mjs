@@ -78,6 +78,9 @@ try {
   for (let i = 0; i < 100 && (await state()).searchQueries[0] !== 'red party dresses'; i++) await pause(50);
   assert.deepEqual((await state()).searchQueries, ['red party dresses']); check('new-rule Save persists a single search term');
   assert.deepEqual(await evaluate('window.browserErrors'), []); check('new-rule editor has no browser errors');
+  await evaluate(await fs.readFile('tests/search-pinning/list-sort-checks.js', 'utf8'));
+  const sorting = await evaluate('window.runPinningListSortChecks()');
+  for (const result of sorting.checks) check(result.name, result.pass);
   console.log('PINNING BROWSER CHECKS PASSED: ' + report.checks.length);
 } catch (error) { report.error = error.stack; console.error(error.stack); process.exitCode = 1; }
 finally {

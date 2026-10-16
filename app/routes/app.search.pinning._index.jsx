@@ -151,7 +151,7 @@ export default function PinningIndex() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
-  const [sortOption, setSortOption] = useState("default");
+  const [sortOption, setSortOption] = useState("query-asc");
 
   const filteredRules = pinningRules.filter((rule) => {
     let matchesSearch =
@@ -719,12 +719,28 @@ export default function PinningIndex() {
                   }}
                 >
                   <div
+                    onClick={() => { setSortOption("query-asc"); setIsSortDropdownOpen(false); }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "query-asc" ? "#5B21B6" : "#334155", fontWeight: sortOption === "query-asc" ? "500" : "400" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    Search term A-Z
+                  </div>
+                  <div
+                    onClick={() => { setSortOption("query-desc"); setIsSortDropdownOpen(false); }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "query-desc" ? "#5B21B6" : "#334155", fontWeight: sortOption === "query-desc" ? "500" : "400" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    Search term Z-A
+                  </div>
+                  <div
                     onClick={() => { setSortOption("default"); setIsSortDropdownOpen(false); }}
                     style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "default" ? "#5B21B6" : "#334155", fontWeight: sortOption === "default" ? "500" : "400" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
-                    Default order
+                    CSV order
                   </div>
                   <div
                     onClick={() => { setSortOption("recent"); setIsSortDropdownOpen(false); }}
@@ -1148,6 +1164,7 @@ export default function PinningIndex() {
                     .map((c) => (
                       <th
                         key={c.id}
+                        aria-sort={c.id === "Search Queries" ? (sortOption === "query-asc" ? "ascending" : sortOption === "query-desc" ? "descending" : "none") : undefined}
                         style={{
                           padding: "12px 16px",
                           textAlign: c.id === "Actions" ? "right" : "left",
@@ -1175,7 +1192,15 @@ export default function PinningIndex() {
                                 height: "15px",
                               }}
                             />{" "}
-                            {c.label}
+                            <button
+                              type="button"
+                              onClick={() => setSortOption(sortOption === "query-asc" ? "query-desc" : "query-asc")}
+                              aria-label="Sort by search term"
+                              style={{ border: "none", background: "transparent", padding: 0, color: "inherit", font: "inherit", textTransform: "inherit", cursor: "pointer", display: "flex", gap: "6px", alignItems: "center" }}
+                            >
+                              {c.label}
+                              {sortOption === "query-asc" ? " \u2191" : sortOption === "query-desc" ? " \u2193" : ""}
+                            </button>
                           </div>
                         ) : (
                           c.label

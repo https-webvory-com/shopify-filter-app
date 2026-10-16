@@ -9,6 +9,9 @@ export async function importMerchandisingRules(shop, rules, ruleType) {
     const info = importRowInfo(rule, index);
     try {
       let reason = rule?.importError;
+      const hasOrdinal = rule?.ordinal !== undefined;
+      const ordinal = hasOrdinal ? Number(rule.ordinal) : null;
+      if (hasOrdinal && (!['string', 'number'].includes(typeof rule.ordinal) || String(rule.ordinal).trim() === '' || !Number.isFinite(ordinal))) reason ||= 'Ordinal must be a finite number.';
       if (!rule || typeof rule.name !== 'string' || !rule.name.trim()) reason ||= 'Rule name is missing or is not text.';
       if (!reason) {
         try { if (!validConditions(rule.conditions)) reason = 'Conditions are missing or incomplete. Check fields, values, numeric ranges and date ranges.'; }
@@ -23,6 +26,7 @@ export async function importMerchandisingRules(shop, rules, ruleType) {
       if (!reason && rule.startDate && rule.endDate && Date.parse(rule.startDate) > Date.parse(rule.endDate)) reason = 'End date is earlier than start date.';
       if (reason) { report.skipped++; report.errors.push({ ...info, reason }); continue; }
       const data = { name: rule.name.trim(), status: rule.status !== false, collections: rule.collections || [], searchQueries: rule.searchQueries || [], customerTags: rule.customerTags || '', locales: rule.locales || '', startDate: rule.startDate ? new Date(rule.startDate) : null, endDate: rule.endDate ? new Date(rule.endDate) : null };
+      if (hasOrdinal) data.ordinal = ordinal;
       // Replace conditions atomically; a failed edit must not delete the saved rule.
       const updated = await prisma.$transaction(async tx => {
         const existing = await tx.merchandisingRule.findFirst({ where: { shop, name: data.name, ruleType } });

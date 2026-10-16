@@ -1,5 +1,6 @@
 import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import * as searchPinCsv from "../../app/utils/searchPinCsv.js";
+import * as csvImportReport from "../../app/utils/csvImportReport.js";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -12,7 +13,7 @@ async function exportModal(file, props) {
   const react = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }), useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}] };
   const context = { module: { exports: {} }, exports: {}, Blob, URL: { createObjectURL: value => { blob = value; return 'blob:fixture'; } },
     document: { createElement: () => ({ style: {}, setAttribute() {}, click() { clicked = true; } }), body: { appendChild() {}, removeChild() {} } },
-    require(name) { if (name === '../../utils/pinImportOrder.js') return pinImportOrder; if (name === '../../utils/searchPinCsv') return searchPinCsv; if (name === 'react') return { __esModule: true, default: react, ...react }; if (name === 'papaparse') return { __esModule: true, default: Papa }; return {}; } };
+    require(name) { if (name === '../../utils/csvImportReport.js') return csvImportReport; if (name === '../../utils/pinImportOrder.js') return pinImportOrder; if (name === '../../utils/searchPinCsv') return searchPinCsv; if (name === 'react') return { __esModule: true, default: react, ...react }; if (name === 'papaparse') return { __esModule: true, default: Papa }; return {}; } };
   vm.runInNewContext((await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' })).code, context);
   const component = context.module.exports.default || context.module.exports.ExportFilterGroupsModal;
   const tree = component({ ...props, isOpen: true, onClose() { closed = true; } });
@@ -35,6 +36,13 @@ test('merchandising export downloads only selected rules with intact commas, quo
   assert.equal(rows.length, 1); assert.equal(rows[0].Name, 'Black, "formal"');
   assert.equal(JSON.parse(rows[0].Conditions)[0].Field, 'option:Color');
   assert.deepEqual(JSON.parse(rows[0].CollectionTitles), ['Dresses']);
+});
+
+test('merchandising export preserves source ordinals and source sequence including zero and legacy blanks', async () => {
+  const allRules = [{ id: 'plus', ordinal: -0.25 }, { id: 'zero', ordinal: 0 }, { id: 'mob', ordinal: -1 }, { id: 'legacy' }, { id: 'prom', ordinal: -0.5 }, { id: 'wedding', ordinal: -0.375 }].map(r => ({ ...r, name: r.id, conditions: [] }));
+  const rows = await exportModal('app/components/merchandising/ExportMerchandisingRulesModal.jsx', { selectedRuleIds: allRules.map(r => r.id), allRules });
+  assert.deepEqual(rows.map(r => r.Name), ['mob', 'prom', 'wedding', 'plus', 'zero', 'legacy']);
+  assert.deepEqual(rows.map(r => r.Ordinal), ['-1', '-0.5', '-0.375', '-0.25', '0', '']);
 });
 
 test('filter group export preserves collection titles containing quotes and missing collection lists', async () => {

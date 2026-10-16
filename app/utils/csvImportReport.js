@@ -1,4 +1,14 @@
 // CSV row numbers refer to records, including the header (first data record = 2).
+// SoBooster merchandising exports carry their display sequence in Ordinal.
+export function sortMerchandisingRules(rules) {
+  const ordinal = rule => typeof rule.ordinal === 'number' && Number.isFinite(rule.ordinal) ? rule.ordinal : null;
+  return [...rules].sort((a, b) => {
+    const left = ordinal(a), right = ordinal(b);
+    if (left !== null && right !== null) return left - right;
+    if (left !== right) return left === null ? 1 : -1;
+    return (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
+  });
+}
 export function importRowInfo(row, index = 0) {
   return { row: Number.isInteger(row?.sourceRow) && row.sourceRow >= 2 ? row.sourceRow : index + 2, name: String(row?.sourceName || row?.name || row?.externalId || row?.searchQuery || (Array.isArray(row?.collectionTitles) ? row.collectionTitles.join(', ') : '') || 'Unnamed rule') };
 }

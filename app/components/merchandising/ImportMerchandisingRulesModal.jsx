@@ -145,6 +145,7 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
     } catch(e) {}
 
     return {
+      ...(row["Ordinal"] != null && String(row["Ordinal"]).trim() !== "" ? { ordinal: row["Ordinal"] } : {}),
       name: row["Name"] || row.name || "Imported Rule",
       status: (row.Status || row.Active || row.status || "True").toString().trim().toUpperCase() !== "FALSE",
       collections,

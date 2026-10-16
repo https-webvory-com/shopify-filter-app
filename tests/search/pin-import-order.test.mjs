@@ -68,3 +68,15 @@ test('default ordering keeps imports grouped, CSV gaps, manual rules and explici
  assert.equal(parsePinImportOrder(imported[1].importOrder).position,9);
  assert.ok(orderedPinImportRows([{}])[0].importOrder,'creates one native random group for an upload');
 });
+
+test('alphabetical search-term sorting matches the SoBooster screenshot independently of CSV order and custom names',()=>{
+ const queries=['Plus Size Party Dresses','long red prom dresses','Puff Sleeve Dress','Party Dresses for Women','', '$49', '$39 Dresses on Sale','A-Line Prom Dresses','8th Grade Graduation Dresses','2 Piece Short Prom Dresses','90s Prom Dresses','A Line Dresses'];
+ const rules=orderedPinImportRows(queries.map((query,i)=>({id:String(i),name:'Custom '+(queries.length-i),applyToAll:!query,searchQueries:query?[query]:[],products:[{id:'two'},{id:'one'}]})),group);
+ const expected=['','$39 Dresses on Sale','$49','2 Piece Short Prom Dresses','8th Grade Graduation Dresses','90s Prom Dresses','A Line Dresses','A-Line Prom Dresses','long red prom dresses','Party Dresses for Women','Plus Size Party Dresses','Puff Sleeve Dress'];
+ assert.deepEqual(sortPinningRules(rules,'query-asc').map(r=>r.searchQueries[0]||''),expected);
+ assert.deepEqual(sortPinningRules(rules,'query-desc').map(r=>r.searchQueries[0]||''),expected.slice().reverse());
+ assert.deepEqual(sortPinningRules(rules).map(r=>r.searchQueries[0]||''),queries,'CSV order is still independently available');
+ assert.ok(sortPinningRules(rules,'query-asc').every(r=>r.products.map(p=>p.id).join()==='two,one'));
+ const same=[{id:'first',searchQueries:['blue']},{id:'second',searchQueries:['Blue']}];
+ assert.deepEqual(sortPinningRules(same,'query-asc').map(r=>r.id),['first','second'],'case-insensitive ties stay stable');
+});

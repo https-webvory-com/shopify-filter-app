@@ -17,6 +17,12 @@ export function orderedPinImportRows(rows, group = `${Date.now()}:${crypto.rando
 export function sortPinningRules(rules, sort = 'default') {
   const created = rule => Number(new Date(rule.createdAt)) || 0;
   return [...rules].sort((a, b) => {
+    if (sort === 'query-asc' || sort === 'query-desc') {
+      const term = rule => rule.applyToAll ? '' : (rule.searchQueries?.[0] || '').trim();
+      const compared = term(a).localeCompare(term(b), 'en', { sensitivity: 'base' });
+      if (compared) return sort === 'query-desc' ? -compared : compared;
+      return 0;
+    }
     if (sort === 'recent') return created(b) - created(a);
     if (sort === 'oldest') return created(a) - created(b);
     const left = parsePinImportOrder(a.importOrder), right = parsePinImportOrder(b.importOrder);

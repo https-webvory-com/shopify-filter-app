@@ -246,7 +246,7 @@ export const loader = async ({ request }) => {
   `,
     prisma.merchandisingRule.findMany({
     where: { shop, ruleType: "collection" },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ ordinal: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
     include: { conditions: true },
   })
   ]);
