@@ -54,6 +54,24 @@ window.runCsvImportChecks = async () => {
       assert(doc().documentElement.scrollWidth <= 375, 'Import report overflows mobile frame');
       assert(win().browserErrors.length === 0, 'Unexpected browser error');
     });
+    for (const scope of ['collection','search']) await test(`${scope} pin importer retains global CSV positions across 151 rows and skipped entries`, async () => {
+      await fetch('/__control', {method:'POST',body:JSON.stringify({pinFailure:false})});
+      await navigate('/?kind=pin&scope='+scope);
+      await upload(Array.from({length:151}, (_,i)=>({
+        Id:'order-'+i, Active:'TRUE', AppliedToInstantSearch:'TRUE', AppliedToSearch:'TRUE',
+        Products:i===10 ? 'bad JSON' : '[{"Id":"1"}]',
+        CollectionTitles:JSON.stringify(['OrderCollection '+i]), SearchQuery:'order query '+i,
+      })));
+      await click('Start Import');
+      await wait(()=>text().includes('150 imported, 1 skipped'));
+      const writes=(await(await fetch('/__pin-writes')).json()).filter(w=>w.ruleType===scope&&(w.name.startsWith('OrderCollection ')||w.name.startsWith('order query ')));
+      assert(writes.length===150,'Missing imported rows');
+      const groups=new Set(writes.map(w=>w.importOrder.slice(0,-11)));
+      assert(groups.size===1,'Concurrent batches did not share one upload group');
+      const positions=writes.map(w=>Number(w.importOrder.slice(-10))).sort((a,b)=>a-b);
+      assert(JSON.stringify(positions)===JSON.stringify(Array.from({length:151},(_,i)=>i+2).filter(i=>i!==12)),'CSV source positions changed across batch boundaries or skips');
+      assert(win().browserErrors.length===0,'Browser error during ordered import');
+    });
   } finally { await fetch('/__control', { method: 'POST', body: JSON.stringify({ pinFailure: false, merchFailure: false }) }); frame.remove(); }
   return results;
 };

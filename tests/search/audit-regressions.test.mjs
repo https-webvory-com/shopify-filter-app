@@ -1,3 +1,4 @@
+import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import * as searchColor from "../../app/utils/searchColor.js";
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
@@ -87,6 +88,7 @@ test('available product IDs exclude products with only unavailable matching comb
 
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+      if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;
    if(name==='../services/merchandisingImport.server.js')return {};
@@ -121,7 +123,7 @@ test('create/edit validation runs before database writes and numeric persistence
 test('manual pin export and batch import preserve order and images; legacy image fallback supports URL strings',async()=>{
  const source=await fs.readFile('app/components/merchandising/ExportCollectionPinsModal.jsx','utf8');
  let exported;
- const context={allRules:[{id:'pins',collections:['Smart Watch'],products:[{id:'gid://shopify/Product/1',title:'One',image:'one.jpg'},{id:'gid://shopify/Product/2',title:'Two',image:'two.jpg'}]}],selectedRuleIds:['pins'],selectedFields:['Products','Brief','CollectionTitles'],Papa:{unparse:rows=>{exported=rows;return 'csv';}},Blob,URL:{createObjectURL:()=>''},document:{createElement:()=>({setAttribute(){},style:{},click(){}}),body:{appendChild(){},removeChild(){}}},onClose(){}};
+ const context={sortPinningRules:pinImportOrder.sortPinningRules,allRules:[{id:'pins',collections:['Smart Watch'],products:[{id:'gid://shopify/Product/1',title:'One',image:'one.jpg'},{id:'gid://shopify/Product/2',title:'Two',image:'two.jpg'}]}],selectedRuleIds:['pins'],selectedFields:['Products','Brief','CollectionTitles'],Papa:{unparse:rows=>{exported=rows;return 'csv';}},Blob,URL:{createObjectURL:()=>''},document:{createElement:()=>({setAttribute(){},style:{},click(){}}),body:{appendChild(){},removeChild(){}}},onClose(){}};
  vm.runInNewContext(source.slice(source.indexOf('  const extractNumericId'),source.indexOf('\n  return ('))+'\nhandleExport();',context);
  const products=JSON.parse(exported[0].Products);
  assert.deepEqual(products.map(p=>p.ImageUrl),['one.jpg','two.jpg']);

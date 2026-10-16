@@ -1,3 +1,4 @@
+import { sortPinningRules } from "../../utils/pinImportOrder.js";
 import React, { useState } from "react";
 import Papa from "papaparse";
 import { searchPinScopeToCsv } from "../../utils/searchPinCsv";
@@ -24,7 +25,7 @@ export default function ExportSearchPinsModal({ isOpen, onClose, selectedRuleIds
   if (!isOpen) return null;
 
   const handleExport = () => {
-    const rulesToExport = allRules.filter(r => selectedRuleIds.includes(r.id));
+    const rulesToExport = sortPinningRules(allRules.filter(r => selectedRuleIds.includes(r.id)));
     
     const exportData = rulesToExport.map(rule => {
       const row = {};

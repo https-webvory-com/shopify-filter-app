@@ -1,3 +1,4 @@
+import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import test from "node:test";
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import assert from "node:assert/strict";
@@ -59,6 +60,7 @@ async function mockedModule(file, mocks) {
     URL,
     console,
     require(name) {
+      if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === '../utils/csvImportReport.js') return csvImportReport;
       if (name === "../services/searchPicker.server.js") return {};
       if (name === "../utils/reorderSearchPins.js") return {};

@@ -1,3 +1,4 @@
+import { orderedPinImportRows } from "../../utils/pinImportOrder.js";
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import Papa from "papaparse";
 import CsvImportReport from "./CsvImportReport";
@@ -169,7 +170,7 @@ export default function ImportCollectionPinsModal({ isOpen, onClose, onImportCom
 
     const BATCH_SIZE = 50;
     const CONCURRENCY = 3;
-    const batches = chunk(parsedRows, BATCH_SIZE);
+    const batches = chunk(orderedPinImportRows(parsedRows), BATCH_SIZE);
     const total = parsedRows.length;
 
     setProgress({ processed: 0, total, imported: 0, skipped: 0, errors: [] });

@@ -1,3 +1,4 @@
+import { sortPinningRules } from "../utils/pinImportOrder.js";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -171,7 +172,7 @@ export default function PinningIndex() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
-  const [sortOption, setSortOption] = useState("recent");
+  const [sortOption, setSortOption] = useState("default");
 
   const filteredRules = pinningRules.filter((rule) => {
     let matchesSearch =
@@ -185,15 +186,7 @@ export default function PinningIndex() {
     return matchesSearch && matchesRuleFilters(rule, ruleFilters, ruleMatchType);
   });
 
-  const sortedRules = [...filteredRules].sort((a, b) => {
-    if (sortOption === "recent") {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    }
-    if (sortOption === "oldest") {
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    }
-    return 0;
-  });
+  const sortedRules = sortPinningRules(filteredRules, sortOption);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createApplyToAll, setCreateApplyToAll] = useState(false);
@@ -838,6 +831,14 @@ export default function PinningIndex() {
                     width: "160px",
                   }}
                 >
+                  <div
+                    onClick={() => { setSortOption("default"); setIsSortDropdownOpen(false); }}
+                    style={{ padding: "12px 16px", cursor: "pointer", fontSize: "14px", color: sortOption === "default" ? "#5B21B6" : "#334155", fontWeight: sortOption === "default" ? "500" : "400" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    Default order
+                  </div>
                   <div
                     onClick={() => {
                       setSortOption("recent");

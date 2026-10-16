@@ -1,3 +1,4 @@
+import { sortPinningRules } from "../../utils/pinImportOrder.js";
 import React, { useState } from "react";
 import Papa from "papaparse";
 
@@ -27,7 +28,7 @@ export default function ExportCollectionPinsModal({ isOpen, onClose, selectedRul
   };
 
   const handleExport = () => {
-    const rulesToExport = allRules.filter(r => selectedRuleIds.includes(r.id));
+    const rulesToExport = sortPinningRules(allRules.filter(r => selectedRuleIds.includes(r.id)));
     
     const exportData = rulesToExport.map(rule => {
       const row = {};

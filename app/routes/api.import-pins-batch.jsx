@@ -1,3 +1,4 @@
+import { parsePinImportOrder } from "../utils/pinImportOrder.js";
 import { normalizePinImportRow, importRowInfo, importWriteError } from '../utils/csvImportReport.js';
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -83,6 +84,11 @@ export const action = async ({ request }) => {
         const externalId = row.externalId || "imported-row";
         const info = importRowInfo(row);
         if (row.importError) { skippedRows.push({ id: externalId, ...info, reason: row.importError }); continue; }
+        if (row.importOrder != null && !parsePinImportOrder(row.importOrder)) {
+          skippedRows.push({ id: externalId, ...info, reason: "The CSV rule order is invalid. Select the CSV again and retry." });
+          continue;
+        }
+        const orderData = row.importOrder == null ? {} : { importOrder: row.importOrder };
         const rowWarnings = [];
 
         // Map and validate products
@@ -176,6 +182,7 @@ export const action = async ({ request }) => {
             },
           },
           update: {
+            ...orderData,
             status: row.active !== false,
             collections: validCollections,
             products: validProducts,
@@ -184,6 +191,7 @@ export const action = async ({ request }) => {
             applyToAll,
           },
           create: {
+            ...orderData,
             shop,
             name: ruleName,
             status: row.active !== false,
