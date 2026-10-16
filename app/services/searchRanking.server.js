@@ -14,9 +14,9 @@ const variants = rows => (rows || []).map(v => ({ ...v,
 // Both search surfaces rank the eligible set before allocating page slots.
 // Never inject an inactive product or a pin that violates the query's color.
 export async function rankSearchResults({ shop, query, options, rule, pinningRule,
-  parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [] }) {
+  parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [], membershipOnly = false }) {
   try {
-    const result = await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
+    const result = !membershipOnly && await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
       parsedQuery, globalSettings, mergedValues, page, limit, facetKeys });
     if (result) return result;
   } catch (error) {
@@ -25,6 +25,10 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
   const seen = new Set(), products = [];
   const { limit: ignoredLimit, offset: ignoredOffset, sortBy, facets, attributesToHighlight,
     attributesToRetrieve, ...searchOptions } = options;
+  // The admin pin picker only consumes IDs. Keep color eligibility fields,
+  // but do not transfer images, descriptions, vectors or other card data.
+  if (membershipOnly) searchOptions.attributesToRetrieve = parsedQuery?.colorIntent?.requested.length
+    ? ['id', 'status', 'options', 'variantPrices', 'variants'] : ['id', 'status'];
   const batchSize = 1000;
   const semanticWindow = 200;
   const includes = buildMeiliIncludeFilters(rule?.conditions?.filter(c => c.action === 'Include') || []);
@@ -99,6 +103,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     const variant = selectSearchColorVariant(p, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
     return variant && (!globalSettings.showOnlyInStock || variant.available !== false);
   });
+  if (membershipOnly) return { products: eligible.map(p => ({ id: p.id })), total: eligible.length };
   if (rule?.conditions?.some(c => c.field === 'SKU')) await hydrateCollectionSkus(eligible, prisma.variant, shop);
   if (rule?.conditions?.some(c => c.field === 'Available')) await hydrateCollectionInventory(eligible, prisma.variant);
   const eligibleIds = new Set(eligible.map(p => p.id));

@@ -165,7 +165,9 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const graphqlQuery = await admin.graphql(`
+  // These reads are independent; do not add every database round trip to page load.
+  const [graphqlQuery, vendorsData, productTypesData, tagsRaw, productsData, skusData, optionsRaw, merchandisingRules] = await Promise.all([
+    admin.graphql(`
     #graphql
     query {
       collections(first: 250) {
@@ -189,7 +191,53 @@ export const loader = async ({ request }) => {
         }
       }
     }
-  `);
+  `),
+    prisma.product.groupBy({
+    by: ["vendor"],
+    where: { shop, vendor: { not: "" } },
+  }),
+    prisma.product.groupBy({
+    by: ["productType"],
+    where: { shop, productType: { not: "" } },
+  }),
+    prisma.$queryRaw`
+    SELECT DISTINCT unnest(tags) as tag
+    FROM "Product"
+    WHERE shop = ${shop} AND array_length(tags, 1) > 0
+  `,
+    prisma.$queryRaw`
+    SELECT title,
+           COALESCE(
+             images->0->>'url',
+             images->0->>'src',
+             images->0->>'originalSrc',
+             CASE WHEN jsonb_typeof(images->0) = 'string' THEN images->>0 ELSE NULL END
+           ) as image
+    FROM "Product"
+    WHERE shop = ${shop}
+    LIMIT 250
+  `,
+    prisma.$queryRaw`
+    SELECT v.sku, p.title as "productTitle", v.option1, v.option2, v.option3, v."imageUrl" as image
+    FROM "Variant" v
+    JOIN "Product" p ON p.id = v."productId"
+    WHERE p.shop = ${shop} AND v.sku IS NOT NULL AND v.sku != ''
+    LIMIT 250
+  `,
+    prisma.$queryRaw`
+    SELECT DISTINCT
+      el->>'name' as name,
+      jsonb_array_elements_text(el->'values') as value
+    FROM "Product",
+    jsonb_array_elements(options) as el
+    WHERE shop = ${shop} AND options IS NOT NULL AND options::text != 'null' AND options::text != '[]'
+  `,
+    prisma.merchandisingRule.findMany({
+    where: { shop, ruleType: "collection" },
+    orderBy: { createdAt: "desc" },
+    include: { conditions: true },
+  })
+  ]);
   const graphqlData = await graphqlQuery.json();
   const shopifyCollections =
     graphqlData?.data?.collections?.nodes
@@ -207,46 +255,14 @@ export const loader = async ({ request }) => {
   });
   const shopifyLocations = Array.from(allLocsSet).sort();
 
-  const vendorsData = await prisma.product.groupBy({
-    by: ["vendor"],
-    where: { shop, vendor: { not: "" } },
-  });
   const shopifyVendors = vendorsData.map((v) => v.vendor).sort();
 
-  const productTypesData = await prisma.product.groupBy({
-    by: ["productType"],
-    where: { shop, productType: { not: "" } },
-  });
   const shopifyProductTypes = productTypesData.map((p) => p.productType).sort();
 
-  const tagsRaw = await prisma.$queryRaw`
-    SELECT DISTINCT unnest(tags) as tag
-    FROM "Product"
-    WHERE shop = ${shop} AND array_length(tags, 1) > 0
-  `;
   const shopifyTags = tagsRaw.map(t => t.tag.trim()).sort();
 
-  const productsData = await prisma.$queryRaw`
-    SELECT title, 
-           COALESCE(
-             images->0->>'url', 
-             images->0->>'src', 
-             images->0->>'originalSrc',
-             CASE WHEN jsonb_typeof(images->0) = 'string' THEN images->>0 ELSE NULL END
-           ) as image
-    FROM "Product"
-    WHERE shop = ${shop}
-    LIMIT 250
-  `;
   const shopifyProducts = productsData.map((p) => ({ title: p.title, image: p.image || null }));
 
-  const skusData = await prisma.$queryRaw`
-    SELECT v.sku, p.title as "productTitle", v.option1, v.option2, v.option3, v."imageUrl" as image
-    FROM "Variant" v
-    JOIN "Product" p ON p.id = v."productId"
-    WHERE p.shop = ${shop} AND v.sku IS NOT NULL AND v.sku != ''
-    LIMIT 250
-  `;
   const shopifySkus = skusData.map((v) => {
     let variantTitleParts = [v.option1, v.option2, v.option3].filter(Boolean);
     let variantTitle = variantTitleParts.join(" / ");
@@ -258,14 +274,6 @@ export const loader = async ({ request }) => {
   
   const shopifyBarcodes = [];
 
-  const optionsRaw = await prisma.$queryRaw`
-    SELECT 
-      el->>'name' as name, 
-      jsonb_array_elements_text(el->'values') as value 
-    FROM "Product", 
-    jsonb_array_elements(options) as el 
-    WHERE shop = ${shop} AND options IS NOT NULL AND options::text != 'null' AND options::text != '[]'
-  `;
 
   const shopifyOptions = {};
   for (const row of optionsRaw) {
@@ -278,11 +286,6 @@ export const loader = async ({ request }) => {
     shopifyOptions[key] = Array.from(shopifyOptions[key]).sort();
   }
 
-  const merchandisingRules = await prisma.merchandisingRule.findMany({
-    where: { shop, ruleType: "collection" },
-    orderBy: { createdAt: "desc" },
-    include: { conditions: true },
-  });
 
   return {
     shopifyCollections,

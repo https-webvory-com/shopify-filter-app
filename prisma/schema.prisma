@@ -56,6 +56,7 @@ model Product {
   metafields      ProductMetafield[]
   variants        Variant[]
 
+  @@index([shop, status])
   @@index([shop, vendor])
   @@index([shop, productType])
   @@index([shop, priceMin, priceMax])
@@ -80,6 +81,7 @@ model Variant {
   sku            String?
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@index([productId, available])
   @@index([option1(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([option2(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([option3(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -92,6 +94,8 @@ model Collection {
   title    String
   handle   String
   products ProductCollection[]
+
+  @@index([shop, title])
 }
 
 model ProductCollection {
@@ -101,6 +105,7 @@ model ProductCollection {
   product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([productId, collectionId])
+  @@index([collectionId, productId])
 }
 
 model ProductMetafield {

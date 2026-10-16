@@ -61,7 +61,7 @@ export const action = async ({ request, params }) => {
     let targetIds = null;
     if (targetQueries.length) {
       let matches;
-      try { matches = await searchPickerProducts(shop, targetQueries); }
+      try { matches = await searchPickerProducts(shop, targetQueries, { idsOnly: true }); }
       catch {
         return Response.json({ products: [], totalCount: 0, targetQueryKey: JSON.stringify(targetQueries),
           error: 'Could not load matching products. Please retry.', nonMatchingPinnedIds: [] });

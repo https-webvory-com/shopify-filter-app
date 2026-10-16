@@ -309,3 +309,42 @@ test('authenticated pin picker retains target-query scope when searching by titl
   assert.equal(calls[0].shop, shop); assert.deepEqual(Array.from(calls[0].AND[0].id.in), [gid(1)]);
   assert.deepEqual(Array.from(calls[0].id.notIn), [gid(9)]); assert.deepEqual(r.nonMatchingPinnedIds, [gid(9)]);
 });
+
+test('pin picker ID retrieval preserves complete hybrid membership with small payloads and distinct cache entries', async () => {
+  const docs = Array.from({length: 2105}, (_, i) => product(i + 1));
+  const calls = [], cache = new Map();
+  const search = async (_q, options) => {
+    calls.push(options);
+    const rows = docs.slice(options.offset, options.offset + options.limit);
+    return { hits: rows.map(p => options.attributesToRetrieve
+      ? Object.fromEntries(options.attributesToRetrieve.filter(k => k in p).map(k => [k, p[k]])) : p),
+      totalHits: docs.length };
+  };
+  const {rankSearchResults} = await loadRanking({}, search, async (key, read) => {
+    if (!cache.has(key)) cache.set(key, await read());
+    return cache.get(key);
+  });
+  const spec = {shop, query: 'dresses', options: {filter: [`shop = '${shop}'`, "status = 'ACTIVE'"]}, limit: Number.MAX_SAFE_INTEGER};
+  const normal = await rankSearchResults(spec);
+  calls.length = 0;
+  const ids = await rankSearchResults({...spec, membershipOnly: true});
+  assert.deepEqual(Array.from(ids.products, p => p.id), Array.from(normal.products, p => p.id));
+  assert.equal(ids.total, 2105, 'retains late matches beyond the first engine batch');
+  assert.ok(calls.length >= 4, 'ID cache cannot reuse complete-record candidate entries');
+  assert.ok(calls.every(o => JSON.stringify(o.attributesToRetrieve) === '["id","status"]'));
+  assert.ok(ids.products.every(p => Object.keys(p).join() === 'id'));
+});
+
+test('pin picker lightweight retrieval retains exact color variant eligibility', async () => {
+  const docs = [product(1), product(2, {variantPrices: [{option1: 'Red', available: true}]}), product(3, {status: 'DRAFT'})];
+  const calls = [];
+  const search = async (_q, options) => {
+    calls.push(options);
+    return {hits: docs.map(p => Object.fromEntries(options.attributesToRetrieve.filter(k => k in p).map(k => [k, p[k]])))};
+  };
+  const {rankSearchResults} = await loadRanking({}, search);
+  const result = await rankSearchResults({shop, query: 'green dress', options: {filter: [`shop = '${shop}'`]},
+    parsedQuery: {colorIntent: {requested: ['green'], values: ['Green']}}, membershipOnly: true});
+  assert.deepEqual(Array.from(result.products, p => p.id), [gid(1)]);
+  assert.ok(calls.every(o => o.attributesToRetrieve.includes('options') && o.attributesToRetrieve.includes('variantPrices')));
+});

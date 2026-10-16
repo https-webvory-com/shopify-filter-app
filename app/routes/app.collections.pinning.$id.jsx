@@ -54,19 +54,20 @@ export const action = async ({ request, params }) => {
       whereClause.id = { notIn: excludedIds };
     }
 
-    const totalCount = await prisma.product.count({ where: whereClause });
-
-    const productsResult = await prisma.product.findMany({
-      where: whereClause,
-      take: 9,
-      skip: skip,
-      select: {
-        id: true,
-        title: true,
-        handle: true,
-        images: true,
-      },
-    });
+    const [totalCount, productsResult] = await Promise.all([
+      prisma.product.count({ where: whereClause }),
+      prisma.product.findMany({
+        where: whereClause,
+        take: 9,
+        skip: skip,
+        select: {
+          id: true,
+          title: true,
+          handle: true,
+          images: true,
+        },
+      }),
+    ]);
 
     const products = productsResult.map((p) => {
       let image = null;
