@@ -124,7 +124,7 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   async function consume(documents) {
     const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));
     if(hydrateRanking)await hydrateRanking(products);
-    for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionRuleRanks:p._collectionRuleRanks,merchandisingScore:p.merchandisingScore});
+    for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionPinsFirst:p._collectionPinsFirst,_collectionRuleRanks:p._collectionRuleRanks,merchandisingScore:p.merchandisingScore});
   }
   for(let offset=0;;offset+=batchSize) {
     const result=await index.search(q,{...options,offset,limit:batchSize,attributesToRetrieve:fields},{signal:AbortSignal.timeout(30000)});

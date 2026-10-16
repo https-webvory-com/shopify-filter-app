@@ -22,6 +22,21 @@ export function createOptionValueMatcher(values) {
   return matcher;
 }
 
+// Observed source contract for ordinary collection ranking: a tag Pin precedes
+// the 99/100 tag-score ladder, then that ladder orders products within the Pin.
+// Keep stronger/custom arithmetic ladders on their existing rule-group path.
+export function usesCollectionPinFirstLadder(rules) {
+  const conditions = rules.flatMap(rule => rule.conditions || []);
+  if (!conditions.some(c => c.action === "Pin")) return false;
+  if (conditions.some(c => !["Dynamic", "Include", "Exclude", "Pin"].includes(c.action))) return false;
+  if (conditions.some(c => ["Pin", "Include"].includes(c.action) && c.field !== "Tags")) return false;
+  const dynamic = conditions.filter(c => c.action === "Dynamic");
+  if (!dynamic.length || dynamic.some(c => c.field !== "Tags" || c.operator !== "Set" || !["99", "100"].includes(String(c.operand)))) return false;
+  const lower = dynamic.filter(c => String(c.operand) === "99");
+  return lower.length > 0 && dynamic.some(c => String(c.operand) === "100") &&
+    lower.every(c => conditions.some(include => include.action === "Include" && include.field === "Tags" && include.value === c.value));
+}
+
 /**
  * Fetches the active merchandising rule for a given shop and collection.
  */
@@ -130,6 +145,7 @@ export async function getActiveRuleForCollection(
     // Keep higher-priority collection rules ahead of lower rules when ranking.
     collectionTagMatching: "exact",
     ruleGroups: applicableRules.map(r => ({ id: r.id, conditions: r.conditions || [] })),
+    ...(usesCollectionPinFirstLadder(applicableRules) ? { collectionPinsFirst: true } : {}),
   };
 }
 
@@ -657,12 +673,13 @@ export function applyMerchandisingRules(
       const rank = scoreMerchandisingConditions(p, rule.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact");
       p.merchandisingScore = rank.score;
       p._rulePinned = rank.pinned;
+      p._collectionPinsFirst = rule.collectionPinsFirst === true;
       p._collectionRuleRanks = rule.ruleGroups?.map(group =>
         scoreMerchandisingConditions(p, group.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact"));
     });
   } else {
     // Ensure score is 0 if no rules
-    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionRuleRanks = undefined; });
+    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionPinsFirst = false; p._collectionRuleRanks = undefined; });
   }
 
   filteredProducts.sort(createMerchandisingComparator(sortBy, pinnedIds, globalSettings));
@@ -758,6 +775,15 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
       }
       if (aIsPinned) return -1;
       if (bIsPinned) return 1;
+    }
+
+    // Only the observed ordinary 99/100 collection ladder promotes a matched
+    // merchandising Pin across its score groups. Explicit product pins above,
+    // strong/custom ladders, manual sort and customer sort overrides keep priority.
+    if (sortBy !== "manual" && !prioritizeSortOverMerchandising &&
+        a._collectionPinsFirst === true && b._collectionPinsFirst === true &&
+        a._rulePinned !== b._rulePinned) {
+      return a._rulePinned ? -1 : 1;
     }
 
     // Compare each collection rule independently, from higher to lower priority.

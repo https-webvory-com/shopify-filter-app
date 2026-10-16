@@ -7,6 +7,7 @@ import { prepareCollectionRanking } from '../../app/utils/prepareCollectionRanki
 import { preparationKey } from '../../app/utils/collectionPreparation.js';
 
 const fixture = JSON.parse(await fs.readFile(new URL('./fixtures/formal-merchandising-order.json', import.meta.url)));
+const prom = JSON.parse(await fs.readFile(new URL('./fixtures/prom-merchandising-order.json', import.meta.url)));
 const source = (await transform(await fs.readFile('app/services/merchandising.server.js', 'utf8'), { format: 'cjs' })).code;
 function service(rules = fixture.rules) {
   const context = { module: { exports: {} }, exports: {}, console,
@@ -90,4 +91,63 @@ test('customer sort overrides and stale product ranking state remain safe', asyn
   assert.equal(sorted[0].id, 'cheap');
   applyMerchandisingRules(sorted, null, 'best-selling');
   assert.ok(sorted.every(p => p._collectionRuleRanks === undefined));
+});
+
+test('observed Prom shared 100 follow merchandising Pin before its ordinary 99/100 score ladder', async () => {
+  const { getActiveRuleForCollection, applyMerchandisingRules } = service(prom.rules);
+  const rule = await getActiveRuleForCollection('fixture', 'Prom Dresses');
+  assert.equal(rule.collectionPinsFirst, true);
+  const ranked = applyMerchandisingRules(clone(prom.products), rule, 'best-selling', {products:prom.pins}, [], settings);
+  assert.deepEqual(Array.from(ranked,p=>p.id),prom.expected);
+  assert.equal(ranked[15].id,'gid://shopify/Product/15046990037363');
+  assert.deepEqual(Array.from(ranked.slice(0,9),p=>p.id),prom.pins.map(p=>p.id));
+  const previous={...rule};delete previous.collectionPinsFirst;
+  assert.notEqual(applyMerchandisingRules(clone(prom.products),previous,'best-selling',{products:prom.pins},[],settings)[15].id,prom.expected[15]);
+  assert.notEqual(preparationKey({rule}),preparationKey({rule:previous}),'old cached rankings cannot mask the new precedence');
+});
+
+test('ordinary ladder recognition is independent of names and refuses stronger or unsupported arithmetic rules', () => {
+  const {usesCollectionPinFirstLadder}=service();
+  const rules=[{conditions:[{action:'Dynamic',field:'Tags',value:'first',operator:'Set',operand:'99'},
+    {action:'Include',field:'Tags',value:'first'}, {action:'Dynamic',field:'Tags',value:'second',operator:'Set',operand:'100'}]},
+    {conditions:[{action:'Pin',field:'Tags',value:'colour'}]}];
+  assert.equal(usesCollectionPinFirstLadder(rules),true);
+  for(const change of [{operand:'1000'},{operator:'Multiply'},{field:'Price'},{operand:'100oops'}]){
+    const altered=clone(rules);Object.assign(altered[0].conditions[2],change);
+    assert.equal(usesCollectionPinFirstLadder(altered),false);
+  }
+  assert.equal(usesCollectionPinFirstLadder(rules.slice(0,1)),false);
+  const unsupported=clone(rules);unsupported[1].conditions.push({action:'Boost',field:'Tags',value:'third'});
+  assert.equal(usesCollectionPinFirstLadder(unsupported),false);
+});
+
+test('Prom customer sort overrides, exclusions, manual ranking and stale state retain their behavior', async () => {
+  const {getActiveRuleForCollection,applyMerchandisingRules}=service(prom.rules);
+  const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
+  const docs=[{id:'cheap',priceMin:1,tags:['TopProm','BestProm'],inventoryTotal:5},
+    {id:'champagne',priceMin:50,tags:['TopProm','Champagne'],inventoryTotal:5},
+    {id:'sold',priceMin:0,tags:['TopProm','Champagne'],inventoryTotal:0}];
+  const sorted=applyMerchandisingRules(clone(docs),rule,'price-ascending',null,[],{prioritizeSortOverMerchandising:true});
+  assert.deepEqual(Array.from(sorted,p=>p.id),['cheap','champagne']);
+  const previous={...rule};delete previous.collectionPinsFirst;
+  for(const sort of ['manual','price-ascending']) {
+    const opts=sort==='manual'?{}:{prioritizeSortOverMerchandising:true};
+    assert.deepEqual(Array.from(applyMerchandisingRules(clone(docs),rule,sort,null,[],opts),p=>p.id),
+      Array.from(applyMerchandisingRules(clone(docs),previous,sort,null,[],opts),p=>p.id));
+  }
+  applyMerchandisingRules(sorted,null,'best-selling');
+  assert.ok(sorted.every(p=>p._collectionPinsFirst===false));
+});
+
+test('compact Prom ranking carries pin precedence across batches and deep pages', async () => {
+  const {getActiveRuleForCollection,applyMerchandisingRules:arrange,createMerchandisingComparator:comparator}=service(prom.rules);
+  const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
+  const docs=Array.from({length:2250},(_,i)=>({id:String(i+1),priceMin:10,inventoryTotal:5,tags:i%2?['TopProm','BestProm']:['TopProm','Champagne']}));
+  const index={search:async(_q,options)=>({hits:docs.slice(options.offset,options.offset+options.limit),estimatedTotalHits:docs.length})};
+  const spec={shop:'fixture',query:{q:'',filter:[]},rule,sortBy:'best-selling',needsShopifyOrder:true,orderedIds:docs.map(p=>p.id),pinnedIds:[],globalSettings:{}};
+  const baseline=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange});
+  const compact=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange,comparator});
+  assert.deepEqual(compact,baseline);
+  assert.deepEqual(compact.ids.slice(0,1125),docs.filter((_,i)=>i%2===0).map(p=>p.id));
+  assert.equal(new Set(compact.ids).size,2250);
 });

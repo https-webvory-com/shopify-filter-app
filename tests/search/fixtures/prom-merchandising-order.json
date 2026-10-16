@@ -1,0 +1,1554 @@
+{
+  "source": "Read-only Prom storefront snapshots, 2026-10-16; same eligible shared product set, existing within-tier order; source quantities recorded only for exclusion fixtures.",
+  "rules": [
+    {
+      "id": "cmvb2ojiv00lyqh77luklga0p",
+      "name": "Top Prom",
+      "collections": [
+        "Short Prom Dresses",
+        "Halter Dresses",
+        "Prom Dresses Under $100",
+        "Two Piece Short Prom Dresses",
+        "Heels Shoes for Prom",
+        "Black Prom Dress",
+        "Blush Prom Dresses",
+        "Red Prom Dresses",
+        "White Prom Dresses",
+        "Yellow Prom Dresses",
+        "Prom Dresses",
+        "Cheap Prom Dresses",
+        "Backless Dresses",
+        "Best Sellers",
+        "Fuchsia Dresses",
+        "Pageant Dresses",
+        "Sage Green Prom Dress",
+        "Teal Dresses",
+        "Size 0 Dresses",
+        "Silver Dresses",
+        "Coral Dresses",
+        "Navy Blue Prom Dresses",
+        "Dusty Rose Dresses",
+        "Turquoise Dresses",
+        "Hot Pink Prom Dresses",
+        "Blush Dresses",
+        "Champagne Dresses",
+        "Black Dresses & Gowns",
+        "One Shoulder Dresses",
+        "Metallic Formal Dresses",
+        "Light Blue Prom Dresses",
+        "Tulle Formal Dress",
+        "All",
+        "Lavender Dresses for Women",
+        "Size 16 Dresses",
+        "Dresses Size 2",
+        "Size 14 Dresses",
+        "Unique Prom Dresses",
+        "Silver Prom Dresses",
+        "Nude Dresses",
+        "Orange Prom Dresses",
+        "Size 8 Dresses",
+        "Light Blue Dress",
+        "Blue Formal Dresses",
+        "Orange Dresses",
+        "Halloween Dress",
+        "Size 4 Dresses",
+        "Strapless Prom Dresses",
+        "Burgundy Prom Dresses",
+        "Purple Prom Dresses",
+        "A-Line Prom Dresses\u00a0",
+        "Auburn Prom Dresses",
+        "Backless Prom Dress",
+        "Ball Gown Prom Dresses",
+        "Beaded Prom Dress",
+        "Best Selling Prom Dresses",
+        "Best Selling Sequins Dresses",
+        "Bodycon Prom Dress",
+        "Colorful\u00a0Prom Dresses",
+        "Couture Dresses",
+        "Cute Prom Dresses",
+        "Embroidered Prom Dress",
+        "Feather Prom Dress",
+        "Fitted Prom Dress",
+        "Floral Prom Dresses",
+        "Halter Prom Dress",
+        "High Low Prom Dresses",
+        "High Neck Prom Dress",
+        "Lace Prom Dresses",
+        "Long Prom Dresses",
+        "Luxury Dresses",
+        "Maxi Prom Dresses",
+        "Modest Prom Dresses",
+        "Prom Dresses 2026",
+        "Off the Shoulder Prom Dress",
+        "One Shoulder Prom Dress",
+        "Open Back Prom Dresses\u00a0",
+        "Petite Prom Dresses\u00a0",
+        "Print Prom Dresses\u00a0",
+        "Prom Dress 2026",
+        "Prom Clothing",
+        "Prom Dresses Under $200",
+        "Prom Dresses with Sleeves",
+        "Prom Dresses with Slit",
+        "Rhinestone Prom Dress",
+        "Ruffle Prom Dress",
+        "Satin Prom Dress",
+        "Sequin Dresses",
+        "Sequin Prom Dresses",
+        "Silk Prom Dress",
+        "Sparkly Prom Dresses",
+        "Square Neck Prom Dress",
+        "Tight Prom Dress",
+        "Tulle Dresses for Prom",
+        "Tulle Prom Dress",
+        "V Neck Prom Dresses",
+        "Vintage Prom Dresses",
+        "Glitter Prom Dress",
+        "Blue Prom Dresses",
+        "Brown Prom Dresses",
+        "Grey Prom Dresses",
+        "Gray Prom Dresses",
+        "Taylor Swift Dress",
+        "Beige Prom Dresses",
+        "Ivory Prom Dress",
+        "Maroon Prom Dresses",
+        "Mini Prom Dresses",
+        "Pastel Prom Dresses",
+        "Metallic Prom Dress",
+        "Long Red Prom Dresses",
+        "Neon Prom Dress",
+        "Champagne Prom Dresses & Gown",
+        "Black Lace Dress",
+        "Sexy Red Dresses",
+        "Feather Dress",
+        "Best Selling Couture Dresses",
+        "90s Prom Dresses"
+      ],
+      "conditions": [
+        {
+          "action": "Dynamic",
+          "field": "Tags",
+          "value": "TopProm",
+          "operator": "Set",
+          "operand": "99",
+          "minValue": null,
+          "maxValue": ""
+        },
+        {
+          "action": "Include",
+          "field": "Tags",
+          "value": "TopProm",
+          "operator": "contains",
+          "operand": "",
+          "minValue": null,
+          "maxValue": ""
+        },
+        {
+          "action": "Dynamic",
+          "field": "Tags",
+          "value": "BestProm",
+          "operator": "Set",
+          "operand": "100",
+          "minValue": null,
+          "maxValue": ""
+        }
+      ],
+      "createdAt": "2026-10-16T14:38:14.744Z",
+      "customerTags": "",
+      "locales": ""
+    },
+    {
+      "id": "cmvb0umw5000apk4km0mdg7q4",
+      "name": "Champagne Prom Dresses",
+      "collections": [],
+      "conditions": [
+        {
+          "action": "Pin",
+          "field": "Tags",
+          "value": "Champagne, Champagne Gold, Ivory/Champagne/Honey, Ivory/Champagne, Champagne/Gold, Champagne/Silver, Ivory Champagne, Black/Champagne, Light Champagne, Champagne Multi, Champagne Silver",
+          "operator": "contains",
+          "operand": "",
+          "minValue": null,
+          "maxValue": ""
+        }
+      ],
+      "createdAt": "2026-10-16T13:46:59.814Z",
+      "customerTags": "",
+      "locales": ""
+    },
+    {
+      "id": "cmvb0umw10008pk4ko2kyxifl",
+      "name": "In-Store Styling Appointment Deposit",
+      "collections": [],
+      "conditions": [
+        {
+          "action": "Exclude",
+          "field": "Id",
+          "value": "15265518944627",
+          "operator": "contains",
+          "operand": "",
+          "minValue": null,
+          "maxValue": ""
+        }
+      ],
+      "createdAt": "2026-10-16T13:46:59.810Z",
+      "customerTags": "",
+      "locales": ""
+    },
+    {
+      "id": "cmvb0umvy0006pk4k5xu31umf",
+      "name": "sold out",
+      "collections": [],
+      "conditions": [
+        {
+          "action": "Exclude",
+          "field": "Available",
+          "value": "-999",
+          "operator": "contains",
+          "operand": "",
+          "minValue": "-999",
+          "maxValue": "0"
+        }
+      ],
+      "createdAt": "2026-10-16T13:46:59.806Z",
+      "customerTags": "",
+      "locales": ""
+    }
+  ],
+  "pins": [
+    {
+      "id": "gid://shopify/Product/15285234663795"
+    },
+    {
+      "id": "gid://shopify/Product/15299019735411"
+    },
+    {
+      "id": "gid://shopify/Product/15285131411827"
+    },
+    {
+      "id": "gid://shopify/Product/15285111357811"
+    },
+    {
+      "id": "gid://shopify/Product/15285141176691"
+    },
+    {
+      "id": "gid://shopify/Product/15397893243251"
+    },
+    {
+      "id": "gid://shopify/Product/7222430662717"
+    },
+    {
+      "id": "gid://shopify/Product/15290790609267"
+    },
+    {
+      "id": "gid://shopify/Product/7126405939261"
+    }
+  ],
+  "products": [
+    {
+      "id": "gid://shopify/Product/15285234663795",
+      "title": "Long Corset Ruffled Off Shoulder Prom Dress",
+      "tags": [
+        "BestProm"
+      ],
+      "priceMin": 149.99,
+      "inventoryTotal": 159,
+      "_originalIndex": 0
+    },
+    {
+      "id": "gid://shopify/Product/15299019735411",
+      "title": "Fitted Stretch Satin Long Formal Corset Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 179.99,
+      "inventoryTotal": 112,
+      "_originalIndex": 1
+    },
+    {
+      "id": "gid://shopify/Product/15285131411827",
+      "title": "High-Low Satin Corset Evening Gown with Full Skirt",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 168,
+      "_originalIndex": 2
+    },
+    {
+      "id": "gid://shopify/Product/15285111357811",
+      "title": "Layered Tulle Prom Dress Ball Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 179,
+      "inventoryTotal": 104,
+      "_originalIndex": 3
+    },
+    {
+      "id": "gid://shopify/Product/15285141176691",
+      "title": "Beaded Mermaid Formal Evening Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 169,
+      "inventoryTotal": 159,
+      "_originalIndex": 4
+    },
+    {
+      "id": "gid://shopify/Product/15397893243251",
+      "title": "Long Corset Tiered Ruffle Formal Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 149,
+      "inventoryTotal": 37,
+      "_originalIndex": 5
+    },
+    {
+      "id": "gid://shopify/Product/7222430662717",
+      "title": "Fitted Off Shoulder Sequin Prom Formal Dress",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 478,
+      "_originalIndex": 6
+    },
+    {
+      "id": "gid://shopify/Product/15290790609267",
+      "title": "Long Corset Formal Pleated Prom Ball Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159.99,
+      "inventoryTotal": 145,
+      "_originalIndex": 7
+    },
+    {
+      "id": "gid://shopify/Product/7126405939261",
+      "title": "Fitted Corset Off the Shoulder Formal Prom Dress",
+      "tags": [
+        "TopProm"
+      ],
+      "priceMin": 99,
+      "inventoryTotal": 88,
+      "_originalIndex": 8
+    },
+    {
+      "id": "gid://shopify/Product/15290794082675",
+      "title": "Long Corset Prom Dresss with Beaded Drape Slit",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 83,
+      "_originalIndex": 9
+    },
+    {
+      "id": "gid://shopify/Product/15139131425139",
+      "title": "Formal A-Line Prom Long Dress by LaDivine CD337",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 149,
+      "inventoryTotal": 567,
+      "_originalIndex": 10
+    },
+    {
+      "id": "gid://shopify/Product/15410848858483",
+      "title": "V-Neck Floor-Length Tulle Prom A-Line LaDivine 2412",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 133,
+      "_originalIndex": 11
+    },
+    {
+      "id": "gid://shopify/Product/15375844311411",
+      "title": "One-Shoulder Floor-Length Sequin Prom Sheath Column May Queen RQ8254",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 344,
+      "inventoryTotal": 185,
+      "_originalIndex": 12
+    },
+    {
+      "id": "gid://shopify/Product/15375844999539",
+      "title": "Scoop Floor-Length with Train Tulle Prom Mermaid Trumpet May Queen RQ8234",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 397,
+      "inventoryTotal": 180,
+      "_originalIndex": 13
+    },
+    {
+      "id": "gid://shopify/Product/15453982818675",
+      "title": "Cowl Neck Floor-Length Satin Prom Corset Gown LaDivine 7438",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 169,
+      "inventoryTotal": 251,
+      "_originalIndex": 14
+    },
+    {
+      "id": "gid://shopify/Product/6842994884669",
+      "title": "Off the Shoulder Satin Corset Evening Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 49.99,
+      "inventoryTotal": 236,
+      "_originalIndex": 15
+    },
+    {
+      "id": "gid://shopify/Product/15292313239923",
+      "title": "Sweetheart Neckline Corset High Slit Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 89.99,
+      "inventoryTotal": 169,
+      "_originalIndex": 16
+    },
+    {
+      "id": "gid://shopify/Product/15143216775539",
+      "title": "LaDivine CC324 Formal Long Beaded Fringe Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 289,
+      "inventoryTotal": 131,
+      "_originalIndex": 17
+    },
+    {
+      "id": "gid://shopify/Product/15285087895923",
+      "title": "Off-Shoulder Beaded Long Formal Evening Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 132,
+      "_originalIndex": 18
+    },
+    {
+      "id": "gid://shopify/Product/15315207848307",
+      "title": "Long Ball Gown Satin Ruffle Off Shoulder Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 149.99,
+      "inventoryTotal": 115,
+      "_originalIndex": 19
+    },
+    {
+      "id": "gid://shopify/Product/15299007906163",
+      "title": "Black Beadd Corset Long Evening Gown Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 279,
+      "inventoryTotal": 34,
+      "_originalIndex": 20
+    },
+    {
+      "id": "gid://shopify/Product/15313862164851",
+      "title": "Corset Lace Formal Evening Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 45,
+      "_originalIndex": 21
+    },
+    {
+      "id": "gid://shopify/Product/15281366073715",
+      "title": "Long Formal Sequin Fitted Prom Dress LaDivine J892",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 92,
+      "_originalIndex": 22
+    },
+    {
+      "id": "gid://shopify/Product/15285235384691",
+      "title": "Figure Hugging Fitted Strapless Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 149,
+      "inventoryTotal": 170,
+      "_originalIndex": 23
+    },
+    {
+      "id": "gid://shopify/Product/15285132034419",
+      "title": "Black Leopard Print Corset Formal Dress with Tiered Skirt",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 19,
+      "_originalIndex": 24
+    },
+    {
+      "id": "gid://shopify/Product/15142431621491",
+      "title": "LaDivine CD727 Beaded Long Formal Prom Sequin Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 399,
+      "inventoryTotal": 471,
+      "_originalIndex": 25
+    },
+    {
+      "id": "gid://shopify/Product/15322628030835",
+      "title": "Metallic Long Fitted Formal Strapless High Slit Prom Dress",
+      "tags": [
+        "BestProm"
+      ],
+      "priceMin": 329,
+      "inventoryTotal": 13,
+      "_originalIndex": 26
+    },
+    {
+      "id": "gid://shopify/Product/15281012375923",
+      "title": "Long Formal Fitted Prom Beaded Corset Dress LaDivine J890",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 42,
+      "_originalIndex": 27
+    },
+    {
+      "id": "gid://shopify/Product/15493295178099",
+      "title": "Long Strapless Corset Beaded Satin Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 179,
+      "inventoryTotal": 25,
+      "_originalIndex": 28
+    },
+    {
+      "id": "gid://shopify/Product/15438321877363",
+      "title": "Strapless Curved Neck Floor-Length Sequin Occasion Ball Gown LaDivine J915",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 345,
+      "inventoryTotal": 469,
+      "_originalIndex": 29
+    },
+    {
+      "id": "gid://shopify/Product/15531996643699",
+      "title": "Prom Fully Beaded Corset Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 179,
+      "inventoryTotal": 30,
+      "_originalIndex": 30
+    },
+    {
+      "id": "gid://shopify/Product/15485166813555",
+      "title": "Embellished Lace Floral Evening Gown with Tulle Overskirt and Nude Lining",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 219,
+      "inventoryTotal": 19,
+      "_originalIndex": 31
+    },
+    {
+      "id": "gid://shopify/Product/15285083832691",
+      "title": "Strapless Mermaid Satin Corset Prom Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 119,
+      "inventoryTotal": 140,
+      "_originalIndex": 32
+    },
+    {
+      "id": "gid://shopify/Product/15239443448179",
+      "title": "LaDivine CD388 Long Formal Beaded Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 169,
+      "inventoryTotal": 134,
+      "_originalIndex": 33
+    },
+    {
+      "id": "gid://shopify/Product/15229792026995",
+      "title": "LaDivine KV1140 Beaded Long Formal Sequin Evening Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 279,
+      "inventoryTotal": 320,
+      "_originalIndex": 34
+    },
+    {
+      "id": "gid://shopify/Product/15543025172851",
+      "title": "Strapless Beaded Bust Pleated Corset Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 93,
+      "_originalIndex": 35
+    },
+    {
+      "id": "gid://shopify/Product/15542998532467",
+      "title": "Long Sequence Prom Formal Evening Dress",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 106,
+      "_originalIndex": 36
+    },
+    {
+      "id": "gid://shopify/Product/15524533764467",
+      "title": "Formal A Line Satin Beaded Corset Evening Gown",
+      "tags": [
+        "BestProm"
+      ],
+      "priceMin": 179,
+      "inventoryTotal": 39,
+      "_originalIndex": 37
+    },
+    {
+      "id": "gid://shopify/Product/15418871251315",
+      "title": "Off Shoulder Sweetheart Corset Formal Prom Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 149,
+      "inventoryTotal": 40,
+      "_originalIndex": 38
+    },
+    {
+      "id": "gid://shopify/Product/15485269901683",
+      "title": "Luxe Fully Embellished Cape Dress with Sweetheart Neckline Rhinestones and Pearl Details",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 279,
+      "inventoryTotal": 9,
+      "_originalIndex": 39
+    },
+    {
+      "id": "gid://shopify/Product/15398644547955",
+      "title": "Long Formal Corset Satin Ball Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 119,
+      "inventoryTotal": 47,
+      "_originalIndex": 40
+    },
+    {
+      "id": "gid://shopify/Product/15269884756339",
+      "title": "Corset Fitted Pleated Long Formal Prom Dress LaDivine CD406",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 195,
+      "inventoryTotal": 266,
+      "_originalIndex": 41
+    },
+    {
+      "id": "gid://shopify/Product/15139121201523",
+      "title": "Long Formal Sequin Beaded Strapless Prom Dress by LaDivine CD0227",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 110,
+      "_originalIndex": 42
+    },
+    {
+      "id": "gid://shopify/Product/15584659767667",
+      "title": "Long Prom Polka Dot Fitted Formal Evening Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 26,
+      "_originalIndex": 43
+    },
+    {
+      "id": "gid://shopify/Product/15542903243123",
+      "title": "High Low Prom Dress Floral Jacquard Corset Ball Gown",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 35,
+      "_originalIndex": 44
+    },
+    {
+      "id": "gid://shopify/Product/15526077890931",
+      "title": "Formal Sequined Fitted Evening Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 44,
+      "_originalIndex": 45
+    },
+    {
+      "id": "gid://shopify/Product/15453982753139",
+      "title": "Strapless Long Satin Prom Dress Mermaid LaDivine CH2602",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 135,
+      "inventoryTotal": 426,
+      "_originalIndex": 46
+    },
+    {
+      "id": "gid://shopify/Product/15452754084211",
+      "title": "Long Floral Jacquard Prom Dress Strapless Ball Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 119.99,
+      "inventoryTotal": 16,
+      "_originalIndex": 47
+    },
+    {
+      "id": "gid://shopify/Product/15430869680499",
+      "title": "Sweetheart Floor-Length Tulle Formal Ball Gown LaDivine C177",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 225,
+      "inventoryTotal": 82,
+      "_originalIndex": 48
+    },
+    {
+      "id": "gid://shopify/Product/15593582821747",
+      "title": "Strapless Sweetheart Sequin Mermaid Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 299,
+      "inventoryTotal": 40,
+      "_originalIndex": 49
+    },
+    {
+      "id": "gid://shopify/Product/15593529934195",
+      "title": "Strapless Sweetheart Sequin Mermaid Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 279,
+      "inventoryTotal": 24,
+      "_originalIndex": 50
+    },
+    {
+      "id": "gid://shopify/Product/15591218676083",
+      "title": "Floral Print Corset Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 29,
+      "_originalIndex": 51
+    },
+    {
+      "id": "gid://shopify/Product/15586905227635",
+      "title": "Prom Strapless Sweetheart Ruffled Organza Ball Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 299,
+      "inventoryTotal": 22,
+      "_originalIndex": 52
+    },
+    {
+      "id": "gid://shopify/Product/15584646889843",
+      "title": "Square Neck Polka Dot Full Skirt Formal Gown",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 199,
+      "inventoryTotal": 30,
+      "_originalIndex": 53
+    },
+    {
+      "id": "gid://shopify/Product/15551954452851",
+      "title": "Sequin Floral Lace Bodice Long Formal Dress",
+      "tags": [
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 87,
+      "_originalIndex": 54
+    },
+    {
+      "id": "gid://shopify/Product/15542939386227",
+      "title": "Formal Dress Beaded Evening Couture Gown",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 389,
+      "inventoryTotal": 14,
+      "_originalIndex": 55
+    },
+    {
+      "id": "gid://shopify/Product/15542902161779",
+      "title": "Prom Floral Sequined Couture Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 229,
+      "inventoryTotal": 16,
+      "_originalIndex": 56
+    },
+    {
+      "id": "gid://shopify/Product/15542898131315",
+      "title": "Long Beaded Formal Evening Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 289,
+      "inventoryTotal": 16,
+      "_originalIndex": 57
+    },
+    {
+      "id": "gid://shopify/Product/15539368919411",
+      "title": "Strapless Curved Neck Floor-Length Satin Occasion A-Line LaDivine CD419",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 26,
+      "_originalIndex": 58
+    },
+    {
+      "id": "gid://shopify/Product/15526089195891",
+      "title": "Formal Floral Satin Corset Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 14,
+      "_originalIndex": 59
+    },
+    {
+      "id": "gid://shopify/Product/15525019615603",
+      "title": "Strapless Curved Neck Floor-Length Chiffon Prom Ball Gown LaDivine 668",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 199,
+      "inventoryTotal": 402,
+      "_originalIndex": 60
+    },
+    {
+      "id": "gid://shopify/Product/15525014405491",
+      "title": "Off-the-Shoulder Floor-Length Sequin Prom Mermaid LaDivine J913",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 114,
+      "_originalIndex": 61
+    },
+    {
+      "id": "gid://shopify/Product/15525014372723",
+      "title": "Off-the-Shoulder Floor-Length Satin Prom Mermaid LaDivine J916",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 299,
+      "inventoryTotal": 94,
+      "_originalIndex": 62
+    },
+    {
+      "id": "gid://shopify/Product/15525014077811",
+      "title": "Sweetheart Floor-Length Satin Prom Mermaid LaDivine CA124",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 17,
+      "_originalIndex": 63
+    },
+    {
+      "id": "gid://shopify/Product/15515073741171",
+      "title": "Strapless Curved Neck Floor-Length Sequin Prom Mermaid LaDivine 396",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 122,
+      "_originalIndex": 64
+    },
+    {
+      "id": "gid://shopify/Product/15499395432819",
+      "title": "V-Neck Floor-Length Satin Prom A-Line LaDivine 7485C",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 160,
+      "inventoryTotal": 25,
+      "_originalIndex": 65
+    },
+    {
+      "id": "gid://shopify/Product/15492207444339",
+      "title": "Long Sweetheart Polka Dot Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 159,
+      "inventoryTotal": 27,
+      "_originalIndex": 66
+    },
+    {
+      "id": "gid://shopify/Product/15485185524083",
+      "title": "Cut Out Fully Beaded Corset Long Evening Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 11,
+      "_originalIndex": 67
+    },
+    {
+      "id": "gid://shopify/Product/15485170254195",
+      "title": "A Line Corset Jacquard Floral Dress with Metallic Accent",
+      "tags": [
+        "AddBestProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 169,
+      "inventoryTotal": 40,
+      "_originalIndex": 68
+    },
+    {
+      "id": "gid://shopify/Product/15453983211891",
+      "title": "Off-the-Shoulder Floor-Length Jacquard Prom Mermaid Gown LaDivine CD641",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 399,
+      "inventoryTotal": 108,
+      "_originalIndex": 69
+    },
+    {
+      "id": "gid://shopify/Product/15453982884211",
+      "title": "Strapless Floor-Length Satin Prom Corset Gown LaDivine 7439",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 169,
+      "inventoryTotal": 151,
+      "_originalIndex": 70
+    },
+    {
+      "id": "gid://shopify/Product/15453982720371",
+      "title": "Strapless Long Chiffon Prom Dress Sequined LaDivine CH2603",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 145,
+      "inventoryTotal": 168,
+      "_originalIndex": 71
+    },
+    {
+      "id": "gid://shopify/Product/15430877184371",
+      "title": "Off-the-Shoulder Floor-Length Tulle Formal Ball Gown LaDivine 657",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 315,
+      "inventoryTotal": 27,
+      "_originalIndex": 72
+    },
+    {
+      "id": "gid://shopify/Product/15430869647731",
+      "title": "Off-the-Shoulder Floor-Length Tulle Prom Mermaid LaDivine S570",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 499,
+      "inventoryTotal": 96,
+      "_originalIndex": 73
+    },
+    {
+      "id": "gid://shopify/Product/15430868730227",
+      "title": "Off-the-Shoulder Floor-Length Satin Prom Mermaid LaDivine 656",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 299,
+      "inventoryTotal": 47,
+      "_originalIndex": 74
+    },
+    {
+      "id": "gid://shopify/Product/15410847809907",
+      "title": "Off-the-Shoulder Floor-Length Mikado Formal Mermaid LaDivine 0107",
+      "tags": [
+        "AddBestProm",
+        "AddTopProm",
+        "BestProm",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 28,
+      "_originalIndex": 75
+    },
+    {
+      "id": "gid://shopify/Product/15046990037363",
+      "title": "Adora 3161 Prom Long Fitted Corset Formal Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 237.99,
+      "inventoryTotal": 297,
+      "_originalIndex": 76
+    },
+    {
+      "id": "gid://shopify/Product/15145278439795",
+      "title": "Glitter Long Formal A Line Prom Gown Amoris T213",
+      "tags": [
+        "AddBestProm",
+        "Champagne Gold",
+        "TopProm"
+      ],
+      "priceMin": 119,
+      "inventoryTotal": 230,
+      "_originalIndex": 77
+    },
+    {
+      "id": "gid://shopify/Product/15044859691379",
+      "title": "Adora Design 3189 Long Formal Fitted Lace Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 163.99,
+      "inventoryTotal": 385,
+      "_originalIndex": 78
+    },
+    {
+      "id": "gid://shopify/Product/15059912458611",
+      "title": "Adora Design 3238 Formal Long Fitted Slit Beaded Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 240.99,
+      "inventoryTotal": 443,
+      "_originalIndex": 79
+    },
+    {
+      "id": "gid://shopify/Product/15046760300915",
+      "title": "Adora 3174 Long Formal Sequin Applique Tiered A Line Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 314.99,
+      "inventoryTotal": 304,
+      "_originalIndex": 80
+    },
+    {
+      "id": "gid://shopify/Product/15045336170867",
+      "title": "Long A Line Sequin Lace Formal Prom Dress Adora 3217",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 248.99,
+      "inventoryTotal": 133,
+      "_originalIndex": 81
+    },
+    {
+      "id": "gid://shopify/Product/15136882327923",
+      "title": "Long Corset Off Shoulder Prom Dress Gown by LaDivine CD0186",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 288,
+      "_originalIndex": 82
+    },
+    {
+      "id": "gid://shopify/Product/15045389353331",
+      "title": "Adora 3053N Mermaid Long Formal Glitter Applique Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 192.99,
+      "inventoryTotal": 278,
+      "_originalIndex": 83
+    },
+    {
+      "id": "gid://shopify/Product/15059910918515",
+      "title": "Adora Design 3263 Fitted Prom Long Formal Glitter Evening Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 238.99,
+      "inventoryTotal": 489,
+      "_originalIndex": 84
+    },
+    {
+      "id": "gid://shopify/Product/15045960892787",
+      "title": "Long Off Shoulder Mermaid Glitter Formal Prom Dress Adora 3123",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 259.99,
+      "inventoryTotal": 242,
+      "_originalIndex": 85
+    },
+    {
+      "id": "gid://shopify/Product/15142974914931",
+      "title": "LaDivine 7448 Long Fitted Corset Formal Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 139,
+      "inventoryTotal": 513,
+      "_originalIndex": 86
+    },
+    {
+      "id": "gid://shopify/Product/15142721061235",
+      "title": "LaDivine T704 Formal Long Fitted Evening Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne Gold",
+        "TopProm"
+      ],
+      "priceMin": 119,
+      "inventoryTotal": 691,
+      "_originalIndex": 87
+    },
+    {
+      "id": "gid://shopify/Product/15153584996723",
+      "title": "LaDivine 7449 A Line Long Formal Slit Prom Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 149,
+      "inventoryTotal": 562,
+      "_originalIndex": 88
+    },
+    {
+      "id": "gid://shopify/Product/15142850462067",
+      "title": "Prom Long Formal Fitted Evening Dress Amoris T608",
+      "tags": [
+        "AddBestProm",
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 99,
+      "inventoryTotal": 211,
+      "_originalIndex": 89
+    },
+    {
+      "id": "gid://shopify/Product/15314925322611",
+      "title": "Off-Shoulder Long Beaded Gown by Lenovia 8363",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 228,
+      "inventoryTotal": 51,
+      "_originalIndex": 90
+    },
+    {
+      "id": "gid://shopify/Product/15136871776627",
+      "title": "LaDivine 7493 Long Formal A Line Slit Prom Dress",
+      "tags": [
+        "AddBestProm",
+        "Champagne Gold",
+        "TopProm"
+      ],
+      "priceMin": 129,
+      "inventoryTotal": 428,
+      "_originalIndex": 91
+    },
+    {
+      "id": "gid://shopify/Product/15261666017651",
+      "title": "Adora Design 3337 Corset Long Evening Formal Prom Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 194,
+      "inventoryTotal": 412,
+      "_originalIndex": 92
+    },
+    {
+      "id": "gid://shopify/Product/15281012965747",
+      "title": "Beaded Sequin Fitted Long Formal Prom Dress LaDivine CC494",
+      "tags": [
+        "Champagne Gold",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 177,
+      "_originalIndex": 93
+    },
+    {
+      "id": "gid://shopify/Product/15542983229811",
+      "title": "Sequin Beaded Off Shoulder Formal Evening Gown",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 229,
+      "inventoryTotal": 43,
+      "_originalIndex": 94
+    },
+    {
+      "id": "gid://shopify/Product/15138096284019",
+      "title": "Knotted Long Sequin Formal Prom Long Dress by LaDivine CD0176",
+      "tags": [
+        "AddBestProm",
+        "Champagne Gold",
+        "TopProm"
+      ],
+      "priceMin": 189,
+      "inventoryTotal": 100,
+      "_originalIndex": 95
+    },
+    {
+      "id": "gid://shopify/Product/15269884952947",
+      "title": "LaDivine CA121 Long Formal Corset Prom Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 249,
+      "inventoryTotal": 411,
+      "_originalIndex": 96
+    },
+    {
+      "id": "gid://shopify/Product/15059744096627",
+      "title": "Adora Design 3268 Prom Fitted Long Formal Glitter  Corset Sequin Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 262.99,
+      "inventoryTotal": 564,
+      "_originalIndex": 97
+    },
+    {
+      "id": "gid://shopify/Product/15046332612979",
+      "title": "Adora 3188 Long Slit Formal Pleated Prom Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 191.99,
+      "inventoryTotal": 141,
+      "_originalIndex": 98
+    },
+    {
+      "id": "gid://shopify/Product/15145226568051",
+      "title": "LaDivine C161 Long Fitted Slit Prom Corset Formal Dress",
+      "tags": [
+        "Champagne",
+        "TopProm"
+      ],
+      "priceMin": 199,
+      "inventoryTotal": 646,
+      "_originalIndex": 99
+    }
+  ],
+  "expected": [
+    "gid://shopify/Product/15285234663795",
+    "gid://shopify/Product/15299019735411",
+    "gid://shopify/Product/15285131411827",
+    "gid://shopify/Product/15285111357811",
+    "gid://shopify/Product/15285141176691",
+    "gid://shopify/Product/15397893243251",
+    "gid://shopify/Product/7222430662717",
+    "gid://shopify/Product/15290790609267",
+    "gid://shopify/Product/7126405939261",
+    "gid://shopify/Product/15290794082675",
+    "gid://shopify/Product/15139131425139",
+    "gid://shopify/Product/15410848858483",
+    "gid://shopify/Product/15375844311411",
+    "gid://shopify/Product/15375844999539",
+    "gid://shopify/Product/15453982818675",
+    "gid://shopify/Product/15046990037363",
+    "gid://shopify/Product/15145278439795",
+    "gid://shopify/Product/15044859691379",
+    "gid://shopify/Product/15059912458611",
+    "gid://shopify/Product/15046760300915",
+    "gid://shopify/Product/15045336170867",
+    "gid://shopify/Product/15136882327923",
+    "gid://shopify/Product/15045389353331",
+    "gid://shopify/Product/15059910918515",
+    "gid://shopify/Product/15045960892787",
+    "gid://shopify/Product/15142974914931",
+    "gid://shopify/Product/15142721061235",
+    "gid://shopify/Product/15153584996723",
+    "gid://shopify/Product/15142850462067",
+    "gid://shopify/Product/15314925322611",
+    "gid://shopify/Product/15136871776627",
+    "gid://shopify/Product/15261666017651",
+    "gid://shopify/Product/15281012965747",
+    "gid://shopify/Product/15542983229811",
+    "gid://shopify/Product/15138096284019",
+    "gid://shopify/Product/15269884952947",
+    "gid://shopify/Product/15059744096627",
+    "gid://shopify/Product/15046332612979",
+    "gid://shopify/Product/15145226568051",
+    "gid://shopify/Product/6842994884669",
+    "gid://shopify/Product/15292313239923",
+    "gid://shopify/Product/15143216775539",
+    "gid://shopify/Product/15285087895923",
+    "gid://shopify/Product/15315207848307",
+    "gid://shopify/Product/15299007906163",
+    "gid://shopify/Product/15313862164851",
+    "gid://shopify/Product/15281366073715",
+    "gid://shopify/Product/15285235384691",
+    "gid://shopify/Product/15285132034419",
+    "gid://shopify/Product/15142431621491",
+    "gid://shopify/Product/15322628030835",
+    "gid://shopify/Product/15281012375923",
+    "gid://shopify/Product/15493295178099",
+    "gid://shopify/Product/15438321877363",
+    "gid://shopify/Product/15531996643699",
+    "gid://shopify/Product/15485166813555",
+    "gid://shopify/Product/15285083832691",
+    "gid://shopify/Product/15239443448179",
+    "gid://shopify/Product/15229792026995",
+    "gid://shopify/Product/15543025172851",
+    "gid://shopify/Product/15542998532467",
+    "gid://shopify/Product/15524533764467",
+    "gid://shopify/Product/15418871251315",
+    "gid://shopify/Product/15485269901683",
+    "gid://shopify/Product/15398644547955",
+    "gid://shopify/Product/15269884756339",
+    "gid://shopify/Product/15139121201523",
+    "gid://shopify/Product/15584659767667",
+    "gid://shopify/Product/15542903243123",
+    "gid://shopify/Product/15526077890931",
+    "gid://shopify/Product/15453982753139",
+    "gid://shopify/Product/15452754084211",
+    "gid://shopify/Product/15430869680499",
+    "gid://shopify/Product/15593582821747",
+    "gid://shopify/Product/15593529934195",
+    "gid://shopify/Product/15591218676083",
+    "gid://shopify/Product/15586905227635",
+    "gid://shopify/Product/15584646889843",
+    "gid://shopify/Product/15551954452851",
+    "gid://shopify/Product/15542939386227",
+    "gid://shopify/Product/15542902161779",
+    "gid://shopify/Product/15542898131315",
+    "gid://shopify/Product/15539368919411",
+    "gid://shopify/Product/15526089195891",
+    "gid://shopify/Product/15525019615603",
+    "gid://shopify/Product/15525014405491",
+    "gid://shopify/Product/15525014372723",
+    "gid://shopify/Product/15525014077811",
+    "gid://shopify/Product/15515073741171",
+    "gid://shopify/Product/15499395432819",
+    "gid://shopify/Product/15492207444339",
+    "gid://shopify/Product/15485185524083",
+    "gid://shopify/Product/15485170254195",
+    "gid://shopify/Product/15453983211891",
+    "gid://shopify/Product/15453982884211",
+    "gid://shopify/Product/15453982720371",
+    "gid://shopify/Product/15430877184371",
+    "gid://shopify/Product/15430869647731",
+    "gid://shopify/Product/15430868730227",
+    "gid://shopify/Product/15410847809907"
+  ]
+}
