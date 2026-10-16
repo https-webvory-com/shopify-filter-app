@@ -176,7 +176,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../db.server": { __esModule: true, default: { product: { findMany: async ({ where }) => {
       assert.equal(where.shop, "fixture.myshopify.com");
       assert.equal(where.status.equals, "active");
-      assert.equal(where.collections.some.collectionId, "gid://shopify/Collection/1");
+      assert.equal(where.collections, undefined, "Explicit pins do not require a collection link");
       return pins;
     } } } },
     "../services/merchandising.server": merchandising,

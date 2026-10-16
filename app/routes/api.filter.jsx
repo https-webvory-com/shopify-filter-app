@@ -542,11 +542,6 @@ export const loader = async ({ request, context }) => {
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual";
-    const pinCollectionScope = !isSearch && resolvedCollectionId
-      ? { collections: { some: { collectionId: resolvedCollectionId.includes("gid://") ? resolvedCollectionId : `gid://shopify/Collection/${resolvedCollectionId}` } } }
-      : !isSearch && resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all"
-        ? { collections: { some: { collection: { shop, title: resolvedCollectionTitle } } } }
-        : {};
     // Bestselling retains pins and merchandising; other selected sorts may override them.
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
@@ -554,7 +549,9 @@ export const loader = async ({ request, context }) => {
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if (activePinnedList.length) {
       const validPins = await prisma.product.findMany({
-        where: { shop, ...pinCollectionScope, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
+        // An explicit pin supplies collection membership for this rule. Keep
+        // shop, active and stock eligibility without requiring a collection link.
+        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
         select: parsedQuery?.colorIntent?.requested.length ? { id: true, options: true, variants: true } : { id: true },
       });
       const validIds = new Set(validPins.filter(product => {
