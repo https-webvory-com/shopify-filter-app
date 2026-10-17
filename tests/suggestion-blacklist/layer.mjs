@@ -9,7 +9,7 @@ export const service=await load('app/services/suggestionBlacklist.server.js',{
   '../db.server':{__esModule:true,default:db},'../utils/suggestionBlacklist.js':helpers,
 });
 export const admin=await load('app/routes/app.search.blacklist.jsx',{
-  'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{boundary:{}},
+  '../components/SearchConfigurationLayout': { default: () => null }, 'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{boundary:{}},
   '../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},
   '../db.server':{__esModule:true,default:db},'../services/suggestionBlacklist.server.js':service,
   '../utils/suggestionBlacklist.js':helpers,

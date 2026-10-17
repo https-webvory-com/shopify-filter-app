@@ -10,7 +10,7 @@ if (new URL(config.url).hostname !== '127.0.0.1' || Number(new URL(config.url).p
 export const db = new PrismaClient({ datasources: { db: { url: config.url } } });
 export const shop = 'settings-fixture.myshopify.com';
 export const service = await loadModule('app/services/searchSettings.server.js', { '../db.server': { default: db }, '../utils/searchSettings.js': schema });
-export const admin = await loadModule('app/routes/app.search.settings.jsx', { 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} }, '../shopify.server': { authenticate: { admin: async () => ({ session: { shop } }) } }, '../services/searchSettings.server.js': service, '../utils/searchSettings.js': schema });
+export const admin = await loadModule('app/routes/app.search.settings.jsx', { '../components/SearchConfigurationLayout': { default: () => null }, 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} }, '../shopify.server': { authenticate: { admin: async () => ({ session: { shop } }) } }, '../services/searchSettings.server.js': service, '../utils/searchSettings.js': schema });
 export const state = { fail: false, slow: false, blacklist: [] };
 export const api = await loadModule('app/routes/api.search-settings.jsx', {
   'react-router': { data: (v, options) => Response.json(v, options) },

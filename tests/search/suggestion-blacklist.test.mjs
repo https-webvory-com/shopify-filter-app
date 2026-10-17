@@ -113,7 +113,7 @@ test('blacklist database failures suppress suggestions without failing product s
 });
 test('admin actions reject duplicates, preserve validation errors and avoid exposing database errors',async()=>{
   const {db}=database();const s=await service(db);
-  const route=await load('app/routes/app.search.blacklist.jsx',{'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{boundary:{}},'../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},'../db.server':{__esModule:true,default:db},'../services/suggestionBlacklist.server.js':s,'../utils/suggestionBlacklist.js':helpers});
+  const route=await load('app/routes/app.search.blacklist.jsx',{'../components/SearchConfigurationLayout': { default: () => null }, 'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{boundary:{}},'../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},'../db.server':{__esModule:true,default:db},'../services/suggestionBlacklist.server.js':s,'../utils/suggestionBlacklist.js':helpers});
   const action=values=>route.action({request:new Request('https://fixture/admin',{method:'POST',body:form(values)})});
   const values={intent:'create',term:'blue',operator:'contains',isActive:'true',shop:'evil.myshopify.com'};
   assert.equal((await action(values)).success,true);assert.ok((await action(values)).error.includes('already exist'));

@@ -5,6 +5,7 @@ import { authenticate } from '../shopify.server';
 import prisma from '../db.server';
 import { saveSuggestionBlacklist } from '../services/suggestionBlacklist.server.js';
 import { SuggestionBlacklistValidationError } from '../utils/suggestionBlacklist.js';
+import SearchConfigurationLayout from '../components/SearchConfigurationLayout';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -22,7 +23,6 @@ export const action = async ({ request }) => {
   }
 };
 const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
-const buttonStyle = { padding: '8px 14px', borderRadius: 6, border: '1px solid #c9cccf', background: '#fff', cursor: 'pointer' };
 export default function SearchBlacklist() {
   const { rules } = useLoaderData();
   const fetcher = useFetcher();
@@ -39,10 +39,10 @@ export default function SearchBlacklist() {
     }
   }, [fetcher.state, fetcher.data]);
   return (
-    <s-page heading="Blacklist Suggestions">
+    <s-page heading="Blacklist Suggestions" full-width="true">
       <ui-title-bar title="Blacklist Suggestions"><button variant="breadcrumb" onClick={() => navigate('/app/search')}>Search</button></ui-title-bar>
-      <div style={{ display: 'grid', gap: 20 }}>
-        <div style={{ background: '#fff', border: '1px solid #e1e3e5', borderRadius: 10, padding: 24 }}>
+      <SearchConfigurationLayout>
+        <div className="search-config-card">
           <h2 style={{ marginTop: 0 }}>{editing ? 'Edit blacklist rule' : 'Create blacklist rule'}</h2>
           <p>Hide matching phrases from autocomplete suggestions. Matching ignores case and extra spaces. Product results stay available.</p>
           {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
@@ -56,27 +56,27 @@ export default function SearchBlacklist() {
             <label><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Enabled</label>
             <input type="hidden" name="isActive" value={String(active)} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button disabled={busy} type="submit" style={{ ...buttonStyle, background: '#5B21B6', color: '#fff' }}>{busy ? 'Saving...' : editing ? 'Update rule' : 'Create rule'}</button>
-              {editing && <button disabled={busy} type="button" onClick={reset} style={buttonStyle}>Cancel</button>}
+              <button disabled={busy} type="submit" className="search-config-primary">{busy ? 'Saving...' : editing ? 'Update rule' : 'Create rule'}</button>
+              {editing && <button disabled={busy} type="button" onClick={reset}>Cancel</button>}
             </div>
           </fetcher.Form>
         </div>
-        <div style={{ background: '#fff', border: '1px solid #e1e3e5', borderRadius: 10, padding: 24 }}>
+        <div className="search-config-card">
           <h2 style={{ marginTop: 0 }}>Blacklist rules</h2>
           {!rules.length && <p>No blacklist rules yet. Create a rule above.</p>}
           {rules.map(rule => (
             <div key={rule.id} style={{ padding: '16px 0', borderTop: '1px solid #e1e3e5', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
               <div style={{ flex: '1 1 240px', minWidth: 0, overflowWrap: 'anywhere' }}>
                 <strong>{rule.term}</strong>
-                <div>{rule.operator === 'contains' ? 'Contains' : 'Exact match'}</div><div>{rule.isActive ? 'Enabled' : 'Disabled'}</div>
+                <div>{rule.operator === 'contains' ? 'Contains' : 'Exact match'}</div><span className="search-config-status" data-active={rule.isActive}>{rule.isActive ? 'Enabled' : 'Disabled'}</span>
               </div>
-              <button disabled={busy} style={buttonStyle} onClick={() => { setEditing(rule.id); setTerm(rule.term); setOperator(rule.operator); setActive(rule.isActive); }}>Edit</button>
-              <button disabled={busy} style={buttonStyle} onClick={() => fetcher.submit({ intent: 'toggle', id: rule.id, isActive: String(!rule.isActive) }, { method: 'post' })}>{rule.isActive ? 'Disable' : 'Enable'}</button>
-              <button disabled={busy} style={buttonStyle} onClick={() => { if (window.confirm('Delete this blacklist rule?')) fetcher.submit({ intent: 'delete', id: rule.id }, { method: 'post' }); }}>Delete</button>
+              <button disabled={busy} onClick={() => { setEditing(rule.id); setTerm(rule.term); setOperator(rule.operator); setActive(rule.isActive); }}>Edit</button>
+              <button disabled={busy} onClick={() => fetcher.submit({ intent: 'toggle', id: rule.id, isActive: String(!rule.isActive) }, { method: 'post' })}>{rule.isActive ? 'Disable' : 'Enable'}</button>
+              <button disabled={busy} className="search-config-danger" onClick={() => { if (window.confirm('Delete this blacklist rule?')) fetcher.submit({ intent: 'delete', id: rule.id }, { method: 'post' }); }}>Delete</button>
             </div>
           ))}
         </div>
-      </div>
+      </SearchConfigurationLayout>
     </s-page>
   );
 }
