@@ -145,7 +145,7 @@ export async function getActiveRuleForCollection(
     // Keep higher-priority collection rules ahead of lower rules when ranking.
     collectionTagMatching: "exact",
     ruleGroups: applicableRules.map(r => ({ id: r.id, conditions: r.conditions || [] })),
-    ...(usesCollectionPinFirstLadder(applicableRules) ? { collectionPinsFirst: true } : {}),
+    ...(usesCollectionPinFirstLadder(applicableRules) ? { collectionPinsFirst: true, collectionLadderBoundaryVersion: 1 } : {}),
   };
 }
 
@@ -676,10 +676,13 @@ export function applyMerchandisingRules(
       p._collectionPinsFirst = rule.collectionPinsFirst === true;
       p._collectionRuleRanks = rule.ruleGroups?.map(group =>
         scoreMerchandisingConditions(p, group.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact"));
+      p._collectionLadderMatched = rule.collectionPinsFirst === true && rule.ruleGroups?.some((group, i) =>
+        group.conditions.some(condition => condition.action === "Dynamic") &&
+        (p._collectionRuleRanks[i]?.score || 0) > 0) === true;
     });
   } else {
     // Ensure score is 0 if no rules
-    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionPinsFirst = false; p._collectionRuleRanks = undefined; });
+    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionPinsFirst = false; p._collectionLadderMatched = false; p._collectionRuleRanks = undefined; });
   }
 
   filteredProducts.sort(createMerchandisingComparator(sortBy, pinnedIds, globalSettings));
@@ -775,6 +778,14 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
       }
       if (aIsPinned) return -1;
       if (bIsPinned) return 1;
+    }
+
+    // Keep products matched by the ordinary ladder ahead of unscored products.
+    // A merchandising Pin can reorder the ladder, but cannot bypass membership.
+    if (sortBy !== "manual" && !prioritizeSortOverMerchandising &&
+        a._collectionPinsFirst === true && b._collectionPinsFirst === true &&
+        a._collectionLadderMatched !== b._collectionLadderMatched) {
+      return a._collectionLadderMatched ? -1 : 1;
     }
 
     // Only the observed ordinary 99/100 collection ladder promotes a matched

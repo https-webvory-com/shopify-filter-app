@@ -48,3 +48,17 @@ existing within-tier base order (local candidate, not deployed behavior):
 The separate Prom regression fixture compares 100 shared products using a larger
 source window. Different collection counts mean these checks cannot establish
 full collection equality, or every product's absolute live position.
+
+The full-list audit exposed a boundary missing from the sampled fixture:
+unscored Champagne pins must follow products matching the ordinary Dynamic
+ladder. The comparator now preserves positive ladder membership before applying
+merchandising Pin priority. Explicit product pins and customer sort overrides
+retain precedence. Compact batches carry the membership flag; rule preparation
+identity includes `collectionLadderBoundaryVersion` to replace old preparations.
+
+Local replay against the saved complete source snapshots produces zero relative
+order differences for all shared Prom (15,613), Wedding (1,875), Mother of Bride
+(5,021), Cocktail (4,569), and Plus Size (88) products. Formal's complete current
+order is unchanged, and its saved first 200 source products match; its full
+source download was rate limited. Counts and absolute-position differences from
+extra/missing products remain. This replay is not a deployed storefront test.

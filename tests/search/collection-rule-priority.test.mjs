@@ -121,6 +121,20 @@ test('ordinary ladder recognition is independent of names and refuses stronger o
   assert.equal(usesCollectionPinFirstLadder(unsupported),false);
 });
 
+test('Prom ladder membership prevents unscored Champagne pins jumping the scored group', async () => {
+  const {getActiveRuleForCollection,applyMerchandisingRules}=service(prom.rules);
+  const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
+  const docs=[{id:'unscored-pin',tags:['Champagne']},{id:'best',tags:['TopProm','BestProm']},
+    {id:'top-pin',tags:['TopProm','Champagne']},{id:'top',tags:['TopProm']},
+    {id:'ordinary',tags:[]},{id:'explicit',tags:[]}].map((p,i)=>({...p,priceMin:10,inventoryTotal:5,_originalIndex:i}));
+  const ranked=applyMerchandisingRules(clone(docs),rule,'best-selling',{products:[{id:'explicit'}]},[],settings);
+  assert.deepEqual(Array.from(ranked,p=>p.id),['explicit','top-pin','best','top','unscored-pin','ordinary']);
+  const old={...rule};delete old.collectionLadderBoundaryVersion;
+  assert.notEqual(preparationKey({rule}),preparationKey({rule:old}));
+  applyMerchandisingRules(ranked,null,'best-selling');
+  assert.ok(ranked.every(p=>p._collectionLadderMatched===false));
+});
+
 test('Prom customer sort overrides, exclusions, manual ranking and stale state retain their behavior', async () => {
   const {getActiveRuleForCollection,applyMerchandisingRules}=service(prom.rules);
   const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
@@ -142,12 +156,12 @@ test('Prom customer sort overrides, exclusions, manual ranking and stale state r
 test('compact Prom ranking carries pin precedence across batches and deep pages', async () => {
   const {getActiveRuleForCollection,applyMerchandisingRules:arrange,createMerchandisingComparator:comparator}=service(prom.rules);
   const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
-  const docs=Array.from({length:2250},(_,i)=>({id:String(i+1),priceMin:10,inventoryTotal:5,tags:i%2?['TopProm','BestProm']:['TopProm','Champagne']}));
+  const docs=Array.from({length:2250},(_,i)=>({id:String(i+1),priceMin:10,inventoryTotal:5,tags:i%3===0?['Champagne']:i%3===1?['TopProm','BestProm']:['TopProm','Champagne']}));
   const index={search:async(_q,options)=>({hits:docs.slice(options.offset,options.offset+options.limit),estimatedTotalHits:docs.length})};
   const spec={shop:'fixture',query:{q:'',filter:[]},rule,sortBy:'best-selling',needsShopifyOrder:true,orderedIds:docs.map(p=>p.id),pinnedIds:[],globalSettings:{}};
   const baseline=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange});
   const compact=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange,comparator});
   assert.deepEqual(compact,baseline);
-  assert.deepEqual(compact.ids.slice(0,1125),docs.filter((_,i)=>i%2===0).map(p=>p.id));
+  assert.deepEqual(compact.ids, [2,1,0].flatMap(remainder=>docs.filter((_,i)=>i%3===remainder).map(p=>p.id)));
   assert.equal(new Set(compact.ids).size,2250);
 });
