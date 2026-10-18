@@ -94,7 +94,7 @@ test('legacy inventory is hydrated in batches and zero bounds exclude sold-out p
   const ids=await build(docs,conditions,{conditions,sortBy:'best-selling',hydrateRanking:products=>hydrateCollectionInventory(products,{groupBy:async query=>{requested=query.where.productId.in;return [{productId:'gid://shopify/Product/2',_sum:{inventory:4}},{productId:'gid://shopify/Product/3',_sum:{inventory:0}}];}})});
   assert.deepEqual(Array.from(requested),['gid://shopify/Product/2','gid://shopify/Product/3']);
   assert.deepEqual(Array.from(ids),['1','2']);
-  assert.deepEqual(collectionRankingFields(conditions,'best-selling'),['id','priceMin','inventoryTotal']);
+  assert.deepEqual(collectionRankingFields(conditions,'best-selling'),['id','priceMin','inventoryTotal','available']);
 });
 
 test('all merchandising score levels are globally ordered before page boundaries', async () => {

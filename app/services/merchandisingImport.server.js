@@ -1,5 +1,5 @@
 import prisma from '../db.server';
-import { normalizeCondition, validConditions } from '../utils/merchandisingCondition.js';
+import { normalizeCondition, validConditions, resolveCollectionTargets } from '../utils/merchandisingCondition.js';
 import { importRowInfo, importWriteError } from '../utils/csvImportReport.js';
 
 export async function importMerchandisingRules(shop, rules, ruleType) {
@@ -30,6 +30,7 @@ export async function importMerchandisingRules(shop, rules, ruleType) {
       // Replace conditions atomically; a failed edit must not delete the saved rule.
       const updated = await prisma.$transaction(async tx => {
         const existing = await tx.merchandisingRule.findFirst({ where: { shop, name: data.name, ruleType } });
+        if (ruleType === 'collection') Object.assign(data, await resolveCollectionTargets(tx, shop, data.collections, rule.collectionIds, existing));
         const conditions = rule.conditions.map(normalizeCondition);
         if (existing) { await tx.merchandisingRule.update({ where: { id: existing.id }, data: { ...data, conditions: { deleteMany: {}, create: conditions } } }); return true; }
         await tx.merchandisingRule.create({ data: { shop, ruleType, ...data, conditions: { create: conditions } } }); return false;

@@ -13,6 +13,22 @@ const common = prisma => ({
   '../components/merchandising/PinSearchField': {}, '@shopify/app-bridge-react': {},
 });
 
+for (const failedLaterPage of [false,true]) test(`collection rule choices retain distinct IDs beyond the first page (fallback=${failedLaterPage})`,async()=>{
+  const rules=[{id:'saved',collections:['New Arrivals'],collectionIds:['gid://shopify/Collection/2']}];let reads=0,fallbackReads=0;
+  const prisma={product:{groupBy:async()=>[]},$queryRaw:async()=>[],merchandisingRule:{findMany:async()=>rules},collection:{findMany:async({where})=>{assert.equal(where.shop,shop);fallbackReads++;return[{id:'gid://shopify/Collection/2',title:'New Arrivals'}];}}};
+  const mocks={...common(prisma),'../services/merchandisingImport.server.js':{},'../utils/merchandisingCondition.js':{}};
+  for(const name of ['FilterModal','CreateRuleModal','CustomizeColumnsModal','ImportMerchandisingRulesModal','ExportMerchandisingRulesModal'])mocks['../components/merchandising/'+name]={};
+  mocks['../shopify.server'].authenticate.admin=async()=>({session:{shop},admin:{graphql:async(query,options)=>{
+    reads++;if(reads===1)return{json:async()=>({data:{collections:{nodes:[{id:'gid://shopify/Collection/1',title:'New Arrivals'}],pageInfo:{hasNextPage:true,endCursor:'next'}}}})};
+    assert.equal(options.variables.after,'next');if(failedLaterPage)throw Error('Shopify unavailable');
+    return{json:async()=>({data:{collections:{nodes:[{id:'gid://shopify/Collection/2',title:'New Arrivals'}],pageInfo:{hasNextPage:false}}}})};
+  }}});
+  const {loader}=await loadModule('app/routes/app.collections.merchandising.jsx',mocks);const data=normalize(await loader({request:new Request('https://fixture/app')}));
+  assert.equal(reads,2);assert.equal(fallbackReads,Number(failedLaterPage));
+  assert.deepEqual(data.shopifyCollections.map(c=>c.id),['gid://shopify/Collection/1','gid://shopify/Collection/2']);
+  assert.deepEqual(data.merchandisingRules,rules);
+});
+
 for (const all of [false, true]) test(`collection picker overlaps count/cards and preserves scope, stock, exclusions and pagination (all=${all})`, async () => {
   let release;
   const gate = new Promise(resolve => release = resolve);

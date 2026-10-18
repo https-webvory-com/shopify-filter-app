@@ -1,6 +1,6 @@
 import { merchandisingRuleIds } from "../utils/merchandisingSelection.js";
 import { importMerchandisingRules } from '../services/merchandisingImport.server.js';
-import { normalizeCondition, validConditions } from "../utils/merchandisingCondition.js";
+import { normalizeCondition, validConditions, resolveCollectionTargets } from "../utils/merchandisingCondition.js";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
@@ -33,6 +33,9 @@ export const action = async ({ request }) => {
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
     if (!String(formData.get("name") || "").trim() || !validConditions(conditions)) return Response.json({ error: "Enter a name and complete every condition." }, { status: 400 });
+    let targets;
+    try { targets = await resolveCollectionTargets(prisma, shop, collections, formData.has('collectionIds') ? JSON.parse(formData.get('collectionIds')) : null); }
+    catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
 
     const startDate =
       startDateStr && startDateStr !== "null" && startDateStr.trim() !== ""
@@ -48,6 +51,7 @@ export const action = async ({ request }) => {
         shop,
         name,
         collections,
+        collectionIds: targets.collectionIds,
         customerTags,
         locales,
         startDate,
@@ -72,6 +76,11 @@ export const action = async ({ request }) => {
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
     if (!String(formData.get("name") || "").trim() || !validConditions(conditions)) return Response.json({ error: "Enter a name and complete every condition." }, { status: 400 });
+    let targets;
+    try {
+      const existing = collections.length ? await prisma.merchandisingRule.findFirst({ where: { id, shop, ruleType: 'collection' } }) : null;
+      targets = await resolveCollectionTargets(prisma, shop, collections, formData.has('collectionIds') ? JSON.parse(formData.get('collectionIds')) : null, existing);
+    } catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
 
     const startDate =
       startDateStr && startDateStr !== "null" && startDateStr.trim() !== ""
@@ -87,6 +96,7 @@ export const action = async ({ request }) => {
       data: {
         name,
         collections,
+        collectionIds: targets.collectionIds,
         customerTags,
         locales,
         startDate,
@@ -144,6 +154,7 @@ export const action = async ({ request }) => {
         shop,
         name: `${existingRule.name} (Copy)`,
         collections: existingRule.collections || [],
+        collectionIds: existingRule.collectionIds || [],
         customerTags: existingRule.customerTags || "",
         locales: existingRule.locales || "",
         startDate: existingRule.startDate || null,
@@ -187,6 +198,7 @@ export const loader = async ({ request }) => {
           id
           title
         }
+        pageInfo { hasNextPage endCursor }
       }
       locations(first: 250, includeInactive: true) {
         nodes {
@@ -251,6 +263,25 @@ export const loader = async ({ request }) => {
   })
   ]);
   const graphqlData = await graphqlQuery.json();
+  let collectionPage = graphqlData?.data?.collections;
+  const collectionCursors = new Set();
+  try { while (collectionPage?.pageInfo?.hasNextPage) {
+    const cursor = collectionPage.pageInfo.endCursor;
+    if (!cursor || collectionCursors.has(cursor)) throw Error('Collection list is incomplete.');
+    collectionCursors.add(cursor);
+    const response = await admin.graphql(`query CollectionRuleOptions($after: String!) { collections(first: 250, after: $after) { nodes { id title } pageInfo { hasNextPage endCursor } } }`, { variables: { after: cursor } });
+    const page = await response.json();
+    if (page.errors?.length || !page.data?.collections) throw Error('Collection list is unavailable.');
+    collectionPage = page.data.collections;
+    graphqlData.data.collections.nodes.push(...collectionPage.nodes);
+  } } catch {
+    // Keep saved rules accessible when a later Shopify page is unavailable.
+    // The shop-owned catalog also supplies identities beyond the first page.
+    const stored = await prisma.collection.findMany({ where: { shop }, select: { id: true, title: true } });
+    const known = new Map((graphqlData.data.collections.nodes || []).map(c => [c.id, c]));
+    for (const c of stored) if (!known.has(c.id)) known.set(c.id, c);
+    graphqlData.data.collections.nodes = [...known.values()];
+  }
   const shopifyCollections =
     graphqlData?.data?.collections?.nodes
       ?.map((c) => ({ id: c.id, title: c.title }))

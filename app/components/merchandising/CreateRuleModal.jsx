@@ -24,6 +24,7 @@ export default function CreateRuleModal({
   const [isCollectionDropdownOpen, setIsCollectionDropdownOpen] = useState(false);
   const [collectionSearch, setCollectionSearch] = useState("");
   const [selectedCollections, setSelectedCollections] = useState([]);
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
 
   const [isDateRangeChecked, setIsDateRangeChecked] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -50,6 +51,7 @@ export default function CreateRuleModal({
     setIsCollectionDropdownOpen(false);
     setCollectionSearch("");
     setSelectedCollections([]);
+    setSelectedCollectionIds([]);
     setIsDateRangeChecked(false);
     setIsDatePickerOpen(false);
     setOpenActionDropdownIndex(null);
@@ -70,6 +72,10 @@ export default function CreateRuleModal({
         setCustomerTags(ruleToEdit.customerTags || "");
         setLocales(ruleToEdit.locales || "");
         setSelectedCollections(ruleToEdit.collections || []);
+        setSelectedCollectionIds(ruleToEdit.collectionIds?.length ? ruleToEdit.collectionIds : (ruleToEdit.collections || []).flatMap(title => {
+          const matches = shopifyCollections.filter(c => c.title === title);
+          return matches.length === 1 ? [matches[0].id] : [];
+        }));
         if (ruleToEdit.startDate || ruleToEdit.endDate) {
           setIsDateRangeChecked(true);
           setStartDate(ruleToEdit.startDate ? new Date(ruleToEdit.startDate).toISOString().split('T')[0] : todayDate());
@@ -116,6 +122,7 @@ export default function CreateRuleModal({
         setIsCollectionDropdownOpen(false);
         setCollectionSearch("");
         setSelectedCollections([]);
+        setSelectedCollectionIds([]);
         setIsDateRangeChecked(false);
         setIsDatePickerOpen(false);
         setStartDate(todayDate());
@@ -130,6 +137,7 @@ export default function CreateRuleModal({
       actionType: ruleToEdit ? "editRule" : "createRule",
       name: ruleName,
       collections: JSON.stringify(selectedCollections),
+      collectionIds: JSON.stringify(selectedCollectionIds),
       customerTags,
       locales,
       startDate: isDateRangeChecked ? startDate : null,
@@ -257,6 +265,7 @@ export default function CreateRuleModal({
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedCollections(selectedCollections.filter(v => v !== val));
+                          setSelectedCollectionIds(selectedCollectionIds.filter(id => shopifyCollections.find(c => c.id === id)?.title !== val));
                         }}
                         style={{ marginLeft: "8px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(255,255,255,0.2)" }}
                       >
@@ -289,7 +298,7 @@ export default function CreateRuleModal({
                   {/* List of Collections */}
                   <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
                     <div 
-                      onClick={() => { setSelectedCollections([]); }}
+                      onClick={() => { setSelectedCollections([]); setSelectedCollectionIds([]); }}
                       style={{ padding: "8px 16px", display: "flex", alignItems: "center", cursor: "pointer", gap: "12px" }}
                     >
                       <div style={{ width: "16px", height: "16px", borderRadius: "4px", border: "2px solid #5B21B6", display: "flex", alignItems: "center", justifyContent: "center", background: selectedCollections.length === 0 ? "#5B21B6" : "transparent", borderColor: selectedCollections.length === 0 ? "#5B21B6" : "#cbd5e1" }}>
@@ -299,15 +308,20 @@ export default function CreateRuleModal({
                     </div>
 
                     {filteredCollections.map(c => {
-                      const isChecked = selectedCollections.includes(c.title);
+                      const isChecked = selectedCollectionIds.length ? selectedCollectionIds.includes(c.id) : selectedCollections.includes(c.title);
                       return (
                         <div 
                           key={c.id} 
                           onClick={() => {
                             if (isChecked) {
-                              setSelectedCollections(selectedCollections.filter(val => val !== c.title));
+                              const remainingIds = selectedCollectionIds.filter(id => id !== c.id);
+                              setSelectedCollectionIds(remainingIds);
+                              if (!remainingIds.some(id => shopifyCollections.find(col => col.id === id)?.title === c.title)) {
+                                setSelectedCollections(selectedCollections.filter(val => val !== c.title));
+                              }
                             } else {
-                              setSelectedCollections([...selectedCollections, c.title]);
+                              setSelectedCollections(selectedCollections.includes(c.title) ? selectedCollections : [...selectedCollections, c.title]);
+                              setSelectedCollectionIds([...selectedCollectionIds, c.id]);
                             }
                           }}
                           style={{ padding: "8px 16px", display: "flex", alignItems: "center", cursor: "pointer", gap: "12px" }}

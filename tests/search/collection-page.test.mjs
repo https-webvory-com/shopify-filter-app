@@ -219,14 +219,15 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   for (const page of [1, 223, 925]) {
     const response = await context.module.exports.loader({ request: new Request(`https://fixture.test/api/filter?shop=fixture.myshopify.com&collectionHandle=black-tie-dresses&page=${page}&limit=25`) });
     assert.equal(response.crash, undefined, response.error);
-    assert.equal(response.totalCount, 23110);
+    assert.equal(response.totalCount, 23111);
     assert.equal(response.debug.collectionPaginationApplied, true);
     assert.equal(response.debug.collectionBestSellingApplied, true);
     assert.equal(response.debug.meiliError, null);
-    assert.equal(response.products.length, page === 925 ? 10 : 25);
-    assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112", "gid://shopify/Product/23113"].includes(p.id)));
+    assert.equal(response.products.length, page === 925 ? 11 : 25);
+    assert.ok(response.products.every(p => !["gid://shopify/Product/23111", "gid://shopify/Product/23112"].includes(p.id)));
     if (page === 1) {
       assert.deepEqual(Array.from(response.products.slice(0, 6), p => p.id), pins.map(p => p.id));
+      assert.ok(response.products.some(p => p.id === 'gid://shopify/Product/23113'), 'Include admits the active product outside Shopify membership');
       assert.equal(response.products[1].selectedVariantId, "303");
       assert.equal(response.products[1].merchandisingImage, "black.jpg");
       assert.equal(response.products[1].variants[0].option1, "Black");
@@ -244,7 +245,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   assert.equal(cold._status, 202); assert.equal(cold.products.length, 0);
   const retained = await load('page=2&rankingToken=fixture-token-0');
   assert.equal(retained._status, 200);
-  assert.deepEqual(Array.from(retained.products, p => p.id.split('/').pop()), Array.from({ length: 25 }, (_, i) => String(i + 26)));
+  assert.deepEqual(Array.from(retained.products, p => p.id.split('/').pop()), Array.from({ length: 25 }, (_, i) => String(i + 25)));
   sourceOrder = { ids: ['1'], status: 'stale', refreshState: 'waiting' };
   const stale = await load('page=1');
   assert.equal(stale._status, 200);

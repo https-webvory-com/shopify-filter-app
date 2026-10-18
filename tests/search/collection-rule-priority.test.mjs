@@ -18,6 +18,15 @@ function service(rules = fixture.rules) {
 const clone = value => JSON.parse(JSON.stringify(value));
 const settings = { preserveCollectionBestSellingOrder: true };
 
+for (const [name,data,title] of [['Prom',prom,'Prom Dresses'],['Formal',fixture,'Formal Dresses']]) test(`${name}: ID-bound sequential mode preserves the observed fixture and explicit pins`,async()=>{
+  const ordinals={'Top Prom':7,'Top Formal':3,'sold out':32,'In-Store Styling Appointment Deposit':111,'Champagne Prom Dresses':116};
+  const rules=data.rules.map(r=>({...r,ordinal:ordinals[r.name],collectionIds:r.collections?.length?['gid://shopify/Collection/1']:[]}));
+  const m=service(rules),rule=await m.getActiveRuleForCollection('fixture',title,[],'en','gid://shopify/Collection/1');assert.equal(rule.collectionSequentialScores,true);
+  const ranked=m.applyMerchandisingRules(clone(data.products),rule,'best-selling',{products:data.pins},[],settings);
+  const expected=name==='Prom'?data.expected:data.expectedFirst25;
+  assert.deepEqual(Array.from(ranked.slice(0,expected.length),p=>p.id),expected);
+});
+
 test('observed Formal Dresses first 25 follow source rule groups and actual Shopify tie order', async () => {
   const { getActiveRuleForCollection, applyMerchandisingRules } = service();
   const rule = await getActiveRuleForCollection('fixture', 'Formal Dresses');

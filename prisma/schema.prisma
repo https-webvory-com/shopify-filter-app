@@ -209,6 +209,7 @@ model MerchandisingRule {
   shop          String
   name          String
   collections   String[]
+  collectionIds String[]                     @default([])
   customerTags  String?
   locales       String?
   startDate     DateTime?

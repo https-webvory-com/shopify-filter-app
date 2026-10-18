@@ -55,7 +55,7 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
     const field = (condition.field || '').toLowerCase();
     const simple = { tags: ['tags'], vendor: ['vendor'], 'product type': ['productType'], product: ['title'], collections: ['collections', 'collection_titles'], price: ['priceMin'], date: ['createdAt'], sku: ['variantPrices'], rating: ['rating', 'metafield_reviews.rating'], id: [] };
     if (field in simple) simple[field].forEach(value => fields.add(value));
-    else if (field === 'available') fields.add('inventoryTotal');
+    else if (field === 'available') { fields.add('inventoryTotal'); fields.add('available'); }
     else if (['discount', 'percent sales'].includes(field) || /option|color|size|title/.test(field)) {
       ['variantPrices', 'options', 'images'].forEach(value => fields.add(value));
     } else return fullRankingFields;
@@ -124,7 +124,7 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   async function consume(documents) {
     const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));
     if(hydrateRanking)await hydrateRanking(products);
-    for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionPinsFirst:p._collectionPinsFirst,_collectionLadderMatched:p._collectionLadderMatched,_collectionRuleRanks:p._collectionRuleRanks,merchandisingScore:p.merchandisingScore});
+    for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionPinsFirst:p._collectionPinsFirst,_collectionLadderMatched:p._collectionLadderMatched,_collectionRuleRanks:p._collectionRuleRanks,_collectionSequentialScore:p._collectionSequentialScore,merchandisingScore:p.merchandisingScore});
   }
   for(let offset=0;;offset+=batchSize) {
     const result=await index.search(q,{...options,offset,limit:batchSize,attributesToRetrieve:fields},{signal:AbortSignal.timeout(30000)});

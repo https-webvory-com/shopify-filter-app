@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
-import { normalizeCondition, validConditions } from '../../app/utils/merchandisingCondition.js';
+import { normalizeCondition, validConditions, resolveCollectionTargets } from '../../app/utils/merchandisingCondition.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
 const { matchingAvailableVariants, availableProductIds } = availableVariants;
 import * as rankedCollection from '../../app/utils/rankedCollectionPage.js';
@@ -98,7 +98,7 @@ async function route(file,mocks){
    if(name in mocks)return mocks[name];
    if(name==='../services/shopCache.server.js')return {invalidateShop:async()=>{}};
    if(name==='../services/collectionPreparation.server.js')return readyPreparation({index:mocks['../services/meiliClient.server'].default.index('products'),prisma:mocks['../db.server'].default,arrange:mocks['../services/merchandising.server'].applyMerchandisingRules});
-   if(name==='../utils/merchandisingCondition.js')return {normalizeCondition,validConditions};
+   if(name==='../utils/merchandisingCondition.js')return {normalizeCondition,validConditions,resolveCollectionTargets};
    if(name.startsWith('../components/')||['react','react-router','@shopify/app-bridge-react'].includes(name))return {};
    throw Error('Unexpected import '+name);
  }};

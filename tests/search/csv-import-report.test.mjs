@@ -29,7 +29,8 @@ export async function merchandisingFixture() {
     create: async ({ data }) => { if (data.name === 'database failure') throw Object.assign(Error('private database secret'), { code: 'P2000' }); const row = { id: String(++serial), ...plain(data) }; rows.push(row); return row; },
     update: async ({ where, data }) => { if (data.conditions.create.some(c => c.value === 'FAIL')) throw Object.assign(Error('private connection secret'), { code: 'P2000' }); Object.assign(rows.find(r => r.id === where.id), plain(data)); },
   };
-  const prisma = { merchandisingRule: model, $transaction: async fn => { const snapshot = plain(rows); try { return await fn({ merchandisingRule: model }); } catch (e) { rows = snapshot; throw e; } } };
+  const collection = { findMany: async () => [{ id: 'gid://shopify/Collection/1', title: 'Summer' }] };
+  const prisma = { merchandisingRule: model, collection, $transaction: async fn => { const snapshot = plain(rows); try { return await fn({ merchandisingRule: model, collection }); } catch (e) { rows = snapshot; throw e; } } };
   const service = await loadImportModule('app/services/merchandisingImport.server.js', { '../db.server': { __esModule: true, default: prisma } });
   return { service, prisma, rows: () => rows };
 }

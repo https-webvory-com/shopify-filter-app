@@ -26,6 +26,7 @@ export const loader = async ({ request }) => {
       activeRule = await getActiveRuleForSearch(shop, searchQuery);
     } else {
       let resolvedCollectionTitle = "";
+      let resolvedCollectionId = "";
 
       // Resolve Collection Title
       if (collectionHandle) {
@@ -35,7 +36,7 @@ export const loader = async ({ request }) => {
           const coll = await prisma.collection.findFirst({
             where: { handle: collectionHandle, shop },
           });
-          if (coll) resolvedCollectionTitle = coll.title;
+          if (coll) { resolvedCollectionTitle = coll.title; resolvedCollectionId = coll.id; }
         }
       }
       
@@ -47,7 +48,7 @@ export const loader = async ({ request }) => {
         const coll = await prisma.collection.findUnique({
           where: { id: formattedId },
         });
-        if (coll) resolvedCollectionTitle = coll.title;
+        if (coll) { resolvedCollectionTitle = coll.title; resolvedCollectionId = coll.id; }
       }
 
       if (!resolvedCollectionTitle) {
@@ -62,6 +63,7 @@ export const loader = async ({ request }) => {
         resolvedCollectionTitle,
         (url.searchParams.get("customerTags") || "").split(",").filter(Boolean),
         url.searchParams.get("locale") || url.searchParams.get("language") || "",
+        resolvedCollectionId,
       );
     }
 

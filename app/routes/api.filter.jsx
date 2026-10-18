@@ -375,11 +375,11 @@ export const loader = async ({ request, context }) => {
     const [activePinningRule, activeRule] = await Promise.all([
       isSearch && searchQuery
         ? getActivePinningRuleForSearch(shop, searchQuery, searchType)
-        : getActivePinningRuleForCollection(shop, resolvedCollectionTitle),
+        : getActivePinningRuleForCollection(shop, resolvedCollectionTitle, resolvedCollectionId),
 
       isSearch && searchQuery
         ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "")
-        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || ""),
+        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "", resolvedCollectionId),
     ]);
 
     // ── 5. Parse pinned IDs ────────────────────────────────────────────
@@ -471,8 +471,9 @@ export const loader = async ({ request, context }) => {
 
       const collClause = collClauseParts.join(" OR ");
 
-      // Include rules must not expand a collection to products from elsewhere.
-      baseFilters.push(`(${collClause})`);
+      // Include adds eligible products without changing Shopify membership.
+      // Tenant, publication/status, availability and customer filters remain ANDed.
+      baseFilters.push(`(${[collClause, ...includeMeiliFilters].join(" OR ")})`);
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }

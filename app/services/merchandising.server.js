@@ -37,6 +37,18 @@ export function usesCollectionPinFirstLadder(rules) {
     lower.every(c => conditions.some(include => include.action === "Include" && include.field === "Tags" && include.value === c.value));
 }
 
+// Supported tag-Set contexts apply later matching Sets to the existing score.
+// Unsupported arithmetic retains its previous ranking until separately verified.
+function usesSequentialCollectionScores(rules) {
+  if (!rules.every(r => Number.isFinite(r.ordinal) &&
+      (!r.collections?.length || r.collectionIds?.length > 0))) return false;
+  const conditions = rules.flatMap(r => r.conditions || []);
+  const dynamic = conditions.filter(c => c.action === 'Dynamic');
+  return dynamic.length > 0 && dynamic.every(c => c.field === 'Tags' && c.operator === 'Set' && ['99','100','1000'].includes(String(c.operand))) &&
+    conditions.every(c => ['Dynamic','Include','Exclude','Pin'].includes(c.action) &&
+      (!['Include','Pin'].includes(c.action) || c.field === 'Tags'));
+}
+
 /**
  * Fetches the active merchandising rule for a given shop and collection.
  */
@@ -45,6 +57,7 @@ export async function getActiveRuleForCollection(
   collectionTitle,
   currentCustomerTags = [],
   locale = "",
+  collectionId = "",
 ) {
   if (!shop || !collectionTitle) return null;
 
@@ -72,6 +85,12 @@ export async function getActiveRuleForCollection(
   const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const matchingRules = rules.filter((rule) => {
+    // Imported targets keep their Shopify identity even after a rename, and
+    // two collections with the same title must never inherit each other's rules.
+    if (Array.isArray(rule.collectionIds) && rule.collectionIds.length > 0) {
+      const targetId = String(collectionId).split('/').pop();
+      return Boolean(targetId) && rule.collectionIds.some(id => String(id).split('/').pop() === targetId);
+    }
     if (!Array.isArray(rule.collections)) return false;
     // The editor and imports represent "All collections" with an empty list.
     if (rule.collections.length === 0) return true;
@@ -83,7 +102,7 @@ export async function getActiveRuleForCollection(
     });
   });
 
-  // Prioritize specific single-collection rules over broad multi-collection rules
+  // Preserve legacy precedence for custom or unpositioned rules.
   matchingRules.sort((a, b) => {
     const aCount = Array.isArray(a.collections) ? a.collections.length : 0;
     const bCount = Array.isArray(b.collections) ? b.collections.length : 0;
@@ -123,7 +142,11 @@ export async function getActiveRuleForCollection(
   }
 
   if (applicableRules.length === 0) return null;
-  if (applicableRules.length === 1) return { ...applicableRules[0], collectionTagMatching: "exact" };
+  const legacyConditions = [...applicableRules].reverse().flatMap(r => r.conditions || []);
+  const sequentialScores = usesSequentialCollectionScores(applicableRules);
+  if (sequentialScores) applicableRules.sort((a,b) => a.ordinal - b.ordinal);
+  const sequential = sequentialScores ? { collectionSequentialScores: true, collectionLegacyConditions: legacyConditions } : {};
+  if (applicableRules.length === 1) return { ...applicableRules[0], ...sequential, collectionTagMatching: "exact", collectionRankingVersion: 3 };
 
   // Merchandising rules are calculated from bottom to top.
   // The lower rule (bottom rule / older) runs first, and its result is then adjusted by the upper rule (top rule / newer).
@@ -141,9 +164,11 @@ export async function getActiveRuleForCollection(
     shop: applicableRules[0].shop,
     name: applicableRules.map((r) => r.name).join(" + "),
     collections: applicableRules[0].collections,
-    conditions: combinedConditions,
+    conditions: sequentialScores ? applicableRules.flatMap(r => r.conditions || []) : combinedConditions,
+    ...sequential,
     // Keep higher-priority collection rules ahead of lower rules when ranking.
     collectionTagMatching: "exact",
+    collectionRankingVersion: 3,
     ruleGroups: applicableRules.map(r => ({ id: r.id, conditions: r.conditions || [] })),
     ...(usesCollectionPinFirstLadder(applicableRules) ? { collectionPinsFirst: true, collectionLadderBoundaryVersion: 1 } : {}),
   };
@@ -215,7 +240,7 @@ export async function getActiveRuleForSearch(
 /**
  * Fetches the active pinning rule for a given shop and collection.
  */
-export async function getActivePinningRuleForCollection(shop, collectionTitle) {
+export async function getActivePinningRuleForCollection(shop, collectionTitle, collectionId = "") {
   if (!shop || !collectionTitle) return null;
 
   if (collectionTitle.toLowerCase() === "all") {
@@ -244,6 +269,17 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle) {
   const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const specificRule = allRules.find((r) => {
+    // The importer already preserves source target IDs in collectionSortKey.
+    // Prefer those IDs; titles are only a fallback for legacy/manual rules.
+    if (r.collectionSortKey) {
+      try {
+        const ids = JSON.parse(r.collectionSortKey);
+        if (Array.isArray(ids) && ids.length > 0) {
+          const targetId = String(collectionId).split('/').pop();
+          return Boolean(targetId) && ids.some(id => String(id).split('/').pop() === targetId);
+        }
+      } catch { /* Legacy keys without an ID list retain title matching. */ }
+    }
     if (!r.collections || r.collections.length === 0) return false;
     return r.collections.some((c) => {
       if (!c) return false;
@@ -327,6 +363,14 @@ function checkRuleMatch(product, condition, mergedValues = [], caseSensitiveTags
     }
 
     if (field === "Available") {
+      // A purchasable variant must not be hidden because another variant's
+      // negative quantity cancels its stock. Keep other numeric ranges intact.
+      if (caseSensitiveTags && condition.action === "Exclude" && min <= 0 && max === 0) {
+        if (typeof product.available === 'boolean') return !product.available;
+        if (product.variants?.length && product.variants.every(v => typeof v.available === 'boolean')) {
+          return !product.variants.some(v => v.available);
+        }
+      }
       const inventory = Number.isFinite(product.inventoryTotal) ? product.inventoryTotal : product.variants
         ? product.variants.reduce((sum, v) => sum + (v.inventory || 0), 0)
         : 0;
@@ -669,20 +713,27 @@ export function applyMerchandisingRules(
     });
 
     // 2. Scoring Phase: Assign scores based on conditions
+    const sequentialScores = rule.collectionSequentialScores === true && sortBy !== 'manual';
+    const scoringConditions = sortBy === 'manual' && rule.collectionSequentialScores
+      ? (rule.collectionLegacyConditions || rule.conditions) : rule.conditions;
+    const scoreConditions = sequentialScores ? scoringConditions.filter(c => c.action !== 'Pin') : scoringConditions;
+    const ordinarySequential = sequentialScores && ['99','100'].every(operand =>
+      scoreConditions.some(c => c.action === 'Dynamic' && String(c.operand) === operand));
     filteredProducts.forEach((p) => {
-      const rank = scoreMerchandisingConditions(p, rule.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact");
+      const rank = scoreMerchandisingConditions(p, scoreConditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact");
       p.merchandisingScore = rank.score;
-      p._rulePinned = rank.pinned;
-      p._collectionPinsFirst = rule.collectionPinsFirst === true;
-      p._collectionRuleRanks = rule.ruleGroups?.map(group =>
+      p._rulePinned = sequentialScores ? rule.conditions.some(c => c.action === 'Pin' && checkRuleMatch(p,c,mergedValues,true)) : rank.pinned;
+      p._collectionSequentialScore = sequentialScores;
+      p._collectionPinsFirst = sequentialScores ? ordinarySequential : rule.collectionPinsFirst === true;
+      p._collectionRuleRanks = sequentialScores ? undefined : rule.ruleGroups?.map(group =>
         scoreMerchandisingConditions(p, group.conditions, pinnedIds, mergedValues, rule.collectionTagMatching === "exact"));
-      p._collectionLadderMatched = rule.collectionPinsFirst === true && rule.ruleGroups?.some((group, i) =>
+      p._collectionLadderMatched = sequentialScores ? rank.score > 0 : rule.collectionPinsFirst === true && rule.ruleGroups?.some((group, i) =>
         group.conditions.some(condition => condition.action === "Dynamic") &&
         (p._collectionRuleRanks[i]?.score || 0) > 0) === true;
     });
   } else {
     // Ensure score is 0 if no rules
-    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionPinsFirst = false; p._collectionLadderMatched = false; p._collectionRuleRanks = undefined; });
+    filteredProducts.forEach((p) => { p.merchandisingScore = 0; p._rulePinned = false; p._collectionPinsFirst = false; p._collectionLadderMatched = false; p._collectionRuleRanks = undefined; p._collectionSequentialScore = false; });
   }
 
   filteredProducts.sort(createMerchandisingComparator(sortBy, pinnedIds, globalSettings));
@@ -778,6 +829,15 @@ export function createMerchandisingComparator(sortBy, pinnedIds = [], globalSett
       }
       if (aIsPinned) return -1;
       if (bIsPinned) return 1;
+    }
+
+    if (sortBy !== 'manual' && !prioritizeSortOverMerchandising &&
+        a._collectionSequentialScore && b._collectionSequentialScore) {
+      const as = a.merchandisingScore || 0, bs = b.merchandisingScore || 0;
+      const ordinary = a._collectionPinsFirst && b._collectionPinsFirst && [99,100].includes(as) && [99,100].includes(bs);
+      if (ordinary && a._rulePinned !== b._rulePinned) return a._rulePinned ? -1 : 1;
+      if (as !== bs) return bs - as;
+      if (a._rulePinned !== b._rulePinned) return a._rulePinned ? -1 : 1;
     }
 
     // Keep products matched by the ordinary ladder ahead of unscored products.
