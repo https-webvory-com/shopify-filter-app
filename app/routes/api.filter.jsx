@@ -39,6 +39,7 @@ import { rankSearchResults } from "../services/searchRanking.server.js";
 export const loader = async ({ request, context }) => {
   const startTime = Date.now();
   let preparedSpec;
+  let preparedCacheKey;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -725,7 +726,7 @@ export const loader = async ({ request, context }) => {
     const collectionBestSellingState = needsShopifyOrder && rankingSession
       ? { ids: rankingSession.ids, status: "ready", updatedAt: rankingSession.updatedAt }
       : needsShopifyOrder
-      ? await getCollectionBestSellingState(shop, resolvedCollectionId) : { ids: null, status: "inactive" };
+      ? await getCollectionBestSellingState(shop, resolvedCollectionId, { warmup: context?.rankingWarmup === true }) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
     // Age alone must not block browsing. A complete last-good Shopify snapshot
     // remains the ranking source while its durable refresh runs in the worker.
@@ -740,6 +741,35 @@ export const loader = async ({ request, context }) => {
         collectionBestSellingPending: orderStatus === "pending",
       } }, { status: orderStatus === "failed" ? 503 : 202,
         headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+    }
+
+    // A warmup only needs to schedule/refresh the complete ranking. Pending
+    // visitors also need no facet queries until that ranking is usable.
+    if (useRankedCollectionPagination && !rankingSession) {
+      preparedSpec = {
+        shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
+        retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
+        query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
+        pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
+        orderRevision: collectionBestSellingState.revision ?? null,
+        orderUpdatedAt: collectionBestSellingState.updatedAt ?? null,
+        rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
+        globalSettings, mergedValues,
+      };
+      const prepared = await getPreparedCollectionRanking(preparedSpec, { warmup: context?.rankingWarmup === true });
+      preparedCacheKey = prepared.cacheKey;
+      collectionRankingStatus = prepared.status;
+      if (prepared.status !== 'ready') {
+        return data({ products: [], totalCount: 0, debug: {
+          collectionRankingStatus: prepared.status,
+          collectionBestSellingStatus: prepared.status,
+          collectionOrderSnapshotStatus: collectionBestSellingState.status,
+          collectionBestSellingApplied: false,
+        } }, { status: prepared.status === 'failed' ? 503 : 202,
+          headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Retry-After': '1' } });
+      }
+      if (context?.rankingWarmup) return data({ warmup: true });
+      rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, prepared.cacheKey ? prepared.orderUpdatedAt : collectionBestSellingState.updatedAt ?? null, prepared.metadata);
     }
 
     // Ranked search owns its counts, facets and page retrieval. Do not run a
@@ -791,32 +821,6 @@ export const loader = async ({ request, context }) => {
         }
         let result;
         if (useRankedCollectionPagination) {
-          if (!rankingSession) {
-            preparedSpec = {
-              shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
-              retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
-              query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
-              pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
-              orderRevision: collectionBestSellingState.revision ?? null,
-              rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
-              globalSettings, mergedValues,
-            };
-            const prepared = await getPreparedCollectionRanking(preparedSpec, { warmup: context?.rankingWarmup === true });
-            collectionRankingStatus = prepared.status;
-            if (prepared.status !== 'ready') {
-              return data({ products: [], totalCount: 0, debug: {
-                collectionRankingStatus: prepared.status,
-                // Older extension assets poll this readiness field. Keep them
-                // waiting too, rather than rendering an empty pending response.
-                collectionBestSellingStatus: prepared.status,
-                collectionOrderSnapshotStatus: collectionBestSellingState.status,
-                collectionBestSellingApplied: false,
-              } }, { status: prepared.status === 'failed' ? 503 : 202,
-                headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Retry-After': '1' } });
-            }
-            if (context?.rankingWarmup) return data({ warmup: true });
-            rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, collectionBestSellingState.updatedAt ?? null, prepared.metadata);
-          }
           collectionRankingStatus = 'ready';
           result = await readRankedCollectionPage(meiliClient.index("products"), {
             ids: rankingSession.ids, page, limit, shop, attributes: mainQuery.attributesToRetrieve,
@@ -1513,7 +1517,7 @@ export const loader = async ({ request, context }) => {
     return data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {
-      try { await discardPreparedCollectionRanking(preparedSpec); }
+      try { await discardPreparedCollectionRanking(preparedSpec, preparedCacheKey); }
       catch (error) { console.error('CFP: Failed to discard obsolete preparation:',error.name); }
     }
     console.error("API Filter Error: ", err);

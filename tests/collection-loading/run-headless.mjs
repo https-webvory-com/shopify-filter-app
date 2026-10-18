@@ -192,6 +192,16 @@ try{
     assert.equal(requests.length,1);assert.equal(requests[0].status,200);assert.equal(after.state.builds,before.state.builds);if(!redisLayer)assert.ok(await evaluate('cardSnapshots[0].at<2000'));assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),simulatedIdleMs:660000,refreshWorkerPaused:true,liveTiming:false};
   });
+  await test('a new Shopify order does not blank the first page while the replacement worker is paused',async()=>{
+    await control({reset:true,clockOffset:0,orderVersion:0,early:true,earlyBeforeStyles:true,assetDelay:0,cssDelay:0,apiDelay:0,delay:50});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const previous=await cards();const before=await(await fetch(origin+'/__state')).json();
+    await control({orderVersion:1,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
+    assert.deepEqual(await cards(),previous);assert.equal(requests.length,1);assert.equal(requests[0].status,200);
+    assert.equal(after.state.builds,before.state.builds);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),refreshWorkerPaused:true,firstRequestStatus:200,liveTiming:false};
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

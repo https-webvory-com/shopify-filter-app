@@ -6,6 +6,7 @@ import { applyMerchandisingRules, createMerchandisingComparator } from './mercha
 import { prepareCollectionRanking } from '../utils/prepareCollectionRanking.js';
 import { createCollectionPreparation, warmupContextsKey, warmupShopsKey } from '../utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
+import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './collectionBestSelling.server.js';
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: spec =>
   prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator }),
@@ -39,6 +40,27 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
 // Refresh known public contexts even when no browser is currently visiting.
 // This only schedules deduplicated, low-priority jobs; scans stay in the worker.
 let discoveredRegistries = false;
+// Seed order snapshots for collections before their first storefront visit.
+// Existing snapshots are left alone; their normal refresh policy still applies.
+// Page discovery and queue submissions are bounded, and cold visitors promote
+// these same deduplicated jobs above the background backlog.
+export async function scheduleMissingCollectionOrders(shop) {
+  let cursor;
+  for (;;) {
+    const collections = await prisma.collection.findMany({
+      where: {shop}, select: {id:true}, orderBy: {id:'asc'}, take:100,
+      ...(cursor ? {cursor:{id:cursor},skip:1} : {}),
+    });
+    if (!collections.length) return;
+    const snapshots = await redis.mget(...collections.map(collection => collectionOrderSnapshotKey(shop,collection.id)));
+    for (let i=0;i<collections.length;i++) {
+      if (!snapshots[i]) await getCollectionBestSellingState(shop,collections[i].id,{warmup:true});
+    }
+    if (collections.length<100) return;
+    cursor=collections.at(-1).id;
+  }
+}
+
 export async function scheduleRegisteredCollectionWarmups() {
   // Discover existing public registries after deployment, so the first visitor
   // does not have to populate the new shop index before warming can start.
@@ -58,10 +80,15 @@ export async function scheduleRegisteredCollectionWarmups() {
     } while (cursor !== '0');
     discoveredRegistries = true;
   }
-  const shops = await redis.zrangebyscore(warmupShopsKey, Date.now() - 86400000, '+inf');
+  const registered = await redis.zrangebyscore(warmupShopsKey, Date.now() - 86400000, '+inf');
+  const catalog = await prisma.collection.findMany({distinct:['shop'],select:{shop:true}});
+  const shops = [...new Set([...registered,...catalog.map(collection=>collection.shop)])];
   for (const shop of shops) {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
-    try { await scheduleCollectionWarmup(shop); }
+    try {
+      await scheduleCollectionWarmup(shop);
+      await scheduleMissingCollectionOrders(shop);
+    }
     catch (error) { console.error('CFP: Periodic collection warmup failed:', error.name); }
   }
 }

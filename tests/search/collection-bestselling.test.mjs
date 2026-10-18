@@ -88,7 +88,7 @@ test('fresh snapshots serve immediately without scheduling Shopify reads',async(
 
 test('pending order jobs deduplicate in the dedicated queue without touching webhooks',async()=>{
  for(const queueState of ['waiting','active','delayed','prioritized']) {
-  const service=await loadOrderService({job:{getState:async()=>queueState}});
+  const service=await loadOrderService({job:{opts:{priority:1},getState:async()=>queueState}});
   const state=await service.getCollectionBestSellingState('shop','collection');
   assert.equal(state.status,'pending');assert.equal(state.refreshState,queueState);
   assert.equal(service.calls.length,0);
@@ -98,6 +98,19 @@ test('pending order jobs deduplicate in the dedicated queue without touching web
  assert.equal(service.calls[0].opts.jobId,'collection-order-shop-collection');
  assert.equal(service.calls[0].data.shop,'shop');
  assert.equal(service.calls[0].data.collectionId,'collection');
+});
+
+test('background order refreshes yield to cold visitors and are promoted without duplicate jobs',async()=>{
+ const cold=await loadOrderService();await cold.getCollectionBestSellingState('shop','collection');
+ assert.equal(cold.calls[0].opts.priority,1);
+ for(const options of [{snapshot:{ids:['1'],updatedAt:1}},{}]){
+  const service=await loadOrderService(options);await service.getCollectionBestSellingState('shop','collection',{warmup:true});
+  assert.equal(service.calls[0].opts.priority,10);
+ }
+ const promotions=[];
+ const service=await loadOrderService({job:{opts:{priority:10},getState:async()=> 'prioritized',changePriority:async value=>promotions.push(value.priority)}});
+ const state=await service.getCollectionBestSellingState('shop','collection');
+ assert.equal(state.status,'pending');assert.deepEqual(promotions,[1]);assert.equal(service.calls.length,0);
 });
 
 test('unchanged Shopify refreshes retain the same ranking revision',async()=>{

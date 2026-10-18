@@ -6,7 +6,8 @@ import { createHash } from 'node:crypto';
 
 const freshnessMs = 300000;
 const retryCooldownMs = 30000;
-const snapshotKey = (shop, collectionId) => `collectionOrderSnapshot:${shop}:${collectionId}`;
+export const collectionOrderSnapshotKey = (shop, collectionId) => `collectionOrderSnapshot:${shop}:${collectionId}`;
+const snapshotKey = collectionOrderSnapshotKey;
 const jobId = (shop, collectionId) => `collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collectionId)}`;
 
 // Publish only complete snapshots. A failed refresh leaves the last good order intact.
@@ -32,7 +33,7 @@ export async function invalidateCollectionBestSelling(shop, collectionId) {
   }
 }
 
-export async function getCollectionBestSellingState(shop, collectionId) {
+export async function getCollectionBestSellingState(shop, collectionId, { warmup = false } = {}) {
   let snapshot = null;
   try {
     const raw = await redis.get(snapshotKey(shop, collectionId));
@@ -46,6 +47,12 @@ export async function getCollectionBestSellingState(shop, collectionId) {
     const id = jobId(shop, collectionId);
     let job = await collectionOrderQueue.getJob(id);
     let state = job ? await job.getState() : null;
+    // Warmups and refreshes with a usable snapshot must yield to a visitor
+    // whose collection has no order at all.
+    const priority = warmup || snapshot ? 10 : 1;
+    if (job && priority === 1 && ['waiting','prioritized','delayed'].includes(state) && (job.priority ?? job.opts?.priority) !== 1) {
+      await job.changePriority({ priority });
+    }
     if (state === 'failed') {
       if (Date.now() - (job.finishedOn ?? 0) < retryCooldownMs) {
         return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'failed', refreshState: 'failed', updatedAt: snapshot?.updatedAt ?? null, revision: snapshot?.revision };
@@ -58,7 +65,7 @@ export async function getCollectionBestSellingState(shop, collectionId) {
       job = null;
     }
     if (!job) {
-      job = await collectionOrderQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId }, { jobId: id });
+      job = await collectionOrderQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId }, { jobId: id, priority });
       state = 'waiting';
     }
     return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'pending', refreshState: state, updatedAt: snapshot?.updatedAt ?? null, revision: snapshot?.revision };

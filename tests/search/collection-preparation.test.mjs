@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionPreparation, preparationKey, preparationRevisionKey, preparationLifetime} from '../../app/utils/collectionPreparation.js';
+import {createCollectionPreparation, preparationKey, preparationOrderFallbackKey, preparationRevisionKey, preparationLifetime} from '../../app/utils/collectionPreparation.js';
 import {productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 
 function fixture() {
@@ -188,4 +188,56 @@ test('fresh preparation does not rebuild on every request and legacy records ref
   f.advance(240000);await f.service.get(f.spec);assert.equal(f.queued.length,1);
   f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,productRevision:'0'}));
   assert.equal((await f.service.get(f.spec)).status,'ready');assert.equal(f.queued.length,2);
+});
+
+test('a changed Shopify order keeps the last complete fresh ranking while its replacement queues at low priority',async()=>{
+ const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['pin','boost','ordinary'],orderRevision:'old',orderUpdatedAt:10});
+ await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+ const changed={...f.spec,orderedIds:['ordinary','boost','pin'],orderRevision:'new',orderUpdatedAt:20};
+ const ready=await f.service.get(changed);
+ assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);assert.equal(ready.orderUpdatedAt,10);
+ assert.equal(ready.cacheKey,preparationKey(f.spec));assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
+ const built={ids:['ordinary','boost','pin'],metadata:{}};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>built});
+ await service.process(f.queued[1].data);
+ assert.deepEqual(await service.get(changed),{status:'ready',...built});
+ assert.equal(f.values.get(preparationOrderFallbackKey(changed)),preparationKey(changed));
+});
+
+test('last-order reuse cannot cross eligibility, configuration, market rules, shops or freshness boundaries',async()=>{
+ for(const change of [{revision:'1'},{shop:'other.myshopify.com'},{pinnedIds:['different']},{query:{filter:["Color = 'Red'"]}},{rule:{conditions:[{field:'Tags',action:'Exclude',value:'hidden'}]}},{retainForIdle:false}]){
+  const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['old'],orderRevision:'old'});
+  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+  const changed={...f.spec,orderedIds:['new'],orderRevision:'new',...change};
+  assert.equal((await f.service.get(changed)).status,'pending',JSON.stringify(change));
+ }
+ for(const reason of ['age','product']){
+  const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,collectionId:'1',orderedIds:['old']});
+  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+  if(reason==='age')f.advance(600000);else f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
+  assert.equal((await f.service.get({...f.spec,orderedIds:['new']})).status,'pending',reason);
+ }
+});
+
+test('a last-order sequence with newly ineligible products is discarded without touching browsing tokens',async()=>{
+ const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['old']});
+ await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+ const changed={...f.spec,orderedIds:['new']};const ready=await f.service.get(changed);
+ f.values.set('collectionRankingSession:fixture.myshopify.com:token','untouched');
+ await f.service.discard(changed,ready.cacheKey);
+ assert.equal((await f.service.get(changed)).status,'pending');
+ assert.equal(f.values.get('collectionRankingSession:fixture.myshopify.com:token'),'untouched');
+ await assert.rejects(f.service.discard(changed,'collectionPreparedSequence:other.myshopify.com:background-v2:'+'a'.repeat(64)),/Invalid/);
+});
+
+test('snapshot refresh time alone does not change the preparation identity',()=>{
+ const f=fixture();assert.equal(preparationKey({...f.spec,orderUpdatedAt:1}),preparationKey({...f.spec,orderUpdatedAt:2}));
+});
+
+test('a ready record from before deployment can seed last-order reuse without rebuilding',async()=>{
+ const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['old']});
+ f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,preparedAt:100000,productRevision:'0'}));
+ assert.equal((await f.service.get(f.spec)).status,'ready');assert.equal(f.builds(),0);
+ const reused=await f.service.get({...f.spec,orderedIds:['new']});
+ assert.equal(reused.status,'ready');assert.equal(reused.orderUpdatedAt,null);assert.deepEqual(reused.ids,f.result.ids);
 });

@@ -37,7 +37,7 @@ function stable(value) {
 }
 
 export function preparationKey(spec) {
-  const {productRevision, retainForIdle, ...identity}=spec;
+  const {productRevision, retainForIdle, orderUpdatedAt, ...identity}=spec;
   // Preparation ranks the complete set. Pagination and response projections
   // must not create separate scans or prevent a limit-25 warmup serving limit-50.
   if (identity.query) {
@@ -45,6 +45,13 @@ export function preparationKey(spec) {
     identity.query=query;
   }
   return `collectionPreparedSequence:${spec.shop}:background-v2:${createHash('sha256').update(JSON.stringify(stable(identity))).digest('hex')}`;
+}
+
+// Only Shopify's order may differ. Filters, tenant, configuration, rules and
+// customer context remain part of the identity of the last usable sequence.
+export function preparationOrderFallbackKey(spec) {
+  const {orderedIds, orderRevision, ...identity}=spec;
+  return preparationKey(identity).replace(':background-v2:', ':last-order-v1:');
 }
 
 export function createCollectionPreparation({ redis, queue, prepare, now = Date.now }) {
@@ -58,7 +65,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     let job = await queue.getJob(jobId);
     if (job) {
       const state = await job.getState();
-      if (!warmup && ['waiting','prioritized','delayed'].includes(state) && job.opts?.priority > priority) {
+      if (!warmup && ['waiting','prioritized','delayed'].includes(state) && (job.priority ?? job.opts?.priority) > priority) {
         await job.changePriority({ priority });
       }
       if (state === 'failed' && now() - (job.finishedOn ?? 0) < 30000) return 'failed';
@@ -99,7 +106,25 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
           now() - value.preparedAt >= preparationFreshnessMs - 120000 || await redis.ttl(key) < 120) {
         try { await schedule(key, spec, true); } catch { /* A usable version remains valid if refresh scheduling fails. */ }
       }
+      if (spec.retainForIdle === true && spec.needsShopifyOrder) {
+        // Adopt already prepared records on deployment too, without requiring
+        // a rebuild before the last-order reuse path can become available.
+        try { await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key); } catch { /* Optional reuse must not block a usable current ranking. */ }
+      }
       return { status: 'ready', ids: value.ids, metadata: value.metadata };
+    }
+    if (spec.retainForIdle === true && spec.needsShopifyOrder) {
+      const previousKey = await redis.get(preparationOrderFallbackKey(spec));
+      if (previousKey && previousKey !== key && previousKey.startsWith(`collectionPreparedSequence:${spec.shop}:background-v2:`)) {
+        let previous;
+        try { previous=JSON.parse(await redis.get(previousKey)); } catch { /* A missing/corrupt record needs a fresh build. */ }
+        if (valid(previous) && previous.productRevision === spec.productRevision &&
+            Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationFreshnessMs &&
+            await revision(spec.shop) === spec.revision) {
+          try { await schedule(key, spec, true); } catch { /* The last complete version is still usable. */ }
+          return {status:'ready',ids:previous.ids,metadata:previous.metadata,orderUpdatedAt:previous.orderUpdatedAt ?? null,cacheKey:previousKey};
+        }
+      }
     }
     return { status: await schedule(key, spec, warmup) };
   }
@@ -113,7 +138,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     if (await revision(spec.shop) !== spec.revision) return { superseded: true };
     // Only ordinary public collection contexts get long retention. Do not
     // multiply memory usage for arbitrary filters or customer-specific scans.
-    const payload = JSON.stringify({...value,productRevision:startedRevision,preparedAt:now()});
+    const payload = JSON.stringify({...value,productRevision:startedRevision,preparedAt:now(),orderUpdatedAt:spec.orderUpdatedAt});
     if (spec.retainForIdle === true && typeof redis.eval === 'function') {
       // Atomically cap retained public versions, including obsolete order hashes.
       // The script can delete only this shop's prepared keys, never queue/session keys.
@@ -121,10 +146,19 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
         preparationLifetime, payload, now(), publicPreparationLimit, `collectionPreparedSequence:${spec.shop}:background-v2:`);
     } else await redis.setex(key, spec.retainForIdle === true ? preparationLifetime : 600, payload);
     if (await revision(spec.shop) !== spec.revision) { await redis.del(key); return { superseded: true }; }
+    if (spec.retainForIdle === true && spec.needsShopifyOrder) {
+      await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key);
+    }
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision };
   }
   // A current first-page sequence referencing a deleted/inactive product must
   // rebuild rather than repeatedly reissue the same broken browsing token.
-  async function discard(spec) { await redis.del(preparationKey(spec)); }
+  async function discard(spec, cacheKey = preparationKey(spec)) {
+    // A returned last-order version must be discarded too if page hydration
+    // detects deleted/inactive products. Other browsing sessions stay intact.
+    const prefix=`collectionPreparedSequence:${spec.shop}:background-v2:`;
+    if (!cacheKey.startsWith(prefix) || !/^[a-f0-9]{64}$/.test(cacheKey.slice(prefix.length))) throw Error('Invalid preparation cache key');
+    await redis.del(cacheKey);
+  }
   return { revision, get, process, discard };
 }

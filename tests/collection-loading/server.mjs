@@ -8,7 +8,7 @@ import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
-import {createCollectionPreparation,preparationRevisionKey} from '../../app/utils/collectionPreparation.js';
+import {createCollectionPreparation,preparationRevisionKey,preparationKey} from '../../app/utils/collectionPreparation.js';
 import {createShopCacheInvalidation,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
 
@@ -17,6 +17,7 @@ export async function createLoadingServer({redisLayer}={}) {
   const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],requestStarts=[];
   const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
+  const trace={facetQueries:0,hydrations:0};
   const docs=Array.from({length:30},(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
     bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,inventoryTotal:5,
@@ -31,7 +32,7 @@ export async function createLoadingServer({redisLayer}={}) {
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
     return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution:{},processingTimeMs:1};
   };
-  const index={search:async(_q,options)=>select(options),getDocument:async id=>{const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
+  const index={search:async(_q,options)=>select(options),getDocument:async id=>{trace.hydrations++;const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
   const prisma={product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]}};
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
@@ -62,13 +63,13 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
     '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:'gid://shopify/Collection/1',resolvedCollectionTitle:'Fixture collection',activeGroupFilters:[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
-    '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>({ids:docs.map(p=>p.id).reverse(),revision:'native-order-v1',status:'ready',updatedAt:1})},
+    '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>({ids:state.orderVersion?docs.map(p=>p.id):docs.map(p=>p.id).reverse(),revision:'native-order-v'+(state.orderVersion||0),status:'ready',updatedAt:1+(state.orderVersion||0)})},
     '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,
     '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.sort();return u.search;},
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
       saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const token='fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
-    '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:spec=>{lastSpec=spec;return preparation.get(spec);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{}},
-    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>({results:queries.map(select)})},
+    '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{}},
+    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
@@ -122,5 +123,7 @@ export async function createLoadingServer({redisLayer}={}) {
       res.writeHead(404).end();
     }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });
-  return {server,dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
+  return {server,state,trace,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
+    prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
+    dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
 }
