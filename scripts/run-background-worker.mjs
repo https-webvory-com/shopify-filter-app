@@ -10,8 +10,8 @@ try {
   await import("../build/server/index.js");
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__collectionOrderWorker) {
-      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__collectionOrderWorker];
+    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker) {
+      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker];
       break;
     }
     await delay(1000);
@@ -32,10 +32,14 @@ try {
   };
   const warmupTimer = setInterval(warm, 240000);
   warmupTimer.unref();
+  let auditing=false;
+  const audit=async()=>{if(auditing||shuttingDown)return;auditing=true;try{await global.__scheduleMembershipAudits?.();}catch(error){console.error('CFP Membership scheduler unavailable:',error.name);}finally{auditing=false;}};
+  const membershipTimer=setInterval(audit,60000);membershipTimer.unref();
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(warmupTimer);
+    clearInterval(membershipTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
     process.exit(0);
@@ -43,6 +47,7 @@ try {
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
   void warm();
+  void audit();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });
   console.error("CFP: Background worker startup failed:", error.message);

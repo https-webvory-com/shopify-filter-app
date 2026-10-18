@@ -56,6 +56,13 @@ if (!global.__collectionOrderQueue) {
 }
 export const collectionOrderQueue = global.__collectionOrderQueue;
 
+// Membership audits never occupy storefront ranking or webhook lanes.
+export const collectionMembershipQueue = global.__collectionMembershipQueue ||= new Queue('collectionMembershipQueueV1', {
+  connection: redisOptions,
+  defaultJobOptions: {attempts:5,backoff:{type:'exponential',delay:10000},removeOnComplete:true,removeOnFail:{count:1000}},
+});
+collectionMembershipQueue.on('error',error=>console.error('CFP Membership Queue:',error.message));
+
 /**
  * Enqueue a webhook job into BullMQ queue.
  */

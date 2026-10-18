@@ -1,5 +1,6 @@
 import prisma from "../db.server";
-import { completeProductCollections } from "./productCollections.server.js";
+import { completeProductCollections, verifyMembershipWrites } from "./productCollections.server.js";
+import { reconcileCollectionMembership } from "../utils/reconcileCollectionMembership.js";
 import { semanticEmbedderSettings, semanticProvider } from "../utils/semanticSearch.js";
 import meiliClient from "./meiliClient.server";
 import { invalidateShop } from "./shopCache.server";
@@ -675,6 +676,9 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
         })(),
       ]);
 
+      // Do not advance past a batch with missing DB links or indexed membership.
+      if (products.length) await verifyMembershipWrites(prisma, meiliClient.index('products'), shop, products, meiliDocs);
+
       // Update Job State
       job = await prisma.syncJob.update({
         where: { id: jobId },
@@ -1166,6 +1170,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
       }),
   ]);
 
+  if (retrySearchErrors) await verifyMembershipWrites(prisma, meiliClient.index('products'), shop, [product], [meiliDoc]);
   await autoSeedOptionFilters(shop);
 
   console.log(`CFP: Webhook sync complete for product ${productId}.`);
@@ -1178,102 +1183,20 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
  * Useful for COLLECTIONS_UPDATE webhooks where product lists might change.
  */
 export async function syncCollectionProducts(shop, admin, collectionId, { throwOnError = false } = {}) {
-  console.log(
-    `CFP: Syncing products for collection ${collectionId} in background...`,
-  );
-
-  // 1. Fetch all product IDs from Shopify for this collection
-  let hasNextPage = true;
-  let cursor = null;
-  const shopifyProductIds = new Set();
-
-  while (hasNextPage) {
-    const query = `#graphql
-      query getCollectionProducts($id: ID!, $cursor: String) {
-        collection(id: $id) {
-          products(first: 250, after: $cursor) {
-            pageInfo { hasNextPage endCursor }
-            nodes { id }
-          }
-        }
-      }
-    `;
-    try {
-      const response = await admin.graphql(query, {
-        variables: { id: collectionId, cursor },
-      });
-      const responseJson = await response.json();
-      if (responseJson.errors) {
-        console.error(
-          "CFP: GraphQL error fetching collection products",
-          responseJson.errors,
-        );
-        if (throwOnError) throw new Error("Shopify collection membership unavailable");
-        break;
-      }
-
-      const products = responseJson.data?.collection?.products;
-      if (!products) {
-        if (throwOnError) throw new Error("Shopify collection membership unavailable");
-        break;
-      }
-
-      products.nodes.forEach((n) => shopifyProductIds.add(n.id));
-      hasNextPage = products.pageInfo.hasNextPage;
-      cursor = products.pageInfo.endCursor;
-    } catch (e) {
-      console.error("CFP: Error fetching collection products", e);
-      if (throwOnError) throw e;
-      break;
-    }
-  }
-
-  // 2. Fetch all product IDs currently linked to this collection in DB
-  const dbLinks = await prisma.productCollection.findMany({
-    where: { collectionId },
-    select: { productId: true },
-  });
-  const dbProductIds = new Set(dbLinks.map((link) => link.productId));
-
-  // 3. Find differences
-  const productsToSync = new Set();
-
-  // Added to collection
-  for (const id of shopifyProductIds) {
-    if (!dbProductIds.has(id)) productsToSync.add(id);
-  }
-
-  // Removed from collection
-  for (const id of dbProductIds) {
-    if (!shopifyProductIds.has(id)) productsToSync.add(id);
-  }
-
-  // 4. Sync affected products
-  if (productsToSync.size > 0) {
-    console.log(
-      `CFP: Found ${productsToSync.size} product differences for collection ${collectionId}. Syncing...`,
-    );
-    for (const productId of productsToSync) {
-      try {
-        await syncSingleProduct(shop, admin, productId, { retrySearchErrors: throwOnError });
-      } catch (e) {
-        console.error(
-          `CFP: Error syncing product ${productId} during collection update`,
-          e,
-        );
-        if (throwOnError) throw e;
-      }
-    }
-    console.log(
-      `CFP: Finished syncing product differences for collection ${collectionId}.`,
-    );
-  } else {
-    console.log(
-      `CFP: No product differences found for collection ${collectionId}.`,
-    );
+  let attemptedWrites = false;
+  try {
+    return await reconcileCollectionMembership({db:prisma,index:meiliClient.index('products'),shop,collectionId,admin,
+      syncProduct:async id=>{attemptedWrites=true;await syncSingleProduct(shop,admin,id,{retrySearchErrors:true});}});
+  } catch (error) {
+    console.error('CFP: Collection membership reconciliation failed:', error.message);
+    if (throwOnError) throw error;
+    return {verified:false,error:'Collection membership reconciliation failed'};
+  } finally {
+    // DB and index are separate systems. Failed partial repairs must not leave
+    // cached eligibility behind; durable retries re-read Shopify before writing.
+    if (attemptedWrites) await invalidateShop(shop);
   }
 }
-
 
 async function shopifyProductCount(admin) {
   const response = await admin.graphql(`#graphql

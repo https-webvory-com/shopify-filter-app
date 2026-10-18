@@ -6,8 +6,9 @@ import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
 import * as searchProjection from '../../app/utils/searchIndexProjection.js';
+import * as memberships from '../../app/services/productCollections.server.js';
 
-async function fixture({ failSetup = false, failIndex = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
+async function fixture({ failSetup = false, failIndex = false, failMembership = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
   const updates = [];
   let heartbeat, cleared = false;
   const job = { id: "job", status: "IN_PROGRESS", cursor: "last-saved", productsProcessed: processed };
@@ -18,14 +19,17 @@ async function fixture({ failSetup = false, failIndex = false, finalizationGate,
       updateMany: async ({data}) => { updates.push(data); return {count:1}; },
     },
     filterSetting: {findMany: async () => {if(failSetup) throw Error("database unavailable"); return []; }},
-    product: {deleteMany: async () => {}},
+    product: {deleteMany: async () => {},findMany:async()=>[{id:'gid://shopify/Product/1',collections:[]}]},
     $queryRaw: async () => [],
   };
+  let indexed=[];
   const index = new Proxy({
     deleteDocument: async () => {},
-    addDocuments: async () => { if(failIndex) throw Error("index unavailable"); return {taskUid:1}; },
+    addDocuments: async docs => { if(failIndex) throw Error("index unavailable"); indexed=docs;return {taskUid:1}; },
+    search:async()=>({hits:indexed}),
   }, {get: (target,key) => target[key] || (async () => ({}))});
   const mocks = {
+    './productCollections.server.js':memberships,
     '../utils/searchIndexProjection.js': searchProjection,
     "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },
     "../db.server": {__esModule:true,default:prisma},
@@ -35,11 +39,13 @@ async function fixture({ failSetup = false, failIndex = false, finalizationGate,
     "../utils/semanticSearch.js": {},
   };
   const source = (await fs.readFile("app/services/sync.server.js","utf8"))
-    .replace('await import("./orders.server.js")','({syncHistoricalOrders: finishOrders})');
+    .replace('await import("./orders.server.js")','({syncHistoricalOrders: finishOrders})')
+    .replace('await smartUpsertProduct(shop, product, prisma);','await pretendPersist(product);');
   const context = {module:{exports:{}}, exports:{}, require:name=>mocks[name],
     process:{env:{}}, console:{log(){},error(){},warn(){}},
     setTimeout: callback=>callback(), setInterval: callback=>{heartbeat=callback;return {unref(){}};},
     clearInterval:()=>{cleared=true;}, finishOrders:async()=>{if(finalizationGate) await finalizationGate;},
+    pretendPersist:async()=>{},
   };
   vm.runInNewContext((await transform(source,{format:"cjs"})).code,context);
   const admin = {graphql:async (query,{variables}={})=>({json:async()=>{
@@ -47,7 +53,7 @@ async function fixture({ failSetup = false, failIndex = false, finalizationGate,
     if(query.includes("getPublishedCollections")) return {data:{collections:{nodes:[],pageInfo:{hasNextPage:false}}}};
     assert.equal(variables.cursor,"last-saved");
     assert.ok(query.includes("products(first: 10"));
-    return {data:{products:{nodes:(failIndex || morePages)?[{id:"gid://shopify/Product/1",status:"DRAFT"}]:[],pageInfo:{hasNextPage:morePages,endCursor:"end"}}}};
+    return {data:{products:{nodes:failMembership?[{id:'gid://shopify/Product/1',status:'ACTIVE',publishedAt:'2026-10-18',options:[],images:{nodes:[]},tags:[],variants:{nodes:[{id:'gid://shopify/ProductVariant/1',price:'100',availableForSale:true,inventoryQuantity:1,selectedOptions:[]}]},collections:{nodes:[{id:'gid://shopify/Collection/1'}],pageInfo:{hasNextPage:false}}}]:(failIndex || morePages)?[{id:"gid://shopify/Product/1",status:"DRAFT"}]:[],pageInfo:{hasNextPage:morePages,endCursor:"end"}}}};
   }})};
   return {run:options=>context.module.exports.runProductSync("job","fixture.myshopify.com",admin,options),updates,
     heartbeat:()=>heartbeat(),cleared:()=>cleared};
@@ -64,6 +70,9 @@ test("index submission failure never advances the saved cursor",async()=>{
   const f=await fixture({failIndex:true});await assert.rejects(f.run(),/index unavailable/);
   assert.equal(f.updates.at(-1).status,"FAILED");
   assert.ok(!f.updates.some(update=>update.cursor));
+});
+test('persisting the product without its membership cannot advance the checkpoint',async()=>{
+ const f=await fixture({failMembership:true});await assert.rejects(f.run(),/membership verification failed/);assert.ok(!f.updates.some(u=>u.cursor));assert.equal(f.updates.at(-1).status,'FAILED');
 });
 
 test("end-cursor resume finishes finalization with a live heartbeat before completing",async()=>{

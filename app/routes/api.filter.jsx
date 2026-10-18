@@ -10,6 +10,7 @@ import {
   getActivePinningRuleForCollection,
   getActivePinningRuleForSearch,
   buildMeiliIncludeFilters,
+  buildIncludeWhereClause,
   buildMeiliRuleFilter,
   selectMerchandisingVariant,
 } from "../services/merchandising.server";
@@ -550,10 +551,20 @@ export const loader = async ({ request, context }) => {
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if (activePinnedList.length) {
+      let pinCollectionScope = {};
+      // Imported collection pins position eligible products; they do not grant
+      // membership. Legacy/manual pin rules and search retain their contract.
+      if (useCollectionPagination && resolvedCollectionId && activePinningRule?.collectionSortKey) {
+        let targets;
+        try { targets = JSON.parse(activePinningRule.collectionSortKey); } catch { /* Legacy key. */ }
+        if (Array.isArray(targets) && targets.length) {
+          const collectionId = `gid://shopify/Collection/${String(resolvedCollectionId).split('/').pop()}`;
+          const includeScope = buildIncludeWhereClause(includeConditions);
+          pinCollectionScope = { OR: [{ collections: { some: { collectionId } } }, ...(includeScope?.OR || [])] };
+        }
+      }
       const validPins = await prisma.product.findMany({
-        // An explicit pin supplies collection membership for this rule. Keep
-        // shop, active and stock eligibility without requiring a collection link.
-        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
+        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...pinCollectionScope, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
         select: parsedQuery?.colorIntent?.requested.length ? { id: true, options: true, variants: true } : { id: true },
       });
       const validIds = new Set(validPins.filter(product => {
@@ -748,6 +759,7 @@ export const loader = async ({ request, context }) => {
     // visitors also need no facet queries until that ranking is usable.
     if (useRankedCollectionPagination && !rankingSession) {
       preparedSpec = {
+        pinEligibilityVersion: 1,
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },

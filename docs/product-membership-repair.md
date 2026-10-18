@@ -25,10 +25,10 @@ Coordinate repair with other catalog updates; DB and index writes are not one
 cross-system transaction. Products removed/unpublished during the repair require
 the normal product lifecycle sync instead.
 
-Pin eligibility is outside this repair. Accepting an outside-collection pin in
-an editor does not prove it is displayed by SoBooster. The audit observed five
-such Plus Size pins absent from SoBooster's results; its eligibility behavior
-still needs verification. Current explicit-pin behavior is preserved.
+Pin eligibility is outside this repair. Imported collection pins now require
+membership or a matching Include rule; legacy/manual pin rules retain their
+existing behavior. See [collection membership integrity](collection-membership-integrity.md)
+for verification and rolling reconciliation safeguards.
 
 Deploying this code does not automatically run a production membership repair.
 Matching Shopify membership

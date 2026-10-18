@@ -232,6 +232,19 @@ async function handleAppUninstalled(shop) {
 }
 
 export function initWebhookWorker() {
+  global.__scheduleMembershipAudits = async () => {
+    const {scheduleMembershipAudits} = await import('../services/collectionMembershipAudit.server.js');
+    return scheduleMembershipAudits();
+  };
+  if (!global.__collectionMembershipWorker) {
+    global.__collectionMembershipWorker = new Worker('collectionMembershipQueueV1', async job => {
+      if(job.name!=='VERIFY_COLLECTION_MEMBERSHIP')throw Error('Unknown membership audit job');
+      const {processMembershipAudit}=await import('../services/collectionMembershipAudit.server.js');
+      return processMembershipAudit(job.data);
+    }, {connection:{...redisOptions,maxRetriesPerRequest:null},concurrency:1});
+    global.__collectionMembershipWorker.on('error',error=>console.error('CFP Membership Worker:',error.message));
+    global.__collectionMembershipWorker.on('failed',(job,error)=>console.error('CFP Membership audit failed:',job?.id,error.message));
+  }
   global.__schedulePublicCollectionWarmups = async () => {
     const { scheduleRegisteredCollectionWarmups } = await import('../services/collectionPreparation.server.js');
     return scheduleRegisteredCollectionWarmups();

@@ -31,3 +31,21 @@ export async function completeProductCollections(admin, product) {
   product.collections = { nodes: [...new Map(nodes.map(node => [node.id, node])).values()], pageInfo };
   return product;
 }
+
+const sameIds = (a, b) => JSON.stringify([...new Set(a)].sort()) === JSON.stringify([...new Set(b)].sort());
+
+// A submitted index task or a product count cannot prove relationships were saved.
+export async function verifyMembershipWrites(db, index, shop, products, documents) {
+  if (!products.length) return;
+  const rows = await db.product.findMany({where:{shop,id:{in:products.map(p=>p.id)}},select:{id:true,collections:{select:{collectionId:true}}}});
+  const hits = (await index.search('', {filter:[`shop = ${JSON.stringify(shop)}`, `id IN [${products.map(p=>JSON.stringify(p.id.split('/').pop())).join(',')}]`],limit:products.length,attributesToRetrieve:['id','shop','collections']})).hits;
+  for (const product of products) {
+    const row = rows.find(p=>p.id===product.id), doc = documents.find(p=>String(p.id)===product.id.split('/').pop());
+    const indexed = hits.find(p=>String(p.id)===product.id.split('/').pop());
+    if (!row || !doc || !indexed || indexed.shop!==shop ||
+        !sameIds(row.collections.map(c=>c.collectionId),product.collections.nodes.map(c=>c.id)) ||
+        !sameIds(indexed.collections || [],doc.collections || [])) {
+      throw new Error('Product membership verification failed; sync checkpoint was not advanced');
+    }
+  }
+}

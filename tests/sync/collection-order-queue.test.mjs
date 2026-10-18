@@ -22,7 +22,7 @@ test('collection order queue is independent, retrying and reused on reload', asy
   assert.equal(order.options.defaultJobOptions.backoff.type, 'exponential');
   vm.runInNewContext(`(function(){${source}\n})();`, context);
   assert.equal(context.module.exports.collectionOrderQueue, order);
-  assert.equal(queues.length, 3);
+  assert.equal(queues.length, 4);
 });
 
 test('order worker runs without consuming webhook slots and retries failures', async () => {
@@ -46,7 +46,7 @@ test('order worker runs without consuming webhook slots and retries failures', a
   });
   vm.runInContext(source, context);
   vm.runInContext('initWebhookWorker(); initWebhookWorker();', context);
-  assert.equal(workers.length, 3);
+  assert.equal(workers.length, 4);
   const order = workers.find(worker => worker.name === 'collectionOrderQueueV1');
   assert.equal(order.options.concurrency, 1);
   assert.equal(order.options.connection.maxRetriesPerRequest, null);
