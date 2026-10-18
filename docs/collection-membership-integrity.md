@@ -1,9 +1,11 @@
 # Collection membership integrity
 
-Imported collection pin lists (identified by their saved collection ID targets)
+Imported collection pin lists with Include rules (identified by their saved collection ID targets)
 position products that are already members or match a collection Include rule.
 They do not grant membership. Exact tags remain distinct. Legacy/manual pin rules
-and search behavior retain their existing contract. New preparation identities
+and search behavior retain their existing contract. Collections without Include
+rules retain explicit outside-collection pins, as observed in live Cocktail.
+New preparation identities
 invalidate older rankings; existing paging sessions remain frozen until reloaded.
 
 Full sync verifies each active product's complete DB membership and its intended

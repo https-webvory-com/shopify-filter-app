@@ -8,6 +8,7 @@ export async function scheduleMembershipAudits() {
   const shops=await prisma.collection.findMany({distinct:['shop'],select:{shop:true}});
   for(const {shop} of shops){
     if(!validShop(shop))continue;
+    if(!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))continue;
     // Full sync already verifies its writes; avoid competing for its API budget.
     if(await prisma.syncJob.findFirst({where:{shop,status:'IN_PROGRESS',updatedAt:{gte:new Date(Date.now()-900000)},OR:[{kind:'PRODUCTS'},{kind:null}]},select:{id:true}}))continue;
     const id='memberships-'+createHash('sha256').update(shop).digest('hex');

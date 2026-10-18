@@ -553,8 +553,9 @@ export const loader = async ({ request, context }) => {
     if (activePinnedList.length) {
       let pinCollectionScope = {};
       // Imported collection pins position eligible products; they do not grant
-      // membership. Legacy/manual pin rules and search retain their contract.
-      if (useCollectionPagination && resolvedCollectionId && activePinningRule?.collectionSortKey) {
+      // membership for Include-driven lists. Collections without Include rules,
+      // legacy/manual pin rules and search retain their existing contract.
+      if (useCollectionPagination && resolvedCollectionId && includeConditions.length && activePinningRule?.collectionSortKey) {
         let targets;
         try { targets = JSON.parse(activePinningRule.collectionSortKey); } catch { /* Legacy key. */ }
         if (Array.isArray(targets) && targets.length) {
@@ -759,7 +760,7 @@ export const loader = async ({ request, context }) => {
     // visitors also need no facet queries until that ranking is usable.
     if (useRankedCollectionPagination && !rankingSession) {
       preparedSpec = {
-        pinEligibilityVersion: 1,
+        pinEligibilityVersion: 2,
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },

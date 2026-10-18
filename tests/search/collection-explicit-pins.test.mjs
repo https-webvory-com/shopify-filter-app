@@ -8,7 +8,8 @@ import * as ranked from '../../app/utils/rankedCollectionPage.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 
-for(const imported of [false,true]) for(const sortBy of ['best-selling','manual']) test(`${sortBy}: ${imported?'imported pins require membership or exact Include eligibility':'legacy pins retain explicit outside-collection behavior'}`,async()=>{
+for(const mode of ['legacy','imported-include','imported-no-include']) for(const sortBy of ['best-selling','manual']) test(`${sortBy}: ${mode} pin eligibility`,async()=>{
+  const imported=mode==='imported-include',bound=mode!=='legacy';
   const shop='fixture.myshopify.com',collection='gid://shopify/Collection/1';
   const full=id=>`gid://shopify/Product/${id}`;
   const outside=new Set([3,7,14,24,26,28,29,30,32]);
@@ -38,7 +39,7 @@ for(const imported of [false,true]) for(const sortBy of ['best-selling','manual'
   const mocks={
     'react-router':{data:(v,opts)=>({...v,_status:opts?.status??200})},'../db.server':{default:prisma},
     '../utils/searchColor.js':color,'../utils/availableVariants.js':variants,'../utils/spellingCorrection.js':{spellingCorrection},
-    '../services/merchandising.server':{...merch,getActiveRuleForCollection:async()=>imported?{conditions:[{action:'Include',field:'Tags',value:'Top Sequins'}]}:null,getActivePinningRuleForCollection:async()=>({products:pins,collectionSortKey:imported?'[1]':null})},
+    '../services/merchandising.server':{...merch,getActiveRuleForCollection:async()=>imported?{conditions:[{action:'Include',field:'Tags',value:'Top Sequins'}]}:null,getActivePinningRuleForCollection:async()=>({products:pins,collectionSortKey:bound?'[1]':null})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{default:meili},
     '../services/semanticSearch.server':{semanticMultiSearch:queries=>meili.multiSearch({queries})},
     '../services/searchRanking.server.js':{},'../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
