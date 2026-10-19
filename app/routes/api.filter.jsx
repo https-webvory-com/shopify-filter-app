@@ -67,8 +67,10 @@ export const loader = async ({ request, context }) => {
         }
       });
     }
-    if(!context?.rankingWarmup&&isPublicCollectionCards(request)){
-      const ready=await getPreparedCollectionCards(request);if(ready)return ready;
+    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&isPublicCollectionCards(request)){
+      // Trusted background rendering can reuse validated cards, but must never
+      // create a shopper's browsing session while probing readiness.
+      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true});if(ready)return ready;
     }
 
     // ── 0. Parse ALL query parameters upfront ─────────────────────────

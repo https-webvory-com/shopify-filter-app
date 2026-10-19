@@ -20,8 +20,8 @@ async function fixture() {
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
     return rows.slice(offset,offset+options.take).map(({id})=>({id}));
   }}};
-  let loadingResponse=()=>Response.json({warmup:true});
-  const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse();},require:name=>{
+  let loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
+  const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse(request,context);},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
@@ -196,10 +196,37 @@ test('product updates precompute affected collections without any prior visitor 
 });
 
 
-test('catalog completion distinguishes ready rankings from materialized cards',async()=>{
- for(const stored of [true,false]){
-  const f=await fixture();let calls=0;f.setResponse(()=>++calls===1?Response.json({warmup:true}):Response.json({products:[]},{headers:stored?{'X-CFP-Collection-Cards':'stored'}:{}}));
+test('catalog completion requires stored or validated existing cards',async()=>{
+ for(const state of ['stored','hit']){
+  const f=await fixture();let calls=0;f.setResponse(()=>++calls===1?Response.json({warmup:true}):Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':state}}));
   const result=await f.processCollectionWarmups('fixture.myshopify.com',null,{url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
-  assert.equal(result.rankingContextsReady,1);assert.equal(result.cardContextsReady,stored?1:0);assert.equal(result.cardContextsUnavailable,stored?0:1);
+  assert.equal(result.rankingContextsReady,1);assert.equal(result.cardContextsReady,1);assert.equal(result.cardContextsUnavailable,0);
  }
+});
+
+test('catalog card misses, pending responses and render/storage failures retry the same unfinished context',async()=>{
+ const record={url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'};
+ for(const failure of ['miss','pending','error','throw','unknown','empty']){
+  const f=await fixture();let fail=true,calls=0;
+  f.setResponse((_request,context)=>{
+   calls++;if(!context.rankingCardsPrecompute)return Response.json({warmup:true});
+   if(!fail)return Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}});
+   if(failure==='throw')throw Error('Storage unavailable');
+   return Response.json({products:[]},{status:failure==='pending'?202:failure==='error'?503:200,
+    headers:{'X-CFP-Collection-Cards':failure==='empty'?'':failure==='unknown'?'unexpected':failure==='pending'||failure==='error'?'stored':'miss'}});
+  });
+  await assert.rejects(f.processCollectionWarmups('fixture.myshopify.com',null,record),{code:'COLLECTION_CARDS_NOT_READY'});
+  assert.equal(f.writes.filter(w=>w[0]==='queue').length,0);
+  fail=false;const result=await f.processCollectionWarmups('fixture.myshopify.com',null,record);
+  assert.equal(result.cardContextsReady,1);assert.equal(result.cardContextsUnavailable,0);assert.equal(calls,4);
+ }
+});
+
+test('catalog jobs use bounded exponential retries while recent warmups still finish other contexts',async()=>{
+ const f=await fixture();f.seeds.push({shop:'fixture.myshopify.com',collectionHandle:'seed',country:'IN',locale:'en'});f.catalog.push({shop:'fixture.myshopify.com',id:'gid://shopify/Collection/1'});
+ f.setResponse((_request,context)=>context.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'miss'}}):Response.json({warmup:true}));
+ const result=await f.processCollectionWarmups('fixture.myshopify.com');assert.equal(result.cardContextsUnavailable,1);assert.equal(result.cardContextsReady,0);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);
+ assert.equal(jobs[0][3].attempts,5);assert.equal(jobs[0][3].backoff.type,'exponential');assert.equal(jobs[0][3].backoff.delay,10000);
+ await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);
 });

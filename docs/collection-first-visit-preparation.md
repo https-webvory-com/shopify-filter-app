@@ -300,3 +300,43 @@ GIN index, Prisma byte/array round trips, two-client advisory-lock concurrency,
 per-shop budgets/expiry, reset rejection, missing-table fallback and rollback.
 These local results do not establish live-store timing or complete live catalog
 readiness. The user explicitly selected local-only completion.
+
+### Product-card preparation retries
+
+A catalog job now completes only when its cards return HTTP 200 with a
+`X-CFP-Collection-Cards` value of `stored` or `hit`. A ready ranked ID list alone
+does not count as complete. Card misses, pending responses, render/storage errors
+and missing readiness headers fail that same catalog job so BullMQ can retry.
+New catalog jobs have five attempts with exponential backoff starting at ten
+seconds. Retries release the single ranking lane while delayed, allowing other
+collections and higher-priority visitor jobs to proceed. Existing queued jobs
+retain their original retry options; the stricter completion check applies when
+they execute. No queue reset or duplicate preparation job is needed.
+
+Recent-context sweeps still continue past an unavailable card context and enqueue
+the normal per-collection catalog jobs. A periodic sweep can reschedule exhausted
+catalog jobs after the existing failure cooldown; five attempts is a bound on
+each job, not a permanent ban on preparing that collection.
+
+Trusted background card requests now probe validated snapshots without creating
+shopper sessions. A valid hit avoids the remaining rendering pipeline. A stale
+snapshot still falls back to canonical preparation and cannot bypass product,
+order, rule or configuration validation. This change does not enable the theme's
+head embed, alter ranking rules, or guarantee readiness for every market.
+
+Additional queue verification:
+
+```sh
+node tests/collection-loading/run-card-preparation-retries.mjs
+```
+
+This uses the existing Redis test harness with an isolated UUID namespace. It
+exercises the actual catalog warmup service and BullMQ retries, successful reuse,
+visitor priority, retry exhaustion and preservation of protected session keys.
+It never clears or modifies merchant queue/cache keys.
+
+Local validation for this retry increment: 652/652 regressions, 29/29 browser
+fixture checks, three real BullMQ lifecycle checks, production build, syntax
+checks and `git diff --check` passed. No schema/theme change is needed for this
+increment. Deploy the backend and worker together when authorized; no deployment
+or merchant-rule changes were performed during implementation.

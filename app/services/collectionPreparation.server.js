@@ -122,7 +122,8 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null)
       // background catalog between jobs. Ranking concurrency stays at one.
       // FIFO among catalog/recent builds preserves progress through unseen
       // collections; bounded prerequisite sweeps run ahead at priority 5.
-      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:10});
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:10,
+        attempts:5,backoff:{type:'exponential',delay:10000}});
     }
     if(rows.length<100)return;cursor=rows.at(-1).id;
   }
@@ -211,13 +212,19 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     if(payload?.warmup===true){
       result.rankingContextsReady++;
       const cardsUrl=new URL(normalized.url);cardsUrl.searchParams.set('responseProfile','collection-cards-v1');
+      let cardsReady=false;
       try{
         const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
-        if(cards.status===200&&cards.headers?.get('X-CFP-Collection-Cards')==='stored'){
+        cardsReady=cards.status===200&&['stored','hit'].includes(cards.headers?.get('X-CFP-Collection-Cards'));
+        if(cardsReady){
           result.cardContextsReady++;
           console.info('CFP: collection cards ready',JSON.stringify({shop,collectionId:normalized.collectionId}));
         }else result.cardContextsUnavailable++;
       }catch(error){result.cardContextsUnavailable++;console.error('CFP: Optional collection cards warmup unavailable:',error.name);}
+      // Catalog jobs own one context. A ranked ID list without reusable cards
+      // is unfinished work; let BullMQ back off and retry this same job rather
+      // than report completion or enqueue duplicate immediate work.
+      if(catalogRecord&&!cardsReady)throw Object.assign(Error('Collection catalog cards are not ready'),{code:'COLLECTION_CARDS_NOT_READY'});
     }
   }
   // Product/rule saves must cover catalog collections even when their URLs are
