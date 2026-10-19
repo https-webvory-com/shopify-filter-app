@@ -5,6 +5,7 @@ application_url = "https://aisearchfilter.webvory.com"
 embedded = true
 name = "AI Search & Filter"
 handle = "ai-smart-search-filter"
+web_directories = ["."]
 
 [webhooks]
 api_version = "2026-07"
