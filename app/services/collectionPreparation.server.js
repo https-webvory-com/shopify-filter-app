@@ -203,6 +203,17 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
       if(response.status>=400||payload?.warmup!==true)throw Error('Collection catalog preparation is not ready');
       console.info('CFP: collection catalog ready',JSON.stringify({shop,collectionId:normalized.collectionId,url:normalized.url}));
     }
+    // Materialize cards too; a saved ID sequence alone still leaves the first
+    // shopper waiting for product shaping and facet work. No sessions are
+    // persisted by this trusted background-only rendering context.
+    if(payload?.warmup===true){
+      const cardsUrl=new URL(normalized.url);cardsUrl.searchParams.set('responseProfile','collection-cards-v1');
+      try{
+        const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
+        if(cards.status===200&&cards.headers?.get('X-CFP-Collection-Cards')==='stored')
+          console.info('CFP: collection cards ready',JSON.stringify({shop,collectionId:normalized.collectionId}));
+      }catch(error){console.error('CFP: Optional collection cards warmup unavailable:',error.name);}
+    }
   }
   // Product/rule saves must cover catalog collections even when their URLs are
   // absent from the recent-visitor registry. Jobs yield after each collection.

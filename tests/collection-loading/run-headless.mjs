@@ -19,7 +19,11 @@ const chrome=spawn(process.env.HEADLESS_CHROME_PATH||'C:\\Program Files\\Google\
 ],{windowsHide:true,stdio:['ignore','ignore','pipe']});
 let stderr='';chrome.stderr.on('data',chunk=>stderr+=chunk.toString());
 const results=[];let socket;
-const control=async values=>{const response=await fetch(origin+'/__control',{method:'POST',body:JSON.stringify(values)});return response.json();};
+// Track the intentional facet follow-up separately from product delivery/polling.
+const phases=data=>({...data,allRequests:data.requests,facetResponses:data.requests.filter(r=>r.profile==='collection-v1'&&r.page==='1'&&r.token),requests:data.requests.filter(r=>!(r.profile==='collection-v1'&&r.page==='1'&&r.token))});
+const getState=async()=>phases(await(await fetch(origin+'/__state')).json());
+let beforeReset=async()=>{};
+const control=async values=>{if(values.reset)await beforeReset();const response=await fetch(origin+'/__control',{method:'POST',body:JSON.stringify(values)});return phases(await response.json());};
 try{
   let endpoint;
   for(let i=0;i<100;i++){endpoint=stderr.match(/DevTools listening on (ws:\/\/\S+)/)?.[1];if(endpoint)break;if(chrome.exitCode!==null)throw Error('Headless Chrome exited before connecting');await delay(100);}
@@ -36,8 +40,10 @@ try{
   const wait=async(expression,timeout=20000)=>{const start=Date.now();while(Date.now()-start<timeout){if(await evaluate(expression))return;await delay(100);}throw Error('Timed out: '+expression);};
   const cards=()=>evaluate(`[...document.querySelectorAll('.cfp-product-card--reveal')].map(c=>c.querySelector('a').getAttribute('href').match(/dress-(\\d+)/)[1])`);
   const navigate=async(query='')=>{await send('Page.navigate',{url:origin+'/collections/fixture'+query});await wait('window._cfpInitStarted===true');};
-  const test=async(name,fn)=>{if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
+  let selected=!process.argv.some(a=>a.startsWith('--from='));
+  const test=async(name,fn)=>{if(!selected){selected=name.startsWith(process.argv.find(a=>a.startsWith('--from=')).slice(7));if(!selected)return;}if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
+  beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
   console.log('Headless browser connected: '+version.product);
@@ -55,16 +61,30 @@ try{
     await wait("document.querySelector('.cfp-product-card--reveal img').naturalWidth>0",15000);
     assert.deepEqual(await evaluate('browserErrors'),[]);return snapshot;
   });
+  await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{
+    await control({reset:true,hold:true,precompute:true,early:true,assetDelay:200,apiDelay:300,facetDelay:3000,clockOffset:0,cssDelay:0});
+    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const first=await cards(),at=await evaluate('cardSnapshots[0].at');if(!redisLayer)assert.ok(at<2000,'Cards exceeded fixture target: '+at);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')"),true);
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",10000);
+    assert.deepEqual(await cards(),first);let data=await getState();assert.equal(data.requests.length,1);assert.equal(data.facetResponses.length,1);
+    await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");await wait("!!document.querySelector('.cfp-facet-error')");
+    assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
+    await control({facetFailure:false});await evaluate("document.querySelector('.cfp-facet-error button').click()");await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({hold:false,early:false,assetDelay:0,apiDelay:0});
+    return {cardsMs:Math.round(at),facetDelayMs:3000,twoSecondTargetMet:at<2000,liveTiming:false};
+  });
   await test('a repeat page uses the prepared cache without another build',async()=>{
     const start=Date.now();await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",8000);
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,1);return {browserReadyMs:Date.now()-start,builds:data.state.builds};
+    const data=await getState();assert.equal(data.state.builds,1);return {browserReadyMs:Date.now()-start,builds:data.state.builds};
   });
   let oldToken,oldIds;
   await test('load more keeps token order without duplicate products and puts zero-price product last',async()=>{
     oldToken=await evaluate("new URL(location.href).searchParams.get('rankingToken')");
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
     oldIds=await cards();assert.equal(new Set(oldIds).size,30);assert.equal(oldIds.at(-1),'3');
-    const data=await(await fetch(origin+'/__state')).json();assert.ok(data.requests.some(r=>r.page==='2'&&r.token===oldToken&&r.status===200));return {products:oldIds.length,zeroPriceLast:oldIds.at(-1)};
+    const data=await getState();assert.ok(data.requests.some(r=>r.page==='2'&&r.token===oldToken&&r.status===200));return {products:oldIds.length,zeroPriceLast:oldIds.at(-1)};
   });
   await test('pin/rule changes affect a new visit while an existing page-two token stays consistent',async()=>{
     await control({invalidate:true,pin:'4',boost:'5',delay:1800,priceDelay:50,imageDelay:50});
@@ -80,9 +100,9 @@ try{
     await wait("(async()=>{const data=await(await fetch('/__state')).json();return data.requestStarts.some(r=>r.sort==='price-ascending');})()");
     await evaluate("document.querySelector('[data-value=\"best-selling\"]').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const before=(await(await fetch(origin+'/__state')).json()).requestStarts.filter(r=>r.sort==='price-ascending').length;
+    const before=(await getState()).requestStarts.filter(r=>r.sort==='price-ascending').length;
     assert.equal(before,1);
-    await delay(2200);const after=(await(await fetch(origin+'/__state')).json()).requestStarts.filter(r=>r.sort==='price-ascending').length;
+    await delay(2200);const after=(await getState()).requestStarts.filter(r=>r.sort==='price-ascending').length;
     assert.equal(after,before);assert.deepEqual((await cards()).slice(0,2),['4','5']);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('mega menu paints above the sticky filter toolbar',async()=>{
@@ -107,41 +127,41 @@ try{
   await test('unavailable preparation stops polling, shows Retry, and recovers after Retry',async()=>{
     await control({reset:true,hold:true});await navigate();await wait("!!document.querySelector('.cfp-order-error button')",110000);
     assert.equal((await cards()).length,0);assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
-    const before=(await(await fetch(origin+'/__state')).json()).requests.length;assert.equal(before,31);
-    await delay(1400);assert.equal((await(await fetch(origin+'/__state')).json()).requests.length,before);
+    const before=(await getState()).requests.length;assert.equal(before,31);
+    await delay(1400);assert.equal((await getState()).requests.length,before);
     await control({invalidate:true,hold:false,delay:100});await evaluate("document.querySelector('.cfp-order-error button').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);assert.equal(await evaluate('!!document.querySelector(".cfp-order-error")'),false);
     return {boundedRequests:before,retryRecovered:true};
   });
-  await test('continuous unrelated product updates do not restart this collection ranking',async()=>{
-    await control({reset:true,delay:1500,stormCollection:'2'});await navigate();
+  await test('continuous unrelated product updates do not restart a native collection without external candidates',async()=>{
+    await control({reset:true,delay:1500,stormCollection:'2',noPins:true});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);
     await delay(1700);await control({stopStorm:true});
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,1);assert.equal(data.productRevision,'0');assert.deepEqual(data.queueFailures,[]);
+    const data=await getState();assert.equal(data.state.builds,1);assert.equal(data.productRevision,'0');assert.deepEqual(data.queueFailures,[]);
     return {builds:data.state.builds,unrelatedUpdatesDidNotInvalidate:true};
   });
   await test('continuous relevant updates do not starve a cold build or delete queue metadata',async()=>{
     await control({reset:true,delay:1500,stormCollection:'1'});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);await control({stopStorm:true});
-    const data=await(await fetch(origin+'/__state')).json();assert.ok(Number(data.productRevision)>0);assert.deepEqual(data.queueFailures,[]);assert.equal((await cards()).length,25);
+    const data=await getState();assert.ok(Number(data.productRevision)>0);assert.deepEqual(data.queueFailures,[]);assert.equal((await cards()).length,25);
     return {productUpdatesDuringBuild:Number(data.productRevision),cardsLoaded:true,unknownJobErrors:0};
   });
   await test('corrupt Redis preparation rebuilds and renders a fresh collection',async()=>{
     await control({reset:true,delay:100});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     await control({corruptPrepared:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,2);assert.deepEqual(data.queueFailures,[]);
+    const data=await getState();assert.equal(data.state.builds,2);assert.deepEqual(data.queueFailures,[]);
   });
   await test('expired page-two token automatically restarts once from page one',async()=>{
     const token=await evaluate("new URL(location.href).searchParams.get('rankingToken')");await control({expireTokens:true});
     await navigate('?page=2&rankingToken='+encodeURIComponent(token));await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     assert.ok([null,'1'].includes(await evaluate("new URL(location.href).searchParams.get('page')")));
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.requests.filter(r=>r.status===409).length,1);
+    const data=await getState();assert.equal(data.requests.filter(r=>r.status===409).length,1);
   });
   for(const action of ['archive','deleteProduct'])await test(action+' of a cached first-page product rebuilds instead of repeated broken tokens',async()=>{
     await control({reset:true,delay:100});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     await control({[action]:'30'});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     assert.ok(!(await cards()).includes('30'));
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,2);assert.equal(data.requests.filter(r=>r.status===409).length,1);
+    const data=await getState();assert.equal(data.state.builds,2);assert.equal(data.requests.filter(r=>r.status===409).length,1);
   });
   for(const failure of ['html','empty'])await test('invalid '+failure+' API response shows Retry and recovers',async()=>{
     await control({reset:true,apiFailure:failure});await navigate();await wait("!!document.querySelector('.cfp-order-error button')");assert.equal((await cards()).length,0);
@@ -159,15 +179,15 @@ try{
     await control({reset:true,colorRule:true,delay:100});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     assert.deepEqual((await cards()).slice(0,2),['1','30']);
     assert.ok(await evaluate("document.querySelector('.cfp-product-card--reveal img').src.includes('/image/1.svg')"));
-    const data=await(await fetch(origin+'/__state')).json();assert.equal(data.state.builds,1);assert.deepEqual(data.queueFailures,[]);assert.deepEqual(await evaluate('browserErrors'),[]);
+    const data=await getState();assert.equal(data.state.builds,1);assert.deepEqual(data.queueFailures,[]);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {variantRuleAcrossBatches:true,firstProducts:(await cards()).slice(0,2)};
   });
   await test('early first-page request overlaps deferred asset loading without duplicate requests',async()=>{
     await control({reset:true,delay:10,clockOffset:0,early:false,assetDelay:0,apiDelay:0});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     await control({assetDelay:1000,apiDelay:700,early:false});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const before=await evaluate('cardSnapshots[0].at');const beforeIds=await cards();const stateBefore=await(await fetch(origin+'/__state')).json();
+    const before=await evaluate('cardSnapshots[0].at');const beforeIds=await cards();const stateBefore=await getState();
     await control({early:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const after=await evaluate('cardSnapshots[0].at');const stateAfter=await(await fetch(origin+'/__state')).json();
+    const after=await evaluate('cardSnapshots[0].at');const stateAfter=await getState();
     assert.equal(stateAfter.requests.length-stateBefore.requests.length,1);assert.deepEqual(await cards(),beforeIds);assert.equal(stateAfter.state.builds,1);assert.ok(after<before-400,`Early request did not overlap latency: ${before} -> ${after}`);
     // Remote Redis tests include cross-region round trips from this workstation.
     // Record that end-to-end latency; only the controlled local fixture checks 2s.
@@ -178,26 +198,26 @@ try{
     await control({reset:true,early:true,earlyBeforeStyles:false,cssDelay:1000,assetDelay:0,apiDelay:700,delay:10});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const before=await evaluate('cardSnapshots[0].at');const ids=await cards();const old=await(await fetch(origin+'/__state')).json();
+    const before=await evaluate('cardSnapshots[0].at');const ids=await cards();const old=await getState();
     await control({earlyBeforeStyles:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const after=await evaluate('cardSnapshots[0].at');const current=await(await fetch(origin+'/__state')).json();
+    const after=await evaluate('cardSnapshots[0].at');const current=await getState();
     assert.deepEqual(await cards(),ids);assert.equal(current.requests.length-old.requests.length,1);
     assert.ok(after<before-350, 'CSS overlap did not improve timing: '+before+' -> '+after);
     assert.deepEqual(await evaluate('browserErrors'),[]);await control({cssDelay:0,earlyBeforeStyles:false});
     return {baselineCardsMs:Math.round(before),earlyCardsMs:Math.round(after),savedMs:Math.round(before-after),fixtureStylesheetDelayMs:1000,fixtureApiDelayMs:700,liveTiming:false};
   });
   await test('new visitor after eleven minutes receives last-good ranking while refresh waits',async()=>{
-    const before=await(await fetch(origin+'/__state')).json();await control({clockOffset:660000,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
+    const before=await getState();await control({clockOffset:660000,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const after=await getState();const requests=after.requests.slice(before.requests.length);
     assert.equal(requests.length,1);assert.ok([200,304].includes(requests[0].status));assert.equal(after.state.builds,before.state.builds);if(!redisLayer)assert.ok(await evaluate('cardSnapshots[0].at<2000'));assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),simulatedIdleMs:660000,refreshWorkerPaused:true,liveTiming:false};
   });
   await test('a new Shopify order does not blank the first page while the replacement worker is paused',async()=>{
     await control({reset:true,clockOffset:0,orderVersion:0,early:true,earlyBeforeStyles:true,assetDelay:0,cssDelay:0,apiDelay:0,delay:50});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const previous=await cards();const before=await(await fetch(origin+'/__state')).json();
+    const previous=await cards();const before=await getState();
     await control({orderVersion:1,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
+    const after=await getState();const requests=after.requests.slice(before.requests.length);
     assert.deepEqual(await cards(),previous);assert.equal(requests.length,1);assert.ok([200,304].includes(requests[0].status));
     assert.equal(after.state.builds,before.state.builds);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),refreshWorkerPaused:true,firstRequestStatus:requests[0].status,liveTiming:false};
@@ -206,7 +226,7 @@ try{
     await send('Network.clearBrowserCache');
     await control({reset:true,directFacts:true,colorRule:true,pin:'4',hold:true,delay:20000,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
-    const status=await(await fetch(origin+'/__state')).json();
+    const status=await getState();
     assert.equal(status.state.builds,0);
     assert.ok(status.trace.candidateBrowses>0);
     assert.equal(status.requests.filter(r=>r.status===202).length,0);
@@ -218,7 +238,7 @@ try{
     const before=await control({reset:true,pin:'5',colorRule:true,directFacts:false,hold:true,precompute:true,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});
     assert.equal(before.state.builds,1);assert.equal(before.requests.length,0);
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
-    const after=await(await fetch(origin+'/__state')).json();assert.equal(after.state.builds,1);
+    const after=await getState();assert.equal(after.state.builds,1);
     assert.equal(after.requests.length,1);assert.equal(after.requests[0].status,200);
     assert.deepEqual((await cards()).slice(0,2),['5','30']);
   });
@@ -226,21 +246,21 @@ try{
     await control({reset:true,pin:'6',colorRule:true,directFacts:false,hold:true,precompute:true,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});
     await control({invalidate:true});await send('Network.clearBrowserCache');await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
-    const after=await(await fetch(origin+'/__state')).json();assert.equal(after.state.builds,1);
+    const after=await getState();assert.equal(after.state.builds,1);
     assert.equal(after.requests.filter(r=>r.status===202).length,0);assert.deepEqual((await cards()).slice(0,2),['6','30']);
   });
   await test('unchanged maintained ranking serves a fresh browser after two hours with the worker paused',async()=>{
     const before=await control({reset:true,pin:'7',colorRule:true,directFacts:false,hold:true,precompute:true,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});
     assert.equal(before.state.builds,1);await control({clockOffset:7200000});
     await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
-    const after=await(await fetch(origin+'/__state')).json();assert.equal(after.state.builds,1);
+    const after=await getState();assert.equal(after.state.builds,1);
     assert.equal(after.requests.length,1);assert.equal(after.requests[0].status,200);
     assert.deepEqual((await cards()).slice(0,2),['7','30']);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){
-  const diagnostic=await(await fetch(origin+'/__state')).json().catch(()=>null);
+  const diagnostic=await getState().catch(()=>null);
   const queueCounts=redisLayer?await redisLayer.queue.getJobCounts('waiting','prioritized','active','failed','delayed'):null;
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({headless:true,results,error:error.message,diagnostic,queueCounts},null,2));
   process.exitCode=1;

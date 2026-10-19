@@ -506,7 +506,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         queryParams.set('responseProfile', 'collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
         if (String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
-          queryParams.set('responseProfile','collection-v2');
+          queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-cards-v1':'collection-v2');
       }
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
@@ -517,6 +517,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const rankingToken = rankedCollection ? collectionRankingTokens.get(rankingKey) || initialRankingToken : null;
       initialRankingToken = null;
       if (rankingToken) queryParams.set('rankingToken', rankingToken);
+      if(rankingToken&&queryParams.get('responseProfile')==='collection-cards-v1')queryParams.set('responseProfile','collection-v2');
       const displayUrl = new URL(window.location.href);
       displayUrl.searchParams.delete('rankingToken');
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
@@ -557,6 +558,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
+      clearTimeout(loadingNoticeTimer);loadingNotice?.remove();
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
         const readyUrl = new URL(window.location.href);
@@ -606,6 +608,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
+      if(data.cfpCards?.version===1){
+        sidebar.classList.add('cfp-loading');
+        await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart);
+      }
 
     } catch (e) {
       if (fetchSignal.aborted) return;
@@ -633,6 +639,35 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       clearTimeout(loadingNoticeTimer);
       loadingNotice?.remove();
     }
+  }
+
+  async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart){
+    if(signal.aborted)return;
+    const request=new URL(requestUrl);request.searchParams.set('responseProfile','collection-v1');
+    request.searchParams.set('rankingToken',cards.rankingToken);
+    const signature=JSON.stringify(cards.products);
+    try{
+      const response=await fetchCollectionResponse(request.toString(),signal);
+      if(signal.aborted)return;
+      if(response.status===409){
+        if(allowSessionRestart){collectionRankingTokens.clear();activeFilters.page=1;return fetchAndRenderData(false,false);}
+        throw Error('Collection changed');
+      }
+      const full=await response.json();
+      if(response.status!==200||full.rankingToken!==cards.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
+      if(signal.aborted)return;
+      if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
+      if(JSON.stringify(full.products)!==signature)renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
+      renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
+    }catch(error){
+      if(signal.aborted)return;
+      const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
+      const message=document.createElement('p');message.textContent='Filters are temporarily unavailable.';
+      const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
+      retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart);});
+      notice.append(message,retry);(sidebar.querySelector('.cfp-sidebar__body')||sidebar).prepend(notice);
+    }finally{if(!signal.aborted)sidebar.classList.remove('cfp-loading');}
   }
 
   function applyGlobalSettings(settings) {

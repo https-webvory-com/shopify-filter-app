@@ -17,6 +17,8 @@ import {processCollectionRankingJob} from '../../app/utils/processCollectionRank
 import {createCollectionResponseCache,collectionPageFingerprint} from '../../app/utils/collectionResponse.js';
 import * as collectionBootstrap from '../../app/utils/collectionBootstrap.js';
 import * as collectionResponse from '../../app/utils/collectionResponse.js';
+import * as collectionCards from '../../app/utils/collectionCards.js';
+import {createCollectionCardStore} from '../../app/utils/collectionCardStore.js';
 
 const shop='headless-fixture.myshopify.com';
 export async function createLoadingServer({redisLayer}={}) {
@@ -78,24 +80,30 @@ export async function createLoadingServer({redisLayer}={}) {
   async function dispatch(job){return processCollectionRankingJob(job,{prepare:preparation.process,warm,schedule});}
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
+  const cardStore=createCollectionCardStore({redis,
+    readState:async({preparedKey})=>({configuration:await redis.get(preparationRevisionKey(shop))||'0',products:await redis.get(productRevisionKey(shop,'1'))||'0',globalProducts:await redis.get(productRevisionKey(shop,'all'))||'0',hardAll:await redis.get('collectionRankingDataRevision:'+shop+':all')||'0',hardCollection:await redis.get('collectionRankingDataRevision:'+shop+':1')||'0',orderRevision:'native-order-v'+(state.orderVersion||0),preparedRaw:await redis.get(preparedKey)}),
+    validateCards:async(entry,prepared)=>{const result=await ranked.readRankedCollectionPage(index,{ids:prepared.ids,page:1,limit:25,shop,attributes:entry.attributes});return collectionPageFingerprint(result.hits)===entry.validationFingerprint;},
+    createSession:async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);},
+  });
   const responseCache=createCollectionResponseCache({readRevision:async()=>[
     String(await redis.get(preparationRevisionKey(shop))??'0'),String(await redis.get(productRevisionKey(shop,'all'))??'0'),
   ]});
   const mocks={
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
-    '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>({products:[{id:'gid://shopify/Product/'+state.pin}]}),
+    '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>state.noPins?null:({products:[{id:'gid://shopify/Product/'+state.pin}]}),
       getActiveRuleForCollection:async()=>({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
     '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:'gid://shopify/Collection/1',resolvedCollectionTitle:'Fixture collection',activeGroupFilters:[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>({ids:state.orderVersion?docs.map(p=>p.id):docs.map(p=>p.id).reverse(),revision:'native-order-v'+(state.orderVersion||0),status:'ready',updatedAt:1+(state.orderVersion||0)})},
-    '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,
+      '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,'../utils/collectionCards.js':collectionCards,
     '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.delete('responseProfile');u.searchParams.sort();return u.search;},
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
       saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata})===identity)return value;const token='fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{}},
-    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
+      '../services/collectionCards.server.js':{getPreparedCollectionCards:request=>state.cardSnapshots?cardStore.get(request):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||preparationKey(options.spec)}):null},
+    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay)await new Promise(r=>setTimeout(r,state.facetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
   };
@@ -111,7 +119,7 @@ export async function createLoadingServer({redisLayer}={}) {
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false});}
+        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false});}
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
         if(updates.invalidate){state.revision++;await invalidate(shop);}
@@ -134,12 +142,13 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/api/filter'){
         if(url.searchParams.get('responseProfile')!=='collection-config-v1')requestStarts.push({sort:url.searchParams.get('sortBy'),startedAt:Date.now()});
         if(state.apiDelay)await new Promise(resolve=>setTimeout(resolve,state.apiDelay));
+        if(res.destroyed)return;
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
         const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url,{headers:req.headers}),params:{},context:{}});
         const text=await response.text();const data=text?JSON.parse(text):{};
         const target=url.searchParams.get('responseProfile')==='collection-config-v1'?configurationRequests:requests;
-        target.push({page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
+        target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
         res.writeHead(response.status,Object.fromEntries(response.headers));res.end(text);return;
       }
       if(url.pathname.startsWith('/products/')){
@@ -153,7 +162,7 @@ export async function createLoadingServer({redisLayer}={}) {
       res.writeHead(404).end();
     }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });
-  return {server,state,trace,facetRequests,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
+  return {server,state,trace,facetRequests,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
     dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
 }

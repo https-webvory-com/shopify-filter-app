@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
-const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
+const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionFirstPage','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
 const productCaches = ['queryParserFacets','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
 export function isOwnedShopCache(key, shop, productOnly = false) {
   return (productOnly ? productCaches : owned).some(prefix => key === `${prefix}:${shop}` || key.startsWith(`${prefix}:${shop}:`)) ||

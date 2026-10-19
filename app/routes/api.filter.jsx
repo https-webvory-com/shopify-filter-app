@@ -26,6 +26,8 @@ import { getCollectionPreparationRevision, getPreparedCollectionRanking, discard
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 import { rankSearchResults } from "../services/searchRanking.server.js";
+import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprint} from '../utils/collectionCards.js';
+import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../services/collectionCards.server.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -44,6 +46,7 @@ export const loader = async ({ request, context }) => {
   let collectionResponse;
   let responsePageFingerprint;
   let getResponsePageFingerprint;
+  let cardSnapshot;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -63,6 +66,9 @@ export const loader = async ({ request, context }) => {
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
       });
+    }
+    if(!context?.rankingWarmup&&isPublicCollectionCards(request)){
+      const ready=await getPreparedCollectionCards(request);if(ready)return ready;
     }
 
     // ── 0. Parse ALL query parameters upfront ─────────────────────────
@@ -198,6 +204,7 @@ export const loader = async ({ request, context }) => {
         async () => {
           let resolvedCollectionId = collectionId;
           let resolvedCollectionTitle = "";
+          let resolvedCollectionHandle=collectionHandle||'';
 
           // Resolve collection handle → id/title
           if (collectionHandle) {
@@ -206,11 +213,12 @@ export const loader = async ({ request, context }) => {
             } else {
               const coll = await prisma.collection.findFirst({
                 where: { handle: collectionHandle, shop },
-                select: { id: true, title: true },
+                select: { id: true, title: true,handle:true },
               });
               if (coll) {
                 resolvedCollectionId = coll.id;
                 resolvedCollectionTitle = coll.title;
+                resolvedCollectionHandle=coll.handle||resolvedCollectionHandle;
               }
             }
           }
@@ -221,11 +229,12 @@ export const loader = async ({ request, context }) => {
               : `gid://shopify/Collection/${resolvedCollectionId}`;
             const coll = await prisma.collection.findUnique({
               where: { id: formattedId },
-              select: { id: true, title: true },
+              select: { id: true, title: true,handle:true },
             });
             if (coll) {
               resolvedCollectionTitle = coll.title;
               resolvedCollectionId = coll.id;
+              resolvedCollectionHandle=coll.handle||resolvedCollectionHandle;
             }
           }
 
@@ -272,7 +281,7 @@ export const loader = async ({ request, context }) => {
             if (defaultGroup) activeGroupFilters = defaultGroup.filters;
           }
 
-          return { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters };
+          return { resolvedCollectionId, resolvedCollectionTitle,resolvedCollectionHandle, activeGroupFilters };
         }
       ),
     ]);
@@ -560,6 +569,7 @@ export const loader = async ({ request, context }) => {
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual";
+    const cardsOnly=useRankedCollectionPagination&&isPublicCollectionCards(request);
     // Bestselling retains pins and merchandising; other selected sorts may override them.
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
@@ -798,9 +808,13 @@ export const loader = async ({ request, context }) => {
         } }, { status: prepared.status === 'failed' ? 503 : 202,
           headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Retry-After': '1' } });
       }
-      if (context?.rankingWarmup) return data({ warmup: true });
-      rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, prepared.cacheKey ? prepared.orderUpdatedAt : collectionBestSellingState.updatedAt ?? null, prepared.metadata);
+      if (context?.rankingWarmup&&!context?.rankingCardsPrecompute) return data({ warmup: true });
+      const updatedAt=prepared.cacheKey?prepared.orderUpdatedAt:collectionBestSellingState.updatedAt??null;
+      rankingSession = context?.rankingCardsPrecompute?
+        {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
+        await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
     }
+    if(cardsOnly&&preparedSpec)cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
     // Only updated collection clients opt into the lossless transport. Ranking
     // readiness and the immutable browsing session are established before reuse.
@@ -818,13 +832,27 @@ export const loader = async ({ request, context }) => {
     // Ranked search owns its counts, facets and page retrieval. Do not run a
     // second ordinary search whose products would immediately be discarded.
     const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
-    if (!needsRankedSearch) {
+    if(cardsOnly){
+      const result=await readRankedCollectionPage(meiliClient.index('products'),{
+        ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
+      });
+      responsePageFingerprint=collectionPageFingerprint(result.hits);
+      meiliRes={hits:result.hits,estimatedTotalHits:result.total};collectionPageTotal=result.total;
+      collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
+      collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
+    }
+    if (!needsRankedSearch&&!cardsOnly) {
     try {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
       // not force exhaustive hit-count ranking merely to obtain facets.
       const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
-      const multiSearchRes = await semanticMultiSearch(queryIndexes.map(i=>queries[i]));
+      const [multiSearchRes,rankedPage] = await Promise.all([
+        semanticMultiSearch(queryIndexes.map(i=>queries[i])),
+        useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
+          ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
+        }):null,
+      ]);
       if(useRankedCollectionPagination){
         const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
         queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
@@ -873,9 +901,7 @@ export const loader = async ({ request, context }) => {
         let result;
         if (useRankedCollectionPagination) {
           collectionRankingStatus = 'ready';
-          result = await readRankedCollectionPage(meiliClient.index("products"), {
-            ids: rankingSession.ids, page, limit, shop, batchOwner:meiliClient, attributes: mainQuery.attributesToRetrieve,
-          });
+          result = rankedPage;
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else {
@@ -1566,6 +1592,10 @@ export const loader = async ({ request, context }) => {
       },
     };
 
+    if(cardsOnly){
+      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint);
+      return collectionCardsResponse(responsePayload,stored?'stored':'miss');
+    }
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {

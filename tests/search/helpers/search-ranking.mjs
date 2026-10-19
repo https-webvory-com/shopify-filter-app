@@ -4,10 +4,15 @@ import { transform } from 'esbuild';
 import { createHash } from 'node:crypto';
 import * as color from '../../../app/utils/searchColor.js';
 import * as ranking from '../../../app/utils/rankedCollectionPage.js';
+import * as collectionCards from '../../../app/utils/collectionCards.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
-    if (!(name in mocks)) throw Error('Unexpected import ' + name);
+    if (!(name in mocks)) {
+      if(name==='../utils/collectionCards.js')return collectionCards;
+      if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
+      throw Error('Unexpected import ' + name);
+    }
     const value = mocks[name];
     return value && 'default' in value ? { __esModule: true, ...value } : value;
   } };

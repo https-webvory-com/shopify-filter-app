@@ -12,6 +12,7 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
   const evalArgs=(script,keyCount,...args)=>{
     const keys=args.slice(0,keyCount).map(physical),values=args.slice(keyCount);
     if(script.includes('ARGV[10]')){for(const index of [7,8,9])values[index]=physical(values[index]);}
+    else if(script.includes('string.len(ARGV[6])'))values[5]=physical(values[5]);
     else values[4]=physical(values[4]);
     return [script,keyCount,...keys,...values];
   };

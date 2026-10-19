@@ -23,9 +23,9 @@ test('filtered and later-page visits do not start speculative ranked requests',(
   for(const search of ['?page=2','?minPrice=50','?maxPrice=200','?vendors=Vendor','?option_Color=Blue','?q=dress','?options[Color][]=Blue','?tags[]=sale'])assert.equal(fixture(search).calls.length,0,search);
 });
 
-test('anonymous bootstrap starts alongside products while targeted requests retain the complete profile',()=>{
- const anonymous=fixture();assert.equal(anonymous.calls.length,1);assert.equal(anonymous.configurationCalls.length,1);
- assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-v2');assert.equal(anonymous.calls[0].options.signal,anonymous.configurationCalls[0].options.signal);
+test('anonymous cards include configuration without a second bootstrap while targeted requests retain the complete profile',()=>{
+ const anonymous=fixture();assert.equal(anonymous.calls.length,1);assert.equal(anonymous.configurationCalls.length,0);
+ assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-cards-v1');
  const privateVisit=fixture('','VIP');assert.equal(privateVisit.configurationCalls.length,0);assert.equal(new URL(privateVisit.calls[0].url).searchParams.get('responseProfile'),'collection-v1');
 });
 test('a different sort, filter, market, customer or shop rejects and aborts the early response',async()=>{

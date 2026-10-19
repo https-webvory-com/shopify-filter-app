@@ -53,3 +53,31 @@ test('an order refresh renders a complete usable first page and preserves existi
   assert.equal(new Set([...ids(original),...ids(before)]).size,30);
  }finally{f.dispose();}
 });
+
+test('cards are available without facet work and the same frozen token retrieves complete facets and page two',async()=>{
+ const f=await createLoadingServer();f.state.hold=true;
+ try{
+  await f.load(new Request(url));await f.prepareLast();
+  const baseline=await(await f.load(new Request(url))).json(),before=f.trace.facetQueries;
+  const cards=await(await f.load(new Request(url+'&responseProfile=collection-cards-v1'))).json();
+  assert.equal(cards.cfpCards.version,1);assert.equal(cards.facets,undefined);assert.equal(f.trace.facetQueries,before);
+  assert.deepEqual(cards.products,baseline.products);assert.equal(cards.rankingToken,baseline.rankingToken);
+  const facets=await(await f.load(new Request(url+'&rankingToken='+cards.rankingToken))).json();
+  assert.deepEqual(facets.products,cards.products);assert.deepEqual(facets.facets,baseline.facets);
+  const next=await(await f.load(new Request(url.replace('page=1','page=2')+'&rankingToken='+cards.rankingToken))).json();
+  assert.equal(new Set([...ids(cards),...ids(next)]).size,30);
+ }finally{f.dispose();}
+});
+
+test('background card snapshots avoid sessions and facets until the first browser and validate current products on reuse',async()=>{
+ const f=await createLoadingServer();f.state.hold=true;f.state.cardSnapshots=true;
+ try{
+  await f.load(new Request(url));await f.prepareLast();
+  const warmed=await f.load(new Request(url+'&responseProfile=collection-cards-v1'),{rankingWarmup:true,rankingCardsPrecompute:true});
+  assert.equal(warmed.headers.get('X-CFP-Collection-Cards'),'stored');assert.equal(f.trace.facetQueries,0);assert.equal(f.sessionCount(),0);
+  const before=f.trace.hydrations,response=await f.load(new Request(url+'&responseProfile=collection-cards-v1'));
+  assert.equal(response.headers.get('X-CFP-Collection-Cards'),'hit');const cards=await response.json();assert.equal(cards.products.length,25);assert.notEqual(cards.rankingToken,'background-cards');
+  assert.equal(f.trace.hydrations,before+25);assert.equal(f.trace.facetQueries,0);assert.equal(f.sessionCount(),1);
+  const second=await f.load(new Request(url.replace('page=1','page=2')+'&rankingToken='+cards.rankingToken));assert.equal(second.status,200);
+ }finally{f.dispose();}
+});

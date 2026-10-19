@@ -175,3 +175,53 @@ exact source versions, bounded profiles and tenant isolation. Browser fixtures
 verified the filtered compact-input path with the worker paused, plus an
 unchanged ranking after two simulated hours. These are local fixtures, not a
 post-deployment Feather timing or proof that every production context is ready.
+
+
+Cards-first delivery (local implementation, 2026-10-19):
+
+Anonymous, unfiltered first pages using best-selling, page 1 and 25 cards now
+opt into collection-cards-v1. This returns the existing correctly ordered cards
+and complete lossless configuration without querying facets. The browser renders
+cards immediately, then fetches filters/counts using the same frozen ranking
+token. A failed filter response leaves cards visible and offers Retry filters.
+Aborted requests cannot overwrite a newer sort/page. Existing clients, search,
+customer-specific rules, other sorts and filtered requests retain full delivery.
+Full ranked responses read facets and page products concurrently.
+
+Catalog/recent warmups also materialize card-only snapshots. These have a 24-hour
+maximum lifetime, 1024 entries and 24 MiB per-shop budget (including ID/handle
+aliases), and a 128 KiB compressed per-entry limit. Capacity is bounded; this
+does not assert that all collections/markets fit or are already prepared.
+Configuration, local product versions, hard invalidation epochs, native order
+revision, backing full sequence/metadata, and current first-page product documents
+are validated before reuse. Include/pin contexts also validate the global product
+version. Facets are never stored in this snapshot. Background rendering creates
+no shopper sessions; actual visits get immutable, URL-specific browsing tokens.
+A failed/slow optional lookup falls back within its 500 ms budget. There are no
+application timeout increases, ranking formula changes, or schema migrations.
+
+Unlike the earlier backend-only changes, this implementation also updates
+collectionFilterPro.js and collectionFilterPro.liquid. Both the backend and the
+Shopify extension assets must be released before the preview uses this path.
+Changes remain local. The two-second target refers to correctly ordered visible
+cards; images and market prices still load independently. A cold missing ranking
+uses existing preparation and can exceed the target. Network/Shopify HTML time
+also counts toward live timing. Controlled fixture results cannot establish a
+universal two-second production result or proprietary SoBooster internals.
+
+Schedule safety: snapshot reads check currently enabled collection-rule schedules
+in parallel with Redis state. Future rule activation and expiry invalidate reuse
+even without a settings write. A schedule boundary occurring during the initial
+request also prevents publishing a snapshot from that request.
+
+Browser verification: all 28 cases passed. In the controlled local first-visit
+fixture, cards rendered in 1555 ms with a 3000 ms facet delay, and failed facets
+preserved cards with a working retry. The deferred-asset case rendered cards in
+1144 ms with 1000 ms injected asset latency and 700 ms API latency. These are
+fixture timings, not live-store benchmarks. Evidence is in ignored
+scratch/collection-headless-results.json. Isolated real Redis checks passed for
+bounded retention, expiry, visitor-only sessions and protected session keys.
+
+Final local validation: 636/636 regressions, production build, 28/28 browser
+cases and isolated real-Redis retention checks passed. No commit, push, backend
+deploy or Shopify release was performed.
