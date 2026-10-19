@@ -41,6 +41,9 @@ export const loader = async ({ request, context }) => {
   const startTime = Date.now();
   let preparedSpec;
   let preparedCacheKey;
+  let collectionResponse;
+  let responsePageFingerprint;
+  let getResponsePageFingerprint;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -276,6 +279,18 @@ export const loader = async ({ request, context }) => {
 
     const { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters } =
       resolvedGroup;
+
+    // Stable bootstrap data has its own browser validator and never waits for
+    // rankings, facets or product hydration. Updated clients request it in parallel.
+    if (url.searchParams.get('responseProfile') === 'collection-config-v1') {
+      const {configurationResponse} = await import('../utils/collectionBootstrap.js');
+      const {isPublicCollectionResponse} = await import('../utils/collectionResponse.js');
+      if (!isPublicCollectionResponse(request) || isSearch || searchQuery || sortBy === 'manual')
+        return data({error:'Invalid collection configuration context'}, {status:400,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+      if (await getCollectionPreparationRevision(shop) !== preparationRevision)
+        return data({error:'Collection configuration changed; retry'}, {status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+      return configurationResponse(request,{settings:activeGroupFilters || [],mergedValues,globalSettings});
+    }
 
     // ── 2. Expand merged values & smart tag variations ────────────────────────
     const expandFilterValues = (type, values) => {
@@ -786,6 +801,19 @@ export const loader = async ({ request, context }) => {
       rankingSession = await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, prepared.cacheKey ? prepared.orderUpdatedAt : collectionBestSellingState.updatedAt ?? null, prepared.metadata);
     }
 
+    // Only updated collection clients opt into the lossless transport. Ranking
+    // readiness and the immutable browsing session are established before reuse.
+    if (['collection-v1','collection-v2'].includes(url.searchParams.get('responseProfile')) && useRankedCollectionPagination && !context?.rankingWarmup) {
+      const {beginCollectionResponse, collectionPageFingerprint} = await import('../services/collectionResponse.server.js');
+      getResponsePageFingerprint = collectionPageFingerprint;
+      collectionResponse = await beginCollectionResponse({request, shop, configurationRevision: preparationRevision, rankingToken: rankingSession.token,
+        validate: async fingerprint => {
+          const current = await readRankedCollectionPage(meiliClient.index('products'), {ids:rankingSession.ids,page,limit,shop,attributes:mainQuery.attributesToRetrieve});
+          return collectionPageFingerprint(current.hits) === fingerprint;
+        }});
+      if (collectionResponse.response) return collectionResponse.response;
+    }
+
     // Ranked search owns its counts, facets and page retrieval. Do not run a
     // second ordinary search whose products would immediately be discarded.
     const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
@@ -839,6 +867,7 @@ export const loader = async ({ request, context }) => {
           result = await readRankedCollectionPage(meiliClient.index("products"), {
             ids: rankingSession.ids, page, limit, shop, attributes: mainQuery.attributesToRetrieve,
           });
+          if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else {
           result = await fetchCollectionPage(meiliClient.index("products"), {
@@ -1528,7 +1557,7 @@ export const loader = async ({ request, context }) => {
       },
     };
 
-    return data(responsePayload, { headers: responseHeaders });
+    return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {
       try { await discardPreparedCollectionRanking(preparedSpec, preparedCacheKey); }

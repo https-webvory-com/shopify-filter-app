@@ -15,6 +15,10 @@ test('page number and token do not change the session fingerprint, filters do', 
   assert.equal(fingerprint('https://app.test/api/filter?shop=s&page=1&limit=25'), fingerprint('https://app.test/api/filter?limit=25&shop=s&page=2&rankingToken=x'));
   assert.notEqual(fingerprint('https://app.test/api/filter?shop=s'), fingerprint('https://app.test/api/filter?shop=s&options[Color][]=Black'));
 });
+
+test('compact response negotiation does not invalidate an existing browsing token',()=>{
+ assert.equal(fingerprint('https://app.test/api/filter?shop=s&page=1'),fingerprint('https://app.test/api/filter?shop=s&page=2&responseProfile=collection-v1'));
+});
 test('subsequent pages retain their saved sequence after Shopify changes order', async () => {
   const first = await save('shop', 'filters', ['1', '2', '3', '4'], 1);
   await save('shop', 'filters', ['4', '3', '2', '1'], 2);

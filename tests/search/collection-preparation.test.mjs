@@ -17,6 +17,16 @@ function fixture() {
   return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
 }
 
+test('readiness diagnostics distinguish a missing key, queue wait and build duration without changing products',async()=>{
+ const f=fixture(),events=[];let clock=100;
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:()=>clock,observe:event=>events.push(event),prepare:async()=>{clock+=250;return f.result;}});
+ await service.get(f.spec);clock+=500;await service.process(f.queued[0].data);
+ assert.equal(events.find(e=>e.event==='unavailable').reason,'missing');assert.equal(events.find(e=>e.event==='build-started').queueWaitMs,500);assert.equal(events.find(e=>e.event==='build-ready').buildMs,250);
+ assert.deepEqual(await service.get(f.spec),{status:'ready',...f.result});
+ const harmless=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>f.result,observe:()=>{throw Error('diagnostics offline');}});
+ assert.equal((await harmless.get({...f.spec,revision:'0',sortBy:'price-ascending'})).status,'pending');
+});
+
 test('a missing ranking queues once across concurrent requests without scanning on the web request',async()=>{
   const f=fixture();const results=await Promise.all([f.service.get(f.spec),f.service.get(f.spec)]);
   assert.deepEqual(results,[{status:'pending'},{status:'pending'}]);assert.equal(f.queued.length,1);assert.equal(f.builds(),0);

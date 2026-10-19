@@ -7,7 +7,7 @@ import * as lifecycle from '../../app/utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 
 async function fixture() {
-  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map();let scans=0;
+  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[];let scans=0;
   const queue={getJob:async id=>jobs.get(id),add:async(name,data,options)=>{writes.push(['queue',name,data,options]);const job={getState:async()=> 'waiting'};jobs.set(options.jobId,job);return job;}};
   const redis={zrange:async()=>records,zrangebyscore:async()=>shops,zadd:async(...args)=>writes.push(['add',...args]),zremrangebyrank:async(...args)=>writes.push(['trim',...args]),zremrangebyscore:async(...args)=>writes.push(['prune',...args]),expire:async(...args)=>writes.push(['expire',...args])};
   redis.scan=async()=>{scans++;return ['0',registries];};redis.ttl=async()=>3600;
@@ -20,6 +20,7 @@ async function fixture() {
   }}};
   const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,warmupLoader:async({request})=>{writes.push(['load',request.url]);return Response.json({warmup:true});},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
+    if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
     if(name==='./redis.server.js')return {__esModule:true,default:redis};
     if(name==='./queue.server.js')return {collectionRankingQueue:queue};
@@ -33,14 +34,14 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,scans:()=>scans};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,scans:()=>scans};
 }
 
 test('warmup registry stores a normalized public collection context with a bounded size and lifetime',async()=>{
   const f=await fixture();await f.registerCollectionWarmup('fixture.myshopify.com','https://foreign.example/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&locale=en&country=US&page=1&limit=48');
   const url=new URL(JSON.parse(f.writes[0][3]).url);assert.equal(url.origin,'https://ranking.internal');assert.equal(url.searchParams.get('limit'),'25');
   assert.equal(url.searchParams.get('shop'),'fixture.myshopify.com');assert.equal(url.searchParams.get('country'),'US');
-  assert.deepEqual(Array.from(f.writes[1].slice(2)),[0,-21]);assert.equal(f.writes[2][2],86400);
+  assert.deepEqual(Array.from(f.writes[1].slice(2)),[0,-41]);assert.equal(f.writes[2][2],lifecycle.warmupRegistryLifetime);
   assert.equal(f.writes[3][1],lifecycle.warmupShopsKey);assert.equal(f.writes[3][3],'fixture.myshopify.com');
   assert.equal(f.writes[4][0],'prune');
 });
@@ -59,7 +60,7 @@ test('worker startup discovers old public registries once without extending idle
   assert.equal(f.scans(),1);
   const registration=f.writes.find(w=>w[0]==='add');
   assert.equal(registration[1],lifecycle.warmupShopsKey);assert.equal(registration[2],'NX');
-  assert.ok(Math.abs(registration[3]-(Date.now()-23*3600000))<1000);
+  assert.ok(Math.abs(registration[3]-(Date.now()-(lifecycle.warmupRegistryLifetime-3600)*1000))<1000);
   assert.equal(registration[4],'fixture.myshopify.com');
   assert.equal(f.writes.filter(w=>w[0]==='add').length,1);
 });
@@ -80,7 +81,7 @@ test('corrupt or private warmup records do not stop valid matching collection wa
   const f=await fixture();const url='https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&page=1';
   f.records.push('{bad',JSON.stringify({url:'invalid',collectionId:'1'}),JSON.stringify({url:url+'&customer_tags=VIP',collectionId:'1'}),JSON.stringify({url,collectionId:'2'}),JSON.stringify({url,collectionId:'1'}));
   await f.processCollectionWarmups('fixture.myshopify.com',['1']);
-  assert.deepEqual(f.writes,[['load',url]]);
+  assert.equal(f.writes.length,1);const normalized=new URL(f.writes[0][1]);assert.equal(normalized.searchParams.get('collectionId'),'1');assert.equal(normalized.searchParams.has('collectionHandle'),false);
 });
 
 test('collections with no previous visitor seed missing order snapshots in bounded tenant-scoped pages',async()=>{
@@ -106,4 +107,24 @@ test('frequent public warmup ticks do not repeatedly scan the catalog for missin
  const f=await fixture();f.catalog.push({shop:'fixture.myshopify.com',id:'1'});
  await f.scheduleRegisteredCollectionWarmups();await f.scheduleRegisteredCollectionWarmups();
  assert.equal(f.writes.filter(row=>row[0]==='order').length,1);
+});
+
+test('configured public priorities warm before any visitor registry and reserve the existing storage budget',async()=>{
+ const f=await fixture();f.seeds.push({shop:'new.myshopify.com',collectionHandle:'petite',country:'IN',locale:'en',sortBy:'best-selling'});
+ await f.scheduleRegisteredCollectionWarmups();assert.equal(f.writes.find(w=>w[0]==='queue')[2].shop,'new.myshopify.com');
+ await f.processCollectionWarmups('new.myshopify.com');
+ const loads=f.writes.filter(w=>w[0]==='load');assert.equal(loads.length,1);const url=new URL(loads[0][1]);assert.equal(url.searchParams.get('country'),'IN');assert.equal(url.searchParams.get('locale'),'en');assert.equal(url.searchParams.get('collectionHandle'),'petite');
+ await f.registerCollectionWarmup('new.myshopify.com','https://app/api/filter?shop=new.myshopify.com&collectionHandle=other&page=1');assert.equal(f.writes.find(w=>w[0]==='trim')[3],-40);
+});
+test('handle, ID, page-size and transport aliases share a warmup context without crossing markets',()=>{
+ const base='https://app/api/filter?shop=fixture.myshopify.com&collectionHandle=petite&country=IN&locale=en&page=1&sortBy=bestselling';
+ const first=lifecycle.normalizeCollectionWarmup('fixture.myshopify.com',base+'&limit=50&responseProfile=collection-v2','gid://shopify/Collection/123');
+ const second=lifecycle.normalizeCollectionWarmup('fixture.myshopify.com',base.replace('collectionHandle=petite','collectionId=123').replace('bestselling','best-selling')+'&limit=25&responseProfile=collection-v1','123');
+ assert.deepEqual(first,second);assert.equal(new URL(first.url).searchParams.has('responseProfile'),false);
+ assert.notEqual(lifecycle.normalizeCollectionWarmup('fixture.myshopify.com',base.replace('country=IN','country=US'),'123').url,first.url);
+});
+test('legacy duplicate warmup records replay only one canonical preparation',async()=>{
+ const f=await fixture(),base='https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionHandle=petite&country=IN&locale=en&page=1';
+ for(const version of ['collection-v1','collection-v2'])f.records.push(JSON.stringify({url:base+'&responseProfile='+version,collectionId:'123'}));
+ await f.processCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='load').length,1);
 });

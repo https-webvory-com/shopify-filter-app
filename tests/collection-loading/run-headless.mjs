@@ -189,7 +189,7 @@ try{
   await test('new visitor after eleven minutes receives last-good ranking while refresh waits',async()=>{
     const before=await(await fetch(origin+'/__state')).json();await control({clockOffset:660000,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
-    assert.equal(requests.length,1);assert.equal(requests[0].status,200);assert.equal(after.state.builds,before.state.builds);if(!redisLayer)assert.ok(await evaluate('cardSnapshots[0].at<2000'));assert.deepEqual(await evaluate('browserErrors'),[]);
+    assert.equal(requests.length,1);assert.ok([200,304].includes(requests[0].status));assert.equal(after.state.builds,before.state.builds);if(!redisLayer)assert.ok(await evaluate('cardSnapshots[0].at<2000'));assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),simulatedIdleMs:660000,refreshWorkerPaused:true,liveTiming:false};
   });
   await test('a new Shopify order does not blank the first page while the replacement worker is paused',async()=>{
@@ -198,9 +198,9 @@ try{
     const previous=await cards();const before=await(await fetch(origin+'/__state')).json();
     await control({orderVersion:1,hold:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     const after=await(await fetch(origin+'/__state')).json();const requests=after.requests.slice(before.requests.length);
-    assert.deepEqual(await cards(),previous);assert.equal(requests.length,1);assert.equal(requests[0].status,200);
+    assert.deepEqual(await cards(),previous);assert.equal(requests.length,1);assert.ok([200,304].includes(requests[0].status));
     assert.equal(after.state.builds,before.state.builds);assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),refreshWorkerPaused:true,firstRequestStatus:200,liveTiming:false};
+    return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),refreshWorkerPaused:true,firstRequestStatus:requests[0].status,liveTiming:false};
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);

@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 const js=await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js','utf8');
-const helper=js.slice(js.indexOf('  async function takeEarlyCollectionResponse('),js.indexOf('  async function waitForCollectionOrder('));
+const helper=js.slice(js.indexOf('  function decodeCollectionResponse('),js.indexOf('  async function waitForCollectionOrder('));
 const liquid=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
 const inline=liquid.slice(liquid.indexOf('  (function() {',liquid.indexOf('Fire API request')),liquid.indexOf('</script>',liquid.indexOf('Fire API request')))
   .replace('{{ shop.permanent_domain }}','fixture.myshopify.com').replace('{{ cfp_collection_handle }}','formal-dresses').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en');
 function fixture(search='',tags=''){
-  const calls=[],window={location:{pathname:'/collections/formal-dresses',search},Shopify:{locale:'en',country:'US'},cfpCustomerTags:tags};
-  const context={window,document:{documentElement:{lang:'en'}},URL,URLSearchParams,AbortController,DOMException,setTimeout,clearTimeout,fetch:async(url,options)=>{calls.push({url,options});return {status:200,json:async()=>({products:['correct'],debug:{collectionRankingStatus:'ready'}})};}};
+  const calls=[],configurationCalls=[],window={location:{pathname:'/collections/formal-dresses',search},Shopify:{locale:'en',country:'US'},cfpCustomerTags:tags};
+  const context={window,document:{documentElement:{lang:'en'}},URL,URLSearchParams,AbortController,DOMException,setTimeout,clearTimeout,fetch:async(url,options)=>{(new URL(url).searchParams.get('responseProfile')==='collection-config-v1'?configurationCalls:calls).push({url,options});return {status:200,json:async()=>({products:['correct'],debug:{collectionRankingStatus:'ready'}})};}};
   vm.runInNewContext(inline,context);vm.runInNewContext(helper,context);
-  return {window,calls,take:context.takeEarlyCollectionResponse};
+  return {window,calls,configurationCalls,take:context.takeEarlyCollectionResponse};
 }
 test('ranked first page starts early with the exact locale, market, customer and pagination context',async()=>{
   const f=fixture('?utm_source=test&rankingToken=old','VIP');assert.equal(f.calls.length,1);
@@ -21,6 +21,12 @@ test('ranked first page starts early with the exact locale, market, customer and
 });
 test('filtered and later-page visits do not start speculative ranked requests',()=>{
   for(const search of ['?page=2','?minPrice=50','?maxPrice=200','?vendors=Vendor','?option_Color=Blue','?q=dress','?options[Color][]=Blue','?tags[]=sale'])assert.equal(fixture(search).calls.length,0,search);
+});
+
+test('anonymous bootstrap starts alongside products while targeted requests retain the complete profile',()=>{
+ const anonymous=fixture();assert.equal(anonymous.calls.length,1);assert.equal(anonymous.configurationCalls.length,1);
+ assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-v2');assert.equal(anonymous.calls[0].options.signal,anonymous.configurationCalls[0].options.signal);
+ const privateVisit=fixture('','VIP');assert.equal(privateVisit.configurationCalls.length,0);assert.equal(new URL(privateVisit.calls[0].url).searchParams.get('responseProfile'),'collection-v1');
 });
 test('a different sort, filter, market, customer or shop rejects and aborts the early response',async()=>{
   for(const change of ['sortBy=price-ascending','country=CA','customer_tags=other','shop=other.myshopify.com','minPrice=90']){

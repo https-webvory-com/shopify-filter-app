@@ -4,14 +4,32 @@ import prisma from '../db.server.js';
 import meiliClient from './meiliClient.server.js';
 import { applyMerchandisingRules, createMerchandisingComparator } from './merchandising.server.js';
 import { prepareCollectionRanking } from '../utils/prepareCollectionRanking.js';
-import { createCollectionPreparation, warmupContextsKey, warmupShopsKey } from '../utils/collectionPreparation.js';
+import { createCollectionPreparation, warmupContextsKey, warmupShopsKey, publicPreparationLimit, warmupRegistryLifetime, normalizeCollectionWarmup } from '../utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './collectionBestSelling.server.js';
+import configuredWarmups from '../config/collection-prewarm.json';
+
+// Explicit public contexts can be prepared before the first visitor. These are
+// operational priorities, not ranking rules, and share the existing 40-slot budget.
+function seededWarmups(shop) {
+  const records=[];
+  for (const entry of configuredWarmups) {
+    if (entry.shop!==shop || !entry.country || !entry.locale || !entry.collectionHandle || entry.collectionHandle==='search') continue;
+    const url=new URL('https://ranking.internal/api/filter');
+    for (const key of ['shop','country','locale','collectionHandle','sortBy']) if(entry[key])url.searchParams.set(key,entry[key]);
+    url.searchParams.set('page','1');
+    const record=normalizeCollectionWarmup(shop,url);
+    if(record && !records.some(r=>r.url===record.url))records.push(record);
+    if(records.length===publicPreparationLimit)break;
+  }
+  return records;
+}
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: spec =>
   prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator }),
+  observe:event=>console.info('CFP: collection preparation',JSON.stringify(event)),
 });
-const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit']);
+const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);
 
 export const getCollectionPreparationRevision = preparation.revision;
 export const getPreparedCollectionRanking = preparation.get;
@@ -21,20 +39,15 @@ export const discardPreparedCollectionRanking = preparation.discard;
 // Remember only anonymous, unfiltered first pages. Customer targeting and
 // filtered requests remain separately scoped and are never replayed as public.
 export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
-  const url = new URL(requestUrl);
-  if(url.searchParams.get('shop')!==shop)return;
-  const allowed = publicParameters;
-  const keys = [...url.searchParams.keys()];
-  if (new Set(keys).size !== keys.length || keys.some(key => !allowed.has(key)) || url.searchParams.get('page') !== '1') return;
-  const normalized = new URL('https://ranking.internal/api/filter');
-  for (const [key, value] of url.searchParams) if (!['page','limit'].includes(key)) normalized.searchParams.set(key, value);
-  normalized.searchParams.set('page', '1'); normalized.searchParams.set('limit', '25'); normalized.searchParams.sort();
+  const record=normalizeCollectionWarmup(shop,requestUrl,collectionId);
+  if (!record) return;
   const key = warmupContextsKey(shop);
-  await redis.zadd(key, Date.now(), JSON.stringify({url:normalized.toString(),collectionId:String(collectionId||'all').split('/').pop()}));
-  await redis.zremrangebyrank(key, 0, -21);
-  await redis.expire(key, 86400);
+  await redis.zadd(key, Date.now(), JSON.stringify(record));
+  const capacity=publicPreparationLimit-seededWarmups(shop).length;
+  await redis.zremrangebyrank(key, 0, -capacity-1);
+  await redis.expire(key, warmupRegistryLifetime);
   await redis.zadd(warmupShopsKey, Date.now(), shop);
-  await redis.zremrangebyscore(warmupShopsKey, '-inf', Date.now() - 86400000);
+  await redis.zremrangebyscore(warmupShopsKey, '-inf', Date.now() - warmupRegistryLifetime*1000);
 }
 
 // Refresh known public contexts even when no browser is currently visiting.
@@ -76,14 +89,14 @@ export async function scheduleRegisteredCollectionWarmups() {
         const ttl = await redis.ttl(key);
         if (ttl <= 0) continue;
         // Preserve the registry's original remaining lifetime.
-        await redis.zadd(warmupShopsKey, 'NX', Date.now() - (86400 - Math.min(ttl, 86400)) * 1000, shop);
+        await redis.zadd(warmupShopsKey, 'NX', Date.now() - (warmupRegistryLifetime - Math.min(ttl, warmupRegistryLifetime)) * 1000, shop);
       }
     } while (cursor !== '0');
     discoveredRegistries = true;
   }
-  const registered = await redis.zrangebyscore(warmupShopsKey, Date.now() - 86400000, '+inf');
+  const registered = await redis.zrangebyscore(warmupShopsKey, Date.now() - warmupRegistryLifetime*1000, '+inf');
   const catalog = await prisma.collection.findMany({distinct:['shop'],select:{shop:true}});
-  const shops = [...new Set([...registered,...catalog.map(collection=>collection.shop)])];
+  const shops = [...new Set([...registered,...catalog.map(collection=>collection.shop),...configuredWarmups.map(entry=>entry.shop)])];
   for (const shop of shops) {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
     try {
@@ -109,8 +122,10 @@ export async function scheduleCollectionWarmup(shop,collectionIds=null) {
 }
 
 export async function processCollectionWarmups(shop,collectionIds=null) {
-  const urls = await redis.zrange(warmupContextsKey(shop), 0, -1);
+  const seeds=seededWarmups(shop);
+  const urls = [...seeds.map(record=>JSON.stringify(record)),...(seeds.length===publicPreparationLimit?[]:await redis.zrange(warmupContextsKey(shop), -(publicPreparationLimit-seeds.length), -1))];
   const { loader } = await import('../routes/api.filter.jsx');
+  const seen=new Set();
   for (const value of urls) {
     let record,url;
     try{record=JSON.parse(value);url=new URL(record.url);}catch{continue;}
@@ -118,7 +133,10 @@ export async function processCollectionWarmups(shop,collectionIds=null) {
     if (url.origin !== 'https://ranking.internal' || url.pathname !== '/api/filter' || url.searchParams.get('shop') !== shop) continue;
     const keys=[...url.searchParams.keys()];
     if(new Set(keys).size!==keys.length||keys.some(key=>!publicParameters.has(key))||url.searchParams.get('page')!=='1')continue;
-    const response = await loader({ request: new Request(url), params: {}, context: { rankingWarmup: true } });
+    const normalized=normalizeCollectionWarmup(shop,url,record.collectionId);
+    if (!normalized || seen.has(normalized.url)) continue;
+    seen.add(normalized.url);
+    const response = await loader({ request: new Request(normalized.url), params: {}, context: { rankingWarmup: true } });
     const payload = response instanceof Response ? await response.json() : response.data;
     if (payload?.crash) throw Error('Collection warmup could not prepare a request');
   }

@@ -315,6 +315,47 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   // Resolve that order before rendering; otherwise the fallback stays on screen.
   const collectionRankingTokens = new Map();
   let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
+  function decodeCollectionResponse(data) {
+    if (!data?.cfpTransport) return data;
+    if (data.cfpTransport.version !== 1) throw new Error('Unsupported collection response');
+    const decode = value => {
+      if (!Array.isArray(value)) return value;
+      const [type, columns, rows] = value;
+      if (type === 'a') return columns.map(decode);
+      if ((type === 'o' || type === 't') && Array.isArray(columns) && columns.every(key=>typeof key === 'string')) {
+        const object = row => {
+          if (!Array.isArray(row) || row.length !== columns.length) throw new Error('Invalid collection metadata');
+          return Object.fromEntries(columns.map((key,index)=>[key,decode(row[index])]));
+        };
+        return type === 't' ? rows.map(object) : object(rows);
+      }
+      throw new Error('Invalid collection metadata');
+    };
+    const {cfpTransport, ...payload} = data;
+    return {...payload, ...decode(cfpTransport.metadata)};
+  }
+  async function fetchCollectionConfiguration(requestUrl, signal) {
+    if (!requestUrl.includes('responseProfile=collection-v2')) return null;
+    const url = new URL(requestUrl);
+    if (url.searchParams.get('responseProfile') !== 'collection-v2') return null;
+    url.searchParams.set('responseProfile','collection-config-v1');
+    try {
+      const response = await fetch(url.toString(), {signal,cache:'no-cache'});
+      return response.ok ? await response.json() : null;
+    } catch { return null; }
+  }
+  async function completeCollectionResponse(payload, requestUrl, signal, configurationPromise) {
+    if (!payload?.cfpConfiguration) return payload;
+    const bootstrap = await configurationPromise;
+    if (bootstrap?.configurationVersion === payload.cfpConfiguration.version && bootstrap.configuration) {
+      const {cfpConfiguration,...data} = payload;
+      return {...data,...bootstrap.configuration};
+    }
+    // A save between the parallel responses, an older backend, or a failed
+    // bootstrap must recover through the complete compatible response.
+    const fallback = new URL(requestUrl);fallback.searchParams.set('responseProfile','collection-v1');
+    return await (await fetchCollectionResponse(fallback.toString(),signal)).json();
+  }
   async function fetchCollectionResponse(requestUrl, signal) {
     const controller = new AbortController();
     const abort = () => controller.abort();
@@ -322,8 +363,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (signal.aborted) abort();
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
-      const payload = await response.json();
+      const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store' });
+      let payload = await response.json();
+      if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
+      payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
       if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
           !['pending', 'failed'].includes(payload?.debug?.collectionRankingStatus)) {
         throw new Error(payload?.error || 'Products are temporarily unavailable. Please retry.');
@@ -349,6 +393,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       });
       const result = await Promise.race([early.promise, cancelled]);
       if (!result) return null;
+      if (result.payload?.cfpTransport) result.payload = decodeCollectionResponse(result.payload);
+      result.payload = await completeCollectionResponse(result.payload,requestUrl,signal,early.configurationPromise);
       if (result.status >= 400 && result.status !== 409 && !['pending','failed'].includes(result.payload?.debug?.collectionBestSellingStatus) &&
           !['pending','failed'].includes(result.payload?.debug?.collectionRankingStatus)) throw Error(result.payload?.error || 'Products are temporarily unavailable. Please retry.');
       return { status: result.status, json: async () => result.payload };
@@ -456,8 +502,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
+      if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
+        queryParams.set('responseProfile', 'collection-v1');
+        const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
+        if (String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
+          queryParams.set('responseProfile','collection-v2');
+      }
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
+      rankingKeyParams.delete('responseProfile');
       rankingKeyParams.sort();
       rankingKey = rankingKeyParams.toString();
       const rankedCollection = templateName !== 'search' && activeFilters.sortBy !== 'manual';

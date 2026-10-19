@@ -9,6 +9,24 @@ export const preparationRevisionKey = shop => `collectionPreparationRevision:${s
 export const warmupContextsKey = shop => `collectionWarmupContextsV2:${shop}`;
 export const warmupShopsKey = 'collectionWarmupShopsV2';
 export const publicPreparationLimit = 40;
+export const warmupRegistryLifetime = 7 * 86400;
+const warmupParameters = new Set(['shop','locale','language','country','collectionHandle','collectionId','sortBy','page','limit','responseProfile']);
+export function normalizeCollectionWarmup(shop, requestUrl, collectionId) {
+  let url;try {url=new URL(requestUrl);} catch {return null;}
+  const keys=[...url.searchParams.keys()];
+  if (url.searchParams.get('shop')!==shop || url.searchParams.get('page')!=='1' ||
+      new Set(keys).size!==keys.length || keys.some(key=>!warmupParameters.has(key))) return null;
+  if (!url.searchParams.get('collectionId') && !url.searchParams.get('collectionHandle')) return null;
+  const normalized=new URL('https://ranking.internal/api/filter');
+  for (const [key,value] of url.searchParams) if (!['page','limit','responseProfile'].includes(key)) normalized.searchParams.set(key,value);
+  const id=String(collectionId || '').split('/').pop();
+  if (/^\d+$/.test(id)) {normalized.searchParams.delete('collectionHandle');normalized.searchParams.set('collectionId',id);}
+  const sort=(normalized.searchParams.get('sortBy') || 'best-selling').toLowerCase().replaceAll('_','-');
+  if (sort==='manual') return null;
+  normalized.searchParams.set('sortBy',sort==='bestselling'?'best-selling':sort);
+  normalized.searchParams.set('page','1');normalized.searchParams.set('limit','25');normalized.searchParams.sort();
+  return {url:normalized.toString(),collectionId:id || 'all'};
+}
 export const publicRetentionKey = shop => `collectionPreparedRetention:${shop}`;
 const retainPublic = `
 local previous = redis.call('GET', KEYS[3])
@@ -63,7 +81,8 @@ export function preparationOrderFallbackKey(spec) {
   return preparationKey(identity).replace(':background-v2:', ':last-order-v1:');
 }
 
-export function createCollectionPreparation({ redis, queue, prepare, now = Date.now }) {
+export function createCollectionPreparation({ redis, queue, prepare, now = Date.now, observe = () => {} }) {
+  const report = event => {try {observe(event);} catch { /* Diagnostics never affect availability. */ }};
   const valid = value => value && Array.isArray(value.ids) && value.ids.every(id=>typeof id==='string'&&id.length>0) &&
     new Set(value.ids).size===value.ids.length && value.metadata && typeof value.metadata==='object' && !Array.isArray(value.metadata);
   const revision = async shop => String(await redis.get(preparationRevisionKey(shop)) ?? '0');
@@ -87,7 +106,10 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
         job = await queue.getJob(jobId);
       }
     }
-    if (!job) await queue.add('COLLECTION_RANKING_PREPARE', { shop: spec.shop, key, spec }, { jobId, priority });
+    if (!job) {
+      await queue.add('COLLECTION_RANKING_PREPARE', { shop: spec.shop, key, spec, queuedAt:now() }, { jobId, priority });
+      report({event:'queued',shop:spec.shop,collectionId:spec.collectionId,key,priority});
+    }
     return 'pending';
   }
   async function get(spec, { warmup = false } = {}) {
@@ -99,6 +121,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
       let value;
       try { value=JSON.parse(raw); } catch { /* Rebuild corrupt cache entries. */ }
       if (!valid(value)) {
+        report({event:'unavailable',reason:'corrupt',shop:spec.shop,collectionId:spec.collectionId,key});
         // The worker will replace this record. Avoid deleting a newly published
         // valid record if another worker completed after this read.
         return {status:await schedule(key,spec,warmup)};
@@ -108,6 +131,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
       // known stock/product changes when a refresh worker is unavailable.
       if (spec.retainForIdle === true && value.productRevision !== spec.productRevision &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
+        report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
         return { status: await schedule(key, spec, warmup) };
       }
       // Refresh a valid version before expiry without holding up visitors.
@@ -131,15 +155,19 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
             Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationLifetime * 1000 &&
             await revision(spec.shop) === spec.revision) {
           try { await schedule(key, spec, true); } catch { /* The last complete version is still usable. */ }
+          report({event:'last-order-reused',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-previous.preparedAt});
           return {status:'ready',ids:previous.ids,metadata:previous.metadata,orderUpdatedAt:previous.orderUpdatedAt ?? null,cacheKey:previousKey};
         }
       }
     }
+    report({event:'unavailable',reason:'missing',shop:spec.shop,collectionId:spec.collectionId,key});
     return { status: await schedule(key, spec, warmup) };
   }
-  async function process({ key, spec }) {
+  async function process({ key, spec, queuedAt }) {
     if (key !== preparationKey(spec)) throw Error('Invalid preparation identity');
     if (await revision(spec.shop) !== spec.revision) return { superseded: true };
+    const startedAt=now();
+    report({event:'build-started',shop:spec.shop,collectionId:spec.collectionId,key,queueWaitMs:Number.isFinite(queuedAt)?Math.max(0,startedAt-queuedAt):null});
     const startedRevision=await productRevision(spec.shop,spec.collectionId);
     const value = await prepare(spec);
     if (!valid(value)) throw Error('Invalid prepared collection ranking');
@@ -159,6 +187,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     if (spec.retainForIdle === true && spec.needsShopifyOrder) {
       await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key);
     }
+    report({event:'build-ready',shop:spec.shop,collectionId:spec.collectionId,key,buildMs:now()-startedAt,products:value.ids.length});
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision };
   }
   // A current first-page sequence referencing a deleted/inactive product must

@@ -7,6 +7,7 @@
 {%- endif -%}
 
 <!-- Start the collection request before stylesheets can block inline scripts. -->
+<link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
 <script>
   window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
   window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
@@ -60,13 +61,20 @@
         else return;
         rankedParams.set('sortBy', params.get('sortBy') || 'best-selling');
         rankedParams.set('page', '1'); rankedParams.set('limit', '25');
+        rankedParams.set('responseProfile', window.cfpCustomerTags || !rankedParams.has('country') ? 'collection-v1' : 'collection-v2');
         var earlyUrl = 'https://aisearchfilter.webvory.com/api/filter?' + rankedParams.toString();
         var controller = new AbortController();
         var timeout = setTimeout(function() { controller.abort(); }, 30000);
-        window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-store'})
+        var configurationPromise = null;
+        if (rankedParams.get('responseProfile') === 'collection-v2') {
+          var configParams = new URLSearchParams(rankedParams);configParams.set('responseProfile','collection-config-v1');
+          configurationPromise = fetch('https://aisearchfilter.webvory.com/api/filter?' + configParams.toString(),{signal:controller.signal,cache:'no-cache'})
+            .then(function(response) { return response.ok ? response.json() : null; }).catch(function() { return null; });
+        }
+        window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,configurationPromise:configurationPromise,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-cache'})
           .then(async function(response) { return {status:response.status,payload:await response.json()}; })
           .catch(function() { return null; })
-          .finally(function() { clearTimeout(timeout); })};
+          .finally(function() { Promise.resolve(configurationPromise).finally(function() { clearTimeout(timeout); }); })};
         return;
       }
       params.set('shop', shop);

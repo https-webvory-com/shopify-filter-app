@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source = await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js', 'utf8');
-const helper = source.slice(source.indexOf('  async function fetchCollectionResponse('), source.indexOf('  async function fetchAndRenderData('));
+const helper = source.slice(source.indexOf('  function decodeCollectionResponse('), source.indexOf('  async function fetchAndRenderData('));
 function load(fetch) {
   const context = { fetch, DOMException, AbortController, setTimeout: (callback,ms) => setTimeout(callback, ms===30000?30000:0), clearTimeout };
   vm.runInNewContext(helper + '\nthis.wait = waitForCollectionOrder;', context);
