@@ -64,8 +64,8 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
 }
 
 // Rank and exclude the complete eligible set before allocating any page slots.
-export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking, compare, projectedFields }) {
-  if (compare) return buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields});
+export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking, compare, projectedFields, observeCandidates }) {
+  if (compare) return buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields,observeCandidates});
   const { indexUid, q, ...options } = query;
   const documents = [];
   const seen = new Set();
@@ -113,7 +113,7 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
 
 // Keep at most one batch of variant/image data. Rule evaluation is per product;
 // the shared merchandising comparator orders compact results across all batches.
-async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields}) {
+async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields,observeCandidates}) {
   const {indexUid,q,...options}=query;
   const ranks=orderedIds?new Map(orderedIds.map((id,i)=>[cleanId(id),i])):null;
   const seen=new Set(),ranked=[];
@@ -127,6 +127,7 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   const batchSize=scanFields.includes('variantPrices')?25:scanFields.some(field=>['collections','collection_titles','options','images'].includes(field))?1000:10000;
   let scanned=0;
   async function consume(documents) {
+    if(observeCandidates)observeCandidates(documents);
     const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));
     if(hydrateRanking)await hydrateRanking(products);
     for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionPinsFirst:p._collectionPinsFirst,_collectionLadderMatched:p._collectionLadderMatched,_collectionRuleRanks:p._collectionRuleRanks,_collectionSequentialScore:p._collectionSequentialScore,merchandisingScore:p.merchandisingScore});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {configurationRevisionKey,productRevisionKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
+import {configurationRevisionKey,productRevisionKey,rankingDataRevisionKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
 
 const shop='fixture.myshopify.com';
 function fixture(){
@@ -14,9 +14,18 @@ test('configuration invalidation only deletes owned cache namespaces and preserv
   f.values.set(`merch:${shop}:1`,'old');f.values.set(`collectionPreparedSequence:${shop}:background-v2:hash`,'old');
   await f.invalidate(shop);
   for(const key of protectedKeys)assert.equal(f.values.get(key),'protected',key);
-  assert.equal(f.values.has(`merch:${shop}:1`),false);assert.equal(f.values.has(`collectionPreparedSequence:${shop}:background-v2:hash`),false);
+  assert.equal(f.values.has(`merch:${shop}:1`),false);assert.equal(f.values.get(`collectionPreparedSequence:${shop}:background-v2:hash`),'old');
   assert.equal(f.values.get(configurationRevisionKey(shop)),'1');assert.deepEqual(f.calls,[[shop,null]]);
   assert.equal(isOwnedShopCache(`merch:${shop}.other:1`,shop),false);
+});
+
+test('membership and bulk catalog invalidations retain records but invalidate only the required data epochs',async()=>{
+ const f=fixture(),key=`collectionPreparedSequence:${shop}:background-v2:hash`;
+ f.values.set(key,'saved');
+ await f.invalidate(shop,{kind:'catalog',collectionIds:['gid://shopify/Collection/1','1']});
+ assert.equal(f.values.get(rankingDataRevisionKey(shop,'1')),'1');assert.equal(f.values.has(rankingDataRevisionKey(shop,'2')),false);
+ assert.equal(f.values.has(rankingDataRevisionKey(shop)),false);assert.equal(f.values.get(key),'saved');assert.deepEqual(f.calls[0],[shop,['1']]);
+ await f.invalidate(shop,{kind:'catalog'});assert.equal(f.values.get(rankingDataRevisionKey(shop)),'1');assert.equal(f.values.get(key),'saved');
 });
 test('product invalidation advances only relevant data versions and keeps usable prepared sequences',async()=>{
   const f=fixture();const prepared=`collectionPreparedSequence:${shop}:background-v2:hash`;

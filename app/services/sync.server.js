@@ -722,7 +722,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       const scoresSynced = await syncHistoricalOrders(shop);
       if (scoresSynced === false) throw new Error("Sales data sync failed; retrying finalization");
 
-      await invalidateShop(shop);
+      await invalidateShop(shop,{kind:'catalog'});
       await prisma.syncJob.update({
         where: { id: jobId },
         data: { status: "COMPLETED", completedAt: new Date(), lastError: null },
@@ -1195,7 +1195,8 @@ export async function syncCollectionProducts(shop, admin, collectionId, { throwO
   } finally {
     // DB and index are separate systems. Failed partial repairs must not leave
     // cached eligibility behind; durable retries re-read Shopify before writing.
-    if (attemptedWrites) await invalidateShop(shop);
+    // Repairs resync full products, which can affect other collections/Includes.
+    if (attemptedWrites) await invalidateShop(shop,{kind:'catalog'});
   }
 }
 

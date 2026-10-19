@@ -213,7 +213,7 @@ async function handleCollectionUpdate(shop, payload) {
   await invalidateCollectionBestSelling(shop, collectionId);
   const { admin } = await unauthenticated.admin(shop);
   await syncCollectionProducts(shop, admin, collectionId, { throwOnError: true });
-  await invalidateShop(shop);
+  await invalidateShop(shop,{kind:'catalog',collectionIds:[collectionId]});
   await refreshCollectionBestSelling(shop, collectionId);
   console.log(`CFP Worker: Collection ${collectionId} updated.`);
 }
@@ -222,7 +222,7 @@ async function handleCollectionDelete(shop, payload) {
   const collectionId = `gid://shopify/Collection/${payload.id}`;
   await prisma.collection.deleteMany({ where: { id: collectionId } });
   const { invalidateShop } = await import("../services/shopCache.server.js");
-  await invalidateShop(shop);
+  await invalidateShop(shop,{kind:'catalog',collectionIds:[collectionId]});
   console.log(`CFP Worker: Collection ${collectionId} deleted.`);
 }
 

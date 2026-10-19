@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
+export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
 const productCaches = ['queryParserFacets','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
 export function isOwnedShopCache(key, shop, productOnly = false) {
@@ -19,6 +20,9 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
   return async function invalidate(shop, {kind = 'configuration', collectionIds = []} = {}) {
     const products = kind === 'products';
     const scopes = [...new Set(collectionIds.map(id=>String(id).split('/').pop()))].filter(id=>id!=='all');
+    // Bulk/index or membership changes can alter inputs absent from a rule's
+    // signature. Reject saved rankings for those scopes immediately.
+    if(kind==='catalog')for(const id of scopes.length?scopes:['all'])await redis.incr(rankingDataRevisionKey(shop,id));
     if (products) {for (const id of [...scopes,'all']) await redis.incr(productRevisionKey(shop,id));}
     else await redis.incr(configurationRevisionKey(shop));
     // Only delete owned cache namespaces. Queue hashes, locks and sorted sets,
@@ -26,10 +30,12 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
     let cursor='0';let deleted=0;
     do {
       const [next, keys]=await redis.scan(cursor,'MATCH',`*${shop}*`,'COUNT',200);cursor=next;
-      const removable=keys.filter(key=>isOwnedShopCache(key,shop,products));
+      const removable=keys.filter(key=>isOwnedShopCache(key,shop,products)&&
+        !key.startsWith(`collectionPreparedSequence:${shop}:`)&&
+        key!==`collectionPreparedRetention:${shop}`&&!key.startsWith(`collectionPreparedRetention:${shop}:`));
       if(removable.length)deleted+=await redis.del(...removable);
     } while(cursor!=='0');
-    await warm(shop, products ? [...scopes,'all'] : null);
+    await warm(shop, products ? [...scopes,'all'] : kind==='catalog'&&scopes.length?scopes:null);
     return {deleted,kind};
   };
 }

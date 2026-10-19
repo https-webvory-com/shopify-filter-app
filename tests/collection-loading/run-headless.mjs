@@ -221,6 +221,13 @@ try{
     assert.equal(after.requests.length,1);assert.equal(after.requests[0].status,200);
     assert.deepEqual((await cards()).slice(0,2),['5','30']);
   });
+  await test('unchanged ranking survives a configuration refresh with the worker paused and no new build',async()=>{
+    await control({reset:true,pin:'6',colorRule:true,directFacts:false,hold:true,precompute:true,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});
+    await control({invalidate:true});await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
+    const after=await(await fetch(origin+'/__state')).json();assert.equal(after.state.builds,1);
+    assert.equal(after.requests.filter(r=>r.status===202).length,0);assert.deepEqual((await cards()).slice(0,2),['6','30']);
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

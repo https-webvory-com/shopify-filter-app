@@ -53,6 +53,39 @@ be discarded. Ranked collection facet queries request zero hits and use the
 frozen sequence's exact count, avoiding an additional exhaustive hit-count query.
 Search and unranked/manual collection queries retain their existing behavior.
 
+## Reusing saved work after invalidation
+
+Configuration cache invalidation retains bounded prepared sequences and their
+retention accounting. Current configuration is still read under its new revision;
+an old revision is never blindly served. A compatibility pointer matches the
+complete current ranking inputs (query/filter scope, resolved rules, pins,
+settings, merged values, sort and Shopify order), excluding only the revision
+number and rule/settings `updatedAt` bookkeeping. Matching saved IDs/metadata
+can be copied into the new revision without scanning products. Source preparation
+time is preserved, so this does not extend the existing product-freshness window.
+
+Cross-revision reuse is enabled for Shopify-backed best-selling order. Native
+products require no index search. Outside Include products carry a saved base-ID
+order, which is rechecked with a small ID-only sorted query before reuse; this
+detects sales-score ordering changes that do not use product webhooks. Proofs
+are bounded to 1,000 outside candidates with a two-second query budget. Other
+sorts, missing legacy proofs, changed outside order and oversized proofs rebuild
+conservatively. Fixed explicit pins retain their existing placement.
+
+Reuse also checks collection product revisions and explicit data invalidations.
+Includes and explicit pins check the shop-wide product revision because they can
+draw products from outside the collection. Collection metadata updates/deletes
+invalidate their own data scope. Full syncs and membership repairs that resync
+complete product records conservatively invalidate the entire catalog data scope.
+Actual rule, pin, filter, ordering or eligibility changes still require new work.
+
+Compatibility pointers are capped at the same 2,048-entry retention limit and
+expire after 24 hours. They reference existing bounded ranking payloads. Missing
+products block compatible copies until a verified rebuild, preventing resurrection
+of an obsolete first page. Exact legacy records can be probed across at most 16
+prior revisions when no data epoch changed; unsupported legacy cases rebuild.
+Already deleted/expired rankings cannot be recovered by this change.
+
 Deployment starts a background fill; it does not instantly prepare the catalog.
 New collections/markets, invalidation, evictions, unavailable workers, and an
 insufficient worker-throughput budget can still cause pending responses. Verify
@@ -70,3 +103,11 @@ production build passed. All 25 browser fixture checks passed, including a
 background build before any visitor, followed by a single HTTP 200 product
 response with the worker paused and no additional build. Fixture timings are
 not proof of live catalog coverage or live page-load timing.
+
+Local verification for compatible saved-ranking reuse: 607 regression tests,
+the production build, and all 26 browser fixture checks passed. The added browser
+case retains an unchanged ranking through a configuration refresh, then serves
+the first visitor with the worker paused and no new build or pending response.
+Isolated real-Redis reuse checks also verified scoped/bulk invalidation guards,
+bounded compatibility pointers, and protection of browsing-session keys.
+All 11 existing real-Redis/BullMQ regression checks passed as well.

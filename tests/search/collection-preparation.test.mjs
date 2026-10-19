@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionPreparation, preparationKey, preparationOrderFallbackKey, preparationRevisionKey, preparationLifetime} from '../../app/utils/collectionPreparation.js';
-import {productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
+import {createCollectionPreparation, preparationKey, preparationReuseKey, preparationOrderFallbackKey, preparationRevisionKey, preparationLifetime} from '../../app/utils/collectionPreparation.js';
+import {productRevisionKey,rankingDataRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 
 function fixture() {
   const values=new Map(),jobs=new Map(),queued=[];let clock=100000,builds=0;
-  const redis={get:async key=>values.get(key),ttl:async()=>600,setex:async(key,_ttl,value)=>values.set(key,value),del:async key=>values.delete(key)};
+  const redis={get:async key=>values.get(key),ttl:async()=>600,setex:async(key,_ttl,value)=>values.set(key,value),del:async key=>values.delete(key),incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;}};
   const queue={getJob:async id=>jobs.get(id),add:async(name,data,{jobId,priority})=>{
     if(jobs.has(jobId))return jobs.get(jobId);
     const job={name,data,opts:{priority},finishedOn:0,state:'waiting',getState:async()=>job.state,remove:async()=>jobs.delete(jobId),changePriority:async({priority})=>{job.opts.priority=priority;}};
@@ -16,6 +16,95 @@ function fixture() {
   const spec={shop:'fixture.myshopify.com',revision:'0',sortBy:'best-selling',query:{q:'',filter:["shop = 'fixture.myshopify.com'"]},rule:{conditions:[]}};
   return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
 }
+
+test('unchanged public rankings survive a configuration epoch without another scan',async()=>{
+ const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true,globalSettings:{showOnlyInStock:true,updatedAt:'old'}};
+ await f.service.get(f.spec,{warmup:true,precompute:true});assert.equal(f.builds(),1);
+ f.values.set(preparationRevisionKey(f.spec.shop),'1');
+ const current={...f.spec,revision:'1',globalSettings:{...f.spec.globalSettings,updatedAt:'new'}};
+ assert.deepEqual(await f.service.get(current),{status:'ready',...f.result});assert.equal(f.builds(),1);assert.equal(f.queued.length,0);
+});
+
+test('changed rules, pins, stock, data epochs and private contexts cannot reuse a saved public ranking',async()=>{
+ for(const change of ['rule','pins','products','collectionData','catalogData','private','market','order','settings']){
+  const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true,orderedIds:['pin','boost','ordinary'],globalSettings:{showOnlyInStock:true}};
+  await f.service.get(f.spec,{warmup:true,precompute:true});f.values.set(preparationRevisionKey(f.spec.shop),'1');
+  let current={...f.spec,revision:'1'};
+  if(change==='rule')current.rule={conditions:[{action:'Exclude',field:'Id',value:'pin'}]};
+  if(change==='pins')current.pinnedIds=['different'];
+  if(change==='products')f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
+  if(change==='collectionData')f.values.set(rankingDataRevisionKey(f.spec.shop,'1'),'1');
+  if(change==='catalogData')f.values.set(rankingDataRevisionKey(f.spec.shop),'1');
+  if(change==='private')current.retainForIdle=false;
+  if(change==='market')current.query={...current.query,filter:["shop = 'fixture.myshopify.com'","country = 'US'"]};
+  if(change==='order')current.orderedIds=['ordinary','boost','pin'];
+  if(change==='settings')current.globalSettings={showOnlyInStock:false};
+  assert.equal((await f.service.get(current)).status,'pending',change);assert.equal(f.builds(),1,change);
+ }
+});
+
+test('exact legacy rankings can be reused without extending the source product freshness window',async()=>{
+ const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true};
+ f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,productRevision:'0',preparedAt:100000}));
+ f.values.set(preparationRevisionKey(f.spec.shop),'1');
+ assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'ready');assert.equal(f.builds(),0);
+ assert.equal(JSON.parse(f.values.get(preparationKey({...f.spec,revision:'1'}))).preparedAt,100000);
+});
+
+test('outside Include and explicit-pin product changes cannot reuse a stale ranking after a config save',async()=>{
+ for(const options of [{rule:{conditions:[{field:'Tags',action:'Include',value:'Top'}]}},{pinnedIds:['pin']}]){
+  const f=fixture();f.spec={...f.spec,retainForIdle:true,collectionId:'1',...options};
+  await f.service.get(f.spec,{warmup:true,precompute:true});
+  f.values.set(productRevisionKey(f.spec.shop,'all'),'1');f.values.set(preparationRevisionKey(f.spec.shop),'1');
+  assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'pending');
+ }
+});
+
+test('discarding a missing-product ranking blocks older compatible copies until a verified rebuild',async()=>{
+ const f=fixture();f.spec={...f.spec,retainForIdle:true,collectionId:'1'};
+ await f.service.get(f.spec,{warmup:true,precompute:true});
+ f.values.set(preparationRevisionKey(f.spec.shop),'1');const current={...f.spec,revision:'1'};
+ assert.equal((await f.service.get(current)).status,'ready');assert.ok(f.values.has(preparationKey(f.spec)));
+ await f.service.discard(current);
+ assert.equal((await f.service.get(current)).status,'pending');assert.equal(f.builds(),1);
+ await f.service.process(f.queued[0].data);assert.equal(f.builds(),2);
+ f.values.set(preparationRevisionKey(f.spec.shop),'2');assert.equal((await f.service.get({...current,revision:'2'})).status,'ready');
+});
+
+test('an external product update during a build cannot label old matches with a newer data version',async()=>{
+ const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true,rule:{conditions:[{action:'Include',field:'Tags',value:'Top'}]}};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:()=>100000,prepare:async()=>{
+  f.values.set(productRevisionKey(f.spec.shop,'all'),'1');return f.result;
+ }});
+ await service.get(f.spec,{warmup:true,precompute:true});f.values.set(preparationRevisionKey(f.spec.shop),'1');
+ assert.equal((await service.get({...f.spec,revision:'1'})).status,'pending');
+});
+
+test('a product update during compatibility validation cannot promote the old product version',async()=>{
+ const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:()=>100000,prepare:async()=>f.result,validateReuse:async()=>{
+  f.values.set(productRevisionKey(f.spec.shop,'1'),'1');return true;
+ }});
+ await service.get(f.spec,{warmup:true,precompute:true});f.values.set(preparationRevisionKey(f.spec.shop),'1');
+ const current={...f.spec,revision:'1'};
+ assert.equal((await service.get(current)).status,'pending');assert.equal(f.values.has(preparationKey(current)),false);
+});
+
+test('foreign, malformed and private reuse pointers cannot serve a ranking',async()=>{
+ for(const pointer of ['collectionPreparedSequence:other.myshopify.com:background-v2:'+'a'.repeat(64),'invalid']){
+  const f=fixture();f.spec.retainForIdle=true;
+  f.values.set(preparationReuseKey(f.spec),pointer);f.values.set(pointer,JSON.stringify({...f.result,productRevision:'0',preparedAt:100000}));
+  assert.equal((await f.service.get(f.spec)).status,'pending');
+ }
+});
+
+test('equivalent legacy short-lived payloads remain readable without bypassing data invalidation',async()=>{
+ const f=fixture();f.spec={...f.spec,retainForIdle:true,collectionId:'1'};
+ f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,productRevision:'0',preparedAt:100000,reusableDataRevision:null}));
+ assert.equal((await f.service.get(f.spec)).status,'ready');
+ f.values.set(rankingDataRevisionKey(f.spec.shop,'1'),'1');
+ assert.equal((await f.service.get(f.spec)).status,'pending');
+});
 
 test('catalog precompute finishes a complete ranking before the first visitor without enqueueing another build',async()=>{
  const f=fixture();f.spec.retainForIdle=true;
@@ -214,7 +303,7 @@ test('idle beyond ten minutes serves the last usable ranking and refreshes in th
   assert.equal(f.builds(),1);assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
   const oldKey=preparationKey(f.spec);f.values.set(preparationRevisionKey(f.spec.shop),'1');
   assert.deepEqual(await f.service.get(f.spec),{status:'pending'});
-  assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'pending');
+  assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'ready');
   assert.notEqual(preparationKey({...f.spec,revision:'1'}),oldKey);
 });
 

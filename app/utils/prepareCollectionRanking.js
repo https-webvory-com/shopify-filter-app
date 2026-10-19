@@ -1,8 +1,10 @@
 import { buildCollectionSequence, collectionRankingFields, hydrateCollectionPrices, hydrateCollectionInventory, hydrateCollectionSkus } from './rankedCollectionPage.js';
 import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFacts.js';
 
-export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts }) {
+export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
+  const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;
+  let sourceOutsideIds=native?[]:null;
   const resolveFact=factProfile?collectionFactResolver(spec.rule,factProfile,spec.mergedValues):null;
   if(factProfile&&!resolveFact)throw Error('Collection rule facts do not cover this rule');
   const projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD])]:undefined;
@@ -15,6 +17,12 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     query: spec.query, conditions: spec.rule?.conditions ?? [], sortBy: spec.sortBy,
     pinnedIds: spec.pinnedIds, orderedIds: spec.orderedIds,
     projectedFields,
+    ...(native?{observeCandidates:documents=>{for(const p of documents){
+      const id=String(p.id).split('/').pop();
+      if(sourceOutsideIds&&!p._rankingPinPlaceholder&&!native.has(id)){
+        if(sourceOutsideIds.length===1000)sourceOutsideIds=null;else sourceOutsideIds.push(id);
+      }
+    }}}:{}),
     compare: comparator?.(spec.sortBy,comparatorPins,{...spec.globalSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder}),
     hydrateRanking: async products => {
       if(loadFacts)await loadFacts(products.filter(product=>!product._rankingPinPlaceholder));
@@ -36,5 +44,5 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
       return ranked;
     },
   });
-  return { ids, metadata };
+  return { ids, metadata, ...(captureReuse?{sourceOutsideIds}:{}) };
 }

@@ -65,7 +65,7 @@ export async function prepareCollectionFromFacts(spec){
   const profile=conditions.some(isVariantCondition)?await getCollectionFactProfile(spec.shop):null;
   signal.throwIfAborted();
   const boundedIndex={search:(q,options,extra={})=>index.search(q,options,{...extra,signal:extra.signal?AbortSignal.any([signal,extra.signal]):signal})};
-  return prepareCollectionRanking(spec,{index:boundedIndex,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,
+  return prepareCollectionRanking(spec,{index:boundedIndex,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,captureReuse:true,
    ...(profile?{factProfile:profile,loadFacts:products=>store.load(spec.shop,profile,products,{signal})}:{})});
  })();
  let onAbort;

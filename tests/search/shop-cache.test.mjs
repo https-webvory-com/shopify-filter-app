@@ -46,7 +46,7 @@ test('admin invalidation preserves browsing sessions, advances revision and sche
  f.values.set('collectionPreparedSequence:shop:old','obsolete');f.values.set('globalSettings:shop','obsolete');
  await f.invalidateShop('shop');
  assert.equal(f.values.get('collectionPreparationRevision:shop'),'1');
- assert.equal(f.values.has('collectionPreparedSequence:shop:old'),false);
+ assert.equal(f.values.get('collectionPreparedSequence:shop:old'),'obsolete');
  assert.equal(f.values.has('globalSettings:shop'),false);
  for(const prefix of ['collectionRankingSession:','collectionOrderSnapshot:','collectionWarmupContexts:'])assert.equal(f.values.get(prefix+'shop'),'retained');
  assert.equal(f.warmups[0][0],'COLLECTION_RANKING_WARM');assert.equal(f.warmups[0][1].shop,'shop');

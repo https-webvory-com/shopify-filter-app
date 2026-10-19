@@ -21,7 +21,7 @@ try{
   const queued=await layer.queue.getJob(id);
   assert.equal(queued.name,'COLLECTION_RANKING_WARM');assert.deepEqual(queued.data,data);
   assert.equal(await queued.getState(),'prioritized');
-  assert.equal(await layer.redis.get(`collectionPreparedSequence:${shop}:background-v2:old`),null);
+  assert.equal(await layer.redis.get(`collectionPreparedSequence:${shop}:background-v2:old`),'old');
   let processed=false;
   layer.setHandler(async job=>{assert.equal(job.name,'COLLECTION_RANKING_WARM');assert.deepEqual(job.data,data);processed=true;});
   layer.worker.resume();await wait(()=>processed);await layer.worker.pause();

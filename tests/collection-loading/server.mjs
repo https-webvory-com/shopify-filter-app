@@ -8,6 +8,7 @@ import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
+import {validateCollectionReuse} from '../../app/utils/validateCollectionReuse.js';
 import {createCollectionFactProfile,projectCollectionRuleFacts} from '../../app/utils/collectionRuleFacts.js';
 import {createCollectionPreparation,preparationRevisionKey,preparationKey} from '../../app/utils/collectionPreparation.js';
 import {createShopCacheInvalidation,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
@@ -54,6 +55,7 @@ export async function createLoadingServer({redisLayer}={}) {
     return job;
   }};
   preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,
+    validateReuse:(spec,value)=>validateCollectionReuse(index,spec,value),
     prepareDirect:async spec=>{
       if(!state.directFacts)return null;
       const profile=createCollectionFactProfile(spec.rule.conditions,spec.mergedValues);
