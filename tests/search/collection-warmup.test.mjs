@@ -194,3 +194,12 @@ test('product updates precompute affected collections without any prior visitor 
  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);
  assert.equal(jobs[0][2].record.collectionId,'123');assert.equal(jobs[0][3].priority,10);
 });
+
+
+test('catalog completion distinguishes ready rankings from materialized cards',async()=>{
+ for(const stored of [true,false]){
+  const f=await fixture();let calls=0;f.setResponse(()=>++calls===1?Response.json({warmup:true}):Response.json({products:[]},{headers:stored?{'X-CFP-Collection-Cards':'stored'}:{}}));
+  const result=await f.processCollectionWarmups('fixture.myshopify.com',null,{url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
+  assert.equal(result.rankingContextsReady,1);assert.equal(result.cardContextsReady,stored?1:0);assert.equal(result.cardContextsUnavailable,stored?0:1);
+ }
+});

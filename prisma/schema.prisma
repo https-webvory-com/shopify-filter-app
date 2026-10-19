@@ -7,6 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Public collection loading only. These bounded, disposable copies keep Redis
+// eviction from forcing an unchanged ranking to be rebuilt on a shopper visit.
+model CollectionLoadingSnapshot {
+  id           String   @id
+  shop         String
+  kind         String
+  collectionId String
+  aliases      String[] @default([])
+  generation   String
+  payload      Bytes
+  size         Int
+  expiresAt    DateTime
+  validatedAt  DateTime
+  updatedAt    DateTime @updatedAt
+
+  @@index([shop, kind, updatedAt])
+  @@index([aliases], type: Gin)
+  @@index([expiresAt])
+}
+
 model Session {
   id                  String    @id
   shop                String

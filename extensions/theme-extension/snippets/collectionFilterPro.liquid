@@ -54,7 +54,8 @@
         var rankedParams = new URLSearchParams();
         rankedParams.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
         rankedParams.set('shop', shop);
-        if (window.Shopify?.country) rankedParams.set('country', window.Shopify.country);
+        var country=window.Shopify?.country||window.cfpCollectionContext?.country;
+        if (country) rankedParams.set('country',country);
         if (window.cfpCustomerTags) rankedParams.set('customer_tags', window.cfpCustomerTags);
         if (collHandle) rankedParams.set('collectionHandle', collHandle);
         else if (collId) rankedParams.set('collectionId', collId);
@@ -62,7 +63,14 @@
         rankedParams.set('sortBy', params.get('sortBy') || 'best-selling');
         rankedParams.set('page', '1'); rankedParams.set('limit', '25');
           rankedParams.set('responseProfile', window.cfpCustomerTags || !rankedParams.has('country') ? 'collection-v1' : ['best-selling','bestselling'].includes(rankedParams.get('sortBy'))?'collection-cards-v1':'collection-v2');
+        rankedParams.sort();
         var earlyUrl = 'https://aisearchfilter.webvory.com/api/filter?' + rankedParams.toString();
+        var previous=window._cfpRankedEarlyFetch;
+        if(previous){
+          var existing=new URL(previous.url);existing.searchParams.sort();
+          if(existing.toString()===earlyUrl)return;
+          previous.controller.abort();
+        }
         var controller = new AbortController();
         var timeout = setTimeout(function() { controller.abort(); }, 30000);
         var configurationPromise = null;

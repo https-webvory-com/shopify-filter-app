@@ -1,0 +1,18 @@
+{% if template.name == 'collection' and collection %}
+  <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
+  <meta name="cfp-collection-context"
+    data-shop="{{ shop.permanent_domain | escape }}"
+    data-handle="{{ collection.handle | escape }}"
+    data-country="{{ localization.country.iso_code | escape }}"
+    data-locale="{{ request.locale.iso_code | escape }}"
+    data-customer-tags="{{ customer.tags | join: ',' | escape }}">
+{% endif %}
+
+{% schema %}
+{
+  "name": "Faster collection loading",
+  "target": "head",
+  "javascript": "collectionLoading.js",
+  "settings": []
+}
+{% endschema %}

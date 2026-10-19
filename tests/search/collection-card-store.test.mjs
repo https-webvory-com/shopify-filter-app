@@ -1,3 +1,4 @@
+import {createCardStateReader} from '../../app/utils/collectionCardState.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCollectionCardStore,collectionCardKey} from '../../app/utils/collectionCardStore.js';
@@ -78,14 +79,23 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
  const calls=[],spec={shop:'fixture.myshopify.com',collectionId:'gid://shopify/Collection/1'};
  const redis={mget:async(...keys)=>{calls.push(keys);return ['1','2','3','4','5',JSON.stringify({revision:'current-native'}),'prepared'];}};
  const adapter=await loadModule('app/services/collectionCards.server.js',{
-  '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]}}},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
-  '../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
+  '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]}}},'./collectionLoadingSnapshots.server.js':{loadCollectionLoadingSnapshot:async()=>null,saveCollectionLoadingSnapshot:async()=>false},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
+  '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
   '../utils/collectionPreparation.js':{preparationKey},'../utils/rankedCollectionPage.js':{},'../utils/collectionResponse.js':{},'./collectionRankingSession.server.js':{},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));
  const state=await adapter.createCardStateReader(redis)({...spec,collectionId:'1',preparedKey:'source'});
  assert.equal(state.orderRevision,'current-native');assert.equal(state.products,'2');assert.equal(state.globalProducts,'3');assert.equal(state.preparedRaw,'prepared');
- assert.ok(calls[0].includes('collectionOrderSnapshot:fixture.myshopify.com:gid://shopify/Collection/1'));assert.equal(calls[0].at(-1),'source');
+ assert.ok(calls[0].includes('collectionOrderSnapshot:fixture.myshopify.com:gid://shopify/Collection/1'));assert.equal(calls[0].at(-2),'source');
  const database={merchandisingRule:{findMany:async()=>[{id:'scheduled',startDate:new Date(10000),endDate:new Date(20000)}]}};let clock=9999;const read=adapter.createCardStateReader(redis,database,()=>clock);const identity={...spec,collectionId:'1',preparedKey:'source'};const before=await read(identity);clock=10000;const active=await read(identity);clock=20001;const ended=await read(identity);assert.notEqual(before.scheduleEpoch,active.scheduleEpoch);assert.notEqual(active.scheduleEpoch,ended.scheduleEpoch);
+});
+
+
+test('durable card copies survive Redis eviction, deduplicate aliases and support a session-free readiness probe',async()=>{
+ let record;const f=fixture({saveDurable:async value=>{record=value;return true;},loadDurable:async({key})=>record?.aliases.includes(key)?record.payload:null});
+ await(await f.begin()).finish(f.payload,'fp');assert.ok(f.values.get(collectionCardKey(f.request)).startsWith('p1:'));assert.equal(record.aliases.length,2);
+ f.values.clear();const probe=await f.store.get(f.request,{probe:true});assert.equal(probe.status,200);assert.equal(f.sessions.length,0);
+ const response=await f.store.get(f.request);assert.equal(response.status,200);assert.equal(f.sessions.length,1);
+ f.setValid(false);assert.equal(await f.store.get(f.request),null);
 });

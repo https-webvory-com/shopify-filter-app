@@ -26,12 +26,14 @@
       sold_out_text_color: block.settings.sold_out_text_color
     %}
   </div>
+  <span id="cfp-collection-ready" hidden></span>
 {% endif %}
 
 {% schema %}
 {
   "name": "AI Collection Filter",
   "target": "section",
+  "javascript": "collectionFilterPro.js",
   "settings": [
     {
       "type": "checkbox",

@@ -1,0 +1,49 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createCollectionLoadingSnapshots} from '../../app/utils/collectionLoadingSnapshots.js';
+
+function fixture(options={}){
+ const rows=new Map(),values=new Map();let time=100000,locks=0;
+ const matches=(row,w)=>Object.entries(w).every(([key,value])=>key==='expiresAt'?(value.gt?row.expiresAt>value.gt:row.expiresAt<=value.lte):key==='aliases'?row.aliases.includes(value.has):key==='id'&&value.in?value.in.includes(row.id):row[key]===value);
+ const table={findFirst:async({where})=>[...rows.values()].find(r=>matches(r,where))||null,findUnique:async({where})=>rows.get(where.id)||null,
+  deleteMany:async({where})=>{for(const [key,row]of rows)if(matches(row,where))rows.delete(key);},
+  upsert:async({where,create,update})=>rows.set(where.id,rows.has(where.id)?{...rows.get(where.id),...update}:create),
+  aggregate:async({where})=>{const selected=[...rows.values()].filter(r=>matches(r,where));return {_count:selected.length,_sum:{size:selected.reduce((n,r)=>n+r.size,0)}};},
+  findMany:async({where,take})=>[...rows.values()].filter(r=>matches(r,where)).sort((a,b)=>a.updatedAt-b.updatedAt||a.id.localeCompare(b.id)).slice(0,take),
+ };
+ const database={collectionLoadingSnapshot:table,$queryRaw:async()=>{locks++;},$transaction:async fn=>{const before=new Map(rows);try{return await fn(database);}catch(error){rows.clear();for(const pair of before)rows.set(...pair);throw error;}}};
+ const redis={get:async key=>values.get(key),set:async(key,value,mode)=>{if(mode!=='NX'||!values.has(key))values.set(key,value);}};
+ const store=createCollectionLoadingSnapshots({database,redis,now:()=>time,...options});
+ const shop='fixture.myshopify.com',key=n=>`collectionFirstPage:${shop}:`+String(n).padStart(64,'a');
+ const write=(n,payload='payload')=>store.save({shop,kind:'cards',key:key(n),aliases:[key(n),key(n+100)],collectionId:'1',payload,expiresAt:time+10000});
+ return {store,rows,values,database,redis,shop,key,write,advance:n=>time+=n,locks:()=>locks};
+}
+
+test('durable copies deduplicate handle/ID aliases, remain tenant scoped and expire',async()=>{
+ const f=fixture();assert.equal(await f.write(1),true);assert.equal(f.rows.size,1);assert.equal(f.locks(),1);
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(101)}),'payload');
+ assert.equal(await f.store.load({shop:'other.myshopify.com',kind:'cards',key:f.key(101)}),null);
+ assert.equal(await f.store.save({shop:f.shop,kind:'cards',key:f.key(1),aliases:['queue:protected'],collectionId:'1',payload:'x',expiresAt:200000}),false);
+ f.advance(10001);assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);
+});
+
+test('Redis resets reject old durable copies instead of resurrecting lost invalidation epochs',async()=>{
+ const f=fixture();await f.write(1);f.values.clear();
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);
+ await f.write(1,'replacement');assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),'replacement');
+});
+
+test('durable byte/entry budgets evict oldest owned snapshots and oversized writes are rejected',async()=>{
+ const f=fixture({maxEntries:2,maxBytes:12,maxEntryBytes:10});
+ await f.write(1,'123456');f.advance(1);await f.write(2,'123456');f.advance(1);await f.write(3,'123456');
+ assert.equal(f.rows.size,2);assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);
+ assert.equal(await f.write(4,'12345678901'),false);assert.equal(f.rows.size,2);
+ const other={...f.rows.values().next().value,id:'protected',shop:'other.myshopify.com',size:1000000};f.rows.set(other.id,other);
+ await f.write(4,'123456');assert.ok(f.rows.has('protected'));
+});
+
+test('missing migrations or database failures are optional and cannot fail canonical delivery',async()=>{
+ const f=fixture();f.database.collectionLoadingSnapshot.findFirst=async()=>{throw Error('Missing table');};
+ f.database.$transaction=async()=>{throw Error('Unavailable database');};
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);assert.equal(await f.write(1),false);
+});

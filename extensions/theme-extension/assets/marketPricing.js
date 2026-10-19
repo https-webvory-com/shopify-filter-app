@@ -57,4 +57,5 @@
       return result;
     },
   };
+  if(typeof window.dispatchEvent==='function')window.dispatchEvent(new Event('cfp:market-pricing-ready'));
 })();

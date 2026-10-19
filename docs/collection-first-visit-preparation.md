@@ -198,7 +198,8 @@ are validated before reuse. Include/pin contexts also validate the global produc
 version. Facets are never stored in this snapshot. Background rendering creates
 no shopper sessions; actual visits get immutable, URL-specific browsing tokens.
 A failed/slow optional lookup falls back within its 500 ms budget. There are no
-application timeout increases, ranking formula changes, or schema migrations.
+application timeout increases or ranking formula changes. The durable loading
+increment below adds an additive database table and migration.
 
 Unlike the earlier backend-only changes, this implementation also updates
 collectionFilterPro.js and collectionFilterPro.liquid. Both the backend and the
@@ -222,6 +223,80 @@ fixture timings, not live-store benchmarks. Evidence is in ignored
 scratch/collection-headless-results.json. Isolated real Redis checks passed for
 bounded retention, expiry, visitor-only sessions and protected session keys.
 
-Final local validation: 636/636 regressions, production build, 28/28 browser
+Previous cards-first validation: 636/636 regressions, production build, 28/28 browser
 cases and isolated real-Redis retention checks passed. No commit, push, backend
 deploy or Shopify release was performed.
+
+### Durable loading and earlier browser startup
+
+The current local increment saves disposable public ranking/card copies in
+`CollectionLoadingSnapshot`. Redis remains the first lookup; a missing payload
+can fall back to PostgreSQL only when its generation and invalidation history
+are still present and current. A Redis reset rejects old database copies rather
+than assuming missing counters mean no changes. Product, configuration, order,
+scheduled-rule and first-page document validation still apply. This does not
+turn a stale ranking into a ready ranking or finish the catalog warmup queue.
+
+Database copies expire within the original 24-hour freshness window and have a
+per-shop limit of 8,192 entries / 256 MiB, with at most 2 MiB per entry. Budget
+decisions use a PostgreSQL transaction and per-shop advisory lock across web
+and worker processes. Cards retain their stricter 128 KiB construction limit.
+ID/handle aliases point to a single canonical card payload. Missing tables or
+optional storage failures fall back to normal collection delivery.
+
+The collection renderer now loads asynchronously and waits for complete widget
+markup instead of waiting for all deferred theme scripts. It supports market
+pricing and wishlist dependencies that arrive after cards. The optional
+**Faster collection loading** head embed additionally starts the matching
+market/locale request before body markup. Its early response is consumed only
+when the body request matches; changed filters, sort, customer or market context
+use their corresponding request.
+
+Local verification commands:
+
+```sh
+node tests/collection-loading/run-postgres-snapshots.mjs
+node tests/collection-loading/run-headless.mjs
+node scripts/run-regression-tests.mjs
+npm run build
+```
+
+The PostgreSQL check requires local PostgreSQL binaries (`POSTGRES_BIN`, default
+`C:/Program Files/PostgreSQL/18/bin`). It creates a disposable loopback cluster
+and separate Prisma client under `scratch`, applies the exact migration, checks
+real transactions/concurrent budget enforcement, and stops only that cluster.
+It does not read `DATABASE_URL` or connect to production. Cluster logs remain
+under `scratch` for inspection.
+
+Release requirements, for a future authorized deployment:
+
+1. Include all new utility/service/theme files and
+   `prisma/migrations/20261019000000_collection_loading_snapshots/migration.sql`.
+2. Apply the additive schema and regenerate Prisma before the backend and worker
+   use this model. This repository's normal startup uses `prisma db push`; a
+   migration-managed installation must apply the checked-in migration instead.
+3. Release both backend/worker and Shopify theme-extension assets. Enable the
+   **Faster collection loading** app embed on the selected theme for the extra
+   head request; publishing assets alone does not enable a new embed.
+4. Check actual card readiness, not queue completions or cached ID counts:
+   `node scripts/check-collection-loading-readiness.mjs --shop STORE.myshopify.com`.
+   `--limit 10` gives a bounded sample. The probe creates no shopper sessions or
+   preparation jobs and performs no cache/schema repairs. It reports coverage
+   of locally known collections in observed/configured markets only, not proof
+   that every Shopify-published collection or market is ready.
+5. Verify first/repeat visits, market prices, wishlist, filters and pagination
+   on the selected theme and measure live cards independently from facets.
+
+Current scope is local verification only. No backend/worker deployment, database
+change on production, theme publication or embed activation is authorized by
+this local completion request.
+
+Local completion verification (2026-10-19): 650/650 regressions, 29/29 actual
+storefront-asset browser fixture checks, 8/8 real PostgreSQL checks, production
+build and Prisma schema validation passed. The repeat-visit browser test now
+sets up two visits with identical settings independently of the preceding
+wishlist-dependency test. PostgreSQL verification includes the exact migration,
+GIN index, Prisma byte/array round trips, two-client advisory-lock concurrency,
+per-shop budgets/expiry, reset rejection, missing-table fallback and rollback.
+These local results do not establish live-store timing or complete live catalog
+readiness. The user explicitly selected local-only completion.

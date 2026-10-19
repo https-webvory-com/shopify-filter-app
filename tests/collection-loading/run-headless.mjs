@@ -41,7 +41,7 @@ try{
   const cards=()=>evaluate(`[...document.querySelectorAll('.cfp-product-card--reveal')].map(c=>c.querySelector('a').getAttribute('href').match(/dress-(\\d+)/)[1])`);
   const navigate=async(query='')=>{await send('Page.navigate',{url:origin+'/collections/fixture'+query});await wait('window._cfpInitStarted===true');};
   let selected=!process.argv.some(a=>a.startsWith('--from='));
-  const test=async(name,fn)=>{if(!selected){selected=name.startsWith(process.argv.find(a=>a.startsWith('--from=')).slice(7));if(!selected)return;}if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
+  const test=async(name,fn)=>{const only=process.argv.find(a=>a.startsWith('--match='));if(only&&!name.includes(only.slice(8)))return;if(!selected){selected=name.startsWith(process.argv.find(a=>a.startsWith('--from=')).slice(7));if(!selected)return;}if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
@@ -75,7 +75,26 @@ try{
     await control({hold:false,early:false,assetDelay:0,apiDelay:0});
     return {cardsMs:Math.round(at),facetDelayMs:3000,twoSecondTargetMet:at<2000,liveTiming:false};
   });
+  await test('head startup renders before DOMContentLoaded and late pricing/wishlist dependencies remain functional',async()=>{
+    await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,themeDelay:3500,htmlDelay:500,assetDelay:150,apiDelay:250,cssDelay:0,wishlist:true});
+    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const at=await evaluate('cardSnapshots[0].at');assert.ok(at<2000,'Head fixture exceeded target: '+at);
+    assert.equal(await evaluate("performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd"),0);
+    assert.equal(await evaluate("document.querySelector('.cfp-product-card__price').textContent"),'See product price');
+    const first=await cards();await wait("performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd>0");
+    await wait("document.querySelector('.cfp-product-card__price').textContent!=='See product price'");
+    await wait("document.querySelectorAll('.cfp-product-card .wishlist-toggle-btn').length===25");
+    assert.ok(await evaluate("!!window.pageDataMap['dress-1']"));assert.deepEqual(await cards(),first);
+    const data=await getState();assert.equal(data.requests.length,1);assert.equal(data.state.builds,1);assert.equal(data.facetResponses.length,1);assert.deepEqual(await evaluate('browserErrors'),[]);
+    const domReadyMs=await evaluate("performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd");
+    await control({hold:false,headRenderer:false,themeDelay:0,htmlDelay:0,assetDelay:0,apiDelay:0,wishlist:false});
+    return {cardsMs:Math.round(at),domReadyMs:Math.round(domReadyMs),themeScriptDelayMs:3500,htmlDelayMs:500,twoSecondTargetMet:at<2000,liveTiming:false};
+  });
   await test('a repeat page uses the prepared cache without another build',async()=>{
+    // Keep both visits under the same settings; the preceding dependency test
+    // switches wishlist integration off, which correctly changes the ranking key.
+    await control({reset:true,precompute:true,early:false,assetDelay:0,apiDelay:0,clockOffset:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",8000);
     const start=Date.now();await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",8000);
     const data=await getState();assert.equal(data.state.builds,1);return {browserReadyMs:Date.now()-start,builds:data.state.builds};
   });

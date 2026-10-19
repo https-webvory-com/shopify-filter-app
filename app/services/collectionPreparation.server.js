@@ -10,6 +10,7 @@ import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './colle
 import configuredWarmups from '../config/collection-prewarm.json';
 import {prepareCollectionFromFacts,scheduleCollectionFactRefresh} from './collectionRuleFacts.server.js';
 import {validateCollectionReuse} from '../utils/validateCollectionReuse.js';
+import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot} from './collectionLoadingSnapshots.server.js';
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -30,6 +31,7 @@ function seededWarmups(shop) {
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
   await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
   prepareDirect:prepareCollectionFromFacts,
+  loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
   revalidateSaved:true,
   observe:event=>console.info('CFP: collection preparation',JSON.stringify(event)),
@@ -182,7 +184,7 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
   const seeds=seededWarmups(shop);
   const urls = catalogRecord ? [JSON.stringify(catalogRecord)] : [...seeds.map(record=>JSON.stringify(record)),...(seeds.length===publicPreparationLimit?[]:await redis.zrange(warmupContextsKey(shop), -(publicPreparationLimit-seeds.length), -1))];
   const { loader } = await import('../routes/api.filter.jsx');
-  const seen=new Set();
+  const seen=new Set(),result={rankingContextsReady:0,cardContextsReady:0,cardContextsUnavailable:0};
   for (const value of urls) {
     let record,url;
     try{record=JSON.parse(value);url=new URL(record.url);}catch{continue;}
@@ -201,21 +203,25 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     if(catalogRecord){
       // Pending Shopify order/rule revisions must retry, never count as ready.
       if(response.status>=400||payload?.warmup!==true)throw Error('Collection catalog preparation is not ready');
-      console.info('CFP: collection catalog ready',JSON.stringify({shop,collectionId:normalized.collectionId,url:normalized.url}));
+      console.info('CFP: collection catalog ranking ready',JSON.stringify({shop,collectionId:normalized.collectionId,url:normalized.url}));
     }
     // Materialize cards too; a saved ID sequence alone still leaves the first
     // shopper waiting for product shaping and facet work. No sessions are
     // persisted by this trusted background-only rendering context.
     if(payload?.warmup===true){
+      result.rankingContextsReady++;
       const cardsUrl=new URL(normalized.url);cardsUrl.searchParams.set('responseProfile','collection-cards-v1');
       try{
         const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
-        if(cards.status===200&&cards.headers?.get('X-CFP-Collection-Cards')==='stored')
+        if(cards.status===200&&cards.headers?.get('X-CFP-Collection-Cards')==='stored'){
+          result.cardContextsReady++;
           console.info('CFP: collection cards ready',JSON.stringify({shop,collectionId:normalized.collectionId}));
-      }catch(error){console.error('CFP: Optional collection cards warmup unavailable:',error.name);}
+        }else result.cardContextsUnavailable++;
+      }catch(error){result.cardContextsUnavailable++;console.error('CFP: Optional collection cards warmup unavailable:',error.name);}
     }
   }
   // Product/rule saves must cover catalog collections even when their URLs are
   // absent from the recent-visitor registry. Jobs yield after each collection.
   if(!catalogRecord)await scheduleCatalogCollectionWarmups(shop,collectionIds);
+  return result;
 }
