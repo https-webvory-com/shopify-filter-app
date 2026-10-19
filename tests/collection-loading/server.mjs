@@ -9,6 +9,7 @@ import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
 import {validateCollectionReuse} from '../../app/utils/validateCollectionReuse.js';
+import {createCollectionCandidateIndex} from '../../app/utils/collectionCandidateIndex.js';
 import {createCollectionFactProfile,projectCollectionRuleFacts} from '../../app/utils/collectionRuleFacts.js';
 import {createCollectionPreparation,preparationRevisionKey,preparationKey} from '../../app/utils/collectionPreparation.js';
 import {createShopCacheInvalidation,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
@@ -22,7 +23,7 @@ export async function createLoadingServer({redisLayer}={}) {
   const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],configurationRequests=[],requestStarts=[],facetRequests=[];
   const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
-  const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0};
+  const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0};
   const docs=Array.from({length:30},(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
     bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,inventoryTotal:5,
@@ -38,7 +39,12 @@ export async function createLoadingServer({redisLayer}={}) {
     return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution:{},processingTimeMs:1};
   };
   const index={search:async(_q,options)=>select(options),
-    getDocuments:async options=>{trace.documentBatches++;const ids=JSON.parse(options.filter.slice(6));const results=ids.map(id=>byId.get(String(id))).filter(doc=>doc&&doc.status!=='DELETED').map(doc=>({...doc})).reverse();trace.hydrations+=results.length;return {results,offset:0,limit:options.limit,total:results.length};},
+    getSettings:async()=>({distinctAttribute:null,pagination:{maxTotalHits:100000}}),
+    getDocuments:async options=>{trace.documentBatches++;
+      if(typeof options.filter!=='string'||!options.filter.startsWith('id IN ')){
+        trace.candidateBrowses++;const rows=docs.filter(p=>p.status==='ACTIVE');return {results:rows.slice(options.offset||0,(options.offset||0)+options.limit).map(p=>Object.fromEntries(options.fields.filter(k=>k in p).map(k=>[k,p[k]]))),total:rows.length};
+      }
+      const ids=JSON.parse(options.filter.slice(6));const results=ids.map(id=>byId.get(String(id))).filter(doc=>doc&&doc.status!=='DELETED').map(doc=>({...doc})).reverse();trace.hydrations+=results.length;return {results,offset:0,limit:options.limit,total:results.length};},
     getDocument:async id=>{trace.documentCalls++;trace.hydrations++;const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
   const prisma={product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]}};
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
@@ -55,11 +61,12 @@ export async function createLoadingServer({redisLayer}={}) {
     return job;
   }};
   preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,
+    revalidateSaved:true,
     validateReuse:(spec,value)=>validateCollectionReuse(index,spec,value),
     prepareDirect:async spec=>{
       if(!state.directFacts)return null;
       const profile=createCollectionFactProfile(spec.rule.conditions,spec.mergedValues);
-      return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator,
+      return prepareCollectionRanking(spec,{index:createCollectionCandidateIndex(index,spec),prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator,
         factProfile:profile,loadFacts:async products=>{for(const p of products)Object.assign(p,projectCollectionRuleFacts(byId.get(p.id.split('/').pop()),profile,merch.checkRuleMatch,{backfill:true}));}});
     },
     prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
@@ -117,7 +124,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.precompute)await warm(shop,null,true);
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests}));return;
       }
-      if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests,configurationRequests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}
+      if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},trace,requests,configurationRequests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}
       if(url.pathname.startsWith('/assets/')){
         const name=url.pathname.split('/').pop();if(!['collectionFilterPro.js','collectionFilterPro.css','marketPricing.js'].includes(name)){res.writeHead(404).end();return;}
         if(name==='collectionFilterPro.css'&&state.cssDelay)await new Promise(resolve=>setTimeout(resolve,state.cssDelay));

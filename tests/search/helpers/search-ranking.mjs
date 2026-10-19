@@ -6,7 +6,7 @@ import * as color from '../../../app/utils/searchColor.js';
 import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 
 export async function loadModule(file, mocks) {
-  const context = { module: { exports: {} }, exports: {}, URL, Response, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
+  const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if (!(name in mocks)) throw Error('Unexpected import ' + name);
     const value = mocks[name];
     return value && 'default' in value ? { __esModule: true, ...value } : value;

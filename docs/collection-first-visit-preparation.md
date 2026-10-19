@@ -9,9 +9,10 @@ four observed/configured markets. Discovery uses 100-row catalog pages every
 four minutes. Private/customer/filter/token contexts never seed catalog work.
 Each catalog replay is an individual job that completes and publishes the full
 ranking inside the worker before reporting success. It does not merely enqueue
-a second build. Recent warmups, catalog preparation, fact sweeps and ranking
-refreshes share background priority 10, so repeated maintenance cannot jump in
-front of an older unseen collection. Existing priority-20 catalog jobs are
+a second build. Recent warmups, catalog preparation and ranking refreshes share
+background priority 10. Small fact-backfill prerequisite jobs use priority 5,
+so missing shared product inputs can be filled before expensive catalog builds.
+Existing priority-20 catalog jobs are
 promoted during discovery. Waiting visitor jobs retain priority 1. Worker
 concurrency remains one; an already running build cannot be preempted.
 
@@ -29,6 +30,58 @@ Order refreshes replace only their own old version. Eviction cannot delete
 browsing sessions or queue data. Configuration and product freshness checks are
 unchanged. The cache retains rankings for 24 hours and refreshes in background
 using the existing policies.
+
+## Maintained inputs and efficient query-time ranking
+
+Supported anonymous best-selling collections can retrieve compact filtered
+documents without asking search to sort the full native set again. Shopify's
+complete ordered ID snapshot supplies native tie positions. At most 1,000
+outside Include IDs are checked with the original filtered/sorted search to
+preserve their exact base order. The existing merchandising comparator still
+produces the complete immutable ID sequence before pagination; there is no
+approximate first-page ordering or pagination against a changing live query.
+
+This path checks engine settings for distinctness and restricted displayed
+attributes and falls back to canonical
+search for unsupported query options, private/filter contexts, other sorts,
+missing browse support, unstable counts/duplicate IDs, more than 50,000
+candidates, projections larger than 16 MiB, large outside sets, or failed outside
+order validation. Browse pages contain at most 1,000 compact documents. No index
+settings, ranking formula, response shape, theme asset or schema is changed.
+
+Normal product writes now carry their version-bound rule facts in the same index
+document when that optional projection fits 4 KiB. Those current facts need no
+Redis lookup. Missing/stale projections still use the existing bounded Redis fact
+store; missing facts on a visitor request never trigger full variant hydration.
+Derived fact fields are excluded from the product-change fingerprint so a
+metadata-only refresh cannot invalidate rankings. Original product/variant
+inputs remain fingerprinted normally.
+The visitor budget remains four seconds. The worker can populate only missing
+facts from exact full product versions in batches of 25, using the canonical
+matcher and SKU hydration. It checks shop, ACTIVE status and the source marker
+before publishing reusable facts. Redis writes use bounded 25-command pipelines.
+Overlapping collections reuse these shared facts instead of repeating variant
+reads. Backfill never rewrites product documents or their source markers.
+Completed prerequisite sweeps leave a one-hour cooldown so repeated scans cannot
+continuously monopolize the background lane; changed product versions continue
+to be maintained by their writers and repaired by individual ranking jobs.
+
+An unchanged supported saved ranking can be renewed after checking all relevant
+data/configuration revisions and the independent outside-Include base order.
+This avoids rebuilding the entire collection every refresh interval. An update
+during validation rejects renewal; product/rule/order changes, missing proofs and
+unsupported contexts retain their previous rebuild/freshness behavior. Existing
+immutable browsing tokens remain unchanged.
+The same product-freshness guard also tracks outside-Include and explicit-pin
+updates using the shop-wide revision, including Includes found in rule groups;
+catalog and last-order reuse cannot bypass that check.
+
+This removes repeated search sorting and variant reads from the supported fast
+path, but still sorts compact IDs with the canonical comparator. It does not
+claim constant-time ranking for arbitrary rules, instantaneous initial backfill,
+unlimited cache coverage, or a universal four-second storefront load. Initial
+shared-input coverage, worker throughput, engine/browser/network latency and the
+existing retention budgets still need production measurement after deployment.
 
 Scalar/tag ranking scans request 10,000 projected products per batch instead of
 1,000. Projections containing collection arrays retain 1,000-row batches; variant
@@ -111,3 +164,14 @@ the first visitor with the worker paused and no new build or pending response.
 Isolated real-Redis reuse checks also verified scoped/bulk invalidation guards,
 bounded compatibility pointers, and protection of browsing-session keys.
 All 11 existing real-Redis/BullMQ regression checks passed as well.
+
+Local verification for maintained inputs and query-time ranking: 627 regressions,
+the production build, 27 headless browser checks and focused 256 MiB heap checks
+passed. Complete native/Include rankings, explicit missing pins, zero prices,
+variant-selected images, SKU hydration, cancellation, restricted engine settings,
+changing/missing/foreign product versions, cache limits and outside-product
+revision changes are covered. Real Redis checks verified 80 pipelined writes,
+exact source versions, bounded profiles and tenant isolation. Browser fixtures
+verified the filtered compact-input path with the worker paused, plus an
+unchanged ranking after two simulated hours. These are local fixtures, not a
+post-deployment Feather timing or proof that every production context is ready.

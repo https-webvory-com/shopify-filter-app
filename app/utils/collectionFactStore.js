@@ -32,29 +32,52 @@ export function readCollectionFactRecord(raw,source,known){
  return value;
 }
 export function createCollectionFactStore(redis){
- return {
-  async put(shop,profile,product,facts){
+ const args=(shop,profile,product,facts)=>{
    if(!collectionFactsCurrent({...product,...facts},profile))throw Error('Invalid collection facts');
    const raw=JSON.stringify({s:facts.cfpCollectionFactSource,m:facts.cfpCollectionFactMatches,i:facts.cfpCollectionFactImages});
-   return redis.eval(write,4,...factStoreKeys(shop,profile.id),`collectionRuleFactProfiles:${shop}`,
+   return [write,4,...factStoreKeys(shop,profile.id),`collectionRuleFactProfiles:${shop}`,
     clean(product.id),facts.cfpCollectionFactSource,raw,lifetime,budget,Number(profile.revision||0),profile.id,
-    `collectionRuleFacts:${shop}:`,`collectionRuleFactHeads:${shop}:`,`collectionRuleFactBytes:${shop}:`);
+    `collectionRuleFacts:${shop}:`,`collectionRuleFactHeads:${shop}:`,`collectionRuleFactBytes:${shop}:`];
+ };
+ return {
+  async put(shop,profile,product,facts){
+   return redis.eval(...args(shop,profile,product,facts));
   },
-  async load(shop,profile,products,{signal}={}){
+  async putMany(shop,profile,rows){
+   const results=[];
+   for(let offset=0;offset<rows.length;offset+=25){
+    const commands=rows.slice(offset,offset+25).map(({product,facts})=>args(shop,profile,product,facts));
+    if(typeof redis.pipeline==='function'){
+     const pipeline=redis.pipeline();for(const command of commands)pipeline.eval(...command);
+     for(const [error,value] of await pipeline.exec()){if(error)throw error;results.push(value);}
+    }else results.push(...await Promise.all(commands.map(command=>redis.eval(...command))));
+   }
+   return results;
+  },
+  async load(shop,profile,products,{signal,allowMissing=false}={}){
    const key=factStoreKeys(shop,profile.id)[0];
    const known=new Set(profile.conditions.map(c=>c.key));
+   const missing=[];
    // Bound command/reply size without issuing an individual lookup per product.
    for(let offset=0;offset<products.length;offset+=1000){
-    const rows=products.slice(offset,offset+1000),fields=rows.map(p=>clean(p.id)+':'+(p.cfpCollectionInputSource||'legacy'));
+    const rows=products.slice(offset,offset+1000).filter(p=>{
+     if(!collectionFactsCurrent(p,profile))return true;
+     // Indexed facts are an optimization only; malformed facts must still fail closed.
+     try{readCollectionFactRecord(JSON.stringify({s:p.cfpCollectionFactSource,m:p.cfpCollectionFactMatches,i:p.cfpCollectionFactImages}),p.cfpCollectionInputSource||'legacy',known);return false;}catch{return true;}
+    }),fields=rows.map(p=>clean(p.id)+':'+(p.cfpCollectionInputSource||'legacy'));
+    if(!rows.length)continue;
     signal?.throwIfAborted();
     const values=await redis.hmget(key,...fields);
     signal?.throwIfAborted();
     for(let i=0;i<rows.length;i++){
      const p=rows[i],source=p.cfpCollectionInputSource||'legacy';
-     const value=readCollectionFactRecord(values[i],source,known);
+     let value;
+     try{value=readCollectionFactRecord(values[i],source,known);}
+     catch(error){if(!allowMissing)throw error;missing.push(p);continue;}
      Object.assign(p,{cfpCollectionFactProfile:profile.id,cfpCollectionFactSource:source,cfpCollectionFactMatches:value.m,cfpCollectionFactImages:value.i});
     }
    }
+   return missing;
   },
  };
 }

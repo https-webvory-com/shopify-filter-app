@@ -9,9 +9,13 @@ export function isOwnedShopCache(key, shop, productOnly = false) {
     (!productOnly && key.startsWith(`api_filter_res_${shop}_`));
 }
 export function productRankingFingerprint(product) {
+  // Derived matching-cache metadata is not a product change. The complete
+  // original variants/options/images remain in the fingerprint, so refreshing
+  // a fact profile cannot invalidate overlapping rankings by itself.
+  const derived=new Set(['cfpCollectionFactProfile','cfpCollectionFactSource','cfpCollectionFactMatches','cfpCollectionFactImages']);
   const stable = value => {
     if (Array.isArray(value)) return value.map(stable);
-    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().filter(key => !['_vectors','updatedAt'].includes(key)).map(key => [key,stable(value[key])]));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().filter(key => !['_vectors','updatedAt'].includes(key)&&(value!==product||!derived.has(key))).map(key => [key,stable(value[key])]));
     return value;
   };
   return createHash('sha256').update(JSON.stringify(stable(product))).digest('hex');

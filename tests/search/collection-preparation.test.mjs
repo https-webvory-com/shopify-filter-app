@@ -14,7 +14,7 @@ function fixture() {
   const result={ids:['pin','boost','ordinary'],metadata:{pin:{merchandisingImage:'pin.jpg'}}};
   const service=createCollectionPreparation({redis,queue,prepare:async()=>{builds++;return result;},now:()=>clock});
   const spec={shop:'fixture.myshopify.com',revision:'0',sortBy:'best-selling',query:{q:'',filter:["shop = 'fixture.myshopify.com'"]},rule:{conditions:[]}};
-  return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
+  return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,now:()=>clock,advance:ms=>clock+=ms};
 }
 
 test('unchanged public rankings survive a configuration epoch without another scan',async()=>{
@@ -395,4 +395,48 @@ test('a ready record from before deployment can seed last-order reuse without re
  assert.equal((await f.service.get(f.spec)).status,'ready');assert.equal(f.builds(),0);
  const reused=await f.service.get({...f.spec,orderedIds:['new']});
  assert.equal(reused.status,'ready');assert.equal(reused.orderUpdatedAt,null);assert.deepEqual(reused.ids,f.result.ids);
+});
+
+test('unchanged maintained public rankings renew without rebuilding or consuming catalog worker jobs',async()=>{
+ const f=fixture();let builds=0,validations=0;
+ const spec={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,orderedIds:f.result.ids};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,revalidateSaved:true,
+  validateReuse:async()=>{validations++;return true;},prepare:async()=>{builds++;return f.result;}});
+ await service.get(spec,{warmup:true,precompute:true});
+ for(let i=0;i<4;i++){
+  f.advance(660000);
+  const ready=await service.get(spec,{warmup:true,precompute:true});assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);
+ }
+ assert.equal(builds,1);assert.equal(validations,4);assert.equal(f.queued.length,0);
+});
+
+test('renewal cannot hide product, catalog, outside-order or private-context changes',async()=>{
+ for(const scenario of ['products','catalog','outside','outsideGlobal','private','concurrent']){
+  const f=fixture();let builds=0;
+  const spec={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,orderedIds:f.result.ids};
+  if(scenario==='outsideGlobal')spec.rule={conditions:[],ruleGroups:[{conditions:[{action:'Include',field:'Tags',value:'Outside'}]}]};
+  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,revalidateSaved:true,
+   validateReuse:async()=>{if(scenario==='concurrent')await f.redis.incr(productRevisionKey(spec.shop,'1'));return scenario!=='outside';},
+   prepare:async()=>{builds++;return f.result;}});
+  await service.get(spec,{warmup:true,precompute:true});f.advance(660000);
+  if(scenario==='products')await f.redis.incr(productRevisionKey(spec.shop,'1'));
+  if(scenario==='outsideGlobal')await f.redis.incr(productRevisionKey(spec.shop,'all'));
+  if(scenario==='catalog')await f.redis.incr(rankingDataRevisionKey(spec.shop));
+  const current=scenario==='private'?{...spec,retainForIdle:false,query:{...spec.query,filter:['private customer']}}:spec;
+  const ready=await service.get(current);
+  assert.equal(builds,1,scenario);
+  if(scenario==='outside')assert.equal(ready.status,'ready'); // Existing short stock-freshness contract remains intact.
+  else assert.equal(ready.status,'pending',scenario);
+  if(scenario!=='concurrent')assert.equal(f.queued.length,1,scenario);
+ }
+});
+
+test('outside Include changes rebuild catalog contexts and cannot escape through last-order reuse',async()=>{
+ const f=fixture();let builds=0;
+ const spec={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,orderedIds:f.result.ids,
+  rule:{conditions:[],ruleGroups:[{conditions:[{action:'Include',field:'Tags',value:'Outside'}]}]}};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,revalidateSaved:true,validateReuse:async()=>true,prepare:async()=>{builds++;return f.result;}});
+ await service.get(spec,{warmup:true,precompute:true});await f.redis.incr(productRevisionKey(spec.shop,'all'));
+ assert.equal((await service.get({...spec,orderRevision:'changed',orderedIds:spec.orderedIds.slice().reverse()})).status,'pending');
+ await service.get(spec,{warmup:true,precompute:true});assert.equal(builds,2);
 });

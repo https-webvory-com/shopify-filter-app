@@ -120,17 +120,18 @@ for _, key in ipairs(redis.call('ZRANGE',KEYS[1],0,-tonumber(ARGV[4])-1)) do
 end
 return 1`;
 
-export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, validateReuse=async()=>true, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
+export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, validateReuse=async()=>true, revalidateSaved=false, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
   const report = event => {try {observe(event);} catch { /* Diagnostics never affect availability. */ }};
   const valid = value => value && Array.isArray(value.ids) && value.ids.every(id=>typeof id==='string'&&id.length>0) &&
     new Set(value.ids).size===value.ids.length && value.metadata && typeof value.metadata==='object' && !Array.isArray(value.metadata);
   const revision = async shop => String(await redis.get(preparationRevisionKey(shop)) ?? '0');
   const productRevision = async (shop,collectionId) => String(await redis.get(productRevisionKey(shop,collectionId)) ?? '0');
+  const externalCandidates=spec=>Boolean(spec.pinnedIds?.length||[...(spec.rule?.conditions||[]),...(spec.rule?.ruleGroups||[]).flatMap(g=>g.conditions||[])].some(c=>c.action==='Include'));
   const reuseRevision = async spec => {
     const keys=[rankingDataRevisionKey(spec.shop),rankingDataRevisionKey(spec.shop,spec.collectionId)];
     // Includes and explicit pins can draw products from outside this collection.
     // A local membership counter alone cannot establish their freshness.
-    if(spec.pinnedIds?.length||spec.rule?.conditions?.some(c=>c.action==='Include'))keys.push(productRevisionKey(spec.shop,'all'));
+    if(externalCandidates(spec))keys.push(productRevisionKey(spec.shop,'all'));
     return (await Promise.all(keys.map(key=>redis.get(key)))).map(value=>String(value??'0')).join(':');
   };
   const dataEpochMatches=async(spec,expected)=>{
@@ -231,11 +232,31 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         report({event:'compatible-reused',shop:spec.shop,collectionId:spec.collectionId,key});
       }
     }
+    // A maintained version need not scan the catalog again merely because it
+    // reached the refresh interval. Check every input epoch and the independent
+    // outside-Include base order before renewing a supported public ranking.
+    if(raw&&revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true){
+      let saved;try{saved=decodePreparation(raw);}catch{}
+      if(valid(saved)&&saved.reusableDataRevision!==null&&saved.productRevision===spec.productRevision&&Number.isFinite(saved.preparedAt)&&
+          (now()-saved.preparedAt>=preparationFreshnessMs-120000||await redis.ttl(key)<120)){
+        const dataRevision=await reuseRevision(spec);
+        if((saved.reusableDataRevision??'0:0')===dataRevision){
+          let verified=false;try{verified=await validateReuse(spec,saved);}catch{}
+          if(verified){
+            const result=await publish(key,spec,saved,spec.productRevision,{sourcePreparedAt:now(),startedDataRevision:dataRevision});
+            if(result.superseded)return {status:'pending'};
+            raw=await redis.get(key);
+            report({event:'unchanged-revalidated',shop:spec.shop,collectionId:spec.collectionId,key});
+          }
+        }
+      }
+    }
     // A catalog job owns one complete build. Do not finish that job after only
     // adding another preparation job to the same worker's queue.
     if (warmup && precompute && spec.retainForIdle === true) {
       let cached;try { cached=decodePreparation(raw); } catch { /* Build missing/corrupt inputs. */ }
       if (!valid(cached) || cached.productRevision !== spec.productRevision ||
+          externalCandidates(spec)&&cached.reusableDataRevision!==await reuseRevision(spec)||
           !Number.isFinite(cached.preparedAt) || now()-cached.preparedAt >= preparationFreshnessMs-120000 ||
           await redis.ttl(key)<120 || !await dataEpochMatches(spec,cached.reusableDataRevision)) {
         const result=await process({key,spec,queuedAt:now()});
@@ -255,15 +276,17 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
       if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision))
         return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
+      const productsChanged=value.productRevision!==spec.productRevision||
+        spec.retainForIdle===true&&externalCandidates(spec)&&value.reusableDataRevision!==await reuseRevision(spec);
       // Long idle retention must not extend the old ten-minute window for
       // known stock/product changes when a refresh worker is unavailable.
-      if (spec.retainForIdle === true && value.productRevision !== spec.productRevision &&
+      if (spec.retainForIdle === true && productsChanged &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
         report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
         return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
       }
       // Refresh a valid version before expiry without holding up visitors.
-      if (value.productRevision !== spec.productRevision || !Number.isFinite(value.preparedAt) ||
+      if (productsChanged || !Number.isFinite(value.preparedAt) ||
           now() - value.preparedAt >= preparationFreshnessMs - 120000 || await redis.ttl(key) < 120) {
         try { await schedule(key, spec, true); } catch { /* A usable version remains valid if refresh scheduling fails. */ }
       }
@@ -280,6 +303,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         let previous;
         try { previous=decodePreparation(await redis.get(previousKey)); } catch { /* A missing/corrupt record needs a fresh build. */ }
         if (valid(previous) && previous.productRevision === spec.productRevision &&
+            (!externalCandidates(spec)||previous.reusableDataRevision===await reuseRevision(spec))&&
             await dataEpochMatches(spec,previous.reusableDataRevision)&&
             Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationLifetime * 1000 &&
             await revision(spec.shop) === spec.revision) {

@@ -41,5 +41,6 @@ test('product invalidation advances only relevant data versions and keeps usable
 test('no-op indexed updates have the same fingerprint while ranking-relevant changes differ',()=>{
   const product={id:'1',tags:['blue'],inventoryTotal:5,variantPrices:[{price:10,available:true}],updatedAt:1,_vectors:{openai:[1]}};
   assert.equal(productRankingFingerprint(product),productRankingFingerprint({...product,updatedAt:2,_vectors:{openai:[2]}}));
+  assert.equal(productRankingFingerprint(product),productRankingFingerprint({...product,cfpCollectionFactProfile:'new',cfpCollectionFactSource:'derived',cfpCollectionFactMatches:['match:b'],cfpCollectionFactImages:{match:'red.jpg'}}));
   for(const change of [{inventoryTotal:0},{tags:['red']},{variantPrices:[{price:0,available:true}]},{collections:['2']}])assert.notEqual(productRankingFingerprint(product),productRankingFingerprint({...product,...change}));
 });

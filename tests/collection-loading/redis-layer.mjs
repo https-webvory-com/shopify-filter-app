@@ -9,6 +9,12 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
   const name='ranking-tests';
   const queue=new Queue(name,{prefix,connection,defaultJobOptions:{attempts:3,backoff:{type:'exponential',delay:2000},removeOnComplete:true,removeOnFail:{count:50,age:3600},...jobOptions}});
   const physical=key=>prefix+':'+key;
+  const evalArgs=(script,keyCount,...args)=>{
+    const keys=args.slice(0,keyCount).map(physical),values=args.slice(keyCount);
+    if(script.includes('ARGV[10]')){for(const index of [7,8,9])values[index]=physical(values[index]);}
+    else values[4]=physical(values[4]);
+    return [script,keyCount,...keys,...values];
+  };
   const redis={
     get:async key=>{const value=await client.get(physical(key));return key.includes(':last-order-v1:')&&value?.startsWith(prefix+':')?value.slice(prefix.length+1):value;},
     hmget:(key,...fields)=>client.hmget(physical(key),...fields),
@@ -17,10 +23,8 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
     ttl:key=>client.ttl(physical(key)),incr:key=>client.incr(physical(key)),del:(...keys)=>keys.length?client.del(...keys.map(physical)):0,
     // The retention script takes its deletion prefix as its fifth value.
     // Keep both keys AND that prefix inside this test-owned namespace.
-    eval:(script,keyCount,...args)=>{const keys=args.slice(0,keyCount).map(physical);const values=args.slice(keyCount);
-      if(script.includes('ARGV[10]')){for(const index of [7,8,9])values[index]=physical(values[index]);}
-      else values[4]=physical(values[4]);
-      return client.eval(script,keyCount,...keys,...values);},
+    eval:(...args)=>client.eval(...evalArgs(...args)),
+    pipeline:()=>{const pipeline=client.pipeline();return {eval:(...args)=>pipeline.eval(...evalArgs(...args)),exec:()=>pipeline.exec()};},
     scan:async(cursor,_match,pattern,_count,count)=>{const [next,keys]=await client.scan(cursor,'MATCH',physical(pattern),'COUNT',count);return [next,keys.map(key=>key.slice(prefix.length+1))];},
   };
   let handler=async()=>{throw Error('Test worker handler not configured');};

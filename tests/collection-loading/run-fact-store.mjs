@@ -24,6 +24,11 @@ try{
  const bucket=layer.physical(factStoreKeys(shop,profile.id)[0]);
  await layer.client.hset(bucket,'2:legacy','broken');
  await assert.rejects(store.load(shop,profile,[{id:'2'}]),/missing/);
+ const batch=Array.from({length:80},(_,i)=>{const product={...p,id:String(i+2)};return {product,facts:projectCollectionRuleFacts(product,profile,()=>false,{backfill:true})};});
+ assert.deepEqual(await store.putMany(shop,profile,batch),Array(80).fill(1));
+ const projected=batch.map(row=>({id:row.product.id}));
+ assert.deepEqual(await store.load(shop,profile,projected,{allowMissing:true}),[]);
+ assert.ok(projected.every(p=>p.cfpCollectionFactMatches.length===0));
  const otherShop='other-test.myshopify.com';
  await store.put(otherShop,profile,p,facts);
  for(let revision=2;revision<=3;revision++){
@@ -32,5 +37,5 @@ try{
  }
  assert.equal(await layer.client.exists(bucket),0);
  assert.equal(await layer.client.exists(layer.physical(factStoreKeys(otherShop,profile.id)[0])),1);
- console.log('PASS: real Redis facts, exact versions, stale backfill isolation, corruption rejection, bounded generations and tenant isolation');
+ console.log('PASS: real Redis facts, 80 pipelined writes, exact versions, stale backfill isolation, corruption rejection, bounded generations and tenant isolation');
 }finally{await layer.close();}

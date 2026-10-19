@@ -28,9 +28,10 @@ function seededWarmups(shop) {
 }
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
-  await prepareCollectionFromFacts(spec).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
+  await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
   prepareDirect:prepareCollectionFromFacts,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
+  revalidateSaved:true,
   observe:event=>console.info('CFP: collection preparation',JSON.stringify(event)),
 });
 const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);
@@ -117,8 +118,8 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null)
         await job.remove();}
       // Each job replays one collection only, so visitors can move ahead of the
       // background catalog between jobs. Ranking concurrency stays at one.
-      // FIFO among background builds prevents repeated recent-page warmups and
-      // fact sweeps from starving collections that have never had a visitor.
+      // FIFO among catalog/recent builds preserves progress through unseen
+      // collections; bounded prerequisite sweeps run ahead at priority 5.
       await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:10});
     }
     if(rows.length<100)return;cursor=rows.at(-1).id;

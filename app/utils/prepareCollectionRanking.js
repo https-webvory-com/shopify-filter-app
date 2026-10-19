@@ -7,7 +7,8 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
   let sourceOutsideIds=native?[]:null;
   const resolveFact=factProfile?collectionFactResolver(spec.rule,factProfile,spec.mergedValues):null;
   if(factProfile&&!resolveFact)throw Error('Collection rule facts do not cover this rule');
-  const projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD])]:undefined;
+  const projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD,
+    'cfpCollectionFactProfile','cfpCollectionFactSource','cfpCollectionFactMatches','cfpCollectionFactImages'])]:undefined;
   let comparatorPins=[];
   try {
     const pins=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;

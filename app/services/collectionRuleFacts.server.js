@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {Buffer} from 'node:buffer';
 import prisma from '../db.server.js';
 import redis from './redis.server.js';
 import client from './meiliClient.server.js';
@@ -10,6 +11,8 @@ import {hydrateCollectionSkus,readRankedCollectionPage} from '../utils/rankedCol
 import {createCollectionFactProfile,isVariantCondition,collectionInputSource,projectCollectionRuleFacts} from '../utils/collectionRuleFacts.js';
 import {createCollectionFactStore,readCollectionFactRecord} from '../utils/collectionFactStore.js';
 import configuredWarmups from '../config/collection-prewarm.json';
+import {maintainCollectionFacts} from '../utils/maintainCollectionFacts.js';
+import {createCollectionCandidateIndex} from '../utils/collectionCandidateIndex.js';
 
 const store=createCollectionFactStore(redis);
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -43,9 +46,12 @@ export async function withCollectionRuleFacts(documents){
   result.push(...await Promise.all(documents.slice(offset,offset+25).map(async p=>{
    if(!collectionFactsEnabled(p.shop))return p;
    const source=collectionInputSource(p),profile=profiles.get(p.shop);
-   if(profile)try{await store.put(p.shop,profile,p,projectCollectionRuleFacts(p,profile,checkRuleMatch));}
+   let facts;
+   if(profile)try{facts=projectCollectionRuleFacts(p,profile,checkRuleMatch);await store.put(p.shop,profile,p,facts);}
    catch(error){console.error('CFP: Collection fact write unavailable:',error.name);}
-   return {...p,cfpCollectionInputSource:source};
+   // Keep optional index projections bounded for shops with many matching rules.
+   const indexedFacts=facts&&Buffer.byteLength(JSON.stringify(facts))<=4096?facts:null;
+   return {...p,...indexedFacts,cfpCollectionInputSource:source};
   })));
  }
  return result;
@@ -53,32 +59,43 @@ export async function withCollectionRuleFacts(documents){
 
 // This path reads projected rank inputs and freezes IDs; full variant documents
 // are never scanned on a visitor request. The existing ranker remains fallback.
-export async function prepareCollectionFromFacts(spec){
+export async function prepareCollectionFromFacts(spec,{populate=false}={}){
  if(!collectionFactsEnabled(spec.shop)||spec.retainForIdle!==true||
   !['best-selling','bestselling','price-ascending','price-descending','title-ascending','title-descending','created-ascending','created-descending'].includes(spec.sortBy))return null;
  if(['best-selling','bestselling'].includes(spec.sortBy)&&(!spec.needsShopifyOrder||!Array.isArray(spec.orderedIds)))return null;
  const conditions=[...(spec.rule?.conditions||[]),...(spec.rule?.ruleGroups||[]).flatMap(g=>g.conditions||[])];
  const scalar=new Set(['Tags','Id','ID','id','Vendor','Product type','Product','Price','Available','Date','Rating']);
  if(conditions.some(c=>!scalar.has(c.field)&&!isVariantCondition(c)))return null;
- const signal=AbortSignal.timeout(4000),index=client.index('products');
+ // Visitors retain their existing four-second budget. Only the single ranking
+ // worker is allowed to populate missing shared inputs; each read stays bounded.
+ const signal=populate?undefined:AbortSignal.timeout(4000),index=client.index('products');
  const work=(async()=>{
   const profile=conditions.some(isVariantCondition)?await getCollectionFactProfile(spec.shop):null;
-  signal.throwIfAborted();
-  const boundedIndex={search:(q,options,extra={})=>index.search(q,options,{...extra,signal:extra.signal?AbortSignal.any([signal,extra.signal]):signal})};
+  signal?.throwIfAborted();
+  const candidates=createCollectionCandidateIndex(index,spec,{signal});
+  const boundedIndex={search:(q,options,extra={})=>candidates.search(q,options,{...extra,...(signal?{signal:extra.signal?AbortSignal.any([signal,extra.signal]):signal}:{})})};
   return prepareCollectionRanking(spec,{index:boundedIndex,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,captureReuse:true,
-   ...(profile?{factProfile:profile,loadFacts:products=>store.load(spec.shop,profile,products,{signal})}:{})});
+   ...(profile?{factProfile:profile,loadFacts:products=>populate?
+    maintainCollectionFacts({store,index,prisma,shop:spec.shop,profile,products,check:checkRuleMatch}):
+    store.load(spec.shop,profile,products,{signal})}:{})});
  })();
  let onAbort;
- try{return await Promise.race([work,new Promise((_,reject)=>{onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});if(signal.aborted)onAbort();})]);}
- finally{signal.removeEventListener('abort',onAbort);}
+ try{return signal?await Promise.race([work,new Promise((_,reject)=>{onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});if(signal.aborted)onAbort();})]):await work;}
+ finally{if(onAbort)signal.removeEventListener('abort',onAbort);}
 }
 
-const leaseKey=(shop,profile)=>`collectionFactSweep:${shop}:${profile}`;
+// Restart one deduplicated prerequisite sweep when upgrading from the old lane;
+// an old lease must not strand its first page behind the catalog backlog.
+const leaseKey=(shop,profile)=>`collectionFactSweepV2:${shop}:${profile}`;
 const jobId=(shop,profile,offset)=>`collection-facts-${hash(shop+':'+profile)}-${offset}`;
 async function enqueueFactPage(shop,profile,offset){
  const id=jobId(shop,profile,offset),previous=await collectionRankingQueue.getJob(id);
  if(previous&&['failed','completed'].includes(await previous.getState()))await previous.remove();
- return collectionRankingQueue.add('COLLECTION_FACTS_REFRESH',{shop,profile,offset},{jobId:id,priority:10});
+ if(previous&&['waiting','prioritized','delayed'].includes(await previous.getState())){
+  if((previous.priority??previous.opts?.priority??10)>5)await previous.changePriority({priority:5});
+  return previous;
+ }
+ return collectionRankingQueue.add('COLLECTION_FACTS_REFRESH',{shop,profile,offset},{jobId:id,priority:5});
 }
 export async function scheduleCollectionFactRefresh(shop){
  if(!collectionFactsEnabled(shop))return;
@@ -88,7 +105,7 @@ export async function scheduleCollectionFactRefresh(shop){
  catch(error){await redis.del(leaseKey(shop,profile.id));throw error;}
 }
 
-// Small jobs share background priority 10 and yield to visitor priority 1.
+// Small prerequisite jobs run ahead of catalog builds, yielding to visitors.
 // A sweep only reads full
 // variant data for missing versions; it never rewrites product/index documents.
 export async function processCollectionFactRefresh({shop,profile:expected,offset=0}){
@@ -109,14 +126,16 @@ export async function processCollectionFactRefresh({shop,profile:expected,offset
   const eligible=docs.hits.filter(doc=>doc.shop===shop&&doc.status==='ACTIVE');
   const normalized=eligible.map(doc=>({...doc,id:'gid://shopify/Product/'+doc.id,variants:doc.variantPrices||[]}));
   if(profile.conditions.some(r=>r.condition.field==='SKU'))await hydrateCollectionSkus(normalized,prisma.variant,shop);
-  for(let i=0;i<eligible.length;i++){
-   const doc=eligible[i],product=normalized[i];
-   published+=Number(await store.put(shop,profile,doc,projectCollectionRuleFacts(product,profile,checkRuleMatch,{backfill:true}))||0);
-  }
+  const rows=eligible.map((doc,i)=>({product:doc,facts:projectCollectionRuleFacts(normalized[i],profile,checkRuleMatch,{backfill:true})}));
+  published+=(await store.putMany(shop,profile,rows)).reduce((sum,value)=>sum+Number(value||0),0);
  }
  if(products.length===100){
   const next=offset+100;
   await enqueueFactPage(shop,profile.id,next);
- }else await redis.del(leaseKey(shop,profile.id));
+ }else{
+  // Product writes maintain versions continuously. Do not start another full
+  // prerequisite sweep every minute and starve untouched catalog collections.
+  await redis.set(leaseKey(shop,profile.id),'complete','EX',3600);
+ }
  return {read:products.length,published,offset};
 }
