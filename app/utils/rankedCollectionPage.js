@@ -122,7 +122,9 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   // Scalar/tag projections do not carry variants or collection membership
   // arrays. Read them in fewer round trips; keep large nested projections
   // bounded by their existing smaller batches.
-  const batchSize=fields.includes('variantPrices')?25:fields.some(field=>['collections','collection_titles','options','images'].includes(field))?1000:10000;
+  const separateVariants=fields.includes('variantPrices')&&typeof index.getDocuments==='function';
+  const scanFields=separateVariants?fields.filter(field=>!['variantPrices','options','images'].includes(field)):fields;
+  const batchSize=scanFields.includes('variantPrices')?25:scanFields.some(field=>['collections','collection_titles','options','images'].includes(field))?1000:10000;
   let scanned=0;
   async function consume(documents) {
     const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));
@@ -130,13 +132,22 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
     for(const p of arrange(products))ranked.push({id:p.id,title:p.title,priceMin:p.priceMin,createdAt:p.createdAt,bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,_originalIndex:p._originalIndex,_rulePinned:p._rulePinned,_collectionPinsFirst:p._collectionPinsFirst,_collectionLadderMatched:p._collectionLadderMatched,_collectionRuleRanks:p._collectionRuleRanks,_collectionSequentialScore:p._collectionSequentialScore,merchandisingScore:p.merchandisingScore});
   }
   for(let offset=0;;offset+=batchSize) {
-    const result=await index.search(q,{...options,offset,limit:batchSize,attributesToRetrieve:fields},{signal:AbortSignal.timeout(30000)});
+    const result=await index.search(q,{...options,offset,limit:batchSize,attributesToRetrieve:scanFields},{signal:AbortSignal.timeout(30000)});
     const documents=result.hits.map(product=>{
       const id=cleanId(product.id);if(seen.has(id))throw Error('Collection changed while ranking; retry the request');
       const sequence=scanned++;seen.add(id);
       return {...product,id,_originalIndex:ranks?(ranks.get(id)??orderedIds.length+sequence):sequence};
     });
-    await consume(documents);
+    if(separateVariants){
+      // Preserve the search's exact scan order, but retrieve variant/image data
+      // by ID without re-running the sorted collection search every 25 rows.
+      // Variant memory remains bounded to the existing 25-document budget.
+      for(let start=0;start<documents.length;start+=25){
+        const batch=documents.slice(start,start+25);
+        const page=await readRankedCollectionPage(index,{ids:batch.map(p=>p.id),page:1,limit:25,attributes:fields,requireDocuments:true});
+        await consume(page.hits.map((product,i)=>({...product,id:batch[i].id,_originalIndex:batch[i]._originalIndex})));
+      }
+    }else await consume(documents);
     if(result.hits.length<batchSize){const expected=result.totalHits??result.estimatedTotalHits;if(expected!=null&&scanned!==expected)throw Error('Incomplete collection ranking results');break;}
   }
   const missing=[...new Set((pinnedIds||[]).map(cleanId))].filter(id=>!seen.has(id));
@@ -151,7 +162,7 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
 
 const unsupportedDocumentBatches = new WeakMap();
 
-export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop, batchOwner=index }) {
+export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop, batchOwner=index, requireDocuments=false }) {
   const selected = ids.slice((page - 1) * limit, page * limit);
   const documents = new Map();
   const fields=shop && attributes ? [...new Set([...attributes,'shop'])] : attributes;
@@ -196,6 +207,7 @@ export async function readRankedCollectionPage(index, { ids, page, limit, attrib
       }
       catch (error) {
         if (error.code !== 'document_not_found') throw error;
+        if(requireDocuments)throw Error('Collection changed while ranking; retry the request');
         documents.set(id, { id }); // Hydrate from DB without moving later page slots.
       }
     }));

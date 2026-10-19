@@ -13,7 +13,8 @@ async function fixture() {
   const redis={zrange:async()=>records,zrangebyscore:async()=>shops,zadd:async(...args)=>writes.push(['add',...args]),zremrangebyrank:async(...args)=>writes.push(['trim',...args]),zremrangebyscore:async(...args)=>writes.push(['prune',...args]),expire:async(...args)=>writes.push(['expire',...args])};
   redis.scan=async()=>{scans++;return ['0',registries];};redis.ttl=async()=>3600;
   redis.mget=async(...keys)=>keys.map(key=>snapshots.get(key)||null);
-  const database={collection:{findMany:async options=>{
+  const offline=new Set();
+  const database={session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
     if(options.distinct)return [...new Set(catalog.map(row=>row.shop))].map(shop=>({shop}));
     const rows=catalog.filter(row=>row.shop===options.where.shop).sort((a,b)=>a.id.localeCompare(b.id));
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
@@ -35,7 +36,7 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,scans:()=>scans};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans};
 }
 
 test('warmup registry stores a normalized public collection context with a bounded size and lifetime',async()=>{
@@ -158,4 +159,12 @@ test('catalog jobs dispatch exactly their public context through the existing ra
  await processCollectionRankingJob({name:'COLLECTION_RANKING_CATALOG',data:{shop:'fixture.myshopify.com',record}},
   {warm:async(...args)=>calls.push(args),prepare:()=>{throw Error('Unexpected preparation');}});
  assert.deepEqual(calls,[['fixture.myshopify.com',null,record]]);
+});
+
+test('disconnected shops do not enqueue order/catalog work or replay already queued catalog requests',async()=>{
+ const f=await fixture();f.offline.add('fixture.myshopify.com');f.catalog.push({shop:'fixture.myshopify.com',id:'1'});
+ f.seeds.push({shop:'fixture.myshopify.com',collectionHandle:'seed',country:'IN',locale:'en'});
+ await f.scheduleRegisteredCollectionWarmups();assert.equal(f.writes.filter(w=>['queue','order','load'].includes(w[0])).length,0);
+ const result=await f.processCollectionWarmups('fixture.myshopify.com',null,{url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&page=1',collectionId:'1'});
+ assert.equal(result.skipped,true);assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
 });

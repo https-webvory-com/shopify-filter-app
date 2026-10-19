@@ -140,6 +140,9 @@ export async function scheduleRegisteredCollectionWarmups() {
   for (const shop of shops) {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
     try {
+      // Historical catalog metadata can outlive an uninstalled app session.
+      // Do not repeatedly fill storefront queues with impossible admin reads.
+      if(!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))continue;
       await scheduleCollectionWarmup(shop);
       // Public rankings refresh every minute; catalog-wide order discovery
       // keeps its existing four-minute cadence and single worker lane.
@@ -163,6 +166,7 @@ export async function scheduleCollectionWarmup(shop,collectionIds=null) {
 }
 
 export async function processCollectionWarmups(shop,collectionIds=null,catalogRecord=null) {
+  if(catalogRecord&&!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))return {skipped:true};
   const seeds=seededWarmups(shop);
   const urls = catalogRecord ? [JSON.stringify(catalogRecord)] : [...seeds.map(record=>JSON.stringify(record)),...(seeds.length===publicPreparationLimit?[]:await redis.zrange(warmupContextsKey(shop), -(publicPreparationLimit-seeds.length), -1))];
   const { loader } = await import('../routes/api.filter.jsx');

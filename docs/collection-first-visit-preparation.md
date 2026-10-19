@@ -25,6 +25,19 @@ Scalar/tag ranking scans request 10,000 projected products per batch instead of
 projections retain 25. Ranking fields, filters, sort, comparator, metadata and
 pagination are unchanged. Production heap-budget checks cover all three cases.
 
+Variant-based rules now separate the sorted scalar scan from variant hydration
+when the index supports document reads. The sorted search retrieves scalar/tag
+fields in large batches; variants, options and images are then read by those
+exact IDs in groups of 25. This avoids repeating the sorted collection search
+for every 25 variant-bearing products. Search order, global merchandising order
+and selected images remain identical to full ranking. Missing products during
+hydration reject the build; existing storefront-page missing-product handling
+is unchanged. Older adapters without document reads retain the previous path.
+
+Disconnected shops without offline sessions no longer schedule new periodic
+order/catalog work; already queued catalog replays for them are skipped. Existing
+valid shops, visitor requests and retries retain their normal behavior.
+
 Once a ranking is ready, the API skips ordinary product searches whose hits would
 be discarded. Ranked collection facet queries request zero hits and use the
 frozen sequence's exact count, avoiding an additional exhaustive hit-count query.
