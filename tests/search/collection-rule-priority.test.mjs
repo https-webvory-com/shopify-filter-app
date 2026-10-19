@@ -75,7 +75,7 @@ test('a single collection rule retains its numeric ranking and exact tag matchin
 test('compact worker ranking retains rule groups across batches and page boundaries', async () => {
   const { getActiveRuleForCollection, applyMerchandisingRules: arrange, createMerchandisingComparator: comparator } = service();
   const rule = await getActiveRuleForCollection('fixture', 'Formal Dresses');
-  const docs = Array.from({ length: 2250 }, (_, i) => ({ id: String(i + 1), priceMin: 10, inventoryTotal: i % 23 ? 5 : 0,
+  const docs = Array.from({ length: 20250 }, (_, i) => ({ id: String(i + 1), priceMin: 10, inventoryTotal: i % 23 ? 5 : 0,
     tags: [i % 3 ? 'TopFormal' : 'ordinary', i % 5 ? 'other' : 'BestFormal', i % 7 ? 'other' : 'Champagne'] }));
   const index = { search: async (_q, options) => ({ hits: docs.slice(options.offset, options.offset + options.limit), estimatedTotalHits: docs.length }) };
   const spec = { shop: 'fixture', query: { q: '', filter: [] }, rule, sortBy: 'best-selling', needsShopifyOrder: true,
@@ -165,12 +165,12 @@ test('Prom customer sort overrides, exclusions, manual ranking and stale state r
 test('compact Prom ranking carries pin precedence across batches and deep pages', async () => {
   const {getActiveRuleForCollection,applyMerchandisingRules:arrange,createMerchandisingComparator:comparator}=service(prom.rules);
   const rule=await getActiveRuleForCollection('fixture','Prom Dresses');
-  const docs=Array.from({length:2250},(_,i)=>({id:String(i+1),priceMin:10,inventoryTotal:5,tags:i%3===0?['Champagne']:i%3===1?['TopProm','BestProm']:['TopProm','Champagne']}));
+  const docs=Array.from({length:20250},(_,i)=>({id:String(i+1),priceMin:10,inventoryTotal:5,tags:i%3===0?['Champagne']:i%3===1?['TopProm','BestProm']:['TopProm','Champagne']}));
   const index={search:async(_q,options)=>({hits:docs.slice(options.offset,options.offset+options.limit),estimatedTotalHits:docs.length})};
   const spec={shop:'fixture',query:{q:'',filter:[]},rule,sortBy:'best-selling',needsShopifyOrder:true,orderedIds:docs.map(p=>p.id),pinnedIds:[],globalSettings:{}};
   const baseline=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange});
   const compact=await prepareCollectionRanking(clone(spec),{index,prisma:{},arrange,comparator});
   assert.deepEqual(compact,baseline);
   assert.deepEqual(compact.ids, [2,1,0].flatMap(remainder=>docs.filter((_,i)=>i%3===remainder).map(p=>p.id)));
-  assert.equal(new Set(compact.ids).size,2250);
+  assert.equal(new Set(compact.ids).size,20250);
 });

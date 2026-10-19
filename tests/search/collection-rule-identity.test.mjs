@@ -58,12 +58,12 @@ test('observed overlapping Formal/Prom Sets replace earlier scores rather than b
 });
 test('compact ranking retains sequential score mode across batches and deep page boundaries',async()=>{
  const m=await service(sequentialRules),rule=await m.getActiveRuleForCollection('fixture','Blue',[],'en',id(1));
- const docs=Array.from({length:2250},(_,i)=>({id:String(i+1),priceMin:10,available:true,tags:i%3===0?['BestFormal']:i%3===1?['BestFormal','BestProm','Champagne']:['TopProm','Champagne']}));
+ const docs=Array.from({length:20250},(_,i)=>({id:String(i+1),priceMin:10,available:true,tags:i%3===0?['BestFormal']:i%3===1?['BestFormal','BestProm','Champagne']:['TopProm','Champagne']}));
  const index={search:async(_q,o)=>({hits:docs.slice(o.offset,o.offset+o.limit),estimatedTotalHits:docs.length})};
  const spec={shop:'fixture',query:{q:'',filter:[]},rule,sortBy:'best-selling',needsShopifyOrder:true,orderedIds:docs.map(p=>p.id),pinnedIds:[],pinningRule:null,globalSettings:{}};
  const baseline=await prepareCollectionRanking(structuredClone(spec),{index,prisma:{},arrange:m.applyMerchandisingRules});
  const compact=await prepareCollectionRanking(structuredClone(spec),{index,prisma:{},arrange:m.applyMerchandisingRules,comparator:m.createMerchandisingComparator});
- assert.deepEqual(compact,baseline);assert.equal(compact.ids.length,2250);assert.equal(new Set(compact.ids).size,2250);
+ assert.deepEqual(compact,baseline);assert.equal(compact.ids.length,20250);assert.equal(new Set(compact.ids).size,20250);
 });
 test('classic collection sold-out exclusions use purchasability, preserving quantity rules and search behavior',async()=>{
  const m=await service();const condition={action:'Exclude',field:'Available',minValue:'-999',maxValue:'0'};

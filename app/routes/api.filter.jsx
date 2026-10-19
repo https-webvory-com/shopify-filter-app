@@ -690,8 +690,7 @@ export const loader = async ({ request, context }) => {
       q: searchQuery,
       filter: tier1Filter,
       facets: targetFacets,
-      hitsPerPage: 1,
-      page: 1,
+      ...(useRankedCollectionPagination ? {limit:0} : {hitsPerPage:1,page:1}),
       attributesToRetrieve: [],
     };
     queries.push(facetQuery);
@@ -705,8 +704,7 @@ export const loader = async ({ request, context }) => {
         q: searchQuery,
         filter: useCollectionPagination ? queries[tier2QueryIndex].filter : allFiltersList,
         facets: targetFacets,
-        hitsPerPage: 1,
-        page: 1,
+        ...(useRankedCollectionPagination ? {limit:0} : {hitsPerPage:1,page:1}),
         attributesToRetrieve: [],
       });
     }
@@ -819,7 +817,15 @@ export const loader = async ({ request, context }) => {
     const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
     if (!needsRankedSearch) {
     try {
-      const multiSearchRes = await semanticMultiSearch(queries);
+      // The immutable sequence already owns product order and exact totals.
+      // Skip ordinary product searches whose hits would be discarded, and do
+      // not force exhaustive hit-count ranking merely to obtain facets.
+      const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
+      const multiSearchRes = await semanticMultiSearch(queryIndexes.map(i=>queries[i]));
+      if(useRankedCollectionPagination){
+        const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
+        queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
+      }
       const tier1Res = multiSearchRes.results[0];
       facetRes = multiSearchRes.results[facetQueryIndex];
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };

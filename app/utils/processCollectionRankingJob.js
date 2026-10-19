@@ -5,5 +5,6 @@ export async function processCollectionRankingJob(job, {prepare,warm,schedule}) 
     return result;
   }
   if(job.name==='COLLECTION_RANKING_WARM')return warm(job.data.shop,job.data.collectionIds);
+  if(job.name==='COLLECTION_RANKING_CATALOG')return warm(job.data.shop,null,job.data.record);
   throw Error('Unknown collection ranking job');
 }

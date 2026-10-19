@@ -119,7 +119,10 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   const seen=new Set(),ranked=[];
   const fields=collectionRankingFields(conditions,sortBy,Array.isArray(orderedIds));
   // Variant arrays can dominate a response even when few products match.
-  const batchSize=fields.includes('variantPrices')?25:1000;
+  // Scalar/tag projections do not carry variants or collection membership
+  // arrays. Read them in fewer round trips; keep large nested projections
+  // bounded by their existing smaller batches.
+  const batchSize=fields.includes('variantPrices')?25:fields.some(field=>['collections','collection_titles','options','images'].includes(field))?1000:10000;
   let scanned=0;
   async function consume(documents) {
     const products=documents.map(p=>({...p,id:`gid://shopify/Product/${cleanId(p.id)}`,variants:p.variantPrices||[],collections:p.collection_titles?.map(title=>({collection:{title}}))||p.collections||[]}));

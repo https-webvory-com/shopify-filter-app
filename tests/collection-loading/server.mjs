@@ -17,7 +17,7 @@ import * as collectionResponse from '../../app/utils/collectionResponse.js';
 
 const shop='headless-fixture.myshopify.com';
 export async function createLoadingServer({redisLayer}={}) {
-  const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],configurationRequests=[],requestStarts=[];
+  const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],configurationRequests=[],requestStarts=[],facetRequests=[];
   const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
   const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0};
@@ -77,7 +77,7 @@ export async function createLoadingServer({redisLayer}={}) {
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
       saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata})===identity)return value;const token='fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{}},
-    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
+    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
   };
@@ -134,7 +134,7 @@ export async function createLoadingServer({redisLayer}={}) {
       res.writeHead(404).end();
     }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });
-  return {server,state,trace,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
+  return {server,state,trace,facetRequests,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
     dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
 }

@@ -18,7 +18,7 @@ function readBounds(facetRes, page) {
 
 test('initial and fallback queries request full-result price stats without a selected price', () => {
   const context = { activeGroupFilters: [], queries: [], searchQuery: '', tier1Filter: ['shop = "fixture"'],
-    hasTier1StrictFilters: true, useCollectionPagination: false, allFiltersList: ['shop = "fixture"'] };
+    hasTier1StrictFilters: true, useCollectionPagination: false, useRankedCollectionPagination:false, allFiltersList: ['shop = "fixture"'] };
   vm.runInNewContext(facetQueries, context);
   for (const query of context.queries) {
     assert.ok(query.facets.includes('priceMin'));
@@ -28,6 +28,17 @@ test('initial and fallback queries request full-result price stats without a sel
     assert.equal(bounds.min, 10);
     assert.equal(bounds.max, 1000);
   }
+});
+
+test('ranked collection facets retain full-result price stats without an exhaustive hit-count query',()=>{
+ const context={activeGroupFilters:[],queries:[],searchQuery:'',tier1Filter:['shop = "fixture"'],hasTier1StrictFilters:true,
+  useCollectionPagination:true,useRankedCollectionPagination:true,allFiltersList:['shop = "fixture"'],tier2QueryIndex:0};
+ context.queries.push({filter:context.allFiltersList});
+ vm.runInNewContext(facetQueries,context);
+ for(const query of context.queries.slice(1)){
+  assert.ok(query.facets.includes('priceMin'));assert.equal(query.limit,0);assert.equal(query.hitsPerPage,undefined);
+  const bounds=readBounds({facetStats:{priceMin:{min:10,max:1000}}},[{priceMin:90}]);assert.equal(bounds.min,10);assert.equal(bounds.max,1000);
+ }
 });
 
 test('slider bounds remain identical across pages with different product prices', () => {

@@ -63,7 +63,7 @@ try{
 
   await wait(async()=>!(await layer.queue.getJobCounts('active')).active);await layer.queue.drain(true);
   let clock=Date.now()+660000;
-  const retained=createCollectionPreparation({redis:layer.redis,queue:layer.queue,now:()=>clock,prepare:async()=>{builds++;return {ids:['1','2'],metadata:{}};}});
+  const retained=createCollectionPreparation({redis:layer.redis,queue:layer.queue,retentionLimit:publicPreparationLimit,now:()=>clock,prepare:async()=>{builds++;return {ids:['1','2'],metadata:{}};}});
   assert.ok(await layer.redis.ttl(preparationKey(stableSpec))>85000);
   assert.equal((await retained.get(stableSpec)).status,'ready');assert.equal(builds,1);
   const refreshJobs=await layer.queue.getJobs(['prioritized']);assert.equal(refreshJobs.length,1);assert.equal(refreshJobs[0].opts.priority,10);

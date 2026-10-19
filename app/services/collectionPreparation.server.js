@@ -10,7 +10,7 @@ import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './colle
 import configuredWarmups from '../config/collection-prewarm.json';
 
 // Explicit public contexts can be prepared before the first visitor. These are
-// operational priorities, not ranking rules, and share the existing 40-slot budget.
+// operational priorities, not ranking rules. Recent visitor replay remains bounded.
 function seededWarmups(shop) {
   const records=[];
   for (const entry of configuredWarmups) {
@@ -75,6 +75,46 @@ export async function scheduleMissingCollectionOrders(shop) {
   }
 }
 
+// Discover public markets from configuration and real public visits. Never turn
+// customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
+export async function scheduleCatalogCollectionWarmups(shop) {
+  const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
+    try{return [JSON.parse(value)];}catch{return [];}
+  })];
+  const markets=new Map();
+  for(const record of records){
+    const normalized=normalizeCollectionWarmup(shop,record.url,record.collectionId);
+    if(!normalized)continue;
+    const source=new URL(normalized.url),url=new URL('https://ranking.internal/api/filter');
+    url.searchParams.set('shop',shop);
+    for(const key of ['country','locale','language'])if(source.searchParams.has(key))url.searchParams.set(key,source.searchParams.get(key));
+    url.searchParams.set('sortBy','best-selling');url.searchParams.set('page','1');
+    // Reserve storage and worker throughput for the observed markets, rather
+    // than generating every possible locale/country/sort combination.
+    if(!markets.has(url.search))markets.set(url.search,url);
+    if(markets.size===4)break;
+  }
+  if(!markets.size)return;
+  let cursor;
+  for(;;){
+    const rows=await prisma.collection.findMany({where:{shop},select:{id:true},orderBy:{id:'asc'},take:100,
+      ...(cursor?{cursor:{id:cursor},skip:1}:{})});
+    for(const row of rows)for(const market of markets.values()){
+      const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
+      const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
+      const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
+      const job=await collectionRankingQueue.getJob(jobId);
+      if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state))continue;
+        if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
+        await job.remove();}
+      // Each job replays one collection only, so visitors can move ahead of the
+      // background catalog between jobs. Ranking concurrency stays at one.
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:20});
+    }
+    if(rows.length<100)return;cursor=rows.at(-1).id;
+  }
+}
+
 export async function scheduleRegisteredCollectionWarmups() {
   // Discover existing public registries after deployment, so the first visitor
   // does not have to populate the new shop index before warming can start.
@@ -105,6 +145,7 @@ export async function scheduleRegisteredCollectionWarmups() {
       // keeps its existing four-minute cadence and single worker lane.
       if (Date.now() - (orderDiscoveryAt.get(shop) ?? -Infinity) >= 240000) {
         await scheduleMissingCollectionOrders(shop);
+        await scheduleCatalogCollectionWarmups(shop);
         orderDiscoveryAt.set(shop, Date.now());
       }
     }
@@ -121,9 +162,9 @@ export async function scheduleCollectionWarmup(shop,collectionIds=null) {
   await collectionRankingQueue.add('COLLECTION_RANKING_WARM',{shop,collectionIds:scopes},{jobId,priority:10,delay:500});
 }
 
-export async function processCollectionWarmups(shop,collectionIds=null) {
+export async function processCollectionWarmups(shop,collectionIds=null,catalogRecord=null) {
   const seeds=seededWarmups(shop);
-  const urls = [...seeds.map(record=>JSON.stringify(record)),...(seeds.length===publicPreparationLimit?[]:await redis.zrange(warmupContextsKey(shop), -(publicPreparationLimit-seeds.length), -1))];
+  const urls = catalogRecord ? [JSON.stringify(catalogRecord)] : [...seeds.map(record=>JSON.stringify(record)),...(seeds.length===publicPreparationLimit?[]:await redis.zrange(warmupContextsKey(shop), -(publicPreparationLimit-seeds.length), -1))];
   const { loader } = await import('../routes/api.filter.jsx');
   const seen=new Set();
   for (const value of urls) {
