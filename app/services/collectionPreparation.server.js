@@ -40,6 +40,7 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
 // Refresh known public contexts even when no browser is currently visiting.
 // This only schedules deduplicated, low-priority jobs; scans stay in the worker.
 let discoveredRegistries = false;
+const orderDiscoveryAt = new Map();
 // Seed order snapshots for collections before their first storefront visit.
 // Existing snapshots are left alone; their normal refresh policy still applies.
 // Page discovery and queue submissions are bounded, and cold visitors promote
@@ -87,7 +88,12 @@ export async function scheduleRegisteredCollectionWarmups() {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop)) continue;
     try {
       await scheduleCollectionWarmup(shop);
-      await scheduleMissingCollectionOrders(shop);
+      // Public rankings refresh every minute; catalog-wide order discovery
+      // keeps its existing four-minute cadence and single worker lane.
+      if (Date.now() - (orderDiscoveryAt.get(shop) ?? -Infinity) >= 240000) {
+        await scheduleMissingCollectionOrders(shop);
+        orderDiscoveryAt.set(shop, Date.now());
+      }
     }
     catch (error) { console.error('CFP: Periodic collection warmup failed:', error.name); }
   }

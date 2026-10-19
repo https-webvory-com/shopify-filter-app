@@ -64,7 +64,7 @@ test("worker shutdown closes processors and removes readiness without touching w
 
 test('worker warms on startup and periodically without overlapping slow ticks or running after shutdown',async()=>{
   let count=0,finish;const f=await runner({warmup:async()=>{count++;await new Promise(resolve=>finish=resolve);}});
-  assert.equal(count,1);assert.equal(f.timers[0].ms,240000);await f.timers[0].callback();assert.equal(count,1);
+  assert.equal(count,1);assert.equal(f.timers[0].ms,60000);await f.timers[0].callback();assert.equal(count,1);
   finish();await new Promise(resolve=>setImmediate(resolve));
   const next=f.timers[0].callback();assert.equal(count,2);finish();await next;
   await f.signals.SIGTERM();await f.timers[0].callback();assert.equal(count,2);

@@ -82,12 +82,24 @@ try{
   await layer.client.set(unrelated,'keep');await layer.client.zadd(budget,0,unrelated);
   for(let i=0;i<=publicPreparationLimit;i++){
     clock++;
-    const different={...stableSpec,orderRevision:'budget-'+i};await retained.process({key:preparationKey(different),spec:different});
+    const different={...stableSpec,collectionId:'budget-'+i,orderRevision:'budget-'+i};await retained.process({key:preparationKey(different),spec:different});
   }
   assert.equal(await layer.client.zcard(budget),publicPreparationLimit);assert.equal(await layer.client.get(unrelated),'keep');
-  assert.equal(await layer.redis.get(preparationKey({...stableSpec,orderRevision:'budget-0'})),null);
-  assert.ok(await layer.redis.get(preparationKey({...stableSpec,orderRevision:'budget-'+publicPreparationLimit})));
+  assert.equal(await layer.redis.get(preparationKey({...stableSpec,collectionId:'budget-0',orderRevision:'budget-0'})),null);
+  assert.ok(await layer.redis.get(preparationKey({...stableSpec,collectionId:'budget-'+publicPreparationLimit,orderRevision:'budget-'+publicPreparationLimit})));
   results.push({name:'Atomic retention cap bounds public order versions and cannot delete an injected protected session key',passed:true});
+
+  const other={...stableSpec,collectionId:'budget-1',orderRevision:'budget-1'};
+  const rotating={...stableSpec,collectionId:'budget-'+publicPreparationLimit,orderRevision:'budget-'+publicPreparationLimit};
+  let previous=preparationKey(rotating);
+  for(let i=0;i<publicPreparationLimit+2;i++){
+    clock++;const changed={...rotating,orderRevision:'rotation-'+i};
+    await retained.process({key:preparationKey(changed),spec:changed});
+    assert.equal(await layer.redis.get(previous),null);previous=preparationKey(changed);
+    assert.ok(await layer.redis.get(preparationKey(other)));
+    assert.equal(await layer.client.zcard(budget),publicPreparationLimit);
+  }
+  results.push({name:'Repeated order refreshes replace only their own context without evicting other warm collections',passed:true});
 
   await layer.redis.del(preparationKey(stableSpec));await layer.queue.drain(true);
   let attempts=0;

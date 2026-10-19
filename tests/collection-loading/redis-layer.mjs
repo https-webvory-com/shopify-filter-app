@@ -10,7 +10,9 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
   const queue=new Queue(name,{prefix,connection,defaultJobOptions:{attempts:3,backoff:{type:'exponential',delay:2000},removeOnComplete:true,removeOnFail:{count:50,age:3600},...jobOptions}});
   const physical=key=>prefix+':'+key;
   const redis={
-    get:key=>client.get(physical(key)),set:(key,value)=>client.set(physical(key),value),setex:(key,ttl,value)=>client.setex(physical(key),ttl,value),
+    get:async key=>{const value=await client.get(physical(key));return key.includes(':last-order-v1:')&&value?.startsWith(prefix+':')?value.slice(prefix.length+1):value;},
+    set:(key,value)=>client.set(physical(key),value),
+    setex:(key,ttl,value)=>client.setex(physical(key),ttl,key.includes(':last-order-v1:')?physical(value):value),
     ttl:key=>client.ttl(physical(key)),incr:key=>client.incr(physical(key)),del:(...keys)=>keys.length?client.del(...keys.map(physical)):0,
     // The retention script takes its deletion prefix as the final argument.
     // Keep both keys AND that prefix inside this test-owned namespace.

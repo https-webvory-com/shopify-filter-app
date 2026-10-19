@@ -11,7 +11,16 @@ export const warmupShopsKey = 'collectionWarmupShopsV2';
 export const publicPreparationLimit = 40;
 export const publicRetentionKey = shop => `collectionPreparedRetention:${shop}`;
 const retainPublic = `
+local previous = redis.call('GET', KEYS[3])
 redis.call('SETEX', KEYS[2], ARGV[1], ARGV[2])
+redis.call('SETEX', KEYS[3], ARGV[1], KEYS[2])
+if previous and previous ~= KEYS[2] then
+  local suffix = string.sub(previous, string.len(ARGV[5])+1)
+  if string.sub(previous, 1, string.len(ARGV[5])) == ARGV[5] and string.len(suffix) == 64 and string.match(suffix, '^%x+$') then
+    redis.call('DEL', previous)
+    redis.call('ZREM', KEYS[1], previous)
+  end
+end
 local latest = redis.call('ZREVRANGE', KEYS[1], 0, 0, 'WITHSCORES')
 local score = tonumber(ARGV[3])
 if latest[2] then score = math.max(score, tonumber(latest[2])+1) end
@@ -119,7 +128,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
         let previous;
         try { previous=JSON.parse(await redis.get(previousKey)); } catch { /* A missing/corrupt record needs a fresh build. */ }
         if (valid(previous) && previous.productRevision === spec.productRevision &&
-            Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationFreshnessMs &&
+            Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationLifetime * 1000 &&
             await revision(spec.shop) === spec.revision) {
           try { await schedule(key, spec, true); } catch { /* The last complete version is still usable. */ }
           return {status:'ready',ids:previous.ids,metadata:previous.metadata,orderUpdatedAt:previous.orderUpdatedAt ?? null,cacheKey:previousKey};
@@ -140,9 +149,10 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     // multiply memory usage for arbitrary filters or customer-specific scans.
     const payload = JSON.stringify({...value,productRevision:startedRevision,preparedAt:now(),orderUpdatedAt:spec.orderUpdatedAt});
     if (spec.retainForIdle === true && typeof redis.eval === 'function') {
-      // Atomically cap retained public versions, including obsolete order hashes.
+      // Replace this context's old order version only after the new one is complete.
+      // This keeps obsolete orders from evicting other collections from the budget.
       // The script can delete only this shop's prepared keys, never queue/session keys.
-      await redis.eval(retainPublic, 2, publicRetentionKey(spec.shop), key,
+      await redis.eval(retainPublic, 3, publicRetentionKey(spec.shop), key, preparationOrderFallbackKey(spec),
         preparationLifetime, payload, now(), publicPreparationLimit, `collectionPreparedSequence:${spec.shop}:background-v2:`);
     } else await redis.setex(key, spec.retainForIdle === true ? preparationLifetime : 600, payload);
     if (await revision(spec.shop) !== spec.revision) { await redis.del(key); return { superseded: true }; }

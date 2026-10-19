@@ -204,7 +204,7 @@ test('a changed Shopify order keeps the last complete fresh ranking while its re
  assert.equal(f.values.get(preparationOrderFallbackKey(changed)),preparationKey(changed));
 });
 
-test('last-order reuse cannot cross eligibility, configuration, market rules, shops or freshness boundaries',async()=>{
+test('last-order reuse cannot cross eligibility, configuration, market rules, shops or retention boundaries',async()=>{
  for(const change of [{revision:'1'},{shop:'other.myshopify.com'},{pinnedIds:['different']},{query:{filter:["Color = 'Red'"]}},{rule:{conditions:[{field:'Tags',action:'Exclude',value:'hidden'}]}},{retainForIdle:false}]){
   const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['old'],orderRevision:'old'});
   await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
@@ -214,9 +214,23 @@ test('last-order reuse cannot cross eligibility, configuration, market rules, sh
  for(const reason of ['age','product']){
   const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,collectionId:'1',orderedIds:['old']});
   await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
-  if(reason==='age')f.advance(600000);else f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
+  if(reason==='age')f.advance(preparationLifetime*1000);else f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
   assert.equal((await f.service.get({...f.spec,orderedIds:['new']})).status,'pending',reason);
  }
+});
+
+test('an idle collection reuses unchanged products across an order refresh without waiting for the worker',async()=>{
+ const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,collectionId:'1',orderedIds:['old'],orderUpdatedAt:10});
+ await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+ f.advance(660000);
+ const changed={...f.spec,orderedIds:['new'],orderUpdatedAt:20};
+ const ready=await f.service.get(changed);
+ assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);
+ assert.equal(ready.orderUpdatedAt,10);assert.equal(ready.cacheKey,preparationKey(f.spec));
+ assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);assert.equal(f.builds(),1);
+ f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
+ assert.equal((await f.service.get(changed)).status,'pending');
+ assert.equal(f.queued[1].opts.priority,1);
 });
 
 test('a last-order sequence with newly ineligible products is discarded without touching browsing tokens',async()=>{

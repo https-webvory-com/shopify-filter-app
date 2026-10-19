@@ -101,3 +101,9 @@ test('startup discovers catalog shops even without a visitor-created registry',a
  const queued=f.writes.filter(row=>row[0]==='queue');assert.equal(queued.length,1);assert.equal(queued[0][2].shop,'new.myshopify.com');
  const orders=f.writes.filter(row=>row[0]==='order');assert.equal(orders.length,1);assert.equal(orders[0][1],'new.myshopify.com');
 });
+
+test('frequent public warmup ticks do not repeatedly scan the catalog for missing orders',async()=>{
+ const f=await fixture();f.catalog.push({shop:'fixture.myshopify.com',id:'1'});
+ await f.scheduleRegisteredCollectionWarmups();await f.scheduleRegisteredCollectionWarmups();
+ assert.equal(f.writes.filter(row=>row[0]==='order').length,1);
+});

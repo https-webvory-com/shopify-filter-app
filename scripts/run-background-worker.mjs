@@ -30,7 +30,7 @@ try {
     catch (error) { console.error('CFP: Collection warmup scheduler unavailable:', error.name); }
     finally { warming = false; }
   };
-  const warmupTimer = setInterval(warm, 240000);
+  const warmupTimer = setInterval(warm, 60000);
   warmupTimer.unref();
   let auditing=false;
   const audit=async()=>{if(auditing||shuttingDown)return;auditing=true;try{await global.__scheduleMembershipAudits?.();}catch(error){console.error('CFP Membership scheduler unavailable:',error.name);}finally{auditing=false;}};
