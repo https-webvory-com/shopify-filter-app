@@ -29,6 +29,7 @@ async function loadSync({ product, deleteError } = {}) {
     addDocuments: async docs => { calls.push(["addIndex", docs]); return { taskUid: 1 }; },
   };
   const mocks = {
+    './collectionRuleFacts.server.js':{withCollectionRuleFacts:async docs=>docs},
     "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },
     "../db.server": { __esModule: true, default: prisma },
     "./meiliClient.server": { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: "succeeded" }) } } },

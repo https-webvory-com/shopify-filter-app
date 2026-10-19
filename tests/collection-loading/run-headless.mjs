@@ -202,6 +202,16 @@ try{
     assert.equal(after.state.builds,before.state.builds);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cardsMs:Math.round(await evaluate('cardSnapshots[0].at')),refreshWorkerPaused:true,firstRequestStatus:requests[0].status,liveTiming:false};
   });
+  await test('maintained facts return first-visit cards without waiting for the ranking worker',async()=>{
+    await send('Network.clearBrowserCache');
+    await control({reset:true,directFacts:true,colorRule:true,pin:'4',hold:true,delay:20000,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
+    const status=await(await fetch(origin+'/__state')).json();
+    assert.equal(status.state.builds,0);
+    assert.equal(status.requests.filter(r=>r.status===202).length,0);
+    assert.deepEqual((await cards()).slice(0,2),['4','30']);
+    assert.ok((await evaluate('cardSnapshots[0].at'))<10000);
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

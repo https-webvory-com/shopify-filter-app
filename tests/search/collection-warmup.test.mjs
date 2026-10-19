@@ -22,6 +22,7 @@ async function fixture() {
   }}};
   const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,warmupLoader:async({request})=>{writes.push(['load',request.url]);return Response.json({warmup:true});},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
+    if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
     if(name==='./redis.server.js')return {__esModule:true,default:redis};

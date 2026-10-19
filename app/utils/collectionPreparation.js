@@ -103,12 +103,39 @@ export function preparationOrderFallbackKey(spec) {
   return preparationKey(identity).replace(':background-v2:', ':last-order-v1:');
 }
 
-export function createCollectionPreparation({ redis, queue, prepare, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
+export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
   const report = event => {try {observe(event);} catch { /* Diagnostics never affect availability. */ }};
   const valid = value => value && Array.isArray(value.ids) && value.ids.every(id=>typeof id==='string'&&id.length>0) &&
     new Set(value.ids).size===value.ids.length && value.metadata && typeof value.metadata==='object' && !Array.isArray(value.metadata);
   const revision = async shop => String(await redis.get(preparationRevisionKey(shop)) ?? '0');
   const productRevision = async (shop,collectionId) => String(await redis.get(productRevisionKey(shop,collectionId)) ?? '0');
+  const directPending=new Map(),directUnavailable=new Map();
+  async function direct(key,spec,warmup){
+    if(!prepareDirect||warmup||spec.retainForIdle!==true)return null;
+    if(directPending.has(key))return directPending.get(key);
+    // Keep exhaustive compact ID/fact sorting within the existing heap budget.
+    if(directPending.size||now()<(directUnavailable.get(key)||0))return null;
+    const task=(async()=>{
+      try{
+        const startedRevision=await productRevision(spec.shop,spec.collectionId);
+        const value=await prepareDirect(spec);
+        if(!value){directUnavailable.set(key,now()+30000);return null;}
+        const result=await publish(key,spec,value,startedRevision);
+        if(result.superseded)return null;
+        if(result.refreshRequired)await schedule(key,spec,true);
+        report({event:'direct-ready',shop:spec.shop,collectionId:spec.collectionId,key,products:value.ids.length});
+        return {status:'ready',ids:value.ids,metadata:value.metadata};
+      }catch(error){
+        directUnavailable.set(key,now()+30000);
+        report({event:'direct-unavailable',shop:spec.shop,collectionId:spec.collectionId,key,error:error.name});
+        return null;
+      }finally{
+        if(directUnavailable.size>128)directUnavailable.delete(directUnavailable.keys().next().value);
+        directPending.delete(key);
+      }
+    })();
+    directPending.set(key,task);return task;
+  }
   async function schedule(key, spec, warmup = false) {
     const priority = warmup ? 10 : 1;
     const jobId = `collection-ranking-${createHash('sha256').update(key).digest('hex')}`;
@@ -146,7 +173,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
         report({event:'unavailable',reason:'corrupt',shop:spec.shop,collectionId:spec.collectionId,key});
         // The worker will replace this record. Avoid deleting a newly published
         // valid record if another worker completed after this read.
-        return {status:await schedule(key,spec,warmup)};
+        return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
       }
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
       // Long idle retention must not extend the old ten-minute window for
@@ -154,7 +181,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
       if (spec.retainForIdle === true && value.productRevision !== spec.productRevision &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
         report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
-        return { status: await schedule(key, spec, warmup) };
+        return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
       }
       // Refresh a valid version before expiry without holding up visitors.
       if (value.productRevision !== spec.productRevision || !Number.isFinite(value.preparedAt) ||
@@ -183,7 +210,7 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
       }
     }
     report({event:'unavailable',reason:'missing',shop:spec.shop,collectionId:spec.collectionId,key});
-    return { status: await schedule(key, spec, warmup) };
+    return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
   }
   async function process({ key, spec, queuedAt }) {
     if (key !== preparationKey(spec)) throw Error('Invalid preparation identity');
@@ -192,6 +219,11 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     report({event:'build-started',shop:spec.shop,collectionId:spec.collectionId,key,queueWaitMs:Number.isFinite(queuedAt)?Math.max(0,startedAt-queuedAt):null});
     const startedRevision=await productRevision(spec.shop,spec.collectionId);
     const value = await prepare(spec);
+    const result=await publish(key,spec,value,startedRevision);
+    if(!result.superseded)report({event:'build-ready',shop:spec.shop,collectionId:spec.collectionId,key,buildMs:now()-startedAt,products:value.ids.length});
+    return result;
+  }
+  async function publish(key,spec,value,startedRevision){
     if (!valid(value)) throw Error('Invalid prepared collection ranking');
     // An admin save during the scan must never publish that outdated ranking.
     if (await revision(spec.shop) !== spec.revision) return { superseded: true };
@@ -209,7 +241,6 @@ export function createCollectionPreparation({ redis, queue, prepare, now = Date.
     if (spec.retainForIdle === true && spec.needsShopifyOrder) {
       await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key);
     }
-    report({event:'build-ready',shop:spec.shop,collectionId:spec.collectionId,key,buildMs:now()-startedAt,products:value.ids.length});
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision };
   }
   // A current first-page sequence referencing a deleted/inactive product must

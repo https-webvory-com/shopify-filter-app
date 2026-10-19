@@ -337,7 +337,9 @@ export async function getActivePinningRuleForSearch(
  * Helper to check if a product matches a rule condition.
  * Supports Merged Values rules expansion for options like Color/Size.
  */
-function checkRuleMatch(product, condition, mergedValues = [], caseSensitiveTags = false) {
+export function checkRuleMatch(product, condition, mergedValues = [], caseSensitiveTags = false) {
+  const fact=product._collectionRuleFact?.(condition);
+  if(fact?.known)return fact.value;
   const field = condition.field || "";
   if (field === "Date") {
     const [start, end] = String(condition.dateValue || "").split(" - ");

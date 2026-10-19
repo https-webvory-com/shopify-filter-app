@@ -17,6 +17,30 @@ function fixture() {
   return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
 }
 
+test('a first visitor publishes maintained rank inputs directly without waiting for the background queue',async()=>{
+ const f=fixture();f.spec.retainForIdle=true;let reads=0;
+ const s=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:()=>{throw Error('Full scan forbidden');},prepareDirect:async()=>{reads++;return f.result;}});
+ const first=await s.get(f.spec);assert.deepEqual(first,{status:'ready',...f.result});assert.equal(reads,1);assert.equal(f.queued.length,0);
+ assert.deepEqual(await s.get(f.spec),first);assert.equal(reads,1);
+});
+
+test('concurrent first visitors share one direct ranking and configuration races never publish old results',async()=>{
+ const f=fixture();f.spec.retainForIdle=true;let complete,reads=0;
+ const s=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>f.result,prepareDirect:async()=>{reads++;return new Promise(resolve=>complete=resolve);}});
+ const requests=Array.from({length:40},()=>s.get(f.spec));await new Promise(resolve=>setImmediate(resolve));complete(f.result);
+ assert.ok((await Promise.all(requests)).every(r=>r.status==='ready'));assert.equal(reads,1);assert.equal(f.queued.length,0);
+ const other={...f.spec,sortBy:'price-ascending'};const pending=s.get(other);await new Promise(resolve=>setImmediate(resolve));f.values.set(preparationRevisionKey(other.shop),'1');complete(f.result);
+ assert.equal((await pending).status,'pending');assert.equal(f.values.has(preparationKey(other)),false);
+});
+
+test('missing or failed facts preserve the existing queued path and never cache incomplete data or replay private contexts',async()=>{
+ const f=fixture();f.spec.retainForIdle=true;let reads=0;
+ const s=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>f.result,prepareDirect:async()=>{reads++;throw Error('Facts missing');}});
+ assert.equal((await s.get(f.spec)).status,'pending');assert.equal((await s.get(f.spec)).status,'pending');assert.equal(reads,1);assert.equal(f.queued.length,1);
+ assert.equal(f.values.has(preparationKey(f.spec)),false);
+ await s.get({...f.spec,retainForIdle:false,query:{filter:["Color = 'Blue'"]}});assert.equal(reads,1);
+});
+
 test('readiness diagnostics distinguish a missing key, queue wait and build duration without changing products',async()=>{
  const f=fixture(),events=[];let clock=100;
  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:()=>clock,observe:event=>events.push(event),prepare:async()=>{clock+=250;return f.result;}});

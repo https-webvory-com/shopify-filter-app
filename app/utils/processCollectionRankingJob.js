@@ -1,4 +1,5 @@
-export async function processCollectionRankingJob(job, {prepare,warm,schedule}) {
+export async function processCollectionRankingJob(job, {prepare,warm,schedule,facts}) {
+  if(job.name==='COLLECTION_FACTS_REFRESH')return facts(job.data);
   if(job.name==='COLLECTION_RANKING_PREPARE'){
     const result=await prepare(job.data);
     if(result.refreshRequired)await schedule(job.data.shop,[String(job.data.spec.collectionId||'all').split('/').pop()]);

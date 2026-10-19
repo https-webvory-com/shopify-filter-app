@@ -40,6 +40,7 @@ test('missing initial metadata fails closed',async()=>{
 test('actual single-product sync aborts before DB/index writes when membership pagination fails',async()=>{
   let writes=0;
   const service=await loadModule('app/services/sync.server.js',{
+    './collectionRuleFacts.server.js':{withCollectionRuleFacts:async docs=>docs},
     '../utils/reconcileCollectionMembership.js':{},
     '../db.server':{default:{filterSetting:{findMany:async()=>[]},product:{deleteMany:async()=>{writes++;}}}},
     './productCollections.server.js':{completeProductCollections},

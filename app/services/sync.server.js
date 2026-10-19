@@ -7,6 +7,7 @@ import { invalidateShop } from "./shopCache.server";
 import { isStorefrontProduct } from "../utils/storefrontProduct.js";
 import { syncErrorMessage, productSyncJobWhere } from "../utils/syncError.js";
 import { searchIndexProjection, SEARCH_FILTER_FIELDS } from '../utils/searchIndexProjection.js';
+import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
 
 /**
  * Format products and push to Meilisearch index.
@@ -87,7 +88,7 @@ export async function formatAndPushToMeili(products) {
 
   try {
     const index = meiliClient.index("products");
-    const task = await index.addDocuments(documents.map(p => ({ ...p, ...searchIndexProjection(p) })));
+    const task = await index.addDocuments(await withCollectionRuleFacts(documents.map(p => ({ ...p, ...searchIndexProjection(p) }))));
     console.log(
       `CFP: Pushed ${documents.length} products to Meilisearch (Task ID: ${task.taskUid})`,
     );
@@ -663,7 +664,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
         // Meili push (gracefully handled if remote VPS disk is full)
         (async () => {
           try {
-            const task = await meiliClient.index("products").addDocuments(meiliDocs.map(p => ({ ...p, ...searchIndexProjection(p) })));
+            const task = await meiliClient.index("products").addDocuments(await withCollectionRuleFacts(meiliDocs.map(p => ({ ...p, ...searchIndexProjection(p) }))));
             const indexed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
             if (indexed.status !== "succeeded") throw new Error("Product indexing failed: " + (indexed.error?.code || indexed.status));
             console.log(
@@ -1157,7 +1158,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     smartUpsertProduct(shop, product, prisma),
     meiliClient
       .index("products")
-      .addDocuments([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }])
+      .addDocuments(await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }]))
       .then(async (task) => {
         if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product indexing failed');}
         console.log(

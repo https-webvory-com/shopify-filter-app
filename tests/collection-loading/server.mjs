@@ -8,6 +8,7 @@ import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
+import {createCollectionFactProfile,projectCollectionRuleFacts} from '../../app/utils/collectionRuleFacts.js';
 import {createCollectionPreparation,preparationRevisionKey,preparationKey} from '../../app/utils/collectionPreparation.js';
 import {createShopCacheInvalidation,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
@@ -52,7 +53,14 @@ export async function createLoadingServer({redisLayer}={}) {
     if(!state.hold){const timer=setTimeout(async()=>{timers.delete(timer);job.state='active';try{await dispatch(job);job.state='completed';state.completed++;}catch{job.state='failed';job.finishedOn=Date.now();}},name==='COLLECTION_RANKING_PREPARE'?state.delay:50);timers.add(timer);}
     return job;
   }};
-  preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
+  preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,
+    prepareDirect:async spec=>{
+      if(!state.directFacts)return null;
+      const profile=createCollectionFactProfile(spec.rule.conditions,spec.mergedValues);
+      return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator,
+        factProfile:profile,loadFacts:async products=>{for(const p of products)Object.assign(p,projectCollectionRuleFacts(byId.get(p.id.split('/').pop()),profile,merch.checkRuleMatch,{backfill:true}));}});
+    },
+    prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
   async function warm(shop,collectionIds){if(collectionIds&&!collectionIds.includes('1'))return;
     await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=25'),params:{},context:{rankingWarmup:true}});
   }
@@ -93,7 +101,7 @@ export async function createLoadingServer({redisLayer}={}) {
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null});}
+        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false});}
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
         if(updates.invalidate){state.revision++;await invalidate(shop);}

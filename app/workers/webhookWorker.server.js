@@ -263,7 +263,8 @@ export function initWebhookWorker() {
   if (!global.__collectionRankingWorker) {
     global.__collectionRankingWorker = new Worker('collectionRankingQueueV2', async job => {
       const { processCollectionPreparation, processCollectionWarmups, scheduleCollectionWarmup } = await import('../services/collectionPreparation.server.js');
-      return processCollectionRankingJob(job,{prepare:processCollectionPreparation,warm:processCollectionWarmups,schedule:scheduleCollectionWarmup});
+      return processCollectionRankingJob(job,{prepare:processCollectionPreparation,warm:processCollectionWarmups,schedule:scheduleCollectionWarmup,
+        facts:async data=>(await import('../services/collectionRuleFacts.server.js')).processCollectionFactRefresh(data)});
     }, { connection: { ...redisOptions, maxRetriesPerRequest: null }, concurrency: 1 });
     global.__collectionRankingWorker.on('error', error => console.error('CFP Ranking Worker:', error.message));
     global.__collectionRankingWorker.on('failed', (job, error) => console.error('CFP Ranking Worker failed:', job?.id, error.message));

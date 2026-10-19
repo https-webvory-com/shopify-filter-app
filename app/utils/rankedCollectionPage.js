@@ -64,8 +64,8 @@ export function collectionRankingFields(conditions, sortBy, hasShopifyOrder = tr
 }
 
 // Rank and exclude the complete eligible set before allocating any page slots.
-export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking, compare }) {
-  if (compare) return buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare});
+export async function buildCollectionSequence(index, { query, pinnedIds, orderedIds, arrange, conditions, sortBy, hydrateRanking, compare, projectedFields }) {
+  if (compare) return buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields});
   const { indexUid, q, ...options } = query;
   const documents = [];
   const seen = new Set();
@@ -113,11 +113,11 @@ export async function buildCollectionSequence(index, { query, pinnedIds, ordered
 
 // Keep at most one batch of variant/image data. Rule evaluation is per product;
 // the shared merchandising comparator orders compact results across all batches.
-async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare}) {
+async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,conditions,sortBy,hydrateRanking,compare,projectedFields}) {
   const {indexUid,q,...options}=query;
   const ranks=orderedIds?new Map(orderedIds.map((id,i)=>[cleanId(id),i])):null;
   const seen=new Set(),ranked=[];
-  const fields=collectionRankingFields(conditions,sortBy,Array.isArray(orderedIds));
+  const fields=projectedFields||collectionRankingFields(conditions,sortBy,Array.isArray(orderedIds));
   // Variant arrays can dominate a response even when few products match.
   // Scalar/tag projections do not carry variants or collection membership
   // arrays. Read them in fewer round trips; keep large nested projections
@@ -151,7 +151,7 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
     if(result.hits.length<batchSize){const expected=result.totalHits??result.estimatedTotalHits;if(expected!=null&&scanned!==expected)throw Error('Incomplete collection ranking results');break;}
   }
   const missing=[...new Set((pinnedIds||[]).map(cleanId))].filter(id=>!seen.has(id));
-  for(let offset=0;offset<missing.length;offset+=1000)await consume(missing.slice(offset,offset+1000).map((id,i)=>({id,_originalIndex:(orderedIds?.length||0)+scanned+offset+i})));
+  for(let offset=0;offset<missing.length;offset+=1000)await consume(missing.slice(offset,offset+1000).map((id,i)=>({id,_rankingPinPlaceholder:true,_originalIndex:(orderedIds?.length||0)+scanned+offset+i})));
   ranked.sort((a,b)=>compare(a,b)||(a._originalIndex??0)-(b._originalIndex??0));
   if(ranks&&['best-selling','bestselling'].includes(sortBy)){
     const isFree=p=>p.priceMin!=null&&p.priceMin!==''&&Number.isFinite(Number(p.priceMin))&&Number(p.priceMin)===0;

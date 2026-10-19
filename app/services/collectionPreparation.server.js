@@ -8,6 +8,7 @@ import { createCollectionPreparation, warmupContextsKey, warmupShopsKey, publicP
 import {createHash} from 'node:crypto';
 import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './collectionBestSelling.server.js';
 import configuredWarmups from '../config/collection-prewarm.json';
+import {prepareCollectionFromFacts,scheduleCollectionFactRefresh} from './collectionRuleFacts.server.js';
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -25,8 +26,9 @@ function seededWarmups(shop) {
   return records;
 }
 
-const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: spec =>
-  prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator }),
+const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
+  await prepareCollectionFromFacts(spec).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator }),
+  prepareDirect:prepareCollectionFromFacts,
   observe:event=>console.info('CFP: collection preparation',JSON.stringify(event)),
 });
 const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);
@@ -51,7 +53,7 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
 }
 
 // Refresh known public contexts even when no browser is currently visiting.
-// This only schedules deduplicated, low-priority jobs; scans stay in the worker.
+// This only schedules deduplicated, low-priority jobs.
 let discoveredRegistries = false;
 const orderDiscoveryAt = new Map();
 // Seed order snapshots for collections before their first storefront visit.
@@ -143,6 +145,7 @@ export async function scheduleRegisteredCollectionWarmups() {
       // Historical catalog metadata can outlive an uninstalled app session.
       // Do not repeatedly fill storefront queues with impossible admin reads.
       if(!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))continue;
+      await scheduleCollectionFactRefresh(shop).catch(error=>console.error('CFP: Collection fact refresh unavailable:',error.name));
       await scheduleCollectionWarmup(shop);
       // Public rankings refresh every minute; catalog-wide order discovery
       // keeps its existing four-minute cadence and single worker lane.
