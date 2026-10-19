@@ -7,9 +7,19 @@ The background scheduler now discovers all local collection metadata for a shop,
 then queues a separate public best-selling context for each collection in up to
 four observed/configured markets. Discovery uses 100-row catalog pages every
 four minutes. Private/customer/filter/token contexts never seed catalog work.
-Each catalog replay is an individual priority-20 job; recent public warmups and
-ranking refreshes use priority 10, and waiting visitor ranking jobs use priority
-1. Worker concurrency remains one. An already running build cannot be preempted.
+Each catalog replay is an individual job that completes and publishes the full
+ranking inside the worker before reporting success. It does not merely enqueue
+a second build. Recent warmups, catalog preparation, fact sweeps and ranking
+refreshes share background priority 10, so repeated maintenance cannot jump in
+front of an older unseen collection. Existing priority-20 catalog jobs are
+promoted during discovery. Waiting visitor jobs retain priority 1. Worker
+concurrency remains one; an already running build cannot be preempted.
+
+Pending Shopify order snapshots and superseded configurations cause catalog
+jobs to retry rather than report readiness. Fresh rankings are reused without
+rebuilding. Product/rule/order warmups also schedule affected catalog collections
+in known public markets even when they have no recent visitor URL. A successful
+job logs `CFP: collection catalog ready` only after the API confirms completion.
 
 Recent visitor replay still retains only 40 registry entries. Complete public
 ranking storage has a separate cap of 2,048 records and 64 MiB of encoded payload
@@ -54,3 +64,9 @@ target and then label the result an unseen-collection test.
 This is an independent implementation informed by observed SoBooster browser
 behavior. Its proprietary server ranking/cache architecture is unknown. No
 Shopify extension or theme release is required for these backend changes.
+
+Local verification for completed catalog jobs: 593 regression tests and the
+production build passed. All 25 browser fixture checks passed, including a
+background build before any visitor, followed by a single HTTP 200 product
+response with the worker paused and no additional build. Fixture timings are
+not proof of live catalog coverage or live page-load timing.

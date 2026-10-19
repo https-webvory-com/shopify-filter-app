@@ -33,7 +33,7 @@ test('fact sweep recovers a retained failed job and queues at lower priority',as
  const f=await fixture();let removed=false;
  f.setExisting({getState:async()=>'failed',remove:async()=>removed=true});
  await f.service.scheduleCollectionFactRefresh('owned.myshopify.com');
- assert.ok(removed);assert.equal(f.jobs[0][0],'COLLECTION_FACTS_REFRESH');assert.equal(f.jobs[0][2].priority,5);
+ assert.ok(removed);assert.equal(f.jobs[0][0],'COLLECTION_FACTS_REFRESH');assert.equal(f.jobs[0][2].priority,10);
 });
 test('fact sweep reads bounded pages and never changes product source markers',async()=>{
  const f=await fixture();f.setDocs(Array.from({length:100},(_,i)=>({id:String(i+1),shop:'owned.myshopify.com',status:'ACTIVE',variantPrices:[{option1:'Red'}]})));

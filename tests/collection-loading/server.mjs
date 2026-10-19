@@ -61,8 +61,9 @@ export async function createLoadingServer({redisLayer}={}) {
         factProfile:profile,loadFacts:async products=>{for(const p of products)Object.assign(p,projectCollectionRuleFacts(byId.get(p.id.split('/').pop()),profile,merch.checkRuleMatch,{backfill:true}));}});
     },
     prepare:async spec=>{state.builds++;if(state.fail)throw Error('Fixture engine failure');return prepareCollectionRanking(spec,{index,prisma,arrange:merch.applyMerchandisingRules,comparator:merch.createMerchandisingComparator});}});
-  async function warm(shop,collectionIds){if(collectionIds&&!collectionIds.includes('1'))return;
-    await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=25'),params:{},context:{rankingWarmup:true}});
+  async function warm(shop,collectionIds,precompute=false){if(collectionIds&&!collectionIds.includes('1'))return;
+    const response=await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=25'),params:{},context:{rankingWarmup:true,rankingPrecompute:precompute}});
+    if(precompute&&!(await response.json()).warmup)throw Error('Fixture precomputation did not complete');
   }
   async function schedule(shop,collectionIds){const jobId='warm-'+shop+'-'+(collectionIds?.join('-')||'all');const job=await queue.getJob(jobId);if(job&&['active','waiting','prioritized','delayed'].includes(await job.getState()))return;if(job)await job.remove();await queue.add('COLLECTION_RANKING_WARM',{shop,collectionIds},{jobId,priority:10});}
   async function dispatch(job){return processCollectionRankingJob(job,{prepare:preparation.process,warm,schedule});}
@@ -111,6 +112,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.deleteProduct)byId.get(updates.deleteProduct).status='DELETED';
         if(updates.stormCollection){const timer=setInterval(()=>invalidate(shop,{kind:'products',collectionIds:[updates.stormCollection]}).catch(()=>{}),150);timers.add(timer);state.stormTimer=timer;}
         if(updates.stopStorm&&state.stormTimer){clearInterval(state.stormTimer);timers.delete(state.stormTimer);delete state.stormTimer;}
+        if(updates.precompute)await warm(shop,null,true);
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests}));return;
       }
       if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests,configurationRequests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}

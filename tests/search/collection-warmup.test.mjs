@@ -9,18 +9,19 @@ import {processCollectionRankingJob} from '../../app/utils/processCollectionRank
 
 async function fixture() {
   const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[];let scans=0;
-  const queue={getJob:async id=>jobs.get(id),add:async(name,data,options)=>{writes.push(['queue',name,data,options]);const job={getState:async()=> 'waiting'};jobs.set(options.jobId,job);return job;}};
+  const queue={getJob:async id=>jobs.get(id),add:async(name,data,options)=>{writes.push(['queue',name,data,options]);const job={opts:options,getState:async()=> 'waiting',changePriority:async({priority})=>{job.opts.priority=priority;writes.push(['priority',options.jobId,priority]);}};jobs.set(options.jobId,job);return job;}};
   const redis={zrange:async()=>records,zrangebyscore:async()=>shops,zadd:async(...args)=>writes.push(['add',...args]),zremrangebyrank:async(...args)=>writes.push(['trim',...args]),zremrangebyscore:async(...args)=>writes.push(['prune',...args]),expire:async(...args)=>writes.push(['expire',...args])};
   redis.scan=async()=>{scans++;return ['0',registries];};redis.ttl=async()=>3600;
   redis.mget=async(...keys)=>keys.map(key=>snapshots.get(key)||null);
   const offline=new Set();
   const database={session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
     if(options.distinct)return [...new Set(catalog.map(row=>row.shop))].map(shop=>({shop}));
-    const rows=catalog.filter(row=>row.shop===options.where.shop).sort((a,b)=>a.id.localeCompare(b.id));
+    const rows=catalog.filter(row=>row.shop===options.where.shop&&(!options.where.id?.in||options.where.id.in.includes(row.id))).sort((a,b)=>a.id.localeCompare(b.id));
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
     return rows.slice(offset,offset+options.take).map(({id})=>({id}));
   }}};
-  const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,warmupLoader:async({request})=>{writes.push(['load',request.url]);return Response.json({warmup:true});},require:name=>{
+  let loadingResponse=()=>Response.json({warmup:true});
+  const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse();},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
@@ -37,7 +38,7 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn};
 }
 
 test('warmup registry stores a normalized public collection context with a bounded size and lifetime',async()=>{
@@ -141,7 +142,7 @@ test('catalog preparation covers unseen collections in public markets, with indi
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,410);
  assert.equal(new Set(jobs.map(w=>w[3].jobId)).size,410);
- for(const job of jobs){assert.equal(job[1],'COLLECTION_RANKING_CATALOG');assert.equal(job[3].priority,20);
+ for(const job of jobs){assert.equal(job[1],'COLLECTION_RANKING_CATALOG');assert.equal(job[3].priority,10);
   const url=new URL(job[2].record.url);assert.equal(url.origin,'https://ranking.internal');assert.equal(url.searchParams.get('shop'),'fixture.myshopify.com');
   assert.ok(['IN','US'].includes(url.searchParams.get('country')));assert.equal(url.searchParams.get('sortBy'),'best-selling');}
  await f.processCollectionWarmups('fixture.myshopify.com',null,jobs[0][2].record);
@@ -168,4 +169,28 @@ test('disconnected shops do not enqueue order/catalog work or replay already que
  await f.scheduleRegisteredCollectionWarmups();assert.equal(f.writes.filter(w=>['queue','order','load'].includes(w[0])).length,0);
  const result=await f.processCollectionWarmups('fixture.myshopify.com',null,{url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&page=1',collectionId:'1'});
  assert.equal(result.skipped,true);assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
+});
+
+test('existing catalog jobs are promoted into the fair background lane without duplicate jobs',async()=>{
+ const f=await fixture();f.seeds.push({shop:'fixture.myshopify.com',collectionHandle:'seed',country:'IN',locale:'en'});f.catalog.push({shop:'fixture.myshopify.com',id:'gid://shopify/Collection/1'});
+ await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
+ const job=[...f.jobs.values()][0];job.opts.priority=20;
+ await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
+ assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);
+});
+
+test('catalog replay requires a completed ranking and trusted worker precompute context',async()=>{
+ const f=await fixture(),record={url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'};
+ await f.processCollectionWarmups('fixture.myshopify.com',null,record);
+ assert.equal(f.writes.find(w=>w[0]==='load')[2].rankingPrecompute,true);
+ f.setResponse(()=>Response.json({products:[],debug:{collectionBestSellingStatus:'pending'}},{status:202}));
+ await assert.rejects(f.processCollectionWarmups('fixture.myshopify.com',null,record),/not ready/);
+});
+
+test('product updates precompute affected collections without any prior visitor URL',async()=>{
+ const f=await fixture();f.seeds.push({shop:'fixture.myshopify.com',collectionHandle:'seed',country:'IN',locale:'en'});
+ for(const id of ['123','456'])f.catalog.push({shop:'fixture.myshopify.com',id:'gid://shopify/Collection/'+id});
+ await f.processCollectionWarmups('fixture.myshopify.com',['123','all']);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);
+ assert.equal(jobs[0][2].record.collectionId,'123');assert.equal(jobs[0][3].priority,10);
 });

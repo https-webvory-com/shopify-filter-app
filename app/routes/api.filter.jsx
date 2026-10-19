@@ -783,7 +783,10 @@ export const loader = async ({ request, context }) => {
         rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
         globalSettings, mergedValues,
       };
-      const prepared = await getPreparedCollectionRanking(preparedSpec, { warmup: context?.rankingWarmup === true });
+      const prepared = await getPreparedCollectionRanking(preparedSpec, {
+        warmup: context?.rankingWarmup === true,
+        precompute: context?.rankingPrecompute === true,
+      });
       preparedCacheKey = prepared.cacheKey;
       collectionRankingStatus = prepared.status;
       if (prepared.status !== 'ready') {

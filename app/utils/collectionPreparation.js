@@ -161,11 +161,23 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     }
     return 'pending';
   }
-  async function get(spec, { warmup = false } = {}) {
+  async function get(spec, { warmup = false, precompute = false } = {}) {
     if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
     spec = {...spec, productRevision: await productRevision(spec.shop,spec.collectionId)};
     const key = preparationKey(spec);
     const raw = await redis.get(key);
+    // A catalog job owns one complete build. Do not finish that job after only
+    // adding another preparation job to the same worker's queue.
+    if (warmup && precompute && spec.retainForIdle === true) {
+      let cached;try { cached=decodePreparation(raw); } catch { /* Build missing/corrupt inputs. */ }
+      if (!valid(cached) || cached.productRevision !== spec.productRevision ||
+          !Number.isFinite(cached.preparedAt) || now()-cached.preparedAt >= preparationFreshnessMs-120000 ||
+          await redis.ttl(key)<120) {
+        const result=await process({key,spec,queuedAt:now()});
+        if(result.superseded)return {status:'pending'};
+      }
+      return get(spec,{warmup:true});
+    }
     if (raw) {
       let value;
       try { value=decodePreparation(raw); } catch { /* Rebuild corrupt cache entries. */ }

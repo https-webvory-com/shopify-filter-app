@@ -17,6 +17,24 @@ function fixture() {
   return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,advance:ms=>clock+=ms};
 }
 
+test('catalog precompute finishes a complete ranking before the first visitor without enqueueing another build',async()=>{
+ const f=fixture();f.spec.retainForIdle=true;
+ const ready=await f.service.get(f.spec,{warmup:true,precompute:true});
+ assert.deepEqual(ready,{status:'ready',...f.result});assert.equal(f.builds(),1);assert.equal(f.queued.length,0);
+ assert.deepEqual(await f.service.get(f.spec),ready);assert.equal(f.builds(),1);
+ await f.service.get(f.spec,{warmup:true,precompute:true});assert.equal(f.builds(),1);
+ f.values.set(productRevisionKey(f.spec.shop,f.spec.collectionId),'1');
+ await f.service.get(f.spec,{warmup:true,precompute:true});assert.equal(f.builds(),2);
+});
+
+test('failed or superseded catalog precompute never publishes or reports a ready ranking',async()=>{
+ const f=fixture();f.spec.retainForIdle=true;
+ const failed=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>{throw Error('Unavailable index');}});
+ await assert.rejects(failed.get(f.spec,{warmup:true,precompute:true}),/Unavailable index/);assert.equal(f.values.has(preparationKey(f.spec)),false);
+ const racing=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>{f.values.set(preparationRevisionKey(f.spec.shop),'changed');return f.result;}});
+ assert.deepEqual(await racing.get(f.spec,{warmup:true,precompute:true}),{status:'pending'});assert.equal(f.values.has(preparationKey(f.spec)),false);
+});
+
 test('a first visitor publishes maintained rank inputs directly without waiting for the background queue',async()=>{
  const f=fixture();f.spec.retainForIdle=true;let reads=0;
  const s=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:()=>{throw Error('Full scan forbidden');},prepareDirect:async()=>{reads++;return f.result;}});

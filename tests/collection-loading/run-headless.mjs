@@ -212,6 +212,15 @@ try{
     assert.deepEqual((await cards()).slice(0,2),['4','30']);
     assert.ok((await evaluate('cardSnapshots[0].at'))<10000);
   });
+  await test('catalog preparation completes before any visitor and the first visitor needs no build or pending response',async()=>{
+    await send('Network.clearBrowserCache');
+    const before=await control({reset:true,pin:'5',colorRule:true,directFacts:false,hold:true,precompute:true,clockOffset:0,orderVersion:0,early:false,earlyBeforeStyles:false,assetDelay:0,cssDelay:0,apiDelay:0});
+    assert.equal(before.state.builds,1);assert.equal(before.requests.length,0);
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",10000);
+    const after=await(await fetch(origin+'/__state')).json();assert.equal(after.state.builds,1);
+    assert.equal(after.requests.length,1);assert.equal(after.requests[0].status,200);
+    assert.deepEqual((await cards()).slice(0,2),['5','30']);
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

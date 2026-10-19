@@ -78,7 +78,7 @@ const jobId=(shop,profile,offset)=>`collection-facts-${hash(shop+':'+profile)}-$
 async function enqueueFactPage(shop,profile,offset){
  const id=jobId(shop,profile,offset),previous=await collectionRankingQueue.getJob(id);
  if(previous&&['failed','completed'].includes(await previous.getState()))await previous.remove();
- return collectionRankingQueue.add('COLLECTION_FACTS_REFRESH',{shop,profile,offset},{jobId:id,priority:5});
+ return collectionRankingQueue.add('COLLECTION_FACTS_REFRESH',{shop,profile,offset},{jobId:id,priority:10});
 }
 export async function scheduleCollectionFactRefresh(shop){
  if(!collectionFactsEnabled(shop))return;
@@ -88,7 +88,8 @@ export async function scheduleCollectionFactRefresh(shop){
  catch(error){await redis.del(leaseKey(shop,profile.id));throw error;}
 }
 
-// Small jobs yield between pages to visitor priority 1. A sweep only reads full
+// Small jobs share background priority 10 and yield to visitor priority 1.
+// A sweep only reads full
 // variant data for missing versions; it never rewrites product/index documents.
 export async function processCollectionFactRefresh({shop,profile:expected,offset=0}){
  if(!collectionFactsEnabled(shop)||!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))return {skipped:true};

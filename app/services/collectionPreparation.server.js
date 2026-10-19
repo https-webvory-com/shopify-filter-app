@@ -79,7 +79,7 @@ export async function scheduleMissingCollectionOrders(shop) {
 
 // Discover public markets from configuration and real public visits. Never turn
 // customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
-export async function scheduleCatalogCollectionWarmups(shop) {
+export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null) {
   const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
     try{return [JSON.parse(value)];}catch{return [];}
   })];
@@ -97,21 +97,27 @@ export async function scheduleCatalogCollectionWarmups(shop) {
     if(markets.size===4)break;
   }
   if(!markets.size)return;
+  const scopes=collectionIds?.map(id=>String(id).split('/').pop()).filter(id=>/^\d+$/.test(id));
   let cursor;
   for(;;){
-    const rows=await prisma.collection.findMany({where:{shop},select:{id:true},orderBy:{id:'asc'},take:100,
+    const rows=await prisma.collection.findMany({where:{shop,...(scopes?.length?{id:{in:scopes.map(id=>'gid://shopify/Collection/'+id)}}:{})},select:{id:true},orderBy:{id:'asc'},take:100,
       ...(cursor?{cursor:{id:cursor},skip:1}:{})});
     for(const row of rows)for(const market of markets.values()){
       const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
       const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
-      if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state))continue;
+      if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){
+        if(state!=='active'&&(job.priority??job.opts?.priority??20)>10)await job.changePriority({priority:10});
+        continue;
+      }
         if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
         await job.remove();}
       // Each job replays one collection only, so visitors can move ahead of the
       // background catalog between jobs. Ranking concurrency stays at one.
-      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:20});
+      // FIFO among background builds prevents repeated recent-page warmups and
+      // fact sweeps from starving collections that have never had a visitor.
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:10});
     }
     if(rows.length<100)return;cursor=rows.at(-1).id;
   }
@@ -184,8 +190,18 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     const normalized=normalizeCollectionWarmup(shop,url,record.collectionId);
     if (!normalized || seen.has(normalized.url)) continue;
     seen.add(normalized.url);
-    const response = await loader({ request: new Request(normalized.url), params: {}, context: { rankingWarmup: true } });
+    const response = await loader({ request: new Request(normalized.url), params: {}, context: {
+      rankingWarmup: true, rankingPrecompute: Boolean(catalogRecord),
+    } });
     const payload = response instanceof Response ? await response.json() : response.data;
     if (payload?.crash) throw Error('Collection warmup could not prepare a request');
+    if(catalogRecord){
+      // Pending Shopify order/rule revisions must retry, never count as ready.
+      if(response.status>=400||payload?.warmup!==true)throw Error('Collection catalog preparation is not ready');
+      console.info('CFP: collection catalog ready',JSON.stringify({shop,collectionId:normalized.collectionId,url:normalized.url}));
+    }
   }
+  // Product/rule saves must cover catalog collections even when their URLs are
+  // absent from the recent-visitor registry. Jobs yield after each collection.
+  if(!catalogRecord)await scheduleCatalogCollectionWarmups(shop,collectionIds);
 }

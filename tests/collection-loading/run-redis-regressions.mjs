@@ -51,6 +51,16 @@ try{
   results.push({name:'Configuration change during real active job prevents outdated rule ranking publication',passed:true});
 
   await layer.reset();
+  const catalogSpec={...spec,collectionId:'unvisited',revision:'0',retainForIdle:true};let catalogBuilds=0,catalogComplete=false;
+  const catalog=createCollectionPreparation({redis:layer.redis,queue:layer.queue,prepare:async()=>{catalogBuilds++;return {ids:['2','1'],metadata:{}};}});
+  layer.setHandler(async()=>{assert.equal((await catalog.get(catalogSpec,{warmup:true,precompute:true})).status,'ready');catalogComplete=true;});
+  await layer.queue.add('COLLECTION_RANKING_CATALOG',{shop},{priority:10});
+  layer.worker.resume();await wait(()=>catalogComplete);await wait(async()=>!(await layer.queue.getJobCounts('active')).active);await layer.worker.pause();
+  assert.equal(catalogBuilds,1);assert.deepEqual((await catalog.get(catalogSpec)).ids,['2','1']);
+  assert.equal(catalogBuilds,1);assert.equal((await layer.queue.getJobs(['prioritized','waiting','delayed'])).length,0);
+  results.push({name:'Catalog worker publishes a complete ranking before any visit and first visit needs no queued build',passed:true});
+
+  await layer.reset();
   let builds=0;
   const stableSpec={...spec,revision:'0',retainForIdle:true,query:{filter:["shop = 'redis-regression.myshopify.com'"]}};
   const live=createCollectionPreparation({redis:layer.redis,queue:layer.queue,prepare:async()=>{builds++;return {ids:['1','2'],metadata:{}};}});
