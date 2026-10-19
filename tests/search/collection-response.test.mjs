@@ -76,7 +76,7 @@ test('the actual route bypasses repeated facet queries while validating current 
   assert.equal((await f.load(new Request(firstUrl))).status,202);await f.prepareLast();
   const first=await f.load(new Request(firstUrl)),etag=first.headers.get('ETag'),body=decode(await first.json());
   const trace={...f.trace};assert.equal(body.products.length,25);assert.ok(etag);
-  const cached=await f.load(new Request(firstUrl,{headers:{'If-None-Match':etag}}));assert.equal(cached.status,304);assert.equal(f.trace.facetQueries,trace.facetQueries);assert.equal(f.trace.hydrations,trace.hydrations+25);
+  const cached=await f.load(new Request(firstUrl,{headers:{'If-None-Match':etag}}));assert.equal(cached.status,304);assert.equal(f.trace.facetQueries,trace.facetQueries);assert.equal(f.trace.hydrations,trace.hydrations+25);assert.equal(f.trace.documentBatches,trace.documentBatches+1);assert.equal(f.trace.documentCalls,trace.documentCalls);
   const pageTwo=new URL(firstUrl);pageTwo.searchParams.set('page','2');pageTwo.searchParams.set('rankingToken',body.rankingToken);
   const second=await f.load(new Request(pageTwo));assert.equal(second.headers.get('Cache-Control'),'no-store');
   const later=decode(await second.json());assert.equal(new Set([...body.products,...later.products].map(p=>p.id)).size,30);

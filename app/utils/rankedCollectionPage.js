@@ -146,17 +146,49 @@ async function buildCompactSequence(index,{query,pinnedIds,orderedIds,arrange,co
   return ranked.map(p=>cleanId(p.id));
 }
 
-export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop }) {
+const unsupportedDocumentBatches = new WeakMap();
+
+export async function readRankedCollectionPage(index, { ids, page, limit, attributes, shop, batchOwner=index }) {
   const selected = ids.slice((page - 1) * limit, page * limit);
   const documents = new Map();
-  for (let offset = 0; offset < selected.length; offset += 8) {
-    await Promise.all(selected.slice(offset, offset + 8).map(async id => {
+  const fields=shop && attributes ? [...new Set([...attributes,'shop'])] : attributes;
+  const validate=product=>{
+    if (shop && product.shop && product.shop !== shop) throw new Error('Collection ranking session expired; product tenant changed');
+    if (product.status && product.status.toUpperCase() !== 'ACTIVE') throw new Error('Collection ranking session expired; product eligibility changed');
+  };
+  // Fetch only this frozen page, then restore its exact ID order. Older servers
+  // without document filters retain the individual-read path; no index setting
+  // changes, ids query parameter, search ranking or global result cap is needed.
+  if (selected.length && selected.length<=250 && selected.every(id=>typeof id==='string' && /^[A-Za-z0-9_-]+$/.test(id)) &&
+      (!attributes || attributes.includes('id')) && typeof index.getDocuments==='function' &&
+      (unsupportedDocumentBatches.get(batchOwner) || 0)<Date.now()) {
+    let timer, response;
+    try {
+      response=await Promise.race([index.getDocuments({filter:'id IN '+JSON.stringify([...new Set(selected)]),fields,limit:selected.length,offset:0}),
+        new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Collection page read timed out')),30000);})]);
+    } catch(error) {
+      if (error.code==='invalid_document_filter' || error.code==='route_not_found' || error.httpStatus===405 ||
+          /Unknown field.*(?:ids|filter)/i.test(error.message || '')) unsupportedDocumentBatches.set(batchOwner,Date.now()+60000);
+      else throw error;
+    } finally {clearTimeout(timer);}
+    if (response) {
+      if (!Array.isArray(response.results)) throw new Error('Invalid collection document batch');
+      const requested=new Set(selected);
+      for (const product of response.results) {
+        const id=String(product.id);
+        if (!requested.has(id) || documents.has(id)) throw new Error('Invalid collection document batch');
+        validate(product);documents.set(id,product);
+      }
+      // Verify omitted records individually: an older server may cap a batch,
+      // and a missing record still needs the original document-not-found path.
+    }
+  }
+  const missing=selected.filter(id=>!documents.has(id));
+  for (let offset = 0; offset < missing.length; offset += 8) {
+    await Promise.all(missing.slice(offset, offset + 8).map(async id => {
       try {
-        const product = await index.getDocument(id, { fields: shop && attributes ? [...new Set([...attributes,'shop'])] : attributes },{signal:AbortSignal.timeout(30000)});
-        if (shop && product.shop && product.shop !== shop) throw new Error('Collection ranking session expired; product tenant changed');
-        if (product.status && product.status.toUpperCase() !== 'ACTIVE') {
-          throw new Error('Collection ranking session expired; product eligibility changed');
-        }
+        const product = await index.getDocument(id, { fields },{signal:AbortSignal.timeout(30000)});
+        validate(product);
         documents.set(id, product);
       }
       catch (error) {

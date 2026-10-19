@@ -808,7 +808,7 @@ export const loader = async ({ request, context }) => {
       getResponsePageFingerprint = collectionPageFingerprint;
       collectionResponse = await beginCollectionResponse({request, shop, configurationRevision: preparationRevision, rankingToken: rankingSession.token,
         validate: async fingerprint => {
-          const current = await readRankedCollectionPage(meiliClient.index('products'), {ids:rankingSession.ids,page,limit,shop,attributes:mainQuery.attributesToRetrieve});
+          const current = await readRankedCollectionPage(meiliClient.index('products'), {ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve});
           return collectionPageFingerprint(current.hits) === fingerprint;
         }});
       if (collectionResponse.response) return collectionResponse.response;
@@ -865,7 +865,7 @@ export const loader = async ({ request, context }) => {
         if (useRankedCollectionPagination) {
           collectionRankingStatus = 'ready';
           result = await readRankedCollectionPage(meiliClient.index("products"), {
-            ids: rankingSession.ids, page, limit, shop, attributes: mainQuery.attributesToRetrieve,
+            ids: rankingSession.ids, page, limit, shop, batchOwner:meiliClient, attributes: mainQuery.attributesToRetrieve,
           });
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;

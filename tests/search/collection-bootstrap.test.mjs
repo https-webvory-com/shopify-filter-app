@@ -11,11 +11,21 @@ function browserHelpers(fetch){const ctx={fetch,URL,AbortController,setTimeout,c
 const json=value=>JSON.parse(JSON.stringify(value));
 
 test('only enabled facet consumers travel, preserving prefix unions, manual inputs, counts and ranges',()=>{
- const result=visibleCollectionFacets(facets,settings);assert.deepEqual(result.tags,facets.tags.slice(0,3));assert.deepEqual(result.options,{Size:facets.options.Size});assert.equal(result.priceRanges,facets.priceRanges);assert.equal(result.vendors,undefined);
+ const result=visibleCollectionFacets(facets,settings);assert.deepEqual(result.tags,[facets.tags[0],facets.tags[2]]);assert.deepEqual(result.options,{Size:facets.options.Size});assert.equal(result.priceRanges,facets.priceRanges);assert.equal(result.vendors,undefined);
  assert.equal(visibleCollectionFacets(facets,[{isEnabled:true,type:'unknown'}]),facets);
  assert.equal(visibleCollectionFacets(facets,[{isEnabled:true,type:'tags',config:'{bad'}]),facets);
  assert.deepEqual(visibleCollectionFacets(facets,[...settings,{isEnabled:true,type:'tag'}]).tags,facets.tags);
  assert.deepEqual(facets.tags.length,4);
+});
+
+test('manual values trim shared facets only when no enabled group needs the removed value',()=>{
+ const values={tags:[{value:'Sale',count:8},{value:'SALE',count:2},{value:'Occasion_Wedding',count:5},{value:'Internal',count:20},{value:'Size_ M ',count:3},{value:'Size_L',count:4}]};
+ const groups=[{isEnabled:true,type:'tag',config:{useManualValues:true,manualValues:[' sale '],excludedValues:['SALE']}},{isEnabled:true,type:'tag',config:{prefix:'Occasion_'}},{isEnabled:true,type:'tag',config:{prefix:'Size_',useManualValues:true,manualValues:['M']}}];
+ const projected=visibleCollectionFacets(values,groups);assert.deepEqual(projected.tags,[values.tags[0],values.tags[2],values.tags[4]]);
+ assert.deepEqual(visibleCollectionFacets(values,[...groups,{isEnabled:true,type:'tag'}]).tags,values.tags);
+ assert.deepEqual(visibleCollectionFacets(values,[{isEnabled:true,type:'tag',config:{useManualValues:true,manualValues:[]}}]).tags,values.tags);
+ assert.equal(visibleCollectionFacets(values,[{isEnabled:true,type:'tag',config:{manualValues:[null]}}]),values);
+ assert.equal(values.tags.length,6);
 });
 test('configuration and products are separated with a content version and reassemble all product/rendering settings',async()=>{
  const wire=packCollectionResponse(payload,{profile:'collection-v2'}),config=collectionConfiguration(payload),helpers=browserHelpers(()=>{throw Error('Unexpected fallback')});
