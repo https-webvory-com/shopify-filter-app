@@ -24,7 +24,7 @@ async function fixture() {
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
     return rows.slice(offset,offset+options.take).map(({id})=>({id}));
   }}};
-  let loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
+  let cardProbe=()=>null,loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
   const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse(request,context);},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
     if(name==='../utils/collectionVisitorRefresh.js')return {createCollectionVisitorRefresh};
@@ -36,6 +36,7 @@ async function fixture() {
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
     if(name==='./redis.server.js')return {__esModule:true,default:redis};
     if(name==='./queue.server.js')return {collectionRankingQueue:queue};
+    if(name==='./collectionCards.server.js')return {getPreparedCollectionCards:async(request,options)=>{writes.push(['probe',request.url,options]);return cardProbe(request,options);}};
     if(name==='../db.server.js')return {__esModule:true,default:database};
     if(name==='./collectionBestSelling.server.js')return {
       collectionOrderSnapshotKey:(shop,id)=>`collectionOrderSnapshot:${shop}:${id}`,
@@ -46,7 +47,7 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn,setProbe:fn=>cardProbe=fn};
 }
 
 test('warmup registry stores a normalized public collection context with a bounded size and lifetime',async()=>{
@@ -197,6 +198,24 @@ test('existing catalog jobs are promoted into the fair background lane without d
  const job=[...f.jobs.values()][0];job.opts.priority=20;
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
  assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);
+});
+
+test('a validated complete card probe yields without ranking setup, sessions or requeueing',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.setProbe(()=>Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'hit'}}));
+ const result=await f.processCollectionWarmups(shop,null,{url:'https://ranking.internal/api/filter?shop='+shop+'&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
+ assert.equal(result.rankingContextsReady,1);assert.equal(result.cardContextsReady,1);
+ assert.equal(f.writes.filter(w=>w[0]==='load'||w[0]==='queue').length,0);
+ const probes=f.writes.filter(w=>w[0]==='probe');assert.equal(probes.length,1);assert.equal(probes[0][2].probe,true);
+ assert.equal(new URL(probes[0][1]).searchParams.get('responseProfile'),'collection-cards-v1');
+});
+
+test('failed or unproven ready-card probes retain canonical preparation and card checks',async()=>{
+ for(const probe of [()=>{throw Error('Unavailable');},()=>Response.json({products:[]}),()=>new Response(null,{status:202,headers:{'X-CFP-Collection-Cards':'hit'}})]){
+  const f=await fixture(),shop='fixture.myshopify.com';f.setProbe(probe);
+  const result=await f.processCollectionWarmups(shop,null,{url:'https://ranking.internal/api/filter?shop='+shop+'&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
+  assert.equal(result.cardContextsReady,1);assert.equal(f.writes.filter(w=>w[0]==='load').length,2);
+ }
 });
 
 test('recurring recent-page sweeps cannot jump ahead of unseen catalog work or demote genuine changed-card refreshes',async()=>{

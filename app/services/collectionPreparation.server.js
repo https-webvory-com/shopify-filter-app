@@ -15,6 +15,7 @@ import {createCollectionVisitorRefresh} from '../utils/collectionVisitorRefresh.
 import {createCollectionWarmupScheduler} from '../utils/collectionWarmupScheduler.js';
 import {createCollectionDependencies} from '../utils/collectionDependencies.js';
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
+import {getPreparedCollectionCards} from './collectionCards.server.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 
 // Explicit public contexts can be prepared before the first visitor. These are
@@ -215,6 +216,16 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
         {jobId,priority:10,attempts:5,backoff:{type:'exponential',delay:10000}});
       continue;
     }
+    // Validate existing complete cards before reconstructing the ranking spec.
+    // This probe checks live epochs/order/documents and creates no visitor
+    // session or follow-up warmup. Ready pages yield worker time to cold pages.
+    const readyUrl=new URL(normalized.url);readyUrl.searchParams.set('responseProfile','collection-cards-v1');
+    try{
+      const ready=await getPreparedCollectionCards(new Request(readyUrl),{probe:true});
+      if(ready?.status===200&&ready.headers?.get('X-CFP-Collection-Cards')==='hit'){
+        result.rankingContextsReady++;result.cardContextsReady++;continue;
+      }
+    }catch{/* Optional probes must not prevent canonical preparation. */}
     const response = await loader({ request: new Request(normalized.url), params: {}, context: {
       rankingWarmup: true, rankingPrecompute: Boolean(catalogRecord),
     } });

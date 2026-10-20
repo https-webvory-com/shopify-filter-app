@@ -192,6 +192,10 @@ Recurring recent-page sweeps dispatch at catalog priority 10 rather than
 repeatedly promoting hot pages to priority 5. This lets unseen contexts make
 FIFO progress. Explicit changed-card refresh priority 5 and visitor ranking
 priority 1 remain in force; the small sweep-dispatch job still has priority 5.
+Each catalog job first probes existing complete cards with current-document,
+epoch/order/configuration and schedule validation. A verified hit finishes
+without reconstructing the ranking specification or creating a shopper session.
+Misses, unproven responses and probe failures use normal canonical preparation.
 
 Backlog retirement defaults to a read-only audit:
 
