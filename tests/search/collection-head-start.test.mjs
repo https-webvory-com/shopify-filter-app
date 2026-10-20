@@ -8,7 +8,7 @@ const bootstrap=await fs.readFile('extensions/theme-extension/assets/collectionL
 const body=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
 test('head runs the bootstrap inline before deferred asset loading, using the same guarded source',async()=>{
  assert.ok(head.includes("<script>{% render 'collection_loading_start' %}</script>"));
- assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),bootstrap);
+ assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),await fs.readFile('extensions/theme-extension/assets/collectionLoading.min.js','utf8'));
 });
 function fixture(search='',tags='',delayed=false,options={}){
  let metaPresent=!delayed,callback;const listeners={};
@@ -36,7 +36,7 @@ test('a changed body market cancels the speculative head request instead of rend
 test('existing collection blocks load the renderer asynchronously in head and preserve a complete-markup marker',async()=>{
  const block=await fs.readFile('extensions/theme-extension/blocks/collection_filter_pro.liquid','utf8');
  const schema=JSON.parse(block.split('{% schema %}')[1].split('{% endschema %}')[0]);
- assert.equal(schema.javascript,'collectionFilterPro.js');assert.ok(block.includes('id="cfp-collection-ready"'));
+ assert.equal(schema.javascript,'collectionWidget.js');assert.ok(block.includes('id="cfp-collection-ready"'));
 });
 
 

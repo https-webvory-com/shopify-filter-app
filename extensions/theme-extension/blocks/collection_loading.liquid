@@ -1,7 +1,9 @@
 {% if template.name == 'collection' and collection %}
-  {{ 'collectionLoading.js' | asset_url | preload_tag: as: 'script' }}
+  {{ 'collectionLoading.min.js' | asset_url | preload_tag: as: 'script' }}
+  {% # theme-check-disable RemoteAsset %}
+  {% # API connection hint, not a downloadable asset; this origin cannot be served by Shopify CDN. %}
   <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
-  <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+  {% # theme-check-enable RemoteAsset %}
   {{ 'collectionFilterPro.css' | asset_url | preload_tag: as: 'style' }}
   {{ 'quickView.css' | asset_url | preload_tag: as: 'style' }}
   <meta name="cfp-collection-context"
@@ -10,8 +12,8 @@
     data-country="{{ localization.country.iso_code | escape }}"
     data-locale="{{ request.locale.iso_code | escape }}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
-  <script src="{{ 'collectionLoading.js' | asset_url }}" async="async"></script>
-  <script src="{{ 'collectionFilterPro.js' | asset_url }}" async="async"></script>
+  <script src="{{ 'collectionLoading.min.js' | asset_url }}" async="async"></script>
+  <script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" async="async"></script>
   <script>{% render 'collection_loading_start' %}</script>
 {% endif %}
 
@@ -19,7 +21,7 @@
 {
   "name": "Faster collection loading",
   "target": "head",
-  "javascript": "collectionLoading.js",
+  "javascript": "collectionLoading.min.js",
   "settings": []
 }
 {% endschema %}

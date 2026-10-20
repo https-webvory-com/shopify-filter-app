@@ -388,3 +388,24 @@ existing queued refresh is promoted rather than duplicated; later bulk warmups
 cannot demote it. Ranking freshness, eligibility, pins and rule ordering retain
 their existing checks. These changes require backend/worker and extension
 deployment together; they do not modify merchant themes or merchant settings.
+
+### Storefront asset build and entry budgets
+
+Run `npm.cmd run build:storefront` after editing `collectionLoading.js` or
+`collectionFilterPro.js`. This writes their committed `.min.js` deployment
+assets and the matching inline loader snippet. Both `npm.cmd run build` and
+`npm.cmd run deploy` run this generation automatically. Direct
+`shopify.cmd app deploy` uses the already generated, committed assets; include
+all generated files when committing. Regression tests reject stale assets.
+
+App block schemas register the small `collectionWidget.js` entry and the
+minified early loader, each below 10000 bytes. The widget entry waits for its
+app block, then loads the version-scoped, minified full widget from Shopify
+CDN once. It does not wait for interaction or change ranking/card semantics.
+The separate early loader remains independent of full-widget loading.
+
+The backend preconnect is a connection hint, not an externally hosted static
+asset. Only those two Liquid lines have a documented `RemoteAsset` exception;
+asset-size checks and other remote-asset checks remain enabled. The redundant
+explicit Shopify CDN preconnect was removed. Verify without publishing with
+`shopify.cmd app build --no-input --no-color`.
