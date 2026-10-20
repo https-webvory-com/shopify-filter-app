@@ -98,3 +98,41 @@ test('failed outside-order proofs fall back, and cancelled visitors stop without
  await assert.rejects(createCollectionCandidateIndex(f.index,f.spec,{signal:controller.signal}).search('',options));
  assert.equal(f.calls.length,0);
 });
+
+test('bounded parallel pages retain canonical ordering despite out-of-order replies',async()=>{
+ const f=fixture(6500),original=f.index.getDocuments;let active=0,peak=0;
+ f.index.getDocuments=async options=>{active++;peak=Math.max(peak,active);try{await new Promise(resolve=>setTimeout(resolve,options.offset%3000===1000?12:1));return await original(options);}finally{active--;}};
+ const options={...f.spec.query,attributesToRetrieve:['id'],offset:0,limit:10000};
+ const baseline=await createCollectionCandidateIndex(f.index,f.spec).search('',options);
+ peak=0;const parallel=await createCollectionCandidateIndex(f.index,f.spec,{browseConcurrency:4}).search('',options);
+ assert.deepEqual(parallel,baseline);assert.equal(peak,4);assert.equal(active,0);
+});
+
+test('a failed parallel window settles all reads before canonical fallback and rejects unstable pages',async()=>{
+ for(const failure of ['request','count','duplicate','truncated']){
+  const f=fixture(4200),browse=f.index.getDocuments,search=f.index.search;let active=0;
+  f.index.getDocuments=async options=>{active++;try{
+   await new Promise(resolve=>setTimeout(resolve,options.offset===1000?1:8));
+   const page=await browse(options);if(options.offset===1000){
+    if(failure==='request')throw Error('Unavailable');
+    if(failure==='count')page.total--;
+    if(failure==='duplicate')page.results[0]=f.docs[0];
+    if(failure==='truncated')page.results.pop();
+   }return page;
+  }finally{active--;}};
+  f.index.search=async(...args)=>{assert.equal(active,0,failure);return search(...args);};
+  const result=await createCollectionCandidateIndex(f.index,f.spec,{browseConcurrency:4}).search('',{...f.spec.query,attributesToRetrieve:['id'],offset:0,limit:10000});
+  assert.equal(result.hits.length,f.docs.length,failure);assert.equal(active,0);
+  assert.ok(f.calls.some(c=>c.type==='search'&&!c.filter.some(v=>typeof v==='string'&&v.startsWith('id IN '))),failure);
+ }
+});
+
+test('parallel browse obeys cancellation and first-page proof budgets without launching canonical work',async()=>{
+ const f=fixture(5500),controller=new AbortController(),browse=f.index.getDocuments;
+ f.index.getDocuments=async options=>{const page=await browse(options);if(options.offset===1000)controller.abort();return page;};
+ await assert.rejects(createCollectionCandidateIndex(f.index,f.spec,{browseConcurrency:4,signal:controller.signal}).search('',{...f.spec.query,attributesToRetrieve:['id'],offset:0,limit:10000}));
+ assert.equal(f.calls.filter(c=>c.type==='search').length,0);assert.ok(f.calls.filter(c=>c.type==='browse').length<=5);
+ const other=fixture(5500);other.spec.orderedIds=[];
+ await createCollectionCandidateIndex(other.index,other.spec,{browseConcurrency:4}).search('',{...other.spec.query,attributesToRetrieve:['id'],offset:0,limit:10000});
+ assert.equal(other.calls.filter(c=>c.type==='browse').length,1);
+});

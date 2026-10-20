@@ -17,6 +17,14 @@ function fixture() {
   return {service,spec,result,values,jobs,queued,redis,queue,builds:()=>builds,now:()=>clock,advance:ms=>clock+=ms};
 }
 
+test('independent head requests queue full work without running a direct whole-collection attempt',async()=>{
+ const f=fixture();let direct=0;
+ const spec={...f.spec,retainForIdle:true,collectionId:'1'};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>f.result,prepareDirect:async()=>{direct++;return f.result;},now:f.now});
+ assert.equal((await service.get(spec,{deferDirect:true})).status,'pending');assert.equal(direct,0);assert.equal(f.queued.length,1);
+ assert.equal((await service.get(spec)).status,'ready');assert.equal(direct,1);assert.equal(f.queued.length,1);
+});
+
 test('unchanged public rankings survive a configuration epoch without another scan',async()=>{
  const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true,globalSettings:{showOnlyInStock:true,updatedAt:'old'}};
  await f.service.get(f.spec,{warmup:true,precompute:true});assert.equal(f.builds(),1);

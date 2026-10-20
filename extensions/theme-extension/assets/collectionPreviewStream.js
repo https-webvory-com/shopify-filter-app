@@ -10,7 +10,8 @@
       if(ended)throw Error('Unexpected collection stream data');
       const record=JSON.parse(text);
       if(record.type==='start'){
-        if(metadata||!Number.isInteger(record.count)||record.count<0||record.count>25||record.payload?.cfpCards?.version!==1||record.payload?.debug?.collectionRankingStatus!=='ready')throw Error('Invalid collection stream header');
+        if(metadata||!Number.isInteger(record.count)||record.count<0||record.count>25||record.payload?.cfpCards?.version!==1||!['ready','prefix-ready'].includes(record.payload?.debug?.collectionRankingStatus)||record.payload?.debug?.collectionRankingStatus==='prefix-ready'&&record.payload?.cfpCards?.prefix!==true)throw Error('Invalid collection stream header');
+        if(record.payload.debug.collectionRankingStatus==='prefix-ready'&&(record.count!==5||record.payload.cfpCards.proof?.version!==1||!/^[a-f0-9]{64}$/.test(record.payload.cfpCards.proof?.inputVersion||'')||record.payload.rankingToken!=null||record.payload.totalCount!=null))throw Error('Invalid collection prefix proof');
         metadata=record.payload;expected=record.count;
       }else if(record.type==='product'){
         const product=record.product;

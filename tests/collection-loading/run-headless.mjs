@@ -347,6 +347,23 @@ try{
     await control({streamDelay:0,assetDelay:0,headRenderer:false,early:false,hold:false});
     return {firstCardMs:Math.round(first.at),cardsAtFirstPaint:first.count,artificialTailDelayMs:160,liveTiming:false};
   });
+  await test('a cold five-pin head renders with the ranking worker paused and hands off to canonical pagination',async()=>{
+    await control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],early:true,headRenderer:true,assetDelay:300,apiDelay:50,cssDelay:0,imageDelay:50,priceDelay:50});
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--preview').length===5");
+    const prefix=await cards(),at=await evaluate('cardSnapshots[0].at');
+    assert.deepEqual(prefix,['1','2','4','5','6']);
+    assert.equal((await getState()).state.builds,0);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
+    assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
+    assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'');
+    await fixture.prepareLast();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.deepEqual((await cards()).slice(0,5),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),true);
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
+    const all=await cards();assert.equal(new Set(all).size,30);assert.equal(all.at(-1),'3');
+    const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.ok(!state.headEvents.some(e=>e.event==='head-comparison-mismatch'));assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {coldPrefixMs:Math.round(at),fullRankingPausedAtPrefix:true,cardsAtPrefix:5,canonicalPaginationProducts:all.length,liveTiming:false};
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

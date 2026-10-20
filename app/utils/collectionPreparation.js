@@ -208,12 +208,12 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     })();
     directPending.set(key,task);return task;
   }
-  async function pending(key,spec,warmup){
+  async function pending(key,spec,warmup,deferDirect=false){
     // Start durable worker preparation immediately. A visitor's optional
     // direct attempt must not postpone queue submission until its timeout.
     let status,error;
     try{status=await schedule(key,spec,warmup);}catch(cause){error=cause;}
-    const ready=await direct(key,spec,warmup);
+    const ready=deferDirect?null:await direct(key,spec,warmup);
     if(ready)return ready;
     if(error)throw error;
     return {status};
@@ -262,7 +262,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     return !result.superseded;
     }catch(error){report({event:'sales-adoption-unavailable',shop:spec.shop,error:error.name});return false;}
   }
-  async function get(spec, { warmup = false, precompute = false } = {}) {
+  async function get(spec, { warmup = false, precompute = false, deferDirect = false } = {}) {
     if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
     spec = {...spec, productRevision: await productRevision(spec.shop,spec.collectionId,spec.retainForIdle===true)};
     const key = preparationKey(spec);
@@ -336,17 +336,17 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         report({event:'unavailable',reason:'corrupt',shop:spec.shop,collectionId:spec.collectionId,key});
         // The worker will replace this record. Avoid deleting a newly published
         // valid record if another worker completed after this read.
-        return pending(key,spec,warmup);
+        return pending(key,spec,warmup,deferDirect);
       }
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
-      if(scores&&spec.retainForIdle===true&&value.productRevisionSource!=='content-v1')return pending(key,spec,warmup);
+      if(scores&&spec.retainForIdle===true&&value.productRevisionSource!=='content-v1')return pending(key,spec,warmup,deferDirect);
       if(revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true&&value.rankingEventsVersion!==1){
         report({event:'unavailable',reason:'legacy-proof',shop:spec.shop,collectionId:spec.collectionId,key});
-        return pending(key,spec,warmup);
+        return pending(key,spec,warmup,deferDirect);
       }
       if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision)){
         report({event:'unavailable',reason:'data-epoch',shop:spec.shop,collectionId:spec.collectionId,key});
-        return pending(key,spec,warmup);
+        return pending(key,spec,warmup,deferDirect);
       }
       const nativeChanged=value.productRevision!==spec.productRevision;
       const externalChanged=spec.retainForIdle===true&&externalCandidates(spec)&&value.reusableDataRevision!==await reuseRevision(spec);
@@ -357,7 +357,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       if (spec.retainForIdle === true && productsChanged &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
         report({event:'unavailable',reason:'changed-products',nativeChanged,externalChanged,shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
-        return pending(key,spec,warmup);
+        return pending(key,spec,warmup,deferDirect);
       }
       // Only changed/legacy inputs need a rebuild. Renewing Redis storage must
       // not recalculate an unchanged database-saved product sequence.
@@ -389,7 +389,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       }
     }
     report({event:'unavailable',reason:'missing',shop:spec.shop,collectionId:spec.collectionId,key});
-    return pending(key,spec,warmup);
+    return pending(key,spec,warmup,deferDirect);
   }
   async function process({ key, spec, queuedAt }) {
     if (key !== preparationKey(spec)) throw Error('Invalid preparation identity');

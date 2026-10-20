@@ -3,7 +3,7 @@ const allowed=new Set(['q','filter','sort','indexUid','limit','offset','attribut
 // Shopify already supplies the native best-selling order. Browse filtered,
 // compact inputs without asking search to sort the entire native collection.
 // Only outside Include candidates need the original engine tie order.
-export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*1024*1024,maxDocuments=50000}={}){
+export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*1024*1024,maxDocuments=50000,browseConcurrency=1}={}){
  if(spec.retainForIdle!==true||spec.needsShopifyOrder!==true||!Array.isArray(spec.orderedIds)||
     !['best-selling','bestselling'].includes(spec.sortBy)||spec.query.q||
     Object.keys(spec.query).some(key=>!allowed.has(key))||typeof index.getDocuments!=='function'||typeof index.getSettings!=='function')return index;
@@ -15,9 +15,9 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
   if(settings.distinctAttribute||Array.isArray(settings.displayedAttributes)&&!settings.displayedAttributes.includes('*'))throw Error('Collection search settings require canonical search');
   const native=new Set(spec.orderedIds.map(clean)),documents=[],seen=new Set(),outside=[];
   let total,bytes=0;
-  for(let offset=0;;offset+=1000){
-   signal?.throwIfAborted();
-   const page=await index.getDocuments({filter:options.filter,fields:options.attributesToRetrieve,limit:1000,offset});
+  const width=Number.isInteger(browseConcurrency)?Math.max(1,Math.min(4,browseConcurrency)):1;
+  const read=offset=>index.getDocuments({filter:options.filter,fields:options.attributesToRetrieve,limit:1000,offset});
+  function accept(page,offset){
    signal?.throwIfAborted();
    if(!Array.isArray(page.results)||!Number.isSafeInteger(page.total)||page.total<0||
       (total!==undefined&&page.total!==total)||page.total>maxDocuments)throw Error('Unstable collection candidate browse');
@@ -32,7 +32,19 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
     // than browsing every remaining page and then repeating a canonical scan.
     if(outside.length>1000)throw Error('Collection candidate browse needs canonical search');
    }
-   if(page.results.length<1000)break;
+   if(page.results.length!==Math.min(1000,Math.max(0,total-offset)))throw Error('Incomplete collection candidate browse');
+  }
+  accept(await read(0),0);
+  for(let offset=1000;offset<total;offset+=1000*width){
+   signal?.throwIfAborted();
+   const offsets=Array.from({length:Math.min(width,Math.ceil((total-offset)/1000))},(_,i)=>offset+i*1000);
+   // Settle the bounded window before fallback so abandoned browse requests
+   // cannot compete with the canonical search started after an error.
+   const pages=await Promise.allSettled(offsets.map(read));
+   for(let i=0;i<pages.length;i++){
+    if(pages[i].status==='rejected')throw pages[i].reason;
+    accept(pages[i].value,offsets[i]);
+   }
   }
   if(documents.length!==total||total>(settings.pagination?.maxTotalHits??1000)||outside.length>1000)throw Error('Collection candidate browse needs canonical search');
   if(outside.length){

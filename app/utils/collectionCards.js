@@ -6,6 +6,7 @@ const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
+export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v1'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
 export function isPublicCollectionCards(request){
  const url=new URL(request.url),keys=[...url.searchParams.keys()],p=url.searchParams;
  return request.method==='GET'&&['collection-cards-v1','collection-preview-v1'].includes(p.get('responseProfile'))&&
@@ -31,7 +32,7 @@ export function collectionPreviewPayload(payload,{limit=5}={}){
   'metafield_custom.mother_of_the_bride_collection_image','metafield_custom.wedding_collection_image'];
  return {rankingToken:payload.rankingToken,totalCount:payload.totalCount,globalSettings:payload.globalSettings,
   debug:{collectionRankingStatus:payload.debug?.collectionRankingStatus,collectionBestSellingStatus:payload.debug?.collectionBestSellingStatus},
-  cfpCards:{version:1,preview:true},products:(payload.products||[]).slice(0,limit).map(product=>({
+  cfpCards:{version:1,preview:true,...(payload.collectionPinnedPrefix?{prefix:true,proof:payload.collectionPinnedPrefix}:{})},products:(payload.products||[]).slice(0,limit).map(product=>({
    ...Object.fromEntries(fields.filter(key=>Object.hasOwn(product,key)).map(key=>[key,product[key]])),
    images:(product.images||[]).slice(0,1),options:product.options,
    variants:(product.variants||[]).map(variant=>Object.fromEntries(['id','available','option1','option2','option3','imageUrl','image'].filter(key=>Object.hasOwn(variant,key)).map(key=>[key,variant[key]]))),

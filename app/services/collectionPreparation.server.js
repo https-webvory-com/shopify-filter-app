@@ -17,7 +17,33 @@ import {createCollectionDependencies} from '../utils/collectionDependencies.js';
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {getPreparedCollectionCards} from './collectionCards.server.js';
 import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
+import {preparationKey} from '../utils/collectionPreparation.js';
+import {createCollectionHeadProofs} from '../utils/collectionHeadProofs.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
+async function readCollectionHeadVersion(spec){
+  const shop=spec.shop,id=String(spec.collectionId).split('/').pop();
+  // Read input metadata only. A head must never load or decode a complete
+  // saved ranking just to prove that five explicit pins are still current.
+  const [values,schedules]=await Promise.all([
+    redis.mget(`collectionPreparationRevision:${shop}`,`collectionRankingDataRevision:${shop}:all`,`collectionRankingDataRevision:${shop}:${id}`,`collectionLoadingGeneration:${shop}`,`collectionProductContentRevision:${shop}:all`,`collectionProductContentRevision:${shop}:${id}`,`collectionOrderSnapshot:${shop}:gid://shopify/Collection/${id}`),
+    prisma.merchandisingRule.findMany({where:{shop,status:true,ruleType:'collection',OR:[{startDate:{not:null}},{endDate:{not:null}}]},select:{id:true,startDate:true,endDate:true},orderBy:{id:'asc'}}),
+  ]);
+  let order;if(values[6]!=null)try{order=JSON.parse(values[6]);}catch{return null;}
+  if(!values[3]||String(values[0]??'0')!==spec.revision||(order?.revision??null)!==(spec.orderRevision??null))return null;
+  const time=Date.now(),schedule=schedules.map(rule=>{const start=rule.startDate==null?null:new Date(rule.startDate).getTime(),end=rule.endDate==null?null:new Date(rule.endDate).getTime();return [rule.id,start,end,(start==null||time>=start)&&(end==null||time<=end)];});
+  const counters=values.slice(0,6).map((value,index)=>index===3?value:String(value??'0'));
+  return createHash('sha256').update(JSON.stringify([1,preparationKey(spec),...counters,order?.revision??null,schedule])).digest('hex');
+}
+const headProofs=createCollectionHeadProofs({redis,readVersion:readCollectionHeadVersion,observe:event=>{
+  (event.event==='head-comparison-mismatch'?console.error:console.info)('CFP: collection head',JSON.stringify(event));recordPreparationEvent(event).catch(()=>{});
+}});
+export async function getCollectionHeadVersion(spec){const version=await readCollectionHeadVersion(spec);return version&&!await headProofs.blocked(spec,version)?version:null;}
+export const rememberCollectionHead=headProofs.remember;
+export const compareCollectionHead=headProofs.compare;
+export function reportCollectionHead(spec,path,reason){
+  const event={event:'head-'+path,reason,shop:spec.shop,collectionId:spec.collectionId};
+  console.info('CFP: collection head',JSON.stringify(event));recordPreparationEvent(event).catch(()=>{});
+}
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -35,8 +61,10 @@ function seededWarmups(shop) {
   return records;
 }
 
-const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
-  await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
+const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>{
+  const value=await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || await prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true });
+  await compareCollectionHead(spec,value);return value;
+},
   prepareDirect:prepareCollectionFromFacts,dependencies:createCollectionDependencies(redis),scores:createCollectionSalesDependencies(redis),
   loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),

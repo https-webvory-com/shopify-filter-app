@@ -598,3 +598,46 @@ of waiting for the entire response, preserving earlier card DOM nodes. Images,
 prices and facets remain independent. Ordinary JSON and older backends remain
 supported. No production timer deliberately stages delivery; test-only tail
 delays prove that the first card appears while later bytes are still pending.
+
+### Independent five-pin head
+
+Clients opt in with the safelisted Accept token
+`application/x-cfp-pinned-prefix-v1`; older clients retain the complete-ranking
+protocol. On an anonymous, unfiltered native best-selling preview request,
+five eligible explicit pins can prove a leading prefix without waiting for
+the complete ranking, its worker or an initially missing native-order snapshot.
+An unavailable full-ranking queue does not suppress an independently proven
+prefix; the canonical follow-up retains its error/retry behavior. The existing route owns active/stock and
+imported membership eligibility. Canonical explicit pins override merchandising
+Exclude conditions and tag scores in this mode. Other sorts decline this path.
+
+The first five eligible configured pins are read from current index documents.
+Missing, inactive, foreign-shop, incomplete, duplicate, unknown-price or
+nonpositive-price proofs decline. In particular, a free earlier eligible pin
+is not silently skipped to manufacture a five-card proof. The canonical
+zero-price partition uses synced base prices; this does not certify contextual
+market prices. Displayed prices keep their existing verification requirement.
+The same merchandising code computes pin images and metadata on this bounded
+set, and its resulting IDs must exactly match the configured eligible prefix.
+
+The response is `200`, `X-CFP-Collection-Cards: prefix`, with
+`collectionRankingStatus: prefix-ready`, five cards, a null total and no browsing
+token. It is never saved as a complete ranking or card snapshot. The browser
+retains these cards while canonical page one completes, then adopts that full
+page's token. Pagination is unavailable until the full first page is present;
+page two follows the full page, not the five-card preview.
+
+Input versions cover shop, market, sort, pins, rules/configuration, native-order
+revision, schedules, content/hard-data counters and runtime generation. Checks
+run around preparation and before delivery without loading a saved full ranking.
+Responses remain no-store. A bounded, ten-minute Redis proof stores only the
+served IDs and input version for shadow comparison. A later canonical result
+logs match, changed-input skip, or mismatch with position; a mismatch disables
+that input version's head path for an hour. Proof and decline reasons are
+observable; optional comparison failures must not break canonical ranking.
+
+This is deliberately partial coverage: it cannot fill an unpinned remainder
+under arbitrary tag scoring. Collections with fewer than five provable pins
+retain canonical preparation. Report cold proven heads, cold declines, warm
+requests, canonical first-page completion and verified-price timing separately.
+Browser-fixture timings do not establish the deployed two-second requirement.

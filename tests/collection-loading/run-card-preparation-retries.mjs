@@ -7,6 +7,7 @@ import {transform} from 'esbuild';
 import {createRedisTestLayer} from './redis-layer.mjs';
 import * as lifecycle from '../../app/utils/collectionPreparation.js';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
+import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 
 const layer=await createRedisTestLayer();
 const wait=async(fn)=>{const until=Date.now()+30000;while(Date.now()<until){if(await fn())return;await new Promise(resolve=>setTimeout(resolve,25));}throw Error('Card preparation queue check timed out');};
@@ -24,6 +25,7 @@ try{
    return Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':state}});
   },require:name=>{
    if(name==='../utils/collectionPreparation.js')return lifecycle;
+   if(name==='../utils/collectionHeadProofs.js')return {createCollectionHeadProofs};
    if(name==='./redis.server.js')return {__esModule:true,default:layer.redis};
    if(name==='./queue.server.js')return {collectionRankingQueue:layer.queue};
    if(name==='../db.server.js')return {__esModule:true,default:{session:{findFirst:async()=>({id:'fixture'})}}};

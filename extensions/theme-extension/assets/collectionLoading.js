@@ -45,7 +45,7 @@
   }
   window.cfpFirstRowSelection=firstRowSelection;
   function mountFirstRow(payload,context,controller){
-    if(payload?.cfpCards?.version!==1||payload.debug?.collectionRankingStatus!=='ready'||!payload.products?.length)return;
+    if(payload?.cfpCards?.version!==1||!['ready','prefix-ready'].includes(payload.debug?.collectionRankingStatus)||!payload.products?.length)return;
     if(controller.cfpPreviewUpdate){controller.cfpPreviewUpdate(payload);return;}
     let grid,scheduled=false,timer,rendered=0;
     const dismissSkeleton=()=>{const overlay=document.getElementById('cfp-skeleton-overlay');if(overlay){overlay.classList.add('cfp-skeleton-done');overlay.style.setProperty('display','none','important');}};
@@ -74,7 +74,7 @@
     observer.observe(document.documentElement,{childList:true,subtree:true});controller.signal.addEventListener('abort',stop,{once:true});timer=setTimeout(()=>{if(!grid)stop();},120000);inspect();
   }
   function preloadImages(payload){
-    if(!document.head||payload?.debug?.collectionRankingStatus!=='ready')return;
+    if(!document.head||!['ready','prefix-ready'].includes(payload?.debug?.collectionRankingStatus))return;
     for(const product of (payload.products||[]).slice(0,5)){
       // Preview cards use the same selected image as the independent first row.
       // Full responses only preload an explicit image also used by a swatch.
@@ -145,7 +145,7 @@
         };
         async function read(){
           while(!controller.signal.aborted){
-            const response=await fetch(url,{signal:controller.signal,cache:'no-cache',priority:'high',headers:{Accept:window.cfpReadEarlyResponse?'application/x-ndjson, application/json':'application/json'}});
+            const response=await fetch(url,{signal:controller.signal,cache:'no-cache',priority:'high',headers:{Accept:window.cfpReadEarlyResponse?'application/x-ndjson, application/x-cfp-pinned-prefix-v1, application/json':'application/x-cfp-pinned-prefix-v1, application/json'}});
             const result=window.cfpReadEarlyResponse?await window.cfpReadEarlyResponse(response,entry.deliver):{status:response.status,payload:await response.json()};
             // Once the widget claims this request, its existing bounded retry
             // loop owns pending responses. Do not add another timeout window.

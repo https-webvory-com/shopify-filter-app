@@ -55,3 +55,10 @@ test('truncated, duplicate, pending, malformed and out-of-order streams cannot b
  assert.deepEqual(JSON.parse(JSON.stringify(await read(Response.json({products:[]})))),{status:200,payload:{products:[]}});
  assert.equal((await read(Response.json({debug:{collectionRankingStatus:'pending'}},{status:202}))).status,202);
 });
+
+test('a proven cold prefix streams five cards without a total or pagination token and rejects malformed proofs',async()=>{
+ const prefix={...payload,products:payload.products.slice(0,5),rankingToken:null,totalCount:null,collectionPinnedPrefix:{version:1,inputVersion:'a'.repeat(64)},debug:{collectionRankingStatus:'prefix-ready'}};
+ const result=await read(await collectionCardsResponse(prefix,'prefix',request()));
+ assert.equal(result.payload.products.length,5);assert.equal(result.payload.cfpCards.prefix,true);assert.equal(result.payload.totalCount,null);assert.equal(result.payload.rankingToken,null);
+ for(const change of [{collectionPinnedPrefix:{version:1,inputVersion:'bad'}},{rankingToken:'made-up'},{totalCount:5},{products:prefix.products.slice(0,4)}])await assert.rejects(read(await collectionCardsResponse({...prefix,...change},'prefix',request())));
+});

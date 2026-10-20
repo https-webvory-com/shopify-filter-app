@@ -368,7 +368,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store' });
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v1, application/json'} });
       let payload = await response.json();
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
@@ -615,7 +615,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       window._cfpInitialized = true;
       if(data.cfpCards?.version===1){
         sidebar.classList.add('cfp-loading');
-        await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart);
+        await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
 
     } catch (e) {
@@ -646,10 +646,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
-  async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart){
+  async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
     if(signal.aborted)return;
     const request=new URL(requestUrl);request.searchParams.set('responseProfile','collection-v1');
-    request.searchParams.set('rankingToken',cards.rankingToken);
+    const prefix=cards.cfpCards?.prefix===true;
+    if(prefix)request.searchParams.delete('rankingToken');else request.searchParams.set('rankingToken',cards.rankingToken);
     const signature=JSON.stringify(cards.products);
     try{
       const response=await fetchCollectionResponse(request.toString(),signal);
@@ -658,9 +659,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if(allowSessionRestart){collectionRankingTokens.clear();activeFilters.page=1;return fetchAndRenderData(false,false);}
         throw Error('Collection changed');
       }
-      const full=await response.json();
-      if(response.status!==200||full.rankingToken!==cards.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
+      let full=await response.json();
+      if(prefix)full=await waitForCollectionOrder(full,request.toString(),signal);
+      if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
       if(signal.aborted)return;
+      if(prefix){
+        if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
+        const readyUrl=new URL(window.location.href);readyUrl.searchParams.set('rankingToken',full.rankingToken);window.history.replaceState(null,'',readyUrl.pathname+readyUrl.search);
+      }
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       if(JSON.stringify(full.products)!==signature)renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
@@ -670,7 +676,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
       const message=document.createElement('p');message.textContent=cards.cfpCards?.preview?'The remaining products and filters are temporarily unavailable.':'Filters are temporarily unavailable.';
       const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
-      retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart);});
+      retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey);});
       notice.append(message,retry);(sidebar.querySelector('.cfp-sidebar__body')||sidebar).prepend(notice);
     }finally{if(!signal.aborted)sidebar.classList.remove('cfp-loading');}
   }
@@ -881,7 +887,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     // Update count labels
     const countLabel = document.querySelector('.cfp-product-count');
-    if (countLabel) {
+    if(countLabel&&!Number.isFinite(totalCount))countLabel.textContent='';
+    if (countLabel&&Number.isFinite(totalCount)) {
       if (globalSettings && globalSettings.showProductCount === false) {
         countLabel.style.display = 'none';
       } else {
@@ -1306,7 +1313,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
           if (colorsArray.length > 5) {
              const extraCount = colorsArray.length - 5;
-             swatchesHtml += `<div class="cfp-swatch-more" 
+             swatchesHtml += `<div class="cfp-swatch-more"
                   onclick="event.preventDefault(); 
                            const container = this.closest('.cfp-product-swatches');
                            const hiddenItems = container.querySelectorAll('.cfp-swatch-item:nth-child(n+6)');

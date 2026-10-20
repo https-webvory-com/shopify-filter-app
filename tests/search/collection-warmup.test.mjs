@@ -10,16 +10,18 @@ import {createCollectionVisitorRefresh} from '../../app/utils/collectionVisitorR
 import {createCollectionWarmupScheduler} from '../../app/utils/collectionWarmupScheduler.js';
 import {createCollectionDependencies} from '../../app/utils/collectionDependencies.js';
 import {createCollectionSalesDependencies} from '../../app/utils/collectionSalesDependencies.js';
+import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
 
 async function fixture() {
-  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[];let scans=0;
+  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[],schedules=[];let scans=0;
   const queue={getJob:async id=>jobs.get(id),add:async(name,data,options)=>{writes.push(['queue',name,data,options]);const job={opts:options,getState:async()=> 'waiting',changePriority:async({priority})=>{job.opts.priority=priority;writes.push(['priority',options.jobId,priority]);}};jobs.set(options.jobId,job);return job;}};
   const redis={zrange:async()=>records,zrangebyscore:async()=>shops,zadd:async(...args)=>writes.push(['add',...args]),zremrangebyrank:async(...args)=>writes.push(['trim',...args]),zremrangebyscore:async(...args)=>writes.push(['prune',...args]),expire:async(...args)=>writes.push(['expire',...args])};
   redis.scan=async()=>{scans++;return ['0',registries];};redis.ttl=async()=>3600;
+  redis.get=async key=>snapshots.get(key)||null;
   redis.mget=async(...keys)=>keys.map(key=>snapshots.get(key)||null);
   const offline=new Set();
-  const database={session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
+  const database={merchandisingRule:{findMany:async()=>schedules},session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
     if(options.distinct)return [...new Set(catalog.map(row=>row.shop))].map(shop=>({shop}));
     const rows=catalog.filter(row=>row.shop===options.where.shop&&(!options.where.id?.in||options.where.id.in.includes(row.id))).sort((a,b)=>a.id.localeCompare(b.id));
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
@@ -32,6 +34,7 @@ async function fixture() {
     if(name==='../utils/collectionWarmupScheduler.js')return {createCollectionWarmupScheduler};
     if(name==='../utils/collectionDependencies.js')return {createCollectionDependencies};
     if(name==='../utils/collectionSalesDependencies.js')return {createCollectionSalesDependencies};
+    if(name==='../utils/collectionHeadProofs.js')return {createCollectionHeadProofs};
     if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
@@ -49,8 +52,20 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn,setProbe:fn=>cardProbe=fn};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,schedules,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn,setProbe:fn=>cardProbe=fn};
 }
+
+test('head versions cover rules, pins, market, stock revisions, schedules and native order without reading a full ranking',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com',spec={shop,collectionId:'gid://shopify/Collection/123',revision:'3',orderRevision:'native-1',sortBy:'best-selling',query:{country:'IN',locale:'en'},pinnedIds:['1','2','3','4','5']};
+ for(const [key,value]of [[`collectionPreparationRevision:${shop}`,'3'],[`collectionRankingDataRevision:${shop}:all`,'0'],[`collectionRankingDataRevision:${shop}:123`,'0'],[`collectionLoadingGeneration:${shop}`,'generation'],[`collectionOrderSnapshot:${shop}:gid://shopify/Collection/123`,JSON.stringify({revision:'native-1',ids:[]})]])f.snapshots.set(key,value);
+ const baseline=await f.getCollectionHeadVersion(spec);assert.match(baseline,/^[a-f0-9]{64}$/);
+ for(const other of [{...spec,pinnedIds:['9']},{...spec,rule:{conditions:[{action:'Boost',field:'Tags',value:'New'}]}},{...spec,query:{country:'US',locale:'en'}}])assert.notEqual(await f.getCollectionHeadVersion(other),baseline);
+ f.snapshots.set(`collectionProductContentRevision:${shop}:all`,'1');assert.notEqual(await f.getCollectionHeadVersion(spec),baseline);f.snapshots.delete(`collectionProductContentRevision:${shop}:all`);
+ f.schedules.push({id:'scheduled',startDate:new Date(Date.now()+60000),endDate:null});assert.notEqual(await f.getCollectionHeadVersion(spec),baseline);f.schedules.length=0;
+ f.snapshots.set(`collectionPreparationRevision:${shop}`,'4');assert.equal(await f.getCollectionHeadVersion(spec),null);f.snapshots.set(`collectionPreparationRevision:${shop}`,'3');
+ f.snapshots.set(`collectionOrderSnapshot:${shop}:gid://shopify/Collection/123`,JSON.stringify({revision:'native-2',ids:[]}));assert.equal(await f.getCollectionHeadVersion(spec),null);
+ assert.equal(f.writes.length,0);assert.equal(f.scans(),0);
+});
 
 test('warmup registry stores a normalized public collection context with a bounded size and lifetime',async()=>{
   const f=await fixture();await f.registerCollectionWarmup('fixture.myshopify.com','https://foreign.example/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&locale=en&country=US&page=1&limit=48');

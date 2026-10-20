@@ -5,11 +5,13 @@ import { createHash } from 'node:crypto';
 import * as color from '../../../app/utils/searchColor.js';
 import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 import * as collectionCards from '../../../app/utils/collectionCards.js';
+import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if (!(name in mocks)) {
       if(name==='../utils/collectionCards.js')return collectionCards;
+      if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;
       if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
       throw Error('Unexpected import ' + name);
     }

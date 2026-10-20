@@ -13,6 +13,7 @@ import {
   buildIncludeWhereClause,
   buildMeiliRuleFilter,
   selectMerchandisingVariant,
+  createMerchandisingComparator,
 } from "../services/merchandising.server";
 import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import meiliClient from "../services/meiliClient.server";
@@ -22,12 +23,13 @@ import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
 import { readRankedCollectionPage, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
-import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup, registerCollectionCardVisit } from "../services/collectionPreparation.server.js";
+import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup, registerCollectionCardVisit, getCollectionHeadVersion, reportCollectionHead, rememberCollectionHead, compareCollectionHead } from "../services/collectionPreparation.server.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 import { rankSearchResults } from "../services/searchRanking.server.js";
-import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprint} from '../utils/collectionCards.js';
+import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprint,acceptsCollectionPinnedPrefix} from '../utils/collectionCards.js';
 import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../services/collectionCards.server.js';
+import {prepareCollectionPinnedPrefix} from '../utils/collectionPinnedPrefix.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -48,6 +50,8 @@ export const loader = async ({ request, context }) => {
   let responsePreviewFingerprint;
   let getResponsePageFingerprint;
   let cardSnapshot;
+  let pinnedPrefix=false;
+  let pinnedPrefixVersion;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -767,9 +771,11 @@ export const loader = async ({ request, context }) => {
       : needsShopifyOrder
       ? await getCollectionBestSellingState(shop, resolvedCollectionId, { warmup: context?.rankingWarmup === true }) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
+    const canPreviewPins=cardsOnly&&url.searchParams.get('responseProfile')==='collection-preview-v1'&&acceptsCollectionPinnedPrefix(request)&&!context?.rankingWarmup&&activePinnedList.length>=5;
+    const missingNativeOrder=needsShopifyOrder&&!Array.isArray(collectionBestSellingIds);
     // Age alone must not block browsing. A complete last-good Shopify snapshot
     // remains the ranking source while its durable refresh runs in the worker.
-    if (needsShopifyOrder && !Array.isArray(collectionBestSellingIds)) {
+    if (missingNativeOrder&&!canPreviewPins) {
       const orderStatus = collectionBestSellingState.status === "stale"
         ? collectionBestSellingState.refreshState === "failed" ? "failed" : "pending"
         : collectionBestSellingState.status;
@@ -796,12 +802,23 @@ export const loader = async ({ request, context }) => {
         rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
         globalSettings, mergedValues,
       };
-      const prepared = await getPreparedCollectionRanking(preparedSpec, {
+      let prepared;
+      try{prepared = missingNativeOrder?{status:'pending'}:await getPreparedCollectionRanking(preparedSpec, {
         warmup: context?.rankingWarmup === true,
         precompute: context?.rankingPrecompute === true,
-      });
+        deferDirect:canPreviewPins,
+      });}catch(error){if(!canPreviewPins)throw error;prepared={status:'pending'};reportCollectionHead(preparedSpec,'background-unavailable',error.name);}
+      if(['pending','failed'].includes(prepared.status)&&canPreviewPins)try{
+        let declineReason;
+        const version=await getCollectionHeadVersion(preparedSpec);
+        const prefix=await prepareCollectionPinnedPrefix(preparedSpec,{index:meiliClient.index('products'),batchOwner:meiliClient,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,onDecline:reason=>declineReason=reason});
+        if(prefix&&version&&await getCollectionHeadVersion(preparedSpec)===version){prepared={...prefix,status:'ready'};pinnedPrefix=true;pinnedPrefixVersion=version;}
+        else reportCollectionHead(preparedSpec,'declined',!version?'unproven-input-version':!prefix?declineReason||'unproven-pin-prefix':'inputs-changed');
+      }catch{reportCollectionHead(preparedSpec,'declined','proof-unavailable');}
+      else if(prepared.status==='pending'&&cardsOnly&&!context?.rankingWarmup)reportCollectionHead(preparedSpec,'declined',!acceptsCollectionPinnedPrefix(request)?'client-protocol-not-supported':activePinnedList.length<5?'insufficient-eligible-pins':'unsupported-head-profile');
       preparedCacheKey = prepared.cacheKey;
       collectionRankingStatus = prepared.status;
+      if(prepared.status==='ready'&&!pinnedPrefix&&!context?.rankingWarmup&&typeof compareCollectionHead==='function')await compareCollectionHead(preparedSpec,prepared);
       if (prepared.status !== 'ready') {
         return data({ products: [], totalCount: 0, debug: {
           collectionRankingStatus: prepared.status,
@@ -813,11 +830,11 @@ export const loader = async ({ request, context }) => {
       }
       if (context?.rankingWarmup&&!context?.rankingCardsPrecompute) return data({ warmup: true });
       const updatedAt=prepared.cacheKey?prepared.orderUpdatedAt:collectionBestSellingState.updatedAt??null;
-      rankingSession = context?.rankingCardsPrecompute?
+      rankingSession = pinnedPrefix?{ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:null}:context?.rankingCardsPrecompute?
         {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
         await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
     }
-    if(cardsOnly&&preparedSpec)cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
+    if(cardsOnly&&preparedSpec&&!pinnedPrefix)cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
     // Only updated collection clients opt into the lossless transport. Ranking
     // readiness and the immutable browsing session are established before reuse.
@@ -1500,7 +1517,8 @@ export const loader = async ({ request, context }) => {
     const responsePayload = {
       rankingToken: rankingSession?.token ?? null,
       products,
-      totalCount,
+      totalCount:pinnedPrefix?null:totalCount,
+      ...(pinnedPrefix?{collectionPinnedPrefix:true}:{}),
       contextualPricingApplied,
       settings: activeGroupFilters || [],
       globalSettings,
@@ -1509,10 +1527,10 @@ export const loader = async ({ request, context }) => {
       debug: {
         collectionPaginationApplied,
         collectionRankingApplied,
-        collectionRankingStatus,
+        collectionRankingStatus:pinnedPrefix?'prefix-ready':collectionRankingStatus,
         collectionBestSellingApplied,
         collectionBestSellingPending: collectionBestSellingState.status === "pending",
-        collectionBestSellingStatus: collectionBestSellingState.status,
+        collectionBestSellingStatus:pinnedPrefix?'prefix-ready':collectionBestSellingState.status,
         collectionBestSellingRefreshState: collectionBestSellingState.refreshState ?? null,
         collectionBestSellingUpdatedAt: collectionBestSellingState.updatedAt ?? null,
         resolvedCollectionId,
@@ -1597,8 +1615,13 @@ export const loader = async ({ request, context }) => {
     };
 
     if(cardsOnly){
+      if(pinnedPrefix){
+        if(await getCollectionHeadVersion(preparedSpec)!==pinnedPrefixVersion)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+        if(!await rememberCollectionHead(preparedSpec,pinnedPrefixVersion,rankingSession.ids))return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+        responsePayload.collectionPinnedPrefix={version:1,inputVersion:pinnedPrefixVersion};reportCollectionHead(preparedSpec,'proven','explicit-paid-pins');
+      }
       const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint);
-      return collectionCardsResponse(responsePayload,stored?'stored':'miss',request);
+      return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request);
     }
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
