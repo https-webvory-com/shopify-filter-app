@@ -104,6 +104,12 @@ export function preparationOrderFallbackKey(spec) {
   return preparationKey(identity).replace(':background-v2:', ':last-order-v1:');
 }
 
+// Durable retention shares the same context boundaries as the existing Redis
+// order fallback. Configuration, rules, filters and tenant stay separate.
+export function preparationSnapshotScopeKey(spec){
+ return `collectionPreparedSequence:${spec.shop}:background-v2:${createHash('sha256').update('durable-order-scope:'+preparationOrderFallbackKey(spec)).digest('hex')}`;
+}
+
 export function preparationReuseKey(spec,dataRevision='0:0') {
   const {revision,...inputs}=spec;
   // Database save timestamps do not participate in matching or scoring.
@@ -293,7 +299,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       }else if(saveDurable){
         // Adopt already-ready Redis rankings on release without rebuilding or
         // extending their source freshness/expiry windows.
-        try{await saveDurable({shop:spec.shop,kind:'ranking',key,collectionId:String(spec.collectionId).split('/').pop(),payload:raw,
+        try{await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId).split('/').pop(),payload:raw,
           validatedAt:cached.preparedAt,expiresAt:now()+preparationLifetime*1000});}
         catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
       }
@@ -412,7 +418,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key);
     }
     if(spec.retainForIdle===true&&saveDurable&&persist)try{
-      await saveDurable({shop:spec.shop,kind:'ranking',key,collectionId:String(spec.collectionId).split('/').pop(),payload,
+      await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId).split('/').pop(),payload,
         validatedAt:sourcePreparedAt??now(),expiresAt:now()+preparationLifetime*1000});
     }catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision ||

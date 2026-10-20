@@ -170,6 +170,24 @@ validates actual first-preview documents and exits nonzero for missing contexts.
 Both are read-only and report their validation scope. Neither establishes a live
 two-second browser SLA or verifies unpublished/undiscovered market combinations.
 
+Durable snapshots store existing deflate bytes in a versioned binary envelope,
+avoiding base64 storage overhead. Readers accept both formats and still enforce
+the original decoded-entry limit. Existing snapshots can be compacted after both
+web and worker are upgraded:
+
+```sh
+node scripts/compact-collection-snapshots.mjs --shop STORE.myshopify.com
+node scripts/compact-collection-snapshots.mjs --shop STORE.myshopify.com --apply
+```
+
+Compaction preserves ranking contents, aliases, validation/expiry timestamps and
+eviction age. It compares the inspected payload and timestamp under the same
+per-shop storage lock, so concurrent updates are skipped. An older binary reader
+cannot restore new-format snapshots; canonical requests still provide fallback.
+New ranking saves also retain only the latest order version within an identical
+configuration/rule/filter context. A newer validated write wins over a delayed
+older save; other contexts and shops remain separate.
+
 Backlog retirement defaults to a read-only audit:
 
 ```sh

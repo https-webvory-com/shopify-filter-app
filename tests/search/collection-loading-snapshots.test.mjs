@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCollectionLoadingSnapshots} from '../../app/utils/collectionLoadingSnapshots.js';
+import {encodePreparation} from '../../app/utils/collectionPreparationPayload.js';
+import {preparationSnapshotScopeKey} from '../../app/utils/collectionPreparation.js';
 
 function fixture(options={}){
  const rows=new Map(),values=new Map();let time=100000,locks=0;
@@ -58,4 +60,26 @@ test('missing migrations or database failures are optional and cannot fail canon
  const f=fixture();f.database.collectionLoadingSnapshot.findFirst=async()=>{throw Error('Missing table');};
  f.database.$transaction=async()=>{throw Error('Unavailable database');};
  assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);assert.equal(await f.write(1),false);
+});
+
+test('binary durable deflate saves base64 overhead and loads original and legacy formats losslessly',async()=>{
+ const f=fixture(),payload=encodePreparation({ids:Array.from({length:20000},(_,i)=>String(10000000+i)),metadata:{}});
+ assert.ok(payload.startsWith('z1:'));assert.equal(await f.write(1,payload),true);
+ const row=f.rows.get(f.key(1));assert.ok(row.size<Buffer.byteLength(payload)*0.76);
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),payload);
+ row.payload=Buffer.from(payload);row.size=row.payload.length;
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),payload);
+ const limited=fixture({maxEntryBytes:Buffer.byteLength(payload)-1});assert.equal(await limited.write(1,payload),false);
+});
+
+test('completed order versions replace only their own durable context and late older writes cannot regress it',async()=>{
+ const f=fixture(),key=n=>`collectionPreparedSequence:${f.shop}:background-v2:`+String(n).padStart(64,'b');
+ const scope=key(9),save=(n,scopeKey=scope,validatedAt=f.now())=>f.store.save({shop:f.shop,kind:'ranking',key:key(n),scopeKey,collectionId:'1',payload:'order '+n,validatedAt,expiresAt:f.now()+10000});
+ await save(1);f.advance(1);await save(2,key(8));f.advance(1);await save(3);
+ assert.equal(f.rows.has(key(1)),false);assert.equal(f.rows.has(key(2)),true);assert.equal(f.rows.has(key(3)),true);
+ assert.equal(await save(4,scope,f.now()-1),false);assert.equal(f.rows.has(key(3)),true);
+ assert.equal(await f.store.save({shop:f.shop,kind:'ranking',key:key(5),scopeKey:'queue:protected',collectionId:'1',payload:'x',expiresAt:f.now()+10000}),false);
+ const base={shop:f.shop,collectionId:'1',revision:'11',query:{filter:['native']},sortBy:'best-selling',orderedIds:['1'],orderRevision:'one'};
+ assert.equal(preparationSnapshotScopeKey(base),preparationSnapshotScopeKey({...base,orderedIds:['2'],orderRevision:'two'}));
+ for(const change of [{revision:'12'},{collectionId:'2'},{sortBy:'price-ascending'},{query:{filter:['other']}},{shop:'other.myshopify.com'}])assert.notEqual(preparationSnapshotScopeKey(base),preparationSnapshotScopeKey({...base,...change}));
 });
