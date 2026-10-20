@@ -409,3 +409,27 @@ asset. Only those two Liquid lines have a documented `RemoteAsset` exception;
 asset-size checks and other remote-asset checks remain enabled. The redundant
 explicit Shopify CDN preconnect was removed. Verify without publishing with
 `shopify.cmd app build --no-input --no-color`.
+
+### Saved-card refresh and body/head startup race
+
+Saved-card hits return before the canonical ranking path. They now report real
+public visits to the bounded registry and, when their ranking has known product
+changes or reaches the eight-minute refresh point, enqueue/promote the same
+one-context catalog job at priority 5. This work does not delay card delivery.
+Fresh unchanged rankings do not enqueue rebuilds, probes do not enqueue visits,
+and failed jobs retain their existing cooldown/backoff. All snapshot, product,
+schedule, order, tenant and freshness validation still runs before delivery.
+
+When theme resource timing lets the inline body fetch start first, the head
+loader attaches its independent renderer to that already-running promise too.
+It previously retained only the request identity, leaving available products
+waiting for the larger widget. Adoption cannot display an aborted or replaced
+request and does not start another fetch.
+
+Fresh live checks on 2026-10-20 for preview `plus-size-long` showed saved-card
+hits with titles at 4266ms desktop and 2723ms mobile, still above target. The
+observed preview served extension 357. Separately, the user's existing Plus Size
+Maxi Dresses tab recorded repeated 202 pending responses until roughly 16s.
+That is a backend-readiness wait, distinct from image/price rendering. These
+local changes do not establish live two-second performance; backend/worker and
+extension deployment and fresh first-visit measurement remain required.

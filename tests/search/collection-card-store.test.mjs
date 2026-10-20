@@ -84,6 +84,17 @@ test('optional snapshot timeouts cannot hold up canonical fallback or create lat
  assert.equal(await f.store.get(f.request),null);await new Promise(r=>setTimeout(r,40));assert.equal(f.sessions.length,0);
 });
 
+test('validated visitor hits notify refresh without waiting, while probes and rejected snapshots never notify',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ const hits=[];let finish;
+ const onHit=async value=>{hits.push(value);await new Promise(resolve=>finish=resolve);};
+ assert.equal((await f.store.get(f.request,{onHit})).status,200);
+ assert.equal(hits.length,1);assert.equal(hits[0].entry.collectionId,'1');assert.deepEqual(hits[0].prepared.ids,['1','2']);finish();
+ await f.store.get(f.request,{probe:true,onHit});assert.equal(hits.length,1);
+ f.setValid(false);assert.equal(await f.store.get(f.request,{onHit}),null);assert.equal(hits.length,1);
+ f.setValid(true);assert.equal((await f.store.get(f.request,{onHit:()=>{throw Error('Queue unavailable');}})).status,200);
+});
+
 
 test('production card adapter rejects fallback ranking keys and reads tenant-scoped current epochs',async()=>{
  const {loadModule}=await import('./helpers/search-ranking.mjs');

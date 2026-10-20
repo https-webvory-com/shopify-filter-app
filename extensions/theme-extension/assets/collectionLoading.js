@@ -116,7 +116,17 @@
         var url = 'https://aisearchfilter.webvory.com/api/filter?' + params;
         var previous = window._cfpRankedEarlyFetch;
         if (previous && previous.url === url) {
-          if(!provisional){previous.verified=true;previous.context=context;if(previous.deliver)previous.promise.then(previous.deliver);}
+          if(!provisional){
+            previous.verified=true;previous.context=context;
+            // The inline body fetch can beat this loader when theme CSS delays
+            // head scripts. Adopt its ready payload too, not only its identity.
+            if(!previous.deliver)previous.deliver=function(result){
+              if(!result||result.status!==200||previous.delivered||previous.controller.signal.aborted||window._cfpRankedEarlyFetch!==previous)return;
+              previous.delivered=true;
+              try{preloadImages(result.payload);mountFirstRow(result.payload,previous.context,previous.controller);}catch{}
+            };
+            previous.promise.then(previous.deliver);
+          }
           return provisional?false:true;
         }
         previous?.controller.abort();

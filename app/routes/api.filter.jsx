@@ -22,7 +22,7 @@ import { rateLimit } from "../services/rateLimiter.server";
 import { getCollectionBestSellingState } from "../services/collectionBestSelling.server.js";
 import { fetchCollectionPage } from "../utils/collectionPage.js";
 import { readRankedCollectionPage, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
-import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup } from "../services/collectionPreparation.server.js";
+import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup, registerCollectionCardVisit } from "../services/collectionPreparation.server.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
 import { semanticMultiSearch } from "../services/semanticSearch.server";
 import { rankSearchResults } from "../services/searchRanking.server.js";
@@ -71,7 +71,7 @@ export const loader = async ({ request, context }) => {
     if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&isPublicCollectionCards(request)){
       // Trusted background rendering can reuse validated cards, but must never
       // create a shopper's browsing session while probing readiness.
-      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true});if(ready)return ready;
+      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit});if(ready)return ready;
     }
 
     // ── 0. Parse ALL query parameters upfront ─────────────────────────

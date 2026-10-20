@@ -11,6 +11,7 @@ import configuredWarmups from '../config/collection-prewarm.json';
 import {prepareCollectionFromFacts,scheduleCollectionFactRefresh} from './collectionRuleFacts.server.js';
 import {validateCollectionReuse} from '../utils/validateCollectionReuse.js';
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot} from './collectionLoadingSnapshots.server.js';
+import {createCollectionVisitorRefresh} from '../utils/collectionVisitorRefresh.js';
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -42,6 +43,7 @@ export const getCollectionPreparationRevision = preparation.revision;
 export const getPreparedCollectionRanking = preparation.get;
 export const processCollectionPreparation = preparation.process;
 export const discardPreparedCollectionRanking = preparation.discard;
+export const registerCollectionCardVisit=createCollectionVisitorRefresh({queue:collectionRankingQueue,register:registerCollectionWarmup});
 
 // Remember only anonymous, unfiltered first pages. Customer targeting and
 // filtered requests remain separately scoped and are never replayed as public.

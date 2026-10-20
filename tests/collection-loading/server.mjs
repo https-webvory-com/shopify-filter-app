@@ -147,6 +147,7 @@ export async function createLoadingServer({redisLayer}={}) {
         const name=url.pathname.split('/').pop();if(!['collectionWidget.js','collectionFilterPro.min.js','collectionFilterPro.css','marketPricing.js','collectionLoading.min.js'].includes(name)){res.writeHead(404).end();return;}
         if(name==='collectionFilterPro.css'&&state.cssDelay)await new Promise(resolve=>setTimeout(resolve,state.cssDelay));
         if(name==='collectionFilterPro.min.js'&&state.assetDelay)await new Promise(resolve=>setTimeout(resolve,state.assetDelay));
+        if(name==='collectionLoading.min.js'&&state.headDelay)await new Promise(resolve=>setTimeout(resolve,state.headDelay));
         res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');let asset=await fs.readFile('extensions/theme-extension/assets/'+name,'utf8');asset=asset.replaceAll('https://aisearchfilter.webvory.com','http://127.0.0.1:'+server.address().port);res.end(asset);return;
       }
       if(url.pathname==='/api/filter'){

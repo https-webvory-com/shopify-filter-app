@@ -83,6 +83,17 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     await control({hold:false,headRenderer:false,assetDelay:0,apiDelay:0,facetDelay:0});
   });
+  await test('a delayed head loader adopts body-started cards before the full widget arrives',async()=>{
+    await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,headDelay:700,assetDelay:3500,apiDelay:100,cssDelay:0,facetDelay:0});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
+    const snapshot=await evaluate("({at:performance.now(),widget:!!window._cfpInitStarted,delivered:window._cfpRankedEarlyFetch.delivered})");
+    assert.equal(snapshot.widget,false);assert.equal(snapshot.delivered,true);
+    if(!redisLayer)assert.ok(snapshot.at<2000,'Body adoption waited for widget: '+snapshot.at);
+    assert.equal((await getState()).requests.length,1);assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({headDelay:0,headRenderer:false,early:false,assetDelay:0,apiDelay:0,hold:false});
+    return {titlesMs:Math.round(snapshot.at),headDelayMs:700,widgetDelayMs:3500,liveTiming:false};
+  });
   await test('head startup renders before DOMContentLoaded and late pricing/wishlist dependencies remain functional',async()=>{
     await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,priceDelay:2500,themeDelay:3500,htmlDelay:500,assetDelay:150,apiDelay:250,cssDelay:0,wishlist:true});
     await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");

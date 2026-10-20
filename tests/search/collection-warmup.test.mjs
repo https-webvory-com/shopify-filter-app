@@ -6,6 +6,7 @@ import {transform} from 'esbuild';
 import * as lifecycle from '../../app/utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
+import {createCollectionVisitorRefresh} from '../../app/utils/collectionVisitorRefresh.js';
 
 async function fixture() {
   const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[];let scans=0;
@@ -23,6 +24,7 @@ async function fixture() {
   let loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
   const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse(request,context);},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
+    if(name==='../utils/collectionVisitorRefresh.js')return {createCollectionVisitorRefresh};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
@@ -48,6 +50,16 @@ test('warmup registry stores a normalized public collection context with a bound
   assert.deepEqual(Array.from(f.writes[1].slice(2)),[0,-41]);assert.equal(f.writes[2][2],lifecycle.warmupRegistryLifetime);
   assert.equal(f.writes[3][1],lifecycle.warmupShopsKey);assert.equal(f.writes[3][3],'fixture.myshopify.com');
   assert.equal(f.writes[4][0],'prune');
+});
+
+test('production saved-card visit hook records its market and queues one promoted context without scanning the catalog',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ const request=new Request('https://api.test/api/filter?shop='+shop+'&collectionHandle=one&country=IN&locale=en&page=1&limit=25&responseProfile=collection-preview-v1');
+ const visit={request,entry:{shop,collectionId:'1',external:false},prepared:{preparedAt:Date.now(),productRevision:'0'},state:{products:'1',globalProducts:'0'}};
+ await f.registerCollectionCardVisit(visit);await f.registerCollectionCardVisit(visit);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);assert.equal(jobs[0][1],'COLLECTION_RANKING_CATALOG');assert.equal(jobs[0][3].priority,5);
+ assert.equal(jobs[0][2].record.collectionId,'1');assert.equal(new URL(jobs[0][2].record.url).searchParams.get('country'),'IN');
+ assert.equal(f.writes.filter(w=>w[0]==='load').length,0);assert.ok(f.writes.some(w=>w[0]==='add'));
 });
 
 test('periodic warmup schedules known public shops at low priority and deduplicates repeated ticks',async()=>{

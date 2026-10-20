@@ -17,8 +17,9 @@ function fixture(search='',tags='',delayed=false,options={}){
  const start=body.indexOf('  (function() {',body.indexOf('Fire API request'));
  const bodyScript=body.slice(start,body.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}','fixture.myshopify.com').replace('{{ cfp_collection_handle }}','formal').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en');
  const context={window,location:window.location,MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},document:{addEventListener:(name,fn)=>listeners[name]=fn,documentElement:{lang:'en'},querySelector:()=>metaPresent?({dataset:{shop:'fixture.myshopify.com',handle:'formal',country:'IN',locale:'en',customerTags:tags}}):null},URL,URLSearchParams,AbortController,setTimeout,clearTimeout,fetch:async(url,requestOptions)=>{calls.push({url,options:requestOptions});return options.respond?options.respond(calls.length):{status:200,json:async()=>({products:[],totalCount:0})};}};
- vm.runInNewContext(headScript,context);
- return {calls,window,addMeta:()=>{metaPresent=true;callback();},domReady:()=>listeners.DOMContentLoaded?.(),body:()=>vm.runInNewContext(bodyScript,context)};
+ const runHead=()=>vm.runInNewContext(headScript,context);
+ if(!options.bodyFirst)runHead();
+ return {calls,window,head:runHead,addMeta:()=>{metaPresent=true;callback();},domReady:()=>listeners.DOMContentLoaded?.(),body:()=>vm.runInNewContext(bodyScript,context)};
 }
 test('head starts the exact market/locale request before widget markup and body consumes it without duplicate fetching',async()=>{
  const f=fixture();assert.equal(f.calls.length,1);const params=new URL(f.calls[0].url).searchParams;
@@ -95,4 +96,19 @@ test('early image selection retains selected variants and collection-specific im
  assert.equal(selected.image,'https://images.example/blue.jpg');assert.equal(selected.url,'/products/formal-gown?variant=11');
  assert.equal(select({...product,'metafield_custom.plus_size_collection_image':{url:'https://images.example/plus.jpg'}},'plus-size-formal',{}).image,'https://images.example/plus.jpg');
  assert.equal(select({...product,merchandisingImage:'https://images.example/blue.jpg'},'formal',{}).image,'https://images.example/blue.jpg');
+});
+
+test('a late head loader adopts ready body-started data without waiting for the full renderer or fetching twice',async()=>{
+ const f=fixture('','',false,{bodyFirst:true});f.window.Shopify={country:'IN',locale:'en'};
+ f.body();const early=f.window._cfpRankedEarlyFetch;await early.promise;
+ assert.equal(f.calls.length,1);assert.equal(early.deliver,undefined);
+ f.head();await Promise.resolve();
+ assert.equal(f.calls.length,1);assert.equal(early.delivered,true);assert.equal(early.verified,true);
+ f.head();assert.equal(f.calls.length,1);
+});
+
+test('late adoption cannot render a cancelled body request',async()=>{
+ const f=fixture('','',false,{bodyFirst:true});f.window.Shopify={country:'IN',locale:'en'};
+ f.body();const early=f.window._cfpRankedEarlyFetch;await early.promise;early.controller.abort();
+ f.head();await Promise.resolve();assert.notEqual(early.delivered,true);assert.equal(f.calls.length,1);
 });

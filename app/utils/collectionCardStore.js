@@ -54,7 +54,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   current[1]=saved[1];current[2]=saved[2];
   return JSON.stringify(current)===entry.state;
  };
- async function get(request,{probe=false}={}){
+ async function get(request,{probe=false,onHit}={}){
   const key=collectionCardKey(request);if(!key)return null;
   const controller=new AbortController(),started=now();let timer;
   const work=async()=>{
@@ -81,6 +81,9 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    const after=await readState(entry),afterPrepared=current(after,entry.external);
    controller.signal.throwIfAborted();
    if(!afterPrepared||stateSignature(after,entry.external)!==stateSignature(before,entry.external)||sequenceSignature(afterPrepared)!==entry.sequence)return null;
+   // Do not make ready cards wait for optional queue/registry work. Trusted
+   // background probes must not masquerade as shopper visits or enqueue loops.
+   if(!probe&&onHit)Promise.resolve().then(()=>onHit({request,entry,prepared:afterPrepared,state:after})).catch(()=>{});
    return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
   }catch{return null;}
   };
