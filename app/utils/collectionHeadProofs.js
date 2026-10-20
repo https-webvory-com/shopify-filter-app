@@ -8,7 +8,7 @@ const remove=`if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL'
 export function createCollectionHeadProofs({redis,readVersion,observe=()=>{},now=Date.now,maxEntries=1024}){
  const report=event=>{try{observe(event);}catch{}};
  async function remember(spec,inputVersion,ids){
-  if(!/^[a-f0-9]{64}$/.test(inputVersion)||!Array.isArray(ids)||ids.length!==5||new Set(ids).size!==5||ids.some(id=>!/^\d+$/.test(id)))return false;
+  if(!/^[a-f0-9]{64}$/.test(inputVersion)||!Array.isArray(ids)||(!ids.length||ids.length>10000)||new Set(ids).size!==ids.length||ids.some(id=>!/^\d+$/.test(id)))return false;
   const key=prefix(spec.shop)+suffix(spec),raw=JSON.stringify({version:1,inputVersion,ids,at:now()});
   try{
    if(redis.eval)await redis.eval(retain,2,key,`collectionPinnedHeadProofRetention:${spec.shop}`,600,raw,now(),maxEntries,prefix(spec.shop));
@@ -20,7 +20,7 @@ export function createCollectionHeadProofs({redis,readVersion,observe=()=>{},now
   const key=prefix(spec.shop)+suffix(spec);let raw;
   try{
    raw=await redis.get(key);if(!raw)return null;
-   const proof=JSON.parse(raw);if(proof.version!==1||!Array.isArray(proof.ids)||proof.ids.length!==5)return null;
+   const proof=JSON.parse(raw);if(proof.version!==1||!Array.isArray(proof.ids)||!proof.ids.length||proof.ids.length>10000)return null;
    const current=await readVersion(spec),base={shop:spec.shop,collectionId:spec.collectionId};
    if(current!==proof.inputVersion){report({...base,event:'head-comparison-skipped',reason:'inputs-changed'});return 'changed';}
    const position=proof.ids.findIndex((id,i)=>canonical.ids[i]!==id);

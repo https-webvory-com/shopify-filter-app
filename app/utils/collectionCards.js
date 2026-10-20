@@ -6,7 +6,7 @@ const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
-export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v1'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
+export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v2'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
 export function isPublicCollectionCards(request){
  const url=new URL(request.url),keys=[...url.searchParams.keys()],p=url.searchParams;
  return request.method==='GET'&&['collection-cards-v1','collection-preview-v1'].includes(p.get('responseProfile'))&&
@@ -23,7 +23,9 @@ export function collectionCardsPayload(payload){
  // never needs to wait for a separate configuration/facet response.
  return packCollectionResponse({...rest,cfpCards:{version:1}},{profile:'collection-v1'});
 }
-export function collectionPreviewPayload(payload,{limit=5}={}){
+export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
+ if(fullCards&&!payload.collectionPinnedPrefix)return {...payload,products:(payload.products||[]).slice(0,limit),cfpCards:{version:1,preview:false}};
+ if(payload.collectionPinnedPrefix?.version===2)return {...payload,cfpCards:{version:1,preview:false,prefix:true,proof:payload.collectionPinnedPrefix}};
  // Only ready cards' image-selection inputs travel initially. Keep variant
  // identity/options so the existing renderer chooses exactly the same image
  // and product link when the complete, token-scoped page arrives.
@@ -44,7 +46,7 @@ export async function collectionCardsResponse(payload,state='miss',request,{prev
  if(stream){
   // All normal ranking/document validation has already run. Send each ready
   // preview card separately; never wait for facets, prices or widget startup.
-  const {products,...metadata}=collectionPreviewPayload(payload,{limit:previewLimit});
+  const {products,...metadata}=collectionPreviewPayload(payload,{limit:previewLimit,fullCards:acceptsCollectionPinnedPrefix(request)});
   function* records(){
    yield Buffer.from(JSON.stringify({type:'start',count:products.length,payload:metadata})+'\n');
    for(const product of products)yield Buffer.from(JSON.stringify({type:'product',product})+'\n');
@@ -58,7 +60,7 @@ export async function collectionCardsResponse(payload,state='miss',request,{prev
   if(gzipAccepted)headers['Content-Encoding']='gzip';
   return new Response(Readable.toWeb(body),{headers});
  }
- let body=JSON.stringify(preview?collectionPreviewPayload(payload,{limit:previewLimit}):collectionCardsPayload(payload));
+ let body=JSON.stringify(preview?collectionPreviewPayload(payload,{limit:previewLimit,fullCards:acceptsCollectionPinnedPrefix(request)}):collectionCardsPayload(payload));
  const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state,'Vary':preview?'Accept, Accept-Encoding':'Accept-Encoding'};
  // First-page variant/configuration data is repetitive. Compress after all
  // validation; this changes transport only, never cache freshness or ranking.

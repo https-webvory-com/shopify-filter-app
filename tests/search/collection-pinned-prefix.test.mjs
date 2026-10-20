@@ -14,8 +14,8 @@ function fixture(){
 }
 test('cold pin prefix equals the canonical leading cards and images without scanning the collection',async()=>{
  const f=fixture(),prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps);
- assert.deepEqual(f.counts(),{batches:1,searches:0});assert.equal(prefix.ids.length,5);
- const full=await prepareCollectionRanking(f.spec,f.deps);assert.deepEqual(prefix.ids,full.ids.slice(0,5));
+ assert.deepEqual(f.counts(),{batches:1,searches:0});assert.equal(prefix.ids.length,6);
+ const full=await prepareCollectionRanking(f.spec,f.deps);assert.deepEqual(prefix.ids,full.ids.slice(0,6));
  for(const id of prefix.ids)assert.deepEqual(prefix.metadata[id],full.metadata[id]);
  assert.equal(prefix.metadata['40'].merchandisingImage,'pin-40.jpg');
 });
@@ -28,7 +28,7 @@ test('prefix proof declines free, missing-price, inactive, cross-tenant and inco
 test('only eligible configured pins in original order can establish a prefix',async()=>{
  const f=fixture();f.spec.pinnedIds=f.spec.pinnedIds.slice(1);
  const prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps);assert.deepEqual(prefix.ids,['12','50','9','30','15']);
- for(const mutate of [s=>s.pinningRule.products.push(s.pinningRule.products[0]),s=>s.pinnedIds=s.pinnedIds.slice(0,4),s=>s.sortBy='price-ascending',s=>s.retainForIdle=false,s=>s.needsShopifyOrder=false,s=>s.pinningRule.products='bad']){
+ for(const mutate of [s=>s.pinningRule.products.push(s.pinningRule.products[0]),s=>s.pinnedIds=[],s=>s.sortBy='price-ascending',s=>s.retainForIdle=false,s=>s.needsShopifyOrder=false,s=>s.pinningRule.products='bad']){
   const other=fixture();mutate(other.spec);assert.equal(await prepareCollectionPinnedPrefix(other.spec,other.deps),null);
  }
 });

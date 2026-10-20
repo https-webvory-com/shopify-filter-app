@@ -368,7 +368,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v1, application/json'} });
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v2, application/json'} });
       let payload = await response.json();
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
@@ -664,6 +664,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
       if(signal.aborted)return;
       if(prefix){
+        // Keep every already-visible pin through the handoff. Read complete
+        // canonical pages until they cover that prefix, then resume after them.
+        const canonical=[...full.products],target=Math.max(PAGE_SIZE,cards.products.length);
+        let lastPage=1;
+        while(canonical.length<Math.min(target,full.totalCount)){
+          const next=new URL(request);next.searchParams.set('rankingToken',full.rankingToken);next.searchParams.set('page',String(lastPage+1));
+          const response=await fetchCollectionResponse(next.toString(),signal),page=await response.json();
+          if(response.status!==200||page.rankingToken!==full.rankingToken||!Array.isArray(page.products)||!page.products.length)throw Error('Collection handoff unavailable');
+          canonical.push(...page.products);lastPage++;
+        }
+        if(signal.aborted)return;
+        if(new Set(canonical.map(p=>p.id)).size!==canonical.length)throw Error('Duplicate collection handoff products');
+        full={...full,products:canonical};activeFilters.page=lastPage;
         if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
         const readyUrl=new URL(window.location.href);readyUrl.searchParams.set('rankingToken',full.rankingToken);window.history.replaceState(null,'',readyUrl.pathname+readyUrl.search);
       }

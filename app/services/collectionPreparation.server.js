@@ -23,7 +23,7 @@ const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 async function readCollectionHeadVersion(spec){
   const shop=spec.shop,id=String(spec.collectionId).split('/').pop();
   // Read input metadata only. A head must never load or decode a complete
-  // saved ranking just to prove that five explicit pins are still current.
+  // saved ranking just to prove that explicit pins are still current.
   const [values,schedules]=await Promise.all([
     redis.mget(`collectionPreparationRevision:${shop}`,`collectionRankingDataRevision:${shop}:all`,`collectionRankingDataRevision:${shop}:${id}`,`collectionLoadingGeneration:${shop}`,`collectionProductContentRevision:${shop}:all`,`collectionProductContentRevision:${shop}:${id}`,`collectionOrderSnapshot:${shop}:gid://shopify/Collection/${id}`),
     prisma.merchandisingRule.findMany({where:{shop,status:true,ruleType:'collection',OR:[{startDate:{not:null}},{endDate:{not:null}}]},select:{id:true,startDate:true,endDate:true},orderBy:{id:'asc'}}),

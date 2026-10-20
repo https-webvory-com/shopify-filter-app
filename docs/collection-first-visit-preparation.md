@@ -599,33 +599,37 @@ prices and facets remain independent. Ordinary JSON and older backends remain
 supported. No production timer deliberately stages delivery; test-only tail
 delays prove that the first card appears while later bytes are still pending.
 
-### Independent five-pin head
+### Independent complete pinned cards
 
 Clients opt in with the safelisted Accept token
-`application/x-cfp-pinned-prefix-v1`; older clients retain the complete-ranking
+`application/x-cfp-pinned-prefix-v2`; older clients retain the complete-ranking
 protocol. On an anonymous, unfiltered native best-selling preview request,
-five eligible explicit pins can prove a leading prefix without waiting for
+all eligible explicit pins can prove a leading prefix without waiting for
 the complete ranking, its worker or an initially missing native-order snapshot.
 An unavailable full-ranking queue does not suppress an independently proven
 prefix; the canonical follow-up retains its error/retry behavior. The existing route owns active/stock and
 imported membership eligibility. Canonical explicit pins override merchandising
 Exclude conditions and tag scores in this mode. Other sorts decline this path.
 
-The first five eligible configured pins are read from current index documents.
+Every eligible configured pin is read from current index documents, in pin order.
 Missing, inactive, foreign-shop, incomplete, duplicate, unknown-price or
 nonpositive-price proofs decline. In particular, a free earlier eligible pin
-is not silently skipped to manufacture a five-card proof. The canonical
+is not silently skipped to manufacture a prefix proof. The canonical
 zero-price partition uses synced base prices; this does not certify contextual
 market prices. Displayed prices keep their existing verification requirement.
 The same merchandising code computes pin images and metadata on this bounded
 set, and its resulting IDs must exactly match the configured eligible prefix.
 
 The response is `200`, `X-CFP-Collection-Cards: prefix`, with
-`collectionRankingStatus: prefix-ready`, five cards, a null total and no browsing
+`collectionRankingStatus: prefix-ready`, complete pinned cards, a null total and no browsing
 token. It is never saved as a complete ranking or card snapshot. The browser
-retains these cards while canonical page one completes, then adopts that full
-page's token. Pagination is unavailable until the full first page is present;
-page two follows the full page, not the five-card preview.
+retains these cards while canonical pages covering every visible pin complete,
+then adopts that ranking's token. For example, 40 pins become 50 canonical cards
+and Load more resumes at page three. Pagination is unavailable during handoff.
+Cards include normal variants, swatches and product actions; market prices are
+verified independently through the existing pricing path. Non-pinned initial
+pages also negotiate complete card data. Only image/title markup needs the
+early renderer; the full widget upgrades it without waiting for ranking.
 
 Input versions cover shop, market, sort, pins, rules/configuration, native-order
 revision, schedules, content/hard-data counters and runtime generation. Checks
@@ -637,7 +641,8 @@ that input version's head path for an hour. Proof and decline reasons are
 observable; optional comparison failures must not break canonical ranking.
 
 This is deliberately partial coverage: it cannot fill an unpinned remainder
-under arbitrary tag scoring. Collections with fewer than five provable pins
-retain canonical preparation. Report cold proven heads, cold declines, warm
+under arbitrary tag scoring. Collections without provable pins retain canonical
+preparation. A defensive 10,000-pin response budget declines larger proofs
+rather than truncating them. Report cold proven heads, cold declines, warm
 requests, canonical first-page completion and verified-price timing separately.
 Browser-fixture timings do not establish the deployed two-second requirement.

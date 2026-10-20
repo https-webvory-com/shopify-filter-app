@@ -50,16 +50,16 @@ try{
 
   await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{
     await control({reset:true,hold:true,precompute:true,early:true,assetDelay:200,apiDelay:300,facetDelay:3000,clockOffset:0,cssDelay:0});
-    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--preview').length>0");
+    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     const first=await cards(),at=await evaluate('cardSnapshots[0].at');if(!redisLayer)assert.ok(at<2000,'Cards exceeded fixture target: '+at);
-    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price,.cfp-quick-view-btn,.cfp-product-swatches').length"),0);
+    assert.ok(await evaluate("document.querySelectorAll('.cfp-product-card__price,.cfp-quick-view-btn,.cfp-product-swatches').length")>0);
     const firstImages=await evaluate("[...document.querySelectorAll('.cfp-product-card__image--primary')].map(e=>e.getAttribute('src'))");
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')"),true);
     await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",10000);
     assert.equal((await cards()).length,25);assert.deepEqual((await cards()).slice(0,first.length),first);
     assert.deepEqual(await evaluate("[...document.querySelectorAll('.cfp-product-card__image--primary')].map(e=>e.getAttribute('src'))"),firstImages);
     let data=await getState();assert.equal(data.requests.length,1);assert.equal(data.facetResponses.length,1);
-    await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--preview').length>0");await wait("!!document.querySelector('.cfp-facet-error')");
+    await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");await wait("!!document.querySelector('.cfp-facet-error')");
     assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
     await control({facetFailure:false});await evaluate("document.querySelector('.cfp-facet-error button').click()");await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
@@ -163,7 +163,7 @@ try{
     const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('scratch/collection-headless-mobile.png',Buffer.from(image.data,'base64'));
   });
   await test('unavailable preparation stops polling, shows Retry, and recovers after Retry',async()=>{
-    await control({reset:true,hold:true});await navigate();await wait("!!document.querySelector('.cfp-order-error button')",110000);
+    await control({reset:true,hold:true,noPins:true});await navigate();await wait("!!document.querySelector('.cfp-order-error button')",110000);
     assert.equal((await cards()).length,0);assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
     const before=(await getState()).requests.length;assert.equal(before,31);
     await delay(1400);assert.equal((await getState()).requests.length,before);
@@ -307,14 +307,14 @@ try{
   // Run the intentionally slow same-origin image/price stress case last so
   // its outstanding HTTP/1 resource queue cannot skew later timing fixtures.
   await test('cold pending ranking shows skeletons and loading feedback, then independent card/image/price rendering',async()=>{
-    await control({reset:true,colorRule:false,orderVersion:0,delay:5500,priceDelay:2500,imageDelay:3000});await navigate();
+    await control({reset:true,noPins:true,colorRule:false,orderVersion:0,delay:5500,priceDelay:2500,imageDelay:3000});await navigate();
     await wait("document.querySelectorAll('.cfp-skeleton-card').length===8");assert.equal((await cards()).length,0);
     await wait("!!document.querySelector('.cfp-loading-notice')",15000);assert.equal((await cards()).length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",15000);
     const snapshot=await evaluate('cardSnapshots[0]');assert.equal(snapshot.imagesLoaded,0);assert.equal(snapshot.pricesReady,0);
     assert.deepEqual(snapshot.delays,Array(Math.min(snapshot.cards,6)).fill('0s'));
     assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
-    assert.deepEqual((await cards()).slice(0,2),['1','2']);
+    assert.equal(new Set(await cards()).size,25);
     await wait("document.querySelector('.cfp-product-card--reveal .cfp-product-card__price').textContent!=='See product price'",15000);
     await wait("document.querySelector('.cfp-product-card--reveal img').naturalWidth>0",15000);
     assert.deepEqual(await evaluate('browserErrors'),[]);return snapshot;
@@ -322,7 +322,7 @@ try{
   // Keep intentionally unfinished image/widget downloads last, so they cannot
   // occupy the browser's connection pool during other timing/cancellation checks.
   await test('pending products become visible before the delayed full widget without waiting for prices or images',async()=>{
-    await control({reset:true,hold:false,headRenderer:true,early:true,delay:150,assetDelay:4500,apiDelay:50,cssDelay:0,facetDelay:0,priceDelay:2500,imageDelay:2500});
+    await control({reset:true,noPins:true,hold:false,headRenderer:true,early:true,delay:150,assetDelay:4500,apiDelay:50,cssDelay:0,facetDelay:0,priceDelay:2500,imageDelay:2500});
     await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
     await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
     const snapshot=await evaluate("({at:performance.now(),widget:!!window._cfpInitStarted,cards:[...document.querySelectorAll('.cfp-initial-product')].map(c=>({title:c.querySelector('h3').textContent,href:c.querySelector('a').getAttribute('href'),loaded:c.querySelector('img').complete&&c.querySelector('img').naturalWidth>0}))})");
@@ -347,22 +347,39 @@ try{
     await control({streamDelay:0,assetDelay:0,headRenderer:false,early:false,hold:false});
     return {firstCardMs:Math.round(first.at),cardsAtFirstPaint:first.count,artificialTailDelayMs:160,liveTiming:false};
   });
-  await test('a cold five-pin head renders with the ranking worker paused and hands off to canonical pagination',async()=>{
+  await test('a cold all-pin head renders with the ranking worker paused and hands off to canonical pagination',async()=>{
     await control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],early:true,headRenderer:true,assetDelay:300,apiDelay:50,cssDelay:0,imageDelay:50,priceDelay:50});
     await send('Network.clearBrowserCache');await navigate();
-    await wait("document.querySelectorAll('.cfp-product-card--preview').length===5");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===6");
     const prefix=await cards(),at=await evaluate('cardSnapshots[0].at');
-    assert.deepEqual(prefix,['1','2','4','5','6']);
+    assert.deepEqual(prefix,['1','2','4','5','6','7']);
     assert.equal((await getState()).state.builds,0);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
     assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
     assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'');
     await fixture.prepareLast();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    assert.deepEqual((await cards()).slice(0,5),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),true);
+    assert.deepEqual((await cards()).slice(0,prefix.length),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),true);
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
     const all=await cards();assert.equal(new Set(all).size,30);assert.equal(all.at(-1),'3');
     const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.ok(!state.headEvents.some(e=>e.event==='head-comparison-mismatch'));assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {coldPrefixMs:Math.round(at),fullRankingPausedAtPrefix:true,cardsAtPrefix:5,canonicalPaginationProducts:all.length,liveTiming:false};
+    return {coldPrefixMs:Math.round(at),fullRankingPausedAtPrefix:true,cardsAtPrefix:6,canonicalPaginationProducts:all.length,liveTiming:false};
+  });
+  await test('all forty pins render complete cards before ranking and retain every product through multi-page handoff',async()=>{
+    const pins=Array.from({length:41},(_,i)=>String(i+1)).filter(id=>id!=='3');
+    await control({reset:true,hold:true,productCount:70,pinList:pins,early:true,headRenderer:true,assetDelay:0,apiDelay:0,cssDelay:0,imageDelay:0,priceDelay:0});
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===40");
+    assert.deepEqual(await cards(),pins);assert.equal((await getState()).state.builds,0);
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview').length"),0);
+    await wait("[...document.querySelectorAll('.cfp-product-card__price')].slice(0,5).every(p=>/[0-9]/.test(p.textContent))");
+    assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
+    await fixture.prepareLast();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+    assert.deepEqual((await cards()).slice(0,40),pins);
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===70");
+    const all=await cards();assert.equal(new Set(all).size,70);assert.equal(all.at(-1),'3');
+    const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {pinsShown:40,canonicalProducts:70,fullRankingPausedAtPins:true,liveTiming:false};
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);

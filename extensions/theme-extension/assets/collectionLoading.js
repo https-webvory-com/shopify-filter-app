@@ -145,7 +145,7 @@
         };
         async function read(){
           while(!controller.signal.aborted){
-            const response=await fetch(url,{signal:controller.signal,cache:'no-cache',priority:'high',headers:{Accept:window.cfpReadEarlyResponse?'application/x-ndjson, application/x-cfp-pinned-prefix-v1, application/json':'application/x-cfp-pinned-prefix-v1, application/json'}});
+            const response=await fetch(url,{signal:controller.signal,cache:'no-cache',priority:'high',headers:{Accept:window.cfpReadEarlyResponse?'application/x-ndjson, application/x-cfp-pinned-prefix-v2, application/json':'application/x-cfp-pinned-prefix-v2, application/json'}});
             const result=window.cfpReadEarlyResponse?await window.cfpReadEarlyResponse(response,entry.deliver):{status:response.status,payload:await response.json()};
             // Once the widget claims this request, its existing bounded retry
             // loop owns pending responses. Do not add another timeout window.

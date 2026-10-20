@@ -24,3 +24,10 @@ test('changes in version, market, pins and shop cannot masquerade as a head mism
  for(const other of [{...f.spec,shop:'other.myshopify.com'},{...f.spec,pinnedIds:['9']},{...f.spec,query:{...f.spec.query,country:'US'}}])assert.equal(await f.service.compare(other,{ids:[]}),null);
  f.change();assert.equal(await f.service.compare(f.spec,{ids:[]}),'changed');assert.equal(f.events[0].event,'head-comparison-skipped');
 });
+
+test('shadow comparison verifies every pin, including a mismatch beyond page one',async()=>{
+ const f=fixture(),ids=Array.from({length:40},(_,i)=>String(i+1));
+ assert.equal(await f.service.remember(f.spec,f.version,ids),true);
+ const canonical=[...ids];canonical[39]='999';
+ assert.equal(await f.service.compare(f.spec,{ids:canonical}),'mismatch');assert.equal(f.events[0].position,39);
+});
