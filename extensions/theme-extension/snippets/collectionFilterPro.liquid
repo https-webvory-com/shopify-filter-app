@@ -150,8 +150,6 @@
   }
 </style>
 
-{{ 'collectionFilterPro.css' | asset_url | stylesheet_tag }}
-{{ 'quickView.css' | asset_url | stylesheet_tag }}
 {% render 'customization' %}
 
 {%- style -%}
@@ -418,6 +416,10 @@
   }
 </style>
 
+{%- comment -%}Start styles before deferred assets, after inline configuration
+and complete widget markup so their download cannot block parsing the widget.{%- endcomment -%}
+{{ 'collectionFilterPro.css' | asset_url | stylesheet_tag }}
+{{ 'quickView.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'marketPricing.js' | asset_url }}" defer="defer"></script>
 {% if template.name == 'search' %}
 <script src="{{ 'searchSettings.js' | asset_url }}" defer="defer"></script>

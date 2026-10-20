@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {gunzipSync} from 'node:zlib';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
@@ -149,10 +150,11 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
         const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url,{headers:req.headers}),params:{},context:{}});
-        const text=await response.text();const data=text?JSON.parse(text):{};
+        const bytes=Buffer.from(await response.arrayBuffer());
+        const text=(response.headers.get('Content-Encoding')==='gzip'?gunzipSync(bytes):bytes).toString();const data=text?JSON.parse(text):{};
         const target=url.searchParams.get('responseProfile')==='collection-config-v1'?configurationRequests:requests;
         target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
-        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(text);return;
+        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(bytes);return;
       }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));

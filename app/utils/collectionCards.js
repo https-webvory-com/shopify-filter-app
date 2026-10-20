@@ -1,4 +1,7 @@
 import {packCollectionResponse} from './collectionResponse.js';
+import {gzip} from 'node:zlib';
+import {promisify} from 'node:util';
+const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
@@ -18,6 +21,14 @@ export function collectionCardsPayload(payload){
  // never needs to wait for a separate configuration/facet response.
  return packCollectionResponse({...rest,cfpCards:{version:1}},{profile:'collection-v1'});
 }
-export function collectionCardsResponse(payload,state='miss'){
- return new Response(JSON.stringify(collectionCardsPayload(payload)),{headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state}});
+export async function collectionCardsResponse(payload,state='miss',request){
+ let body=JSON.stringify(collectionCardsPayload(payload));
+ const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state,'Vary':'Accept-Encoding'};
+ // First-page variant/configuration data is repetitive. Compress after all
+ // validation; this changes transport only, never cache freshness or ranking.
+ const encodings=(request?.headers.get('accept-encoding')||'').split(',').map(value=>value.trim().split(';').map(part=>part.trim()));
+ if(Buffer.byteLength(body)>=1024&&encodings.some(([name,...parameters])=>name.toLowerCase()==='gzip'&&!parameters.some(value=>/^q\s*=\s*0(?:\.0*)?$/i.test(value)))){
+  body=await compress(body);headers['Content-Encoding']='gzip';
+ }
+ return new Response(body,{headers});
 }

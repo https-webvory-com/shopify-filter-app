@@ -1596,7 +1596,7 @@ export const loader = async ({ request, context }) => {
 
     if(cardsOnly){
       const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint);
-      return collectionCardsResponse(responsePayload,stored?'stored':'miss');
+      return collectionCardsResponse(responsePayload,stored?'stored':'miss',request);
     }
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {

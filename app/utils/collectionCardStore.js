@@ -67,7 +67,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    const after=await readState(entry),afterPrepared=current(after,entry.external);
    controller.signal.throwIfAborted();
    if(!afterPrepared||stateSignature(after,entry.external)!==entry.state||sequenceSignature(afterPrepared)!==entry.sequence)return null;
-   return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit');
+   return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request);
   }catch{return null;}
   };
   try{return await Promise.race([work(),new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(null);},readBudgetMs);})]);}

@@ -1,11 +1,15 @@
 {% if template.name == 'collection' and collection %}
   <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+  <link rel="preload" as="style" href="{{ 'collectionFilterPro.css' | asset_url }}">
+  <link rel="preload" as="style" href="{{ 'quickView.css' | asset_url }}">
   <meta name="cfp-collection-context"
     data-shop="{{ shop.permanent_domain | escape }}"
     data-handle="{{ collection.handle | escape }}"
     data-country="{{ localization.country.iso_code | escape }}"
     data-locale="{{ request.locale.iso_code | escape }}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
+  <script>{% render 'collection_loading_start' %}</script>
 {% endif %}
 
 {% schema %}

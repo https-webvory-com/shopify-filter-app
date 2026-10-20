@@ -384,8 +384,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   async function takeEarlyCollectionResponse(requestUrl, signal) {
     const early = window._cfpRankedEarlyFetch;
-    if (!early) return null;
-    delete window._cfpRankedEarlyFetch;
+    if (!early || early.claimed) return null;
+    // Keep the identity after consumption: a deferred head/body bootstrap can
+    // execute later and must not launch the same first-page request again.
+    early.claimed = true;
     const canonical = value => { const url = new URL(value); url.searchParams.sort(); return url.toString(); };
     if (canonical(early.url) !== canonical(requestUrl)) { early.controller.abort(); return null; }
     let onAbort;

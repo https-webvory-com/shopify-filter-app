@@ -6,6 +6,10 @@ import vm from 'node:vm';
 const head=await fs.readFile('extensions/theme-extension/blocks/collection_loading.liquid','utf8');
 const bootstrap=await fs.readFile('extensions/theme-extension/assets/collectionLoading.js','utf8');
 const body=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
+test('head runs the bootstrap inline before deferred asset loading, using the same guarded source',async()=>{
+ assert.ok(head.includes("<script>{% render 'collection_loading_start' %}</script>"));
+ assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),bootstrap);
+});
 function fixture(search='',tags='',delayed=false){
  let metaPresent=!delayed,callback;const listeners={};
  const calls=[],window={location:new URL('https://store.example/collections/formal'+search),cfpCustomerTags:tags};

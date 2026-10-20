@@ -23,6 +23,15 @@ test('filtered and later-page visits do not start speculative ranked requests',(
   for(const search of ['?page=2','?minPrice=50','?maxPrice=200','?vendors=Vendor','?option_Color=Blue','?q=dress','?options[Color][]=Blue','?tags[]=sale'])assert.equal(fixture(search).calls.length,0,search);
 });
 
+test('a late bootstrap cannot restart a consumed first-page request',async()=>{
+ const f=fixture(),url=f.calls[0].url;
+ await f.take(url,new AbortController().signal);
+ vm.runInNewContext(inline,{window:f.window,URL,URLSearchParams,AbortController,setTimeout,clearTimeout,document:{documentElement:{lang:'en'}},fetch:()=>{throw Error('Duplicate request');}});
+ assert.equal(f.calls.length,1);
+ assert.equal(f.window._cfpRankedEarlyFetch.claimed,true);
+ assert.equal(await f.take(url,new AbortController().signal),null);
+});
+
 test('anonymous cards include configuration without a second bootstrap while targeted requests retain the complete profile',()=>{
  const anonymous=fixture();assert.equal(anonymous.calls.length,1);assert.equal(anonymous.configurationCalls.length,0);
  assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-cards-v1');
