@@ -73,6 +73,8 @@ try{
     await send('Page.navigate',{url:origin+'/collections/fixture'});
     await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
     assert.equal(await evaluate('!!window._cfpInitStarted'),false);
+    await evaluate("(()=>{const overlay=document.createElement('div');overlay.id='cfp-skeleton-overlay';overlay.style.display='block';document.body.append(overlay);})()");
+    await wait("getComputedStyle(document.getElementById('cfp-skeleton-overlay')).display==='none'");
     const early=await evaluate("[...document.querySelectorAll('.cfp-initial-product a')].map(a=>({href:a.getAttribute('href'),title:a.textContent,image:a.querySelector('img').getAttribute('src')}))");
     assert.ok(early.every(card=>card.title&&card.image&&card.href.includes('/products/')));
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");

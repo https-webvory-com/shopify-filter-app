@@ -47,11 +47,12 @@
   function mountFirstRow(payload,context,controller){
     if(payload?.cfpCards?.version!==1||payload.debug?.collectionRankingStatus!=='ready'||!payload.products?.length)return;
     let grid,scheduled=false,timer;
+    const dismissSkeleton=()=>{const overlay=document.getElementById('cfp-skeleton-overlay');if(overlay){overlay.classList.add('cfp-skeleton-done');overlay.style.setProperty('display','none','important');}};
     const stop=()=>{observer.disconnect();clearTimeout(timer);controller.signal.removeEventListener('abort',stop);grid?.remove();};
     const inspect=()=>{scheduled=false;
       if(controller.signal.aborted||document.querySelector('#cfp-products-container .cfp-product-card')){stop();return;}
       const app=document.querySelector('.cfp-v1-app-container')||document.getElementById('cfp-first-row-anchor');if(!app)return;
-      if(grid){if(grid.parentElement!==app)app.prepend(grid);return;}
+      if(grid){if(grid.parentElement!==app)app.prepend(grid);dismissSkeleton();return;}
       grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';
       const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;padding:16px;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:3/4;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}';grid.append(style);
       for(const [index,product] of payload.products.entries()){
@@ -62,7 +63,7 @@
         title.textContent=product.title;link.append(img,title);card.append(link);grid.append(card);
       }
       app.prepend(grid);
-      document.getElementById('cfp-skeleton-overlay')?.classList.add('cfp-skeleton-done');
+      dismissSkeleton();
     };
     const observer=new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(inspect);}});
     observer.observe(document.documentElement,{childList:true,subtree:true});controller.signal.addEventListener('abort',stop,{once:true});timer=setTimeout(()=>{if(!grid)stop();},120000);inspect();
