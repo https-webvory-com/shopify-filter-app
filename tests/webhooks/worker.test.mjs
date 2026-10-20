@@ -5,7 +5,7 @@ import vm from "node:vm";
 import {productRankingFingerprint} from '../../app/utils/shopCacheInvalidation.js';
 
 async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false) {
-  const calls = [];
+  const calls = [],invalidations=[];
   const admin = {};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
   const source = (await fs.readFile("app/workers/webhookWorker.server.js", "utf8"))
@@ -14,7 +14,7 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
     productRankingFingerprint,
-    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged?2:1,collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
+    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged?2:1,tags:synced&&!unchanged?['NewTag']:['OldTag'],collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
     prisma: {product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
@@ -37,13 +37,13 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
         if (syncError) throw syncError;
         synced=true;
       } };
-      if (path.includes("shopCache")) return { invalidateShop: async (shop) => {calls.push(["invalidate", shop]);if(invalidationFailsOnce){invalidationFailsOnce=false;throw Error('Invalidation unavailable');}} };
+      if (path.includes("shopCache")) return { invalidateShop: async (shop,options) => {invalidations.push(options);calls.push(["invalidate", shop]);if(invalidationFailsOnce){invalidationFailsOnce=false;throw Error('Invalidation unavailable');}} };
       throw new Error(`Unexpected module: ${path}`);
     },
   });
   vm.runInContext(source, context);
   const processor=vm.runInContext("processWebhookJob", context);
-  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls };
+  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls,invalidations };
 }
 
 test("collection updates synchronize eligibility and refresh Shopify ordering", async () => {
@@ -103,6 +103,7 @@ test('a retry after successful indexing and failed invalidation still refreshes 
   assert.ok(job.data.rankingBefore.fingerprint);
   await worker.process(job);
   assert.equal(worker.calls.filter(([type])=>type==='invalidate').length,2);
+  assert.deepEqual(Array.from(worker.invalidations[1].externalProof.tags),['OldTag','NewTag']);
 });
 
 test('product deletion retries retain affected collections after DB memberships disappear',async()=>{
@@ -113,4 +114,5 @@ test('product deletion retries retain affected collections after DB memberships 
   await worker.process(job);
   assert.equal(worker.calls.filter(([type])=>type==='invalidate').length,2);
   assert.deepEqual(Array.from(job.data.deletedCollectionIds),['gid://shopify/Collection/1']);
+  assert.deepEqual(Array.from(worker.invalidations[1].externalProof.tags),['OldTag']);
 });

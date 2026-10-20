@@ -295,6 +295,15 @@ try{
     assert.equal(after.requests.length,1);assert.equal(after.requests[0].status,200);
     assert.deepEqual((await cards()).slice(0,2),['7','30']);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
+  await test('unrelated outside-product updates preserve saved pinned cards after two hours with the worker paused',async()=>{
+    await control({reset:true,pin:'7',hold:true,precompute:true,cardSnapshots:true,clockOffset:0,orderVersion:0,early:true,earlyBeforeStyles:true,assetDelay:0,apiDelay:0,cssDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    const first=await cards(),before=await getState();await control({clockOffset:7200000,unrelatedExternalUpdate:true});
+    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    const after=await getState();assert.equal(after.state.builds,before.state.builds);
+    assert.equal(after.requests.slice(before.requests.length).some(r=>r.status===202),false);assert.deepEqual(await cards(),first);
+    await control({clockOffset:0,early:false,earlyBeforeStyles:false,cardSnapshots:false});
+  });
   // Run the intentionally slow same-origin image/price stress case last so
   // its outstanding HTTP/1 resource queue cannot skew later timing fixtures.
   await test('cold pending ranking shows skeletons and loading feedback, then independent card/image/price rendering',async()=>{

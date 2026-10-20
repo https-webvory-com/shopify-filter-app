@@ -8,6 +8,8 @@ import {createHash} from 'node:crypto';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
 import {createCollectionVisitorRefresh} from '../../app/utils/collectionVisitorRefresh.js';
 import {createCollectionWarmupScheduler} from '../../app/utils/collectionWarmupScheduler.js';
+import {createCollectionDependencies} from '../../app/utils/collectionDependencies.js';
+import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
 
 async function fixture() {
   const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[];let scans=0;
@@ -27,6 +29,8 @@ async function fixture() {
     if(name==='../utils/collectionPreparation.js')return lifecycle;
     if(name==='../utils/collectionVisitorRefresh.js')return {createCollectionVisitorRefresh};
     if(name==='../utils/collectionWarmupScheduler.js')return {createCollectionWarmupScheduler};
+    if(name==='../utils/collectionDependencies.js')return {createCollectionDependencies};
+    if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};

@@ -131,6 +131,63 @@ Search and unranked/manual collection queries retain their existing behavior.
 
 ## Reusing saved work after invalidation
 
+### Exact external dependencies and operational checks
+
+New supported public rankings record a bounded union of exact Include-tag and
+configured explicit-pin dependencies. Configured pins remain dependencies when
+currently unavailable, so an eligibility change can reintroduce them correctly.
+Product webhooks persist original tags across retries and invalidate the union
+of before/after tags and the product ID. Incremental sales updates write only
+the changed products and derive dependency proofs from visible index documents.
+Unsupported Include predicates, malformed/missing proofs and bulk writes retain
+broad invalidation. Legacy rankings continue using their original global proof
+until rebuilt; legacy first-page copies take a canonical validation pass before
+being saved under the new card policy.
+
+Dependency versions use opaque unique epochs. Missing versions fail validation;
+reinitializing a lost key cannot recreate its previous identity. Counters are
+created only for declared dependencies, and ordinary product events update only
+existing dependency keys. Native membership, configuration, schedule, order,
+current-document and ten-minute changed-product guards remain in force.
+
+Newly validated cards expire according to their own creation time, independently
+of an unchanged ranking's original age. Each later card read still checks the
+backing ranking and current documents. Large outside Include sets now abandon
+the optional browse path as soon as its proof limit is exceeded, avoiding a full
+browse followed by a repeated canonical scan. Worker concurrency stays at one.
+
+`collectionPreparationTelemetry:SHOP` holds bounded event/rejection counters and
+300 recent samples with queue-wait, build and card-read durations. Optional metric
+failures cannot block products. Audit known contexts using:
+
+```sh
+node scripts/check-collection-loading-readiness.mjs --shop STORE.myshopify.com --metadata-only
+node scripts/check-collection-loading-readiness.mjs --shop STORE.myshopify.com --handle COLLECTION --require-ready
+```
+
+The first command checks metadata coverage without engine reads. The second
+validates actual first-preview documents and exits nonzero for missing contexts.
+Both are read-only and report their validation scope. Neither establishes a live
+two-second browser SLA or verifies unpublished/undiscovered market combinations.
+
+Backlog retirement defaults to a read-only audit:
+
+```sh
+node scripts/retire-superseded-collection-jobs.mjs --shop STORE.myshopify.com
+node scripts/retire-superseded-collection-jobs.mjs --shop STORE.myshopify.com --apply
+```
+
+Apply schedules a replacement global sweep before removing legacy warmups and
+removes preparation jobs only for obsolete configuration revisions. Active,
+current, catalog and other-shop jobs remain. BullMQ enforces locked-job safety.
+
+`scripts/enable-collection-http2.py` is an optional, dry-run-by-default server
+helper for the existing app virtual host. It accepts only that host under
+`/etc/nginx`, checks nginx HTTP/2 support, backs up the original file outside the
+enabled-sites directory, tests configuration and restores it if reload fails.
+`--self-test` runs without touching server configuration. Browser protocol and
+fresh-load measurements must confirm the effect after application.
+
 Configuration cache invalidation retains bounded prepared sequences and their
 retention accounting. Current configuration is still read under its new revision;
 an old revision is never blindly served. A compatibility pointer matches the

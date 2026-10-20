@@ -18,6 +18,17 @@ function fixture({failed=false,partial=false}={}){
  vm.runInNewContext(compiled,context);
  return {calls,run:()=>context.module.exports.pushScoresToMeili('fixture.myshopify.com',['gid://shopify/Product/1']),release:()=>release?.()};
 }
+
+test('incremental score writes select only changed products and send exact external dependency proof',async()=>{
+ const writes=[],invalidations=[],queries=[],shop='fixture.myshopify.com';
+ const products=[{id:'gid://shopify/Product/1',tags:['TopProm'],bestSellingScore:3,trendingScore:4}];
+ const ctx={module:{exports:{}},exports:{},console:{log(){},error(){}},fixtureInvalidate:async(_shop,options)=>invalidations.push(options),require:name=>({__esModule:true,default:name==='../db.server.js'?{
+  product:{findMany:async options=>{queries.push(options);return products;}},productCollection:{findMany:async()=>[]},
+ }:name==='./meiliClient.server.js'?{index:()=>({updateDocuments:async docs=>{writes.push(docs);return {taskUid:1};},getDocuments:async()=>({results:[{id:'1',shop,tags:['TopProm']}]})}),tasks:{waitForTask:async()=>({status:'succeeded'})}}:{}})};
+ vm.runInNewContext(compiled,ctx);await ctx.module.exports.pushScoresToMeili(shop,['gid://shopify/Product/1']);
+ assert.deepEqual(Array.from(queries[0].where.id.in),['gid://shopify/Product/1']);assert.equal(writes[0].length,1);
+ assert.deepEqual(Array.from(invalidations[0].externalProof.tags),['TopProm']);assert.deepEqual(Array.from(invalidations[0].externalProof.ids),['1']);
+});
 test('sales score changes invalidate ranking versions only after every index batch becomes visible',async()=>{
  const f=fixture(),work=f.run();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(f.calls.some(c=>c[0]==='invalidate'),false);f.release();await work;

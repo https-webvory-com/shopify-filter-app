@@ -81,6 +81,14 @@ test('large outside sets and counts changing across browse pages never publish i
  }
 });
 
+test('a provably oversized outside Include stops after one page instead of scanning the whole candidate set twice',async()=>{
+ const f=fixture(22000);f.spec.orderedIds=[];
+ const options={...f.spec.query,attributesToRetrieve:['id'],offset:0,limit:25000};
+ const result=await createCollectionCandidateIndex(f.index,f.spec).search('',options);
+ assert.equal(result.hits.length,22002);assert.equal(f.calls.filter(c=>c.type==='browse').length,1);
+ assert.equal(f.calls.filter(c=>c.type==='search').length,1);
+});
+
 test('failed outside-order proofs fall back, and cancelled visitors stop without launching fallback searches',async()=>{
  const f=fixture(30),search=f.index.search;
  f.index.search=async(q,options)=>options.filter.some(f=>typeof f==='string'&&f.startsWith('id IN '))?{hits:[{id:'unrelated'}]}:search(q,options);

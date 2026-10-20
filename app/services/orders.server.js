@@ -322,7 +322,7 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
   try {
     // Fetch all products with their scores
     const products = await prisma.product.findMany({
-      where: { shop },
+      where: { shop,...(changedProductIds?{id:{in:[...new Set(changedProductIds)]}}:{}) },
       select: {
         id: true,
         bestSellingScore: true,
@@ -359,7 +359,23 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
     if(succeeded||!scoreTasks.length){
       const {invalidateShop}=await import('./shopCache.server.js');
       const memberships=await prisma.productCollection.findMany({where:{product:{shop},...(changedProductIds?{productId:{in:[...new Set(changedProductIds)]}}:{})},select:{collectionId:true},distinct:['collectionId']});
-      await invalidateShop(shop,{kind:'products',collectionIds:memberships.map(row=>row.collectionId)});
+      // Use visible index tags, which may differ from a concurrent DB sync.
+      // An unavailable/incomplete proof retains broad invalidation.
+      let externalProof;const scoreIndex=meiliClient.index('products');
+      if(changedProductIds&&meiliDocs.length<=2000&&typeof scoreIndex.getDocuments==='function')try{
+        const tags=new Set(),ids=[];
+        for(let offset=0;offset<meiliDocs.length;offset+=250){
+          const wanted=new Set(meiliDocs.slice(offset,offset+250).map(p=>p.id));
+          const response=await scoreIndex.getDocuments({filter:'id IN '+JSON.stringify([...wanted]),fields:['id','shop','tags'],limit:wanted.size,offset:0});
+          if(!Array.isArray(response.results)||response.results.length!==wanted.size)throw Error('Incomplete sales dependency proof');
+          for(const p of response.results){
+            if(p.shop!==shop||!wanted.delete(String(p.id))||!Array.isArray(p.tags)||p.tags.some(t=>typeof t!=='string'))throw Error('Invalid sales dependency proof');
+            ids.push(String(p.id));for(const tag of p.tags)tags.add(tag);
+          }
+        }
+        externalProof={tags:[...tags],ids};
+      }catch(error){console.error('OrdersSync: Using broad dependency invalidation:',error.name);}
+      await invalidateShop(shop,{kind:'products',collectionIds:memberships.map(row=>row.collectionId),externalProof});
     }
     if(failed)throw Error('Some sales-score indexing tasks failed');
     console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);

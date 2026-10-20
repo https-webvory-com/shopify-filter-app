@@ -16,6 +16,8 @@ import {createCollectionPreparation,preparationRevisionKey,preparationKey} from 
 import {createShopCacheInvalidation,productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../../app/utils/processCollectionRankingJob.js';
 import {createCollectionWarmupScheduler} from '../../app/utils/collectionWarmupScheduler.js';
+import {createCollectionDependencies} from '../../app/utils/collectionDependencies.js';
+import {decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 import {createCollectionResponseCache,collectionPageFingerprint} from '../../app/utils/collectionResponse.js';
 import * as collectionBootstrap from '../../app/utils/collectionBootstrap.js';
 import * as collectionResponse from '../../app/utils/collectionResponse.js';
@@ -54,7 +56,8 @@ export async function createLoadingServer({redisLayer}={}) {
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
   const merch=serviceCtx.module.exports;
-  const redis=redisLayer?.redis||{get:async key=>values.get(key),ttl:async()=>600,set:async(key,value)=>values.set(key,value),setex:async(key,_ttl,value)=>values.set(key,value),del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;},incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},scan:async()=>['0',[...values.keys()]]};
+  const redis=redisLayer?.redis||{get:async key=>values.get(key),ttl:async()=>600,set:async(key,value,mode)=>{if(mode==='NX'&&values.has(key)||mode==='XX'&&!values.has(key))return;values.set(key,value);},setex:async(key,_ttl,value)=>values.set(key,value),del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;},incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},scan:async()=>['0',[...values.keys()]]};
+  const dependencies=createCollectionDependencies(redis);
   let preparation;
   const timers=new Set();
   const queue=redisLayer?.queue||{getJob:async id=>jobs.get(id),add:async(name,data,{jobId,priority})=>{
@@ -64,7 +67,7 @@ export async function createLoadingServer({redisLayer}={}) {
     if(!state.hold){const timer=setTimeout(async()=>{timers.delete(timer);job.state='active';try{await dispatch(job);job.state='completed';state.completed++;}catch{job.state='failed';job.finishedOn=Date.now();}},name==='COLLECTION_RANKING_PREPARE'?state.delay:50);timers.add(timer);}
     return job;
   }};
-  preparation=createCollectionPreparation({redis,queue,now:()=>Date.now()+state.clockOffset,
+  preparation=createCollectionPreparation({redis,queue,dependencies,now:()=>Date.now()+state.clockOffset,
     revalidateSaved:true,
     validateReuse:(spec,value)=>validateCollectionReuse(index,spec,value),
     prepareDirect:async spec=>{
@@ -83,7 +86,7 @@ export async function createLoadingServer({redisLayer}={}) {
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
   const cardStore=createCollectionCardStore({redis,
-    readState:async({preparedKey})=>({configuration:await redis.get(preparationRevisionKey(shop))||'0',products:await redis.get(productRevisionKey(shop,'1'))||'0',globalProducts:await redis.get(productRevisionKey(shop,'all'))||'0',hardAll:await redis.get('collectionRankingDataRevision:'+shop+':all')||'0',hardCollection:await redis.get('collectionRankingDataRevision:'+shop+':1')||'0',orderRevision:'native-order-v'+(state.orderVersion||0),preparedRaw:await redis.get(preparedKey)}),
+    readState:async({preparedKey})=>{const raw=await redis.get(preparedKey);let saved;try{saved=decodePreparation(raw);}catch{}return {configuration:await redis.get(preparationRevisionKey(shop))||'0',products:await redis.get(productRevisionKey(shop,'1'))||'0',globalProducts:await redis.get(productRevisionKey(shop,'all'))||'0',externalProducts:saved?.externalDependencies?await dependencies.revision(shop,saved.externalDependencies):undefined,hardAll:await redis.get('collectionRankingDataRevision:'+shop+':all')||'0',hardCollection:await redis.get('collectionRankingDataRevision:'+shop+':1')||'0',orderRevision:'native-order-v'+(state.orderVersion||0),preparedRaw:raw};},
     validateCards:async(entry,prepared)=>{const result=await ranked.readRankedCollectionPage(index,{ids:prepared.ids,page:1,limit:25,shop,attributes:entry.attributes});return collectionPageFingerprint(result.hits)===entry.validationFingerprint;},
     createSession:async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);},
   });
@@ -122,16 +125,18 @@ export async function createLoadingServer({redisLayer}={}) {
     .map(match=>`<script async fetchpriority="${match[0].includes('fetchpriority="high"')?'high':'auto'}" src="/assets/${match[1]}"></script>`).join('');
   const start=liquid.indexOf('  (function() {',liquid.indexOf('Fire API request'));
   const inline=liquid.slice(start,liquid.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}',shop).replace('{{ cfp_collection_handle }}','fixture').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en').replaceAll("'https://aisearchfilter.webvory.com", "location.origin + '");
+  const sockets=new Set();
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
+        if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset)state.streamDelay=0;
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
         if(updates.invalidate){state.revision++;await invalidate(shop);}
+        if(updates.unrelatedExternalUpdate)await invalidate(shop,{kind:'products',collectionIds:[],externalProof:{tags:['Unrelated'],ids:['999']}});
         if(updates.corruptPrepared){await preparation.discard(lastSpec);await redis.set((await import('../../app/utils/collectionPreparation.js')).preparationKey(lastSpec),'{corrupt');}
         if(updates.expireTokens)sessions.clear();
         if(updates.archive)byId.get(updates.archive).status='ARCHIVED';
@@ -185,6 +190,9 @@ export async function createLoadingServer({redisLayer}={}) {
       res.writeHead(404).end();
     }catch(error){if(res.headersSent){res.destroy();return;}res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });
+  // Timing cases navigate away before reset. Close only this fixture's old
+  // sockets so intentionally delayed images cannot occupy the next case's pool.
+  server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
   return {server,state,trace,facetRequests,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
     dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};

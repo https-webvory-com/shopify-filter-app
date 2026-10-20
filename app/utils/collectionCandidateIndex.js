@@ -22,11 +22,15 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
    if(!Array.isArray(page.results)||!Number.isSafeInteger(page.total)||page.total<0||
       (total!==undefined&&page.total!==total)||page.total>maxDocuments)throw Error('Unstable collection candidate browse');
    total=page.total;bytes+=Buffer.byteLength(JSON.stringify(page.results));
+   if(total-native.size>1000)throw Error('Collection candidate browse needs canonical search');
    if(bytes>maxBytes)throw Error('Collection candidate projection exceeds budget');
    for(const product of page.results){
     const id=clean(product.id);
     if(!id||id==='undefined'||seen.has(id))throw Error('Invalid collection candidate browse');
     seen.add(id);documents.push(product);if(!native.has(id))outside.push(id);
+    // This path cannot prove a larger outside order. Stop immediately rather
+    // than browsing every remaining page and then repeating a canonical scan.
+    if(outside.length>1000)throw Error('Collection candidate browse needs canonical search');
    }
    if(page.results.length<1000)break;
   }

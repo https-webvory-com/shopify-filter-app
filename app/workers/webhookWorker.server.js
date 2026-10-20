@@ -172,6 +172,7 @@ async function handleProductUpdate(shop, payload, job) {
   if (!job.data.rankingBefore) {
     await job.updateData({...job.data, rankingBefore: {
       fingerprint: productRankingFingerprint(before),
+      tags: before==null?[]:Array.isArray(before.tags)&&before.tags.every(t=>typeof t==='string')?before.tags:null,
       collectionIds: [...new Set([...beforeLinks.map(link=>link.collectionId),...(before?.collections||[])])],
     }});
   }
@@ -179,7 +180,9 @@ async function handleProductUpdate(shop, payload, job) {
   const after=await read();
   if(job.data.rankingBefore.fingerprint!==productRankingFingerprint(after)) {
     const collectionIds=[...new Set([...job.data.rankingBefore.collectionIds,...beforeLinks.map(link=>link.collectionId),...(after?.collections||[])])];
-    await invalidateShop(shop,{kind:'products',collectionIds});
+    const beforeTags=job.data.rankingBefore.tags,afterTags=after==null?[]:after.tags;
+    const externalProof=Array.isArray(beforeTags)&&Array.isArray(afterTags)?{tags:[...new Set([...beforeTags,...afterTags])],ids:[String(productId).split('/').pop()]}:undefined;
+    await invalidateShop(shop,{kind:'products',collectionIds,externalProof});
   }
   console.log(`CFP Worker: Product update synced for ${productId}`);
 }
@@ -189,13 +192,18 @@ async function handleProductDelete(shop, payload, job) {
   const productId = `gid://shopify/Product/${payload.id}`;
   const links=await prisma.productCollection.findMany({where:{productId,product:{shop}},select:{collectionId:true}});
   if (!job.data.deletedCollectionIds) await job.updateData({...job.data,deletedCollectionIds:links.map(link=>link.collectionId)});
+  if(job.data.deletedProductTags===undefined){
+    let tags=null;try{const p=await meiliClient.index('products').getDocument(String(payload.id));if(p.shop===shop&&Array.isArray(p.tags))tags=p.tags;}catch{}
+    await job.updateData({...job.data,deletedProductTags:tags});
+  }
   await prisma.product.deleteMany({ where: { id: productId, shop } });
   const numericId = payload.id.toString();
   const task=await meiliClient.index("products").deleteDocument(numericId);
   const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});
   if(completed.status!=='succeeded')throw Error('Product deletion indexing failed');
   const { invalidateShop } = await import("../services/shopCache.server.js");
-  await invalidateShop(shop,{kind:'products',collectionIds:job.data.deletedCollectionIds});
+  await invalidateShop(shop,{kind:'products',collectionIds:job.data.deletedCollectionIds,
+    externalProof:Array.isArray(job.data.deletedProductTags)?{tags:job.data.deletedProductTags,ids:[numericId]}:undefined});
   console.log(`CFP Worker: Product ${productId} deleted from DB & Meilisearch.`);
 }
 

@@ -19,6 +19,24 @@ function fixture(options={}){
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
 
+test('a maintained old ranking can publish newly validated durable cards with an independent card lifetime',async()=>{
+ const saved=[],f=fixture({saveDurable:async row=>saved.push(row)});
+ f.advance(2*86400000);const lease=await f.begin();assert.ok(lease);
+ assert.equal(await lease.finish(f.payload,'fp'),true);assert.equal(saved.length,1);
+ assert.equal(saved[0].expiresAt-saved[0].validatedAt,86400000);
+ assert.ok(await f.store.get(f.request));f.advance(86400000);assert.equal(await f.store.get(f.request),null);
+});
+
+test('precise outside dependencies survive unrelated global updates and reject lost or changed proofs',async()=>{
+ const f=fixture();f.spec.pinnedIds=['2'];
+ f.prepared.externalDependencies={version:1,tokens:['p'+'a'.repeat(64)]};
+ f.prepared.reusableDataRevision='0:0:d1.saved';f.state.externalProducts='d1.saved';f.setSource(encodePreparation(f.prepared));
+ await(await f.begin()).finish(f.payload,'fp');f.advance(7200000);f.state.globalProducts='99';
+ assert.ok(await f.store.get(f.request));
+ f.state.externalProducts=null;assert.equal(await f.store.get(f.request),null);
+ f.state.externalProducts='d1.changed';assert.equal(await f.store.get(f.request),null);
+});
+
 test('prepared cards serve before any visitor, omit facets and create URL-specific immutable sessions only on visits',async()=>{
  const f=fixture(),lease=await f.begin();assert.ok(lease);assert.equal(await lease.finish(f.payload,'fingerprint'),true);assert.equal(f.sessions.length,0);
  const response=await f.store.get(f.request),body=await response.json();
@@ -112,6 +130,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
   '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]}}},'./collectionLoadingSnapshots.server.js':{loadCollectionLoadingSnapshot:async()=>null,saveCollectionLoadingSnapshot:async()=>false},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
   '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
+  '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));

@@ -13,6 +13,9 @@ import {validateCollectionReuse} from '../utils/validateCollectionReuse.js';
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot} from './collectionLoadingSnapshots.server.js';
 import {createCollectionVisitorRefresh} from '../utils/collectionVisitorRefresh.js';
 import {createCollectionWarmupScheduler} from '../utils/collectionWarmupScheduler.js';
+import {createCollectionDependencies} from '../utils/collectionDependencies.js';
+import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
+const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -32,11 +35,11 @@ function seededWarmups(shop) {
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
   await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
-  prepareDirect:prepareCollectionFromFacts,
+  prepareDirect:prepareCollectionFromFacts,dependencies:createCollectionDependencies(redis),
   loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
   revalidateSaved:true,
-  observe:event=>console.info('CFP: collection preparation',JSON.stringify(event)),
+  observe:event=>{console.info('CFP: collection preparation',JSON.stringify({...event,at:Date.now()}));recordPreparationEvent(event).catch(()=>{});},
 });
 const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);
 

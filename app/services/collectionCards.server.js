@@ -7,10 +7,13 @@ import {preparationKey} from '../utils/collectionPreparation.js';
 import {validateCollectionCardDocuments} from '../utils/collectionCardValidation.js';
 import {collectionRankingFingerprint,saveCollectionRankingSession} from './collectionRankingSession.server.js';
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot,getCollectionLoadingGeneration} from './collectionLoadingSnapshots.server.js';
+import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
+const recordCardEvent=createCollectionPreparationTelemetry(redis);
 
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
 
 const store=createCollectionCardStore({redis,readState:createCardStateReader(redis),loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
+ observe:event=>recordCardEvent(event).catch(()=>{}),
  validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(meili.index('products'),entry,prepared,{...options,batchOwner:meili}),
  createSession:(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata),
 });

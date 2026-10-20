@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {productRevisionKey,rankingDataRevisionKey} from './shopCacheInvalidation.js';
 import {encodePreparation,decodePreparation} from './collectionPreparationPayload.js';
+import {collectionHasExternalCandidates} from './collectionDependencies.js';
 
 // Keep the last usable product-data version through idle periods. Explicit
 // configuration revisions still invalidate it immediately.
@@ -120,19 +121,24 @@ for _, key in ipairs(redis.call('ZRANGE',KEYS[1],0,-tonumber(ARGV[4])-1)) do
 end
 return 1`;
 
-export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, loadDurable,saveDurable,validateReuse=async()=>true, revalidateSaved=false, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
+export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, loadDurable,saveDurable,dependencies,validateReuse=async()=>true, revalidateSaved=false, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
   const report = event => {try {observe(event);} catch { /* Diagnostics never affect availability. */ }};
   const valid = value => value && Array.isArray(value.ids) && value.ids.every(id=>typeof id==='string'&&id.length>0) &&
     new Set(value.ids).size===value.ids.length && value.metadata && typeof value.metadata==='object' && !Array.isArray(value.metadata);
   const revision = async shop => String(await redis.get(preparationRevisionKey(shop)) ?? '0');
   const productRevision = async (shop,collectionId) => String(await redis.get(productRevisionKey(shop,collectionId)) ?? '0');
-  const externalCandidates=spec=>Boolean(spec.pinnedIds?.length||[...(spec.rule?.conditions||[]),...(spec.rule?.ruleGroups||[]).flatMap(g=>g.conditions||[])].some(c=>c.action==='Include'));
+  const externalCandidates=collectionHasExternalCandidates;
   const reuseRevision = async spec => {
     const keys=[rankingDataRevisionKey(spec.shop),rankingDataRevisionKey(spec.shop,spec.collectionId)];
     // Includes and explicit pins can draw products from outside this collection.
     // A local membership counter alone cannot establish their freshness.
-    if(externalCandidates(spec))keys.push(productRevisionKey(spec.shop,'all'));
-    return (await Promise.all(keys.map(key=>redis.get(key)))).map(value=>String(value??'0')).join(':');
+    const values=(await Promise.all(keys.map(key=>redis.get(key)))).map(value=>String(value??'0'));
+    if(externalCandidates(spec)){
+      const descriptor=dependencies?.describe(spec);
+      const precise=descriptor&&await dependencies.revision(spec.shop,descriptor,{initialize:true});
+      values.push(precise||String(await redis.get(productRevisionKey(spec.shop,'all'))??'0'));
+    }
+    return values.join(':');
   };
   const dataEpochMatches=async(spec,expected)=>{
     expected??='0:0';if(typeof expected!=='string')return false;
@@ -303,17 +309,22 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         return pending(key,spec,warmup);
       }
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
-      if(revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true&&value.rankingEventsVersion!==1)
+      if(revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true&&value.rankingEventsVersion!==1){
+        report({event:'unavailable',reason:'legacy-proof',shop:spec.shop,collectionId:spec.collectionId,key});
         return pending(key,spec,warmup);
-      if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision))
+      }
+      if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision)){
+        report({event:'unavailable',reason:'data-epoch',shop:spec.shop,collectionId:spec.collectionId,key});
         return pending(key,spec,warmup);
-      const productsChanged=value.productRevision!==spec.productRevision||
-        spec.retainForIdle===true&&externalCandidates(spec)&&value.reusableDataRevision!==await reuseRevision(spec);
+      }
+      const nativeChanged=value.productRevision!==spec.productRevision;
+      const externalChanged=spec.retainForIdle===true&&externalCandidates(spec)&&value.reusableDataRevision!==await reuseRevision(spec);
+      const productsChanged=nativeChanged||externalChanged;
       // Long idle retention must not extend the old ten-minute window for
       // known stock/product changes when a refresh worker is unavailable.
       if (spec.retainForIdle === true && productsChanged &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
-        report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
+        report({event:'unavailable',reason:'changed-products',nativeChanged,externalChanged,shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
         return pending(key,spec,warmup);
       }
       // Only changed/legacy inputs need a rebuild. Renewing Redis storage must
@@ -381,7 +392,8 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     if (await revision(spec.shop) !== spec.revision || !await dataEpochCurrent()) return { superseded: true };
     // Only ordinary public collection contexts get long retention. Do not
     // multiply memory usage for arbitrary filters or customer-specific scans.
-    const payload = encodePreparation({...value,productRevision:startedRevision,preparedAt:sourcePreparedAt??now(),orderUpdatedAt:spec.orderUpdatedAt,reusableDataRevision:dataRevision});
+    const descriptor=dataRevision?.split(':')[2]?.startsWith('d1.')?dependencies?.describe(spec):null;
+    const payload = encodePreparation({...value,...(descriptor?{externalDependencies:descriptor}:{}),productRevision:startedRevision,preparedAt:sourcePreparedAt??now(),orderUpdatedAt:spec.orderUpdatedAt,reusableDataRevision:dataRevision});
     if (spec.retainForIdle === true && typeof redis.eval === 'function') {
       // Replace this context's old order version only after the new one is complete.
       // This keeps obsolete orders from evicting other collections from the budget.
@@ -403,7 +415,8 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       await saveDurable({shop:spec.shop,kind:'ranking',key,collectionId:String(spec.collectionId).split('/').pop(),payload,
         validatedAt:sourcePreparedAt??now(),expiresAt:now()+preparationLifetime*1000});
     }catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
-    return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision };
+    return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision ||
+      spec.retainForIdle===true&&externalCandidates(spec)&&await reuseRevision(spec)!==dataRevision };
   }
   // A current first-page sequence referencing a deleted/inactive product must
   // rebuild rather than repeatedly reissue the same broken browsing token.

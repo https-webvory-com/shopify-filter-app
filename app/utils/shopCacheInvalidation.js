@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {createCollectionDependencies} from './collectionDependencies.js';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
@@ -21,7 +22,7 @@ export function productRankingFingerprint(product) {
   return createHash('sha256').update(JSON.stringify(stable(product))).digest('hex');
 }
 export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
-  return async function invalidate(shop, {kind = 'configuration', collectionIds = []} = {}) {
+  return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof} = {}) {
     const products = kind === 'products';
     const scopes = [...new Set(collectionIds.map(id=>String(id).split('/').pop()))].filter(id=>id!=='all');
     // Bulk/index or membership changes can alter inputs absent from a rule's
@@ -29,6 +30,9 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
     if(kind==='catalog')for(const id of scopes.length?scopes:['all'])await redis.incr(rankingDataRevisionKey(shop,id));
     if (products) {for (const id of [...scopes,'all']) await redis.incr(productRevisionKey(shop,id));}
     else await redis.incr(configurationRevisionKey(shop));
+    // Old copies continue to check globalProducts. New supported copies use
+    // tag/pin dependencies, with a broad fallback for unproven/bulk writes.
+    if(products&&typeof redis.set==='function')await createCollectionDependencies(redis).changed(shop,externalProof);
     // Only delete owned cache namespaces. Queue hashes, locks and sorted sets,
     // snapshots, sessions and revisions are deliberately outside this allowlist.
     let cursor='0';let deleted=0;

@@ -13,13 +13,13 @@ export async function createRedisTestLayer({workerOptions={},jobOptions={}}={}) 
     const keys=args.slice(0,keyCount).map(physical),values=args.slice(keyCount);
     if(script.includes('ARGV[10]')){for(const index of [7,8,9])values[index]=physical(values[index]);}
     else if(script.includes('string.len(ARGV[6])'))values[5]=physical(values[5]);
-    else values[4]=physical(values[4]);
+    else if(!script.includes("redis.call('MGET',unpack(KEYS))"))values[4]=physical(values[4]);
     return [script,keyCount,...keys,...values];
   };
   const redis={
     get:async key=>{const value=await client.get(physical(key));return key.includes(':last-order-v1:')&&value?.startsWith(prefix+':')?value.slice(prefix.length+1):value;},
     hmget:(key,...fields)=>client.hmget(physical(key),...fields),
-    set:(key,value)=>client.set(physical(key),value),
+    set:(key,value,...args)=>client.set(physical(key),value,...args),mget:(...keys)=>client.mget(...keys.map(physical)),
     setex:(key,ttl,value)=>client.setex(physical(key),ttl,key.includes(':last-order-v1:')?physical(value):value),
     ttl:key=>client.ttl(physical(key)),incr:key=>client.incr(physical(key)),del:(...keys)=>keys.length?client.del(...keys.map(physical)):0,
     // The retention script takes its deletion prefix as its fifth value.
