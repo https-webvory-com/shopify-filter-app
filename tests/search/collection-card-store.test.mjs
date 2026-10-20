@@ -38,7 +38,7 @@ test('private, filtered, token, search, custom sort, duplicate and later-page re
 });
 
 test('current products, prepared sequence, configuration, data epochs and native order are validated before serving',async()=>{
- for(const change of ['configuration','products','hardAll','hardCollection','scheduleEpoch','order','missing','sequence','metadata','cards','corrupt','expired']){
+ for(const change of ['configuration','hardAll','hardCollection','scheduleEpoch','order','missing','sequence','metadata','cards','corrupt','expired']){
   const f=fixture();await(await f.begin()).finish(f.payload,'fingerprint');
   if(['configuration','products','hardAll','hardCollection','scheduleEpoch'].includes(change))f.state[change]='1';
   if(change==='order')f.state.orderRevision='new';if(change==='missing')f.setSource(null);
@@ -50,11 +50,23 @@ test('current products, prepared sequence, configuration, data epochs and native
  }
 });
 
-test('unrelated product changes preserve native snapshots while external Include inputs require the global version',async()=>{
+test('soft product updates reuse freshly validated cards only inside the canonical ranking freshness window',async()=>{
  const native=fixture();await(await native.begin()).finish(native.payload,'fp');native.state.globalProducts='1';assert.ok(await native.store.get(native.request));
+ native.state.products='1';assert.ok(await native.store.get(native.request));native.setValid(false);assert.equal(await native.store.get(native.request),null);
+ native.setValid(true);native.advance(600000);assert.equal(await native.store.get(native.request),null);
  const external=fixture();external.spec.rule.ruleGroups=[{conditions:[{action:'Include',field:'Tags',value:'Outside'}]}];
  external.prepared.reusableDataRevision='0:0:0';external.setSource(encodePreparation(external.prepared));
- await(await external.begin()).finish(external.payload,'fp');external.state.globalProducts='1';assert.equal(await external.store.get(external.request),null);
+ await(await external.begin()).finish(external.payload,'fp');external.state.globalProducts='1';assert.ok(await external.store.get(external.request));
+ external.advance(599999);assert.ok(await external.store.get(external.request));external.advance(1);assert.equal(await external.store.get(external.request),null);
+});
+
+test('preview delivery includes every validated card and never exposes unchecked later cards',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'full','head');
+ const request=new Request(f.request.url.replace('collection-cards-v1','collection-preview-v1'));
+ let observed;f.setValidation(async(_entry,_prepared,options)=>{observed=options.preview;options.onValidated(1);return true;});
+ assert.equal((await(await f.store.get(request)).json()).products.length,1);assert.equal(observed,true);
+ f.setValidation(async(_entry,_prepared,options)=>{options.onValidated(25);return true;});
+ assert.equal((await(await f.store.get(request)).json()).products.length,2);
 });
 
 test('changes during validation or construction reject snapshots and optional storage failures do not hide cards',async()=>{
@@ -81,7 +93,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
  const adapter=await loadModule('app/services/collectionCards.server.js',{
   '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]}}},'./collectionLoadingSnapshots.server.js':{loadCollectionLoadingSnapshot:async()=>null,saveCollectionLoadingSnapshot:async()=>false},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
   '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
-  '../utils/collectionPreparation.js':{preparationKey},'../utils/rankedCollectionPage.js':{},'../utils/collectionResponse.js':{},'./collectionRankingSession.server.js':{},
+  '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));

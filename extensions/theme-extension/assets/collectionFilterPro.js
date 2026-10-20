@@ -1328,7 +1328,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if(previewOnly)return `
         <div class="cfp-product-card cfp-product-card--reveal cfp-product-card--preview" style="--cfp-reveal-delay:0ms;--cfp-reveal-duration:0ms">
           <div class="cfp-product-card__image-wrapper"><a href="${productUrl}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
-            <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" fetchpriority="high" decoding="async" width="360" height="480" />
+            <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
           </div></a></div>
           <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${product.title}</h3></div></a>
         </div>`;

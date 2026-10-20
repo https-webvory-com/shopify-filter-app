@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {decodePreparation,encodePreparation} from './collectionPreparationPayload.js';
 import {isPublicCollectionCards,collectionCardsResponse} from './collectionCards.js';
+import {preparationFreshnessMs} from './collectionPreparation.js';
 
 const digest=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const clean=id=>String(id).split('/').pop();
@@ -36,11 +37,23 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
  function current(state,external){
   if(!state?.preparedRaw||state.epochsPresent===false||typeof state.orderRevision!=='string'||!state.orderRevision)return null;
   let prepared;try{prepared=decodePreparation(state.preparedRaw);}catch{return null;}
-  if(!Array.isArray(prepared?.ids)||!prepared.metadata||!Number.isFinite(prepared.preparedAt)||now()-prepared.preparedAt>=lifetime*1000||prepared.productRevision!==state.products)return null;
+  if(!Array.isArray(prepared?.ids)||!prepared.metadata||!Number.isFinite(prepared.preparedAt)||now()-prepared.preparedAt>=lifetime*1000)return null;
   const epochs=typeof prepared.reusableDataRevision==='string'?prepared.reusableDataRevision.split(':'):[];
-  if(epochs[0]!==state.hardAll||epochs[1]!==state.hardCollection||external&&epochs[2]!==state.globalProducts)return null;
+  if(epochs[0]!==state.hardAll||epochs[1]!==state.hardCollection)return null;
+  const productsChanged=prepared.productRevision!==state.products||external&&epochs[2]!==state.globalProducts;
+  // Match the canonical ranker's existing bounded reuse policy. A soft product
+  // update does not change this saved sequence immediately; the exact cards
+  // being returned are independently checked against current documents below.
+  if(productsChanged&&now()-prepared.preparedAt>=preparationFreshnessMs)return null;
   return prepared;
  }
+ const compatibleState=(entry,state)=>{
+  let saved;try{saved=JSON.parse(entry.state);}catch{return false;}
+  const current=JSON.parse(stateSignature(state,entry.external));
+  if(!Array.isArray(saved)||saved.length!==current.length)return false;
+  current[1]=saved[1];current[2]=saved[2];
+  return JSON.stringify(current)===entry.state;
+ };
  async function get(request,{probe=false}={}){
   const key=collectionCardKey(request);if(!key)return null;
   const controller=new AbortController(),started=now();let timer;
@@ -60,14 +73,15 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(entry?.version!==1||entry.shop!==shop||!/^\d+$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
    const before=await readState(entry),prepared=current(before,entry.external);
    controller.signal.throwIfAborted();
-   if(!prepared||before.configuration!==entry.configuration||stateSignature(before,entry.external)!==entry.state||sequenceSignature(prepared)!==entry.sequence)return null;
-   const readStarted=now();if(!await validateCards(entry,prepared))return null;
+   if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;
+   let previewLimit=25;
+   const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1',onValidated:count=>{previewLimit=count;}}))return null;
    const readMs=now()-readStarted;controller.signal.throwIfAborted();
    const session=probe?{}:await createSession(request,entry,prepared);
    const after=await readState(entry),afterPrepared=current(after,entry.external);
    controller.signal.throwIfAborted();
-   if(!afterPrepared||stateSignature(after,entry.external)!==entry.state||sequenceSignature(afterPrepared)!==entry.sequence)return null;
-   return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request);
+   if(!afterPrepared||stateSignature(after,entry.external)!==stateSignature(before,entry.external)||sequenceSignature(afterPrepared)!==entry.sequence)return null;
+   return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
   }catch{return null;}
   };
   try{return await Promise.race([work(),new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(null);},readBudgetMs);})]);}
@@ -83,13 +97,14 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(Number.isFinite(before.scheduleChangedAt)&&before.scheduleChangedAt>(startedAt??0))return null;
    if(!prepared||before.configuration!==spec.revision||spec.orderRevision!=null&&before.orderRevision!==spec.orderRevision||sequenceSignature(prepared)!==sequenceSignature({...rankingSession,orderUpdatedAt:rankingSession.updatedAt}))return null;
    const state=stateSignature(before,external),sequence=sequenceSignature(prepared);
-   return {async finish(payload,validationFingerprint){
+   return {async finish(payload,validationFingerprint,previewValidationFingerprint){
     if(!validationFingerprint||!Array.isArray(payload.products)||payload.products.length>25||!Array.isArray(attributes))return;
     try{
      const after=await readState(identity),latest=current(after,external);
      if(!latest||stateSignature(after,external)!==state||sequenceSignature(latest)!==sequence)return;
      const {facets,rankingToken,...cards}=payload;
-     const entry={version:1,...identity,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,payload:cards,at:now()};
+     const entry={version:1,...identity,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
+      ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);
      const url=new URL(request.url);url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',collectionId);aliases.add(collectionCardKey(new Request(url)));

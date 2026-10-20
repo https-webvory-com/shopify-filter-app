@@ -45,6 +45,7 @@ export const loader = async ({ request, context }) => {
   let preparedCacheKey;
   let collectionResponse;
   let responsePageFingerprint;
+  let responsePreviewFingerprint;
   let getResponsePageFingerprint;
   let cardSnapshot;
   console.log("API Filter Request: ", request.url);
@@ -839,6 +840,7 @@ export const loader = async ({ request, context }) => {
         ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
       });
       responsePageFingerprint=collectionPageFingerprint(result.hits);
+      responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));
       meiliRes={hits:result.hits,estimatedTotalHits:result.total};collectionPageTotal=result.total;
       collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
       collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
@@ -1595,7 +1597,7 @@ export const loader = async ({ request, context }) => {
     };
 
     if(cardsOnly){
-      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint);
+      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint);
       return collectionCardsResponse(responsePayload,stored?'stored':'miss',request);
     }
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });

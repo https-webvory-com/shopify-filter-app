@@ -1,16 +1,82 @@
 (function(){
   if(window._cfpHeadBootstrapLoaded||!location.pathname.includes('/collections/'))return;
   window._cfpHeadBootstrapLoaded=true;
+  function firstRowSelection(product,handle,settings){
+    const image=value=>typeof value==='string'?value:value?.url||value?.src||value?.image?.url||'';
+    const id=value=>String(value||'').split('/').pop();
+    const variants=product.variants||[];
+    const selected=product.selectedVariantId&&variants.find(v=>id(v.id)===id(product.selectedVariantId));
+    let variantId=selected?id(selected.id):id(variants.find(v=>v.available===true)?.id);
+    const name=String(handle||'').toLowerCase();let custom='';
+    if(/plus-size|plus size/.test(name))custom=image(product['metafield_custom.plus_size_collection_image']);
+    else {
+      const mob=image(product['metafield_custom.mob_collection_image'])||image(product['metafield_custom.mother_of_the_bride_collection_image']);
+      if(/mother-of-the-bride|mother of the bride|mob/.test(name)&&mob)custom=mob;
+      else if(name.includes('wedding'))custom=image(product['metafield_custom.wedding_collection_image']);
+    }
+    let primary=(product.searchColor?product.searchColorImage:custom||selected?.imageUrl||product.merchandisingImage||image(product.images?.[0]))||'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+    let options=product.options||[];try{if(typeof options==='string')options=JSON.parse(options);}catch{options=[];}
+    let position=options.findIndex(o=>['color','colour'].includes(String(o.name).toLowerCase()));
+    if(position<0&&variants.length){
+      const known=Object.keys(settings?.swatchConfig?.colors||{});
+      const colors=(known.length?known:['black','white','ivory','red','blue','green','yellow','pink','purple','navy','burgundy','champagne','silver','gold','blush','dusty rose','hunter green','royal blue','emerald','mauve','lilac','sage']).map(v=>v.toLowerCase().trim());
+      const sample=variants.find(v=>v.option1||v.option2)||variants[0];
+      if(colors.includes(String(sample.option1||'').toLowerCase().trim()))position=0;
+      else if(colors.includes(String(sample.option2||'').toLowerCase().trim()))position=1;
+    }
+    if(position>=0){
+      const key='option'+(position+1),colors=new Map();
+      for(const variant of variants){const color=variant[key];if(!color)continue;
+        const src=variant.imageUrl||image(variant.image),existing=colors.get(color);
+        if(!existing||!existing.image&&src)colors.set(color,{image:src,id:id(variant.id)});
+      }
+      const rows=[...colors];if(rows.length){let active=0,override=false;
+        if(product.selectedVariantId&&selected){const found=rows.findIndex(([color])=>color.toLowerCase()===String(selected[key]||'').toLowerCase());if(found>=0){active=found;override=true;}}
+        else if(product.merchandisingImage){const base=value=>String(value).split('?')[0].replace(/^https?:/,'').toLowerCase(),merch=base(product.merchandisingImage);
+          let found=rows.findIndex(([,value])=>value.image&&(base(value.image).includes(merch)||merch.includes(base(value.image))));
+          if(found<0)found=rows.findIndex(([color])=>/black|nude/i.test(color));
+          if(found>=0){active=found;override=true;if(rows[active][1].id)variantId=rows[active][1].id;}
+        }
+        const color=rows[active][1];if(color.image&&(!custom||override))primary=color.image;
+        variantId=product.selectedVariantId&&variantId||color.id||variantId;
+      }
+    }
+    return {image:primary,url:'/products/'+encodeURIComponent(product.handle)+(variantId&&/^\d+$/.test(variantId)?'?variant='+variantId:'')};
+  }
+  window.cfpFirstRowSelection=firstRowSelection;
+  function mountFirstRow(payload,context,controller){
+    if(payload?.cfpCards?.version!==1||payload.debug?.collectionRankingStatus!=='ready'||!payload.products?.length)return;
+    let grid,scheduled=false,timer;
+    const stop=()=>{observer.disconnect();clearTimeout(timer);controller.signal.removeEventListener('abort',stop);grid?.remove();};
+    const inspect=()=>{scheduled=false;
+      if(controller.signal.aborted||document.querySelector('#cfp-products-container .cfp-product-card')){stop();return;}
+      const app=document.querySelector('.cfp-v1-app-container')||document.getElementById('cfp-first-row-anchor');if(!app)return;
+      if(grid){if(grid.parentElement!==app)app.prepend(grid);return;}
+      grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';
+      const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;padding:16px;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:3/4;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}';grid.append(style);
+      for(const [index,product] of payload.products.entries()){
+        const selection=firstRowSelection(product,context.handle,payload.globalSettings),card=document.createElement('div'),link=document.createElement('a'),img=document.createElement('img'),title=document.createElement('h3');
+        card.className='cfp-initial-product';link.href=selection.url;img.alt=product.title;img.width=360;img.height=480;img.fetchPriority=index<5?'high':'low';if(index>=5)img.loading='lazy';img.decoding='async';
+        const resize=width=>{const clean=selection.image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?');return clean.includes('cdn.shopify.com')?clean+(clean.includes('?')?'&':'?')+'width='+width:clean;};
+        img.src=resize(360);if(selection.image.includes('cdn.shopify.com')){img.srcset=[180,360,540].map(width=>resize(width)+' '+width+'w').join(', ');img.sizes='(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw';}
+        title.textContent=product.title;link.append(img,title);card.append(link);grid.append(card);
+      }
+      app.prepend(grid);
+      document.getElementById('cfp-skeleton-overlay')?.classList.add('cfp-skeleton-done');
+    };
+    const observer=new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(inspect);}});
+    observer.observe(document.documentElement,{childList:true,subtree:true});controller.signal.addEventListener('abort',stop,{once:true});timer=setTimeout(()=>{if(!grid)stop();},120000);inspect();
+  }
   function preloadImages(payload){
     if(!document.head||payload?.debug?.collectionRankingStatus!=='ready')return;
-    for(const product of (payload.products||[]).slice(0,4)){
-      // Only preload an explicit merchandising image that a swatch also uses.
-      // Other cards can choose a collection-specific or filtered image later.
-      const image=product.merchandisingImage;
+    for(const product of (payload.products||[]).slice(0,5)){
+      // Preview cards use the same selected image as the independent first row.
+      // Full responses only preload an explicit image also used by a swatch.
+      const image=payload.cfpCards?.version===1?firstRowSelection(product,window.cfpCollectionContext?.handle,payload.globalSettings).image:product.merchandisingImage;
       if(typeof image!=='string'||!image.includes('cdn.shopify.com')||
-        Object.keys(product).some(key=>key.startsWith('metafield_custom.')&&product[key]))continue;
+        payload.cfpCards?.version!==1&&Object.keys(product).some(key=>key.startsWith('metafield_custom.')&&product[key]))continue;
       const base=value=>value.split('?')[0].replace(/^https?:/,'').toLowerCase();
-      if(!product.variants?.some(variant=>typeof variant.imageUrl==='string'&&base(variant.imageUrl)===base(image)))continue;
+      if(payload.cfpCards?.version!==1&&!product.variants?.some(variant=>typeof variant.imageUrl==='string'&&base(variant.imageUrl)===base(image)))continue;
       const resize=width=>{
         const clean=image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?');
         return clean+(clean.includes('?')?'&':'?')+'width='+width;
@@ -46,7 +112,7 @@
         window._cfpRankedEarlyFetch = {
           url:url,controller:controller,configurationPromise:null,
           promise:fetch(url,{signal:controller.signal,cache:'no-cache'})
-            .then(async function(response) {const payload=await response.json();try{if(response.status===200)preloadImages(payload);}catch{}return {status:response.status,payload};})
+            .then(async function(response) {const payload=await response.json();try{if(response.status===200){preloadImages(payload);mountFirstRow(payload,context,controller);}}catch{}return {status:response.status,payload};})
             .catch(function() {return null;})
             .finally(function() {clearTimeout(timer);})
         };

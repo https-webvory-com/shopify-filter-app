@@ -340,3 +340,30 @@ fixture checks, three real BullMQ lifecycle checks, production build, syntax
 checks and `git diff --check` passed. No schema/theme change is needed for this
 increment. Deploy the backend and worker together when authorized; no deployment
 or merchant-rule changes were performed during implementation.
+
+### Immediate card rendering and compatible snapshot reuse
+
+The initial response contains image/title inputs for every currently validated
+card. A saved snapshot can validate its first five independently; a canonical
+response that already has the full page returns all 25. The small head loader
+renders every returned card without waiting for the main widget, prioritizing
+the first five images. The token-scoped follow-up supplies prices, filters and
+the remaining cards. No timer delays product rendering.
+
+Soft product epochs now follow the canonical ranking's existing ten-minute
+reuse window. Every displayed product still requires current-document
+validation. Configuration, hard data epochs, schedules, order revisions,
+sequence identity and changes during validation continue to reject reuse.
+Older snapshots retain 25-document validation until they are rebuilt with a
+separate first-five fingerprint. This does not extend ranking freshness.
+
+For draft themes whose head embed follows blocking theme styles/scripts,
+`node scripts/prepare-collection-theme-start.mjs saved-layout.liquid output-dir`
+prepares a guarded inline loader immediately after the charset and a main-area
+anchor. It writes files locally only. Back up and compare the current layout,
+then upload only the generated layout and snippet to the intended unpublished
+theme with `--nodelete`; never publish it as the live theme implicitly. Rerun
+the generator when changing the head loader so the theme copy stays in sync.
+
+Browser fixture timings verify behavior with controlled delays; only fresh
+visits to the deployed storefront establish actual first-card/image times.

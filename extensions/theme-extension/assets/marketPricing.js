@@ -9,10 +9,12 @@
     if (saved && Date.now() - saved.at < 60000) return saved.promise;
     const promise = (async () => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
+      // HTTP/1 connections can queue these behind the first product images.
+      // Keep the price request alive through that queue without holding cards.
+      const timer = setTimeout(() => controller.abort(), 8000);
       try {
         const response = await fetch(`${root}products/${encodeURIComponent(handle)}.js`, {
-          credentials: 'same-origin', signal: controller.signal,
+          credentials: 'same-origin', signal: controller.signal, priority: 'high',
         });
         if (!response.ok) throw new Error('Storefront price unavailable');
         const product = await response.json();

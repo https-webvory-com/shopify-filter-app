@@ -9,14 +9,15 @@ test('first-row payload preserves ranking and image inputs without prices, facet
   products:Array.from({length:25},(_,i)=>({id:String(i),title:`Dress ${i}`,handle:`dress-${i}`,vendor:'Vendor',tags:['sale'],priceMin:10,priceMax:20,selectedVariantId:'selected',merchandisingImage:'merch.jpg',
    'metafield_custom.mob_collection_image':{url:'mob.jpg'},options:[{name:'Color',values:['Red']}],images:['main.jpg','hover.jpg'],variants:[{id:'selected',available:true,option1:'Red',imageUrl:'variant.jpg',price:10,inventory:100}]}))};
  const before=JSON.stringify(payload),preview=collectionPreviewPayload(payload);
- assert.deepEqual(preview.products.map(p=>p.id),['0','1','2','3']);assert.equal(preview.rankingToken,payload.rankingToken);assert.equal(preview.totalCount,100);
+ assert.deepEqual(preview.products.map(p=>p.id),['0','1','2','3','4']);assert.equal(preview.rankingToken,payload.rankingToken);assert.equal(preview.totalCount,100);
  for(const key of ['settings','mergedValues','facets'])assert.equal(key in preview,false);
  assert.equal('priceMin' in preview.products[0],false);assert.equal('price' in preview.products[0].variants[0],false);
  assert.deepEqual(preview.products[0].variants,[{id:'selected',available:true,option1:'Red',imageUrl:'variant.jpg'}]);
  assert.deepEqual(preview.products[0]['metafield_custom.mob_collection_image'],{url:'mob.jpg'});
  assert.equal(JSON.stringify(payload),before);assert.ok(JSON.stringify(preview).length<before.length/3);
  const result=await collectionCardsResponse(payload,'hit',new Request(url));
- assert.deepEqual((await result.json()).cfpCards,{version:1,preview:true});assert.equal(result.headers.get('Cache-Control'),'no-store');
+ const ready=await result.json();assert.deepEqual(ready.cfpCards,{version:1,preview:true});assert.equal(ready.products.length,25);assert.equal(result.headers.get('Cache-Control'),'no-store');
+ const head=await collectionCardsResponse(payload,'hit',new Request(url),{previewLimit:5});assert.equal((await head.json()).products.length,5);
  const complete=await collectionCardsResponse(payload,'hit',new Request(url.replace('collection-preview-v1','collection-cards-v1')));
  assert.equal((await complete.json()).products.length,25);
 });

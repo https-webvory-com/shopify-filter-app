@@ -44,3 +44,13 @@ test('late head metadata starts once and DOMContentLoaded cannot restart an obso
  const f=fixture('','',true);assert.equal(f.calls.length,0);f.addMeta();assert.equal(f.calls.length,1);
  f.window.Shopify={country:'US',locale:'en'};f.body();assert.equal(f.calls.length,2);f.domReady();assert.equal(f.calls.length,2);await f.window._cfpRankedEarlyFetch.promise;
 });
+
+test('early image selection retains selected variants and collection-specific images',()=>{
+ const select=fixture('?page=2').window.cfpFirstRowSelection;
+ const product={handle:'formal-gown',images:['https://images.example/default.jpg'],options:[{name:'Color'}],variants:[{id:'gid://shopify/ProductVariant/10',available:true,option1:'Red',imageUrl:'https://images.example/red.jpg'},{id:'11',available:true,option1:'Blue',imageUrl:'https://images.example/blue.jpg'}]};
+ assert.equal(select(product,'formal',{}).image,'https://images.example/red.jpg');
+ const selected=select({...product,selectedVariantId:'11'},'formal',{});
+ assert.equal(selected.image,'https://images.example/blue.jpg');assert.equal(selected.url,'/products/formal-gown?variant=11');
+ assert.equal(select({...product,'metafield_custom.plus_size_collection_image':{url:'https://images.example/plus.jpg'}},'plus-size-formal',{}).image,'https://images.example/plus.jpg');
+ assert.equal(select({...product,merchandisingImage:'https://images.example/blue.jpg'},'formal',{}).image,'https://images.example/blue.jpg');
+});
