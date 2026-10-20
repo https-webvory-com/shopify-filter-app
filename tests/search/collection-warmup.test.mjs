@@ -103,7 +103,7 @@ test('corrupt or private warmup records do not stop valid matching collection wa
   const f=await fixture();const url='https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionHandle=hydrogen&page=1';
   f.records.push('{bad',JSON.stringify({url:'invalid',collectionId:'1'}),JSON.stringify({url:url+'&customer_tags=VIP',collectionId:'1'}),JSON.stringify({url,collectionId:'2'}),JSON.stringify({url,collectionId:'1'}));
   await f.processCollectionWarmups('fixture.myshopify.com',['1']);
-  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);assert.equal(jobs[0][3].priority,5);const normalized=new URL(jobs[0][2].record.url);assert.equal(normalized.searchParams.get('collectionId'),'1');assert.equal(normalized.searchParams.has('collectionHandle'),false);
+  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);assert.equal(jobs[0][3].priority,10);const normalized=new URL(jobs[0][2].record.url);assert.equal(normalized.searchParams.get('collectionId'),'1');assert.equal(normalized.searchParams.has('collectionHandle'),false);
   assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
 });
 
@@ -197,6 +197,21 @@ test('existing catalog jobs are promoted into the fair background lane without d
  const job=[...f.jobs.values()][0];job.opts.priority=20;
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
  assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);
+});
+
+test('recurring recent-page sweeps cannot jump ahead of unseen catalog work or demote genuine changed-card refreshes',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.seeds.push({shop,collectionHandle:'recent',country:'IN',locale:'en'});
+ for(const id of ['1','2'])f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
+ f.records.push(JSON.stringify({url:'https://ranking.internal/api/filter?shop='+shop+'&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'}));
+ await f.scheduleCatalogCollectionWarmups(shop);
+ const catalog=[...f.jobs.values()];assert.equal(catalog.length,2);
+ await f.processCollectionWarmups(shop);await f.processCollectionWarmups(shop);
+ assert.ok([...f.jobs.values()].every(job=>job.opts.priority===10));
+ assert.equal(f.writes.filter(w=>w[0]==='priority').length,0);
+ assert.ok(f.writes.filter(w=>w[0]==='queue'&&w[1]==='COLLECTION_RANKING_CATALOG').every(w=>w[3].priority===10));
+ catalog[0].opts.priority=5;await f.processCollectionWarmups(shop);
+ assert.equal(catalog[0].opts.priority,5);
 });
 
 test('catalog replay requires a completed ranking and trusted worker precompute context',async()=>{

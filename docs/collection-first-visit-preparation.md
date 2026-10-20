@@ -188,6 +188,11 @@ New ranking saves also retain only the latest order version within an identical
 configuration/rule/filter context. A newer validated write wins over a delayed
 older save; other contexts and shops remain separate.
 
+Recurring recent-page sweeps dispatch at catalog priority 10 rather than
+repeatedly promoting hot pages to priority 5. This lets unseen contexts make
+FIFO progress. Explicit changed-card refresh priority 5 and visitor ranking
+priority 1 remain in force; the small sweep-dispatch job still has priority 5.
+
 Backlog retirement defaults to a read-only audit:
 
 ```sh

@@ -202,14 +202,17 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();
         if(['waiting','active','prioritized','delayed'].includes(state)){
-          if(state!=='active'&&(job.priority??job.opts?.priority??20)>5)await job.changePriority({priority:5});
+          if(state!=='active'&&(job.priority??job.opts?.priority??20)>10)await job.changePriority({priority:10});
           continue;
         }
         if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
         await job.remove();
       }
+      // Recurring recent-page replay shares catalog FIFO priority. Promoting
+      // the same hot pages every minute can otherwise starve unseen pages.
+      // Real visitors/changed-card refreshes retain their separate priorities.
       await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record:normalized},
-        {jobId,priority:5,attempts:5,backoff:{type:'exponential',delay:10000}});
+        {jobId,priority:10,attempts:5,backoff:{type:'exponential',delay:10000}});
       continue;
     }
     const response = await loader({ request: new Request(normalized.url), params: {}, context: {
