@@ -37,6 +37,21 @@ test('precise outside dependencies survive unrelated global updates and reject l
  f.state.externalProducts='d1.changed';assert.equal(await f.store.get(f.request),null);
 });
 
+test('saved cards retain idle native order across internal scores while outside score changes and races remain guarded',async()=>{
+ const f=fixture();f.prepared.productRevisionSource='content-v1';f.prepared.salesDependencies={version:1,ids:['99'],revision:'s1.saved'};f.state.salesProducts='s1.saved';f.state.salesEpoch='b.initial';f.setSource(encodePreparation(f.prepared));
+ await(await f.begin()).finish(f.payload,'fp');f.advance(7200000);
+ f.state.globalProducts='10';f.state.salesEpoch='e.native-sales-event';
+ assert.ok(await f.store.get(f.request));
+ f.state.salesProducts='s1.outside-changed';assert.equal(await f.store.get(f.request),null);
+ f.state.salesProducts='s1.saved';f.setValidation(async()=>{f.state.salesProducts='s1.changed-during-read';return true;});
+ assert.equal(await f.store.get(f.request),null);
+});
+
+test('legacy card proofs work through baseline initialization but require adoption after a score event',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');f.state.salesEpoch='b.initial';assert.ok(await f.store.get(f.request));
+ f.state.salesEpoch='e.sales-event';assert.equal(await f.store.get(f.request),null);
+});
+
 test('prepared cards serve before any visitor, omit facets and create URL-specific immutable sessions only on visits',async()=>{
  const f=fixture(),lease=await f.begin();assert.ok(lease);assert.equal(await lease.finish(f.payload,'fingerprint'),true);assert.equal(f.sessions.length,0);
  const response=await f.store.get(f.request),body=await response.json();
@@ -136,7 +151,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));
  const state=await adapter.createCardStateReader(redis)({...spec,collectionId:'1',preparedKey:'source'});
  assert.equal(state.orderRevision,'current-native');assert.equal(state.products,'2');assert.equal(state.globalProducts,'3');assert.equal(state.preparedRaw,'prepared');
- assert.ok(calls[0].includes('collectionOrderSnapshot:fixture.myshopify.com:gid://shopify/Collection/1'));assert.equal(calls[0].at(-2),'source');
+ assert.ok(calls[0].includes('collectionOrderSnapshot:fixture.myshopify.com:gid://shopify/Collection/1'));assert.equal(calls[0][6],'source');assert.ok(calls[0].includes('collectionProductContentRevision:fixture.myshopify.com:1'));
  const database={merchandisingRule:{findMany:async()=>[{id:'scheduled',startDate:new Date(10000),endDate:new Date(20000)}]}};let clock=9999;const read=adapter.createCardStateReader(redis,database,()=>clock);const identity={...spec,collectionId:'1',preparedKey:'source'};const before=await read(identity);clock=10000;const active=await read(identity);clock=20001;const ended=await read(identity);assert.notEqual(before.scheduleEpoch,active.scheduleEpoch);assert.notEqual(active.scheduleEpoch,ended.scheduleEpoch);
 });
 

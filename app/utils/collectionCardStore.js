@@ -33,7 +33,7 @@ return 1`;
 // data/configuration epochs, the backing ranking and the native order revision.
 export function createCollectionCardStore({redis,readState,validateCards,createSession,loadDurable,saveDurable,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=128*1024,lifetime=86400,readBudgetMs=500}){
  const sourceValid=(shop,key)=>typeof key==='string'&&key.startsWith(`collectionPreparedSequence:${shop}:background-v2:`)&&/^[a-f0-9]{64}$/.test(key.split(':').at(-1));
- const stateSignature=(state,external)=>JSON.stringify([state.configuration,state.products,external?(state.externalProducts??state.globalProducts):null,state.hardAll,state.hardCollection,state.orderRevision,state.scheduleEpoch,state.runtimeGeneration,state.epochsPresent]);
+ const stateSignature=(state,external)=>JSON.stringify([state.configuration,state.products,external?(state.externalProducts??state.globalProducts):null,state.hardAll,state.hardCollection,state.orderRevision,state.scheduleEpoch,state.runtimeGeneration,state.epochsPresent,...(state.salesProducts!==undefined?[state.salesProducts]:[])]);
  const sequenceSignature=value=>digest([value.ids,value.metadata]);
  function current(state,external){
   if(!state?.preparedRaw||state.epochsPresent===false||typeof state.orderRevision!=='string'||!state.orderRevision)return null;
@@ -43,9 +43,12 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   // adoption/build before receiving indefinite event-driven retention.
   if(external&&prepared.rankingEventsVersion!==1)return null;
   if(external&&prepared.externalDependencies&&typeof state.externalProducts!=='string')return null;
+  if(prepared.productRevisionSource==='content-v1'){
+   if(!prepared.salesDependencies||typeof state.salesProducts!=='string')return null;
+  }else if(state.salesEpoch?.startsWith('e.'))return null;
   const epochs=typeof prepared.reusableDataRevision==='string'?prepared.reusableDataRevision.split(':'):[];
   if(epochs[0]!==state.hardAll||epochs[1]!==state.hardCollection)return null;
-  const productsChanged=prepared.productRevision!==state.products||external&&epochs[2]!==(state.externalProducts??state.globalProducts);
+  const productsChanged=prepared.productRevision!==state.products||external&&epochs[2]!==(state.externalProducts??state.globalProducts)||prepared.salesDependencies&&prepared.salesDependencies.revision!==state.salesProducts;
   // Match the canonical ranker's existing bounded reuse policy. A soft product
   // update does not change this saved sequence immediately; the exact cards
   // being returned are independently checked against current documents below.
@@ -57,6 +60,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   const current=JSON.parse(stateSignature(state,entry.external));
   if(!Array.isArray(saved)||saved.length!==current.length)return false;
   current[1]=saved[1];current[2]=saved[2];
+  if(current.length===10)current[9]=saved[9];
   return JSON.stringify(current)===entry.state;
  };
  async function get(request,{probe=false,onHit}={}){

@@ -9,7 +9,8 @@ export function createCollectionVisitorRefresh({queue,register,now=Date.now}){
   if(!record)return;
   await register(entry.shop,request.url,entry.collectionId);
   const externalChanged=entry.external&&prepared.reusableDataRevision?.split(':')[2]!==(state.externalProducts??state.globalProducts);
-  if(prepared.productRevision===state.products&&!externalChanged&&Number.isFinite(prepared.preparedAt))return;
+  const salesChanged=prepared.salesDependencies&&prepared.salesDependencies.revision!==state.salesProducts;
+  if(prepared.productRevision===state.products&&!externalChanged&&!salesChanged&&Number.isFinite(prepared.preparedAt))return;
   const priority=5,jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
   let job=await queue.getJob(jobId);
   if(job){

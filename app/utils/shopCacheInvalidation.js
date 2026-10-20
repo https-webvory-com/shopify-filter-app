@@ -1,7 +1,9 @@
 import {createHash} from 'node:crypto';
 import {createCollectionDependencies} from './collectionDependencies.js';
+import {createCollectionSalesDependencies} from './collectionSalesDependencies.js';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
+export const productContentRevisionKey=(shop,collectionId)=>`collectionProductContentRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionFirstPage','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
 const productCaches = ['queryParserFacets','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
@@ -21,9 +23,14 @@ export function productRankingFingerprint(product) {
   };
   return createHash('sha256').update(JSON.stringify(stable(product))).digest('hex');
 }
+export function productContentFingerprint(product){
+ if(product==null)return productRankingFingerprint(product);
+ const {bestSellingScore,trendingScore,cfpCollectionInputSource,...content}=product;
+ return productRankingFingerprint(content);
+}
 export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
   return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof} = {}) {
-    const products = kind === 'products';
+    const products = kind === 'products'||kind==='scores';
     const scopes = [...new Set(collectionIds.map(id=>String(id).split('/').pop()))].filter(id=>id!=='all');
     // Bulk/index or membership changes can alter inputs absent from a rule's
     // signature. Reject saved rankings for those scopes immediately.
@@ -32,7 +39,9 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
     else await redis.incr(configurationRevisionKey(shop));
     // Old copies continue to check globalProducts. New supported copies use
     // tag/pin dependencies, with a broad fallback for unproven/bulk writes.
-    if(products&&typeof redis.set==='function')await createCollectionDependencies(redis).changed(shop,externalProof);
+    if(kind==='products')for(const id of [...scopes,'all'])await redis.incr(productContentRevisionKey(shop,id));
+    if(kind==='products'&&typeof redis.set==='function')await createCollectionDependencies(redis).changed(shop,externalProof);
+    if(kind==='scores'&&typeof redis.set==='function')await createCollectionSalesDependencies(redis).changed(shop,externalProof?.ids);
     // Only delete owned cache namespaces. Queue hashes, locks and sorted sets,
     // snapshots, sessions and revisions are deliberately outside this allowlist.
     let cursor='0';let deleted=0;

@@ -197,6 +197,25 @@ epoch/order/configuration and schedule validation. A verified hit finishes
 without reconstructing the ranking specification or creating a shopper session.
 Misses, unproven responses and probe failures use normal canonical preparation.
 
+### Content updates and internal score writes
+
+Order processing uses a separate `scores` invalidation signal. Existing general
+product/search counters still advance, but public collection rankings use a
+content revision plus separately declared sales dependencies. Native best-selling
+positions come from Shopify; our sales scores cannot reorder those positions or
+fixed native pins. Only the bounded, proven outside candidate IDs declare score
+dependencies. Unknown/bulk writes, unproven outside sets and other ranking modes
+keep conservative broad score invalidation. True product content/stock changes
+still invalidate content and Include/pin dependencies normally.
+
+Each build captures the global score epoch before scanning and verifies it before
+publishing. Reads verify declared score epochs, and lost epochs fail validation.
+Legacy rankings can adopt the new proof without rescanning only before the first
+new score event, when their old native/content counters, configuration/data epochs
+and canonical outside-order proof still match. Source age is preserved; otherwise
+the worker rebuilds. Score-only product webhooks use the same score path, while
+derived index source hashes alone do not masquerade as product edits.
+
 Backlog retirement defaults to a read-only audit:
 
 ```sh

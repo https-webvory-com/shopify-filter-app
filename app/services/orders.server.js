@@ -375,7 +375,7 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
         }
         externalProof={tags:[...tags],ids};
       }catch(error){console.error('OrdersSync: Using broad dependency invalidation:',error.name);}
-      await invalidateShop(shop,{kind:'products',collectionIds:memberships.map(row=>row.collectionId),externalProof});
+      await invalidateShop(shop,{kind:'scores',collectionIds:memberships.map(row=>row.collectionId),externalProof});
     }
     if(failed)throw Error('Some sales-score indexing tasks failed');
     console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);

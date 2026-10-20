@@ -33,7 +33,7 @@ test('sales score changes invalidate ranking versions only after every index bat
  const f=fixture(),work=f.run();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(f.calls.some(c=>c[0]==='invalidate'),false);f.release();await work;
  assert.deepEqual(f.calls.map(c=>c[0]),['write','write','wait','wait','scope','invalidate']);
- assert.deepEqual(f.calls.at(-1),['invalidate','fixture.myshopify.com','products','gid://shopify/Collection/1']);
+ assert.deepEqual(f.calls.at(-1),['invalidate','fixture.myshopify.com','scores','gid://shopify/Collection/1']);
  assert.deepEqual(JSON.parse(JSON.stringify(f.calls.at(-2))),['scope','fixture.myshopify.com',['gid://shopify/Product/1']]);
 });
 test('failed score indexing cannot publish a successful ranking invalidation event',async()=>{

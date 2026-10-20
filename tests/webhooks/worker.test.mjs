@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import vm from "node:vm";
-import {productRankingFingerprint} from '../../app/utils/shopCacheInvalidation.js';
+import {productRankingFingerprint,productContentFingerprint} from '../../app/utils/shopCacheInvalidation.js';
 
-async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false) {
+async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content') {
   const calls = [],invalidations=[];
   const admin = {};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
@@ -13,8 +13,8 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     .replaceAll("await import(", "await loadModule(")
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
-    productRankingFingerprint,
-    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged?2:1,tags:synced&&!unchanged?['NewTag']:['OldTag'],collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
+    productRankingFingerprint,productContentFingerprint,
+    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
     prisma: {product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
@@ -94,6 +94,15 @@ test('unchanged indexed product updates do not invalidate or rebuild collection 
   await worker.process({name:'PRODUCTS_UPDATE',data:{shop:'fixture.myshopify.com',payload:{id:123}}});
   assert.equal(worker.calls.some(([type])=>type==='sync'),true);
   assert.equal(worker.calls.some(([type])=>type==='invalidate'),false);
+});
+
+test('score-only webhooks use score invalidation and derived index metadata cannot pretend to be product edits',async()=>{
+ for(const mode of ['scores','derived']){
+  const worker=await loadWorker(null,false,false,mode);
+  await worker.process({name:'PRODUCTS_UPDATE',data:{shop:'fixture.myshopify.com',payload:{id:1}}});
+  assert.equal(worker.invalidations.length,mode==='scores'?1:0);
+  if(mode==='scores')assert.equal(worker.invalidations[0].kind,'scores');
+ }
 });
 
 test('a retry after successful indexing and failed invalidation still refreshes the affected ranking',async()=>{

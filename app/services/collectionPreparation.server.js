@@ -16,6 +16,7 @@ import {createCollectionWarmupScheduler} from '../utils/collectionWarmupSchedule
 import {createCollectionDependencies} from '../utils/collectionDependencies.js';
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {getPreparedCollectionCards} from './collectionCards.server.js';
+import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 
 // Explicit public contexts can be prepared before the first visitor. These are
@@ -36,7 +37,7 @@ function seededWarmups(shop) {
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>
   await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true }),
-  prepareDirect:prepareCollectionFromFacts,dependencies:createCollectionDependencies(redis),
+  prepareDirect:prepareCollectionFromFacts,dependencies:createCollectionDependencies(redis),scores:createCollectionSalesDependencies(redis),
   loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
   revalidateSaved:true,

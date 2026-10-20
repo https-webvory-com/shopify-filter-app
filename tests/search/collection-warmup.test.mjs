@@ -9,6 +9,7 @@ import {processCollectionRankingJob} from '../../app/utils/processCollectionRank
 import {createCollectionVisitorRefresh} from '../../app/utils/collectionVisitorRefresh.js';
 import {createCollectionWarmupScheduler} from '../../app/utils/collectionWarmupScheduler.js';
 import {createCollectionDependencies} from '../../app/utils/collectionDependencies.js';
+import {createCollectionSalesDependencies} from '../../app/utils/collectionSalesDependencies.js';
 import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
 
 async function fixture() {
@@ -30,6 +31,7 @@ async function fixture() {
     if(name==='../utils/collectionVisitorRefresh.js')return {createCollectionVisitorRefresh};
     if(name==='../utils/collectionWarmupScheduler.js')return {createCollectionWarmupScheduler};
     if(name==='../utils/collectionDependencies.js')return {createCollectionDependencies};
+    if(name==='../utils/collectionSalesDependencies.js')return {createCollectionSalesDependencies};
     if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};

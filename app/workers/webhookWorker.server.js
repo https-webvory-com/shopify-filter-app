@@ -3,7 +3,7 @@ import { redisOptions } from "../services/queue.server.js";
 import prisma from "../db.server.js";
 import { calculateProductScores, pushScoresToMeili } from "../services/orders.server.js";
 import meiliClient from "../services/meiliClient.server.js";
-import {productRankingFingerprint} from '../utils/shopCacheInvalidation.js';
+import {productRankingFingerprint,productContentFingerprint} from '../utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../utils/processCollectionRankingJob.js';
 
 let webhookWorker;
@@ -172,6 +172,8 @@ async function handleProductUpdate(shop, payload, job) {
   if (!job.data.rankingBefore) {
     await job.updateData({...job.data, rankingBefore: {
       fingerprint: productRankingFingerprint(before),
+      contentFingerprint: productContentFingerprint(before),
+      scoreFingerprint: JSON.stringify([before?.bestSellingScore,before?.trendingScore]),
       tags: before==null?[]:Array.isArray(before.tags)&&before.tags.every(t=>typeof t==='string')?before.tags:null,
       collectionIds: [...new Set([...beforeLinks.map(link=>link.collectionId),...(before?.collections||[])])],
     }});
@@ -182,7 +184,9 @@ async function handleProductUpdate(shop, payload, job) {
     const collectionIds=[...new Set([...job.data.rankingBefore.collectionIds,...beforeLinks.map(link=>link.collectionId),...(after?.collections||[])])];
     const beforeTags=job.data.rankingBefore.tags,afterTags=after==null?[]:after.tags;
     const externalProof=Array.isArray(beforeTags)&&Array.isArray(afterTags)?{tags:[...new Set([...beforeTags,...afterTags])],ids:[String(productId).split('/').pop()]}:undefined;
-    await invalidateShop(shop,{kind:'products',collectionIds,externalProof});
+    const contentChanged=typeof job.data.rankingBefore.contentFingerprint!=='string'||job.data.rankingBefore.contentFingerprint!==productContentFingerprint(after);
+    const scoresChanged=job.data.rankingBefore.scoreFingerprint!==JSON.stringify([after?.bestSellingScore,after?.trendingScore]);
+    if(contentChanged||scoresChanged)await invalidateShop(shop,{kind:contentChanged?'products':'scores',collectionIds,externalProof});
   }
   console.log(`CFP Worker: Product update synced for ${productId}`);
 }
