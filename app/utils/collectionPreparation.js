@@ -175,7 +175,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         ]);
         const value=await prepareDirect(spec);
         if(!value){directUnavailable.set(key,now()+30000);return null;}
-        const result=await publish(key,spec,value,startedRevision,{startedDataRevision});
+        const result=await publish(key,spec,{...value,rankingEventsVersion:1},startedRevision,{startedDataRevision});
         if(result.superseded)return null;
         if(result.refreshRequired)await schedule(key,spec,true);
         report({event:'direct-ready',shop:spec.shop,collectionId:spec.collectionId,key,products:value.ids.length});
@@ -227,10 +227,10 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       try{
         const retained=await loadDurable({shop:spec.shop,kind:'ranking',key});
         let saved;try{saved=decodePreparation(retained);}catch{}
-        if(valid(saved)&&Number.isFinite(saved.preparedAt)&&saved.preparedAt<=now()&&now()-saved.preparedAt<preparationLifetime*1000&&
+        if(valid(saved)&&Number.isFinite(saved.preparedAt)&&saved.preparedAt<=now()&&
           saved.productRevision===spec.productRevision&&saved.reusableDataRevision===await reuseRevision(spec)&&
           await validateReuse(spec,saved)){
-          const restored=await publish(key,spec,saved,saved.productRevision,{sourcePreparedAt:saved.preparedAt,startedDataRevision:saved.reusableDataRevision,persist:false});
+          const restored=await publish(key,spec,{...saved,rankingEventsVersion:1},saved.productRevision,{sourcePreparedAt:saved.preparedAt,startedDataRevision:saved.reusableDataRevision,persist:false});
           if(!restored.superseded){raw=await redis.get(key);report({event:'durable-restored',shop:spec.shop,collectionId:spec.collectionId,key});}
         }
       }catch(error){report({event:'durable-read-unavailable',shop:spec.shop,error:error.name});}
@@ -238,7 +238,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     if(!raw&&spec.retainForIdle===true){
       const previous=await reusable(spec);
       if(previous){
-        const result=await publish(key,spec,{ids:previous.ids,metadata:previous.metadata,sourceOutsideIds:previous.sourceOutsideIds},previous.productRevision,{
+        const result=await publish(key,spec,{ids:previous.ids,metadata:previous.metadata,sourceOutsideIds:previous.sourceOutsideIds,rankingEventsVersion:1},previous.productRevision,{
           sourcePreparedAt:previous.preparedAt,startedDataRevision:previous.reusableDataRevision??'0:0',
         });
         if(result.superseded)return {status:'pending'};
@@ -247,17 +247,17 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       }
     }
     // A maintained version need not scan the catalog again merely because it
-    // reached the refresh interval. Check every input epoch and the independent
+    // needs its Redis storage renewed. Check every input epoch and the independent
     // outside-Include base order before renewing a supported public ranking.
     if(raw&&revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true){
       let saved;try{saved=decodePreparation(raw);}catch{}
       if(valid(saved)&&saved.reusableDataRevision!==null&&saved.productRevision===spec.productRevision&&Number.isFinite(saved.preparedAt)&&
-          (now()-saved.preparedAt>=preparationFreshnessMs-120000||await redis.ttl(key)<120)){
+          (saved.rankingEventsVersion!==1||await redis.ttl(key)<120)){
         const dataRevision=await reuseRevision(spec);
         if((saved.reusableDataRevision??'0:0')===dataRevision){
           let verified=false;try{verified=await validateReuse(spec,saved);}catch{}
           if(verified){
-            const result=await publish(key,spec,saved,spec.productRevision,{sourcePreparedAt:now(),startedDataRevision:dataRevision});
+            const result=await publish(key,spec,{...saved,rankingEventsVersion:1},spec.productRevision,{sourcePreparedAt:saved.preparedAt,startedDataRevision:dataRevision});
             if(result.superseded)return {status:'pending'};
             raw=await redis.get(key);
             report({event:'unchanged-revalidated',shop:spec.shop,collectionId:spec.collectionId,key});
@@ -271,15 +271,14 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       let cached;try { cached=decodePreparation(raw); } catch { /* Build missing/corrupt inputs. */ }
       if (!valid(cached) || cached.productRevision !== spec.productRevision ||
           externalCandidates(spec)&&cached.reusableDataRevision!==await reuseRevision(spec)||
-          !Number.isFinite(cached.preparedAt) || now()-cached.preparedAt >= preparationFreshnessMs-120000 ||
-          await redis.ttl(key)<120 || !await dataEpochMatches(spec,cached.reusableDataRevision)) {
+          !Number.isFinite(cached.preparedAt) || revalidateSaved&&spec.needsShopifyOrder===true&&cached.rankingEventsVersion!==1 || !await dataEpochMatches(spec,cached.reusableDataRevision)) {
         const result=await process({key,spec,queuedAt:now()});
         if(result.superseded)return {status:'pending'};
       }else if(saveDurable){
         // Adopt already-ready Redis rankings on release without rebuilding or
         // extending their source freshness/expiry windows.
         try{await saveDurable({shop:spec.shop,kind:'ranking',key,collectionId:String(spec.collectionId).split('/').pop(),payload:raw,
-          validatedAt:cached.preparedAt,expiresAt:cached.preparedAt+preparationLifetime*1000});}
+          validatedAt:cached.preparedAt,expiresAt:now()+preparationLifetime*1000});}
         catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
       }
       return get(spec,{warmup:true});
@@ -294,6 +293,8 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
       }
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
+      if(revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true&&value.rankingEventsVersion!==1)
+        return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
       if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision))
         return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
       const productsChanged=value.productRevision!==spec.productRevision||
@@ -305,11 +306,12 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
         return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
       }
-      // Refresh a valid version before expiry without holding up visitors.
-      if (productsChanged || !Number.isFinite(value.preparedAt) ||
-          now() - value.preparedAt >= preparationFreshnessMs - 120000 || await redis.ttl(key) < 120) {
+      // Only changed/legacy inputs need a rebuild. Renewing Redis storage must
+      // not recalculate an unchanged database-saved product sequence.
+      if (productsChanged || !Number.isFinite(value.preparedAt)) {
         try { await schedule(key, spec, true, !warmup); } catch { /* A usable version remains valid if refresh scheduling fails. */ }
       }
+      if(spec.retainForIdle===true&&await redis.ttl(key)<120&&redis.expire)try{await redis.expire(key,preparationLifetime);}catch{}
       if (spec.retainForIdle === true && spec.needsShopifyOrder) {
         // Adopt already prepared records on deployment too, without requiring
         // a rebuild before the last-order reuse path can become available.
@@ -345,7 +347,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       productRevision(spec.shop,spec.collectionId),spec.retainForIdle===true?reuseRevision(spec):null,
     ]);
     const value = await prepare(spec);
-    const result=await publish(key,spec,value,startedRevision,{startedDataRevision});
+    const result=await publish(key,spec,{...value,rankingEventsVersion:1},startedRevision,{startedDataRevision});
     if(!result.superseded)report({event:'build-ready',shop:spec.shop,collectionId:spec.collectionId,key,buildMs:now()-startedAt,products:value.ids.length});
     return result;
   }
@@ -380,7 +382,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     }
     if(spec.retainForIdle===true&&saveDurable&&persist)try{
       await saveDurable({shop:spec.shop,kind:'ranking',key,collectionId:String(spec.collectionId).split('/').pop(),payload,
-        validatedAt:sourcePreparedAt??now(),expiresAt:(sourcePreparedAt??now())+preparationLifetime*1000});
+        validatedAt:sourcePreparedAt??now(),expiresAt:now()+preparationLifetime*1000});
     }catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId) !== startedRevision };
   }

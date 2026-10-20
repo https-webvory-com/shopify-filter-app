@@ -7,8 +7,8 @@ const head=await fs.readFile('extensions/theme-extension/blocks/collection_loadi
 const bootstrap=await fs.readFile('extensions/theme-extension/assets/collectionLoading.js','utf8');
 const body=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
 test('head runs the bootstrap inline before deferred asset loading, using the same guarded source',async()=>{
- assert.ok(head.includes("<script>{% render 'collection_loading_start' %}</script>"));
- assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),await fs.readFile('extensions/theme-extension/assets/collectionLoading.min.js','utf8'));
+ assert.ok(head.includes("{% render 'collection_loading_start' %}"));
+ assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),'<script>'+await fs.readFile('extensions/theme-extension/assets/collectionLoading.min.js','utf8')+'</script>\n');
 });
 function fixture(search='',tags='',delayed=false,options={}){
  let metaPresent=!delayed,callback;const listeners={};
@@ -24,6 +24,7 @@ function fixture(search='',tags='',delayed=false,options={}){
 test('head starts the exact market/locale request before widget markup and body consumes it without duplicate fetching',async()=>{
  const f=fixture();assert.equal(f.calls.length,1);const params=new URL(f.calls[0].url).searchParams;
  assert.equal(params.get('country'),'IN');assert.equal(params.get('locale'),'en');assert.equal(params.get('responseProfile'),'collection-preview-v1');
+ assert.equal(f.calls[0].options.priority,'high');
  f.body();assert.equal(f.calls.length,1);await f.window._cfpRankedEarlyFetch.promise;
 });
 test('head preserves customer scope and rejects filtered, manual and later-page URLs',async()=>{
@@ -111,4 +112,13 @@ test('late adoption cannot render a cancelled body request',async()=>{
  const f=fixture('','',false,{bodyFirst:true});f.window.Shopify={country:'IN',locale:'en'};
  f.body();const early=f.window._cfpRankedEarlyFetch;await early.promise;early.controller.abort();
  f.head();await Promise.resolve();assert.notEqual(early.delivered,true);assert.equal(f.calls.length,1);
+});
+
+test('a late body stream callback cannot deliver to a replacement request with the same URL',async()=>{
+ const f=fixture('','',false,{bodyFirst:true});f.window.Shopify={country:'IN',locale:'en'};
+ let publish,calls=0;
+ f.window.cfpReadEarlyResponse=async(_response,onProduct)=>{publish=onProduct;return {status:200,payload:{products:[]}};};
+ f.body();const old=f.window._cfpRankedEarlyFetch;await old.promise;
+ f.window._cfpRankedEarlyFetch={url:old.url,controller:new AbortController(),deliver:()=>calls++};
+ publish({status:200,payload:{products:[{id:'old'}]}});assert.equal(calls,0);
 });

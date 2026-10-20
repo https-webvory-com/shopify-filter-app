@@ -8,7 +8,7 @@ import {isPublicCollectionCards} from '../../app/utils/collectionCards.js';
 function fixture(options={}){
  const shop='fixture.myshopify.com',url=`https://api.test/api/filter?shop=${shop}&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-cards-v1`;
  const values=new Map(),sessions=[];let clock=100000,valid=true,validation=async()=>valid;
- const prepared={ids:['1','2'],metadata:{'1':{merchandisingImage:'red.jpg'}},productRevision:'0',preparedAt:clock,reusableDataRevision:'0:0',orderUpdatedAt:100};
+ const prepared={ids:['1','2'],metadata:{'1':{merchandisingImage:'red.jpg'}},productRevision:'0',preparedAt:clock,reusableDataRevision:'0:0',orderUpdatedAt:100,rankingEventsVersion:1};
  const state={configuration:'0',products:'0',globalProducts:'0',hardAll:'0',hardCollection:'0',scheduleEpoch:'0',orderRevision:'native-order'};
  let source=encodePreparation(prepared);
  const redis={get:async key=>values.get(key),setex:async(key,_ttl,value)=>values.set(key,value)};
@@ -58,6 +58,13 @@ test('soft product updates reuse freshly validated cards only inside the canonic
  external.prepared.reusableDataRevision='0:0:0';external.setSource(encodePreparation(external.prepared));
  await(await external.begin()).finish(external.payload,'fp');external.state.globalProducts='1';assert.ok(await external.store.get(external.request));
  external.advance(599999);assert.ok(await external.store.get(external.request));external.advance(1);assert.equal(await external.store.get(external.request),null);
+});
+
+test('legacy external-candidate snapshots fall back for one-time canonical verification before indefinite reuse',async()=>{
+ const f=fixture();f.spec.pinnedIds=['1'];f.prepared.reusableDataRevision='0:0:0';f.setSource(encodePreparation(f.prepared));
+ await(await f.begin()).finish(f.payload,'fp');
+ const {rankingEventsVersion,...legacy}=f.prepared;f.setSource(encodePreparation(legacy));
+ assert.equal(await f.store.get(f.request),null);
 });
 
 test('preview delivery includes every validated card and never exposes unchecked later cards',async()=>{

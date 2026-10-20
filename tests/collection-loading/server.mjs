@@ -118,7 +118,7 @@ export async function createLoadingServer({redisLayer}={}) {
   // Exercise the published block's actual async entry points, so this fixture
   // cannot pass with an async renderer that the extension never loads.
   const headAsyncScripts=[...loadingBlock.matchAll(/<script src="\{\{ '([^']+)' \| asset_url \}\}"[^>]*async="async"><\/script>/g)]
-    .map(match=>`<script async src="/assets/${match[1]}"></script>`).join('');
+    .map(match=>`<script async fetchpriority="${match[0].includes('fetchpriority="high"')?'high':'auto'}" src="/assets/${match[1]}"></script>`).join('');
   const start=liquid.indexOf('  (function() {',liquid.indexOf('Fire API request'));
   const inline=liquid.slice(start,liquid.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}',shop).replace('{{ cfp_collection_handle }}','fixture').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en').replaceAll("'https://aisearchfilter.webvory.com", "location.origin + '");
   const server=http.createServer(async(req,res)=>{
@@ -127,6 +127,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
         if(updates.reset){for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
+        if(updates.reset)state.streamDelay=0;
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
         if(updates.invalidate){state.revision++;await invalidate(shop);}
@@ -144,7 +145,7 @@ export async function createLoadingServer({redisLayer}={}) {
         await new Promise(resolve=>setTimeout(resolve,state.themeDelay||0));res.setHeader('Content-Type','text/javascript');res.end("document.addEventListener('DOMContentLoaded',()=>{window.pageDataMap={};});");return;
       }
       if(url.pathname.startsWith('/assets/')){
-        const name=url.pathname.split('/').pop();if(!['collectionWidget.js','collectionFilterPro.min.js','collectionFilterPro.css','marketPricing.js','collectionLoading.min.js'].includes(name)){res.writeHead(404).end();return;}
+        const name=url.pathname.split('/').pop();if(!['collectionWidget.js','collectionFilterPro.min.js','collectionFilterPro.css','marketPricing.js','collectionLoading.min.js','collectionPreviewStream.min.js'].includes(name)){res.writeHead(404).end();return;}
         if(name==='collectionFilterPro.css'&&state.cssDelay)await new Promise(resolve=>setTimeout(resolve,state.cssDelay));
         if(name==='collectionFilterPro.min.js'&&state.assetDelay)await new Promise(resolve=>setTimeout(resolve,state.assetDelay));
         if(name==='collectionLoading.min.js'&&state.headDelay)await new Promise(resolve=>setTimeout(resolve,state.headDelay));
@@ -157,11 +158,16 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
         const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url,{headers:req.headers}),params:{},context:{}});
-        const bytes=Buffer.from(await response.arrayBuffer());
-        const text=(response.headers.get('Content-Encoding')==='gzip'?gunzipSync(bytes):bytes).toString();const data=text?JSON.parse(text):{};
+        const streaming=response.headers.get('Content-Type')?.includes('application/x-ndjson');
+        const captured=[];let chunkIndex=0;res.writeHead(response.status,Object.fromEntries(response.headers));
+        for await(const chunk of response.body){if(streaming&&chunkIndex++>1&&state.streamDelay)await new Promise(resolve=>setTimeout(resolve,state.streamDelay));captured.push(Buffer.from(chunk));if(!res.destroyed)res.write(Buffer.from(chunk));}res.end();
+        const bytes=Buffer.concat(captured);
+        const text=(response.headers.get('Content-Encoding')==='gzip'?gunzipSync(bytes):bytes).toString();
+        let data;
+        if(streaming){const records=text.trim().split('\n').map(line=>JSON.parse(line));data={...records[0].payload,products:records.filter(r=>r.type==='product').map(r=>r.product)};}else data=text?JSON.parse(text):{};
         const target=url.searchParams.get('responseProfile')==='collection-config-v1'?configurationRequests:requests;
         target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
-        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(bytes);return;
+        return;
       }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));
@@ -176,7 +182,7 @@ export async function createLoadingServer({redisLayer}={}) {
           .replace('<script src="/assets/collectionWidget.js">','<script defer src="/assets/collectionWidget.js">');
         }if(state.early){const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+inline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}
       res.writeHead(404).end();
-    }catch(error){res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
+    }catch(error){if(res.headersSent){res.destroy();return;}res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });
   return {server,state,trace,facetRequests,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),

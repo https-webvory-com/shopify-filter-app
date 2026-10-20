@@ -4,6 +4,10 @@ const clean=id=>String(id).split('/').pop();
 // engine's base order, which sales-score writes can change independently of
 // product webhooks. Validate that small order before reusing a saved sequence.
 export async function validateCollectionReuse(index,spec,value){
+ // This marker is published only by a fresh build or a verified legacy
+ // adoption. Callers also require matching product/global/data revisions.
+ // Sales-score index writes now advance the global product revision too.
+ if(spec.retainForIdle===true&&value.rankingEventsVersion===1)return true;
  if(spec.needsShopifyOrder!==true||!Array.isArray(spec.orderedIds)||!['best-selling','bestselling'].includes(spec.sortBy))return false;
  const native=new Set(spec.orderedIds.map(clean));
  if(value.ids.every(id=>native.has(clean(id))))return true;

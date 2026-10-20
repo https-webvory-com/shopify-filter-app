@@ -414,7 +414,7 @@ explicit Shopify CDN preconnect was removed. Verify without publishing with
 
 Saved-card hits return before the canonical ranking path. They now report real
 public visits to the bounded registry and, when their ranking has known product
-changes or reaches the eight-minute refresh point, enqueue/promote the same
+changes, enqueue/promote the same
 one-context catalog job at priority 5. This work does not delay card delivery.
 Fresh unchanged rankings do not enqueue rebuilds, probes do not enqueue visits,
 and failed jobs retain their existing cooldown/backoff. All snapshot, product,
@@ -433,3 +433,42 @@ Maxi Dresses tab recorded repeated 202 pending responses until roughly 16s.
 That is a backend-readiness wait, distinct from image/price rendering. These
 local changes do not establish live two-second performance; backend/worker and
 extension deployment and fresh first-visit measurement remain required.
+
+### Database ranking reuse on change events
+
+Public rankings use their durable database sequence after Redis expiry or
+eviction, including beyond the old one-day retention interval. Reads still
+verify configuration, product/data versions, order identity, shop, market and
+reuse eligibility. Redis storage TTL and ranking validity are separate. An
+unchanged ranking no longer recalculates just because eight minutes elapsed,
+its Redis TTL is low, or a catalog warmup tick runs. Identical ranking saves
+also skip database updates. Durable byte and entry budgets remain enforced.
+
+Product, collection/order, pinning/merchandising, settings, hard data and relevant
+schedule changes still invalidate or rebuild affected inputs. Known stock or
+product changes do not gain an extended stale-data window. Missing/corrupt
+rankings and lost invalidation history still need a verified rebuild. Card
+snapshots retain their own independent freshness and current-document checks.
+
+Successful sales-score index updates also emit product-version changes for the
+affected collections and the global outside-Include context, after their Meili
+tasks complete. This covers sales-driven order changes without product-edit
+webhooks. New or verified rankings carry `rankingEventsVersion: 1`. Legacy
+outside-candidate snapshots undergo one canonical verification/adoption or
+rebuild during this upgrade; they are not blindly given indefinite reuse.
+
+### Prioritized loader and progressive card transport
+
+The early-loader preload, early scripts and first-page fetch use high-priority
+browser hints. Quick-view CSS is no longer preloaded alongside the critical
+product request. These hints cannot force execution before arbitrary merchant
+scripts or before Shopify delivers the app embed; no merchant theme is edited.
+
+The early loader negotiates newline-delimited preview records when supported.
+The backend validates the ranking and displayed documents first, then sends
+metadata and each ready card in order, with sync-flushed gzip when accepted and
+`X-Accel-Buffering: no`. The reader appends complete records immediately instead
+of waiting for the entire response, preserving earlier card DOM nodes. Images,
+prices and facets remain independent. Ordinary JSON and older backends remain
+supported. No production timer deliberately stages delivery; test-only tail
+delays prove that the first card appears while later bytes are still pending.

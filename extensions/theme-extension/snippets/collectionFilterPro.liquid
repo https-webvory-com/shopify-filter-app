@@ -82,8 +82,8 @@
           configurationPromise = fetch('https://aisearchfilter.webvory.com/api/filter?' + configParams.toString(),{signal:controller.signal,cache:'no-cache'})
             .then(function(response) { return response.ok ? response.json() : null; }).catch(function() { return null; });
         }
-        window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,configurationPromise:configurationPromise,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-cache'})
-          .then(async function(response) { return {status:response.status,payload:await response.json()}; })
+        window._cfpRankedEarlyFetch = {url:earlyUrl,controller:controller,configurationPromise:configurationPromise,promise:fetch(earlyUrl,{signal:controller.signal,cache:'no-cache',priority:'high',headers:{Accept:window.cfpReadEarlyResponse&&rankedParams.get('responseProfile')==='collection-preview-v1'?'application/x-ndjson, application/json':'application/json'}})
+          .then(async function(response) { return window.cfpReadEarlyResponse?window.cfpReadEarlyResponse(response,function(result){const current=window._cfpRankedEarlyFetch;if(current?.url===earlyUrl&&current.controller===controller&&!controller.signal.aborted)current.deliver?.(result);}):{status:response.status,payload:await response.json()}; })
           .catch(function() { return null; })
           .finally(function() { Promise.resolve(configurationPromise).finally(function() { clearTimeout(timeout); }); })};
         return;
@@ -427,7 +427,7 @@ and complete widget markup so their download cannot block parsing the widget.{%-
 {% if template.name == 'search' %}
 <script src="{{ 'searchSettings.js' | asset_url }}" defer="defer"></script>
 {% endif %}
-<script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" fetchpriority="high" defer="defer"></script>
 {% if template.name == 'search' %}
   {{ 'searchBanners.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'searchBanners.js' | asset_url }}" defer="defer"></script>

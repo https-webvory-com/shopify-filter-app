@@ -1,5 +1,6 @@
 import {packCollectionResponse} from './collectionResponse.js';
-import {gzip} from 'node:zlib';
+import {gzip,createGzip,constants} from 'node:zlib';
+import {Readable} from 'node:stream';
 import {promisify} from 'node:util';
 const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
@@ -38,8 +39,26 @@ export function collectionPreviewPayload(payload,{limit=5}={}){
 }
 export async function collectionCardsResponse(payload,state='miss',request,{previewLimit=25}={}){
  const preview=request&&new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1';
+ const stream=preview&&(request.headers.get('accept')||'').split(',').some(value=>{const [type,...params]=value.trim().split(';');return type==='application/x-ndjson'&&!params.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
+ if(stream){
+  // All normal ranking/document validation has already run. Send each ready
+  // preview card separately; never wait for facets, prices or widget startup.
+  const {products,...metadata}=collectionPreviewPayload(payload,{limit:previewLimit});
+  function* records(){
+   yield Buffer.from(JSON.stringify({type:'start',count:products.length,payload:metadata})+'\n');
+   for(const product of products)yield Buffer.from(JSON.stringify({type:'product',product})+'\n');
+   yield Buffer.from(JSON.stringify({type:'end',count:products.length})+'\n');
+  }
+  const source=Readable.from(records());
+  const headers={'Content-Type':'application/x-ndjson; charset=utf-8','Cache-Control':'no-store, no-transform','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state,'Vary':'Accept, Accept-Encoding','X-Accel-Buffering':'no'};
+  const gzipAccepted=(request.headers.get('accept-encoding')||'').split(',').some(value=>/^gzip(?:\s*;\s*q\s*=\s*(?!0(?:\.0*)?$)[\d.]+)?$/i.test(value.trim()));
+  // Sync-flush each available record rather than buffering the complete gzip.
+  const body=gzipAccepted?source.pipe(createGzip({flush:constants.Z_SYNC_FLUSH})):source;
+  if(gzipAccepted)headers['Content-Encoding']='gzip';
+  return new Response(Readable.toWeb(body),{headers});
+ }
  let body=JSON.stringify(preview?collectionPreviewPayload(payload,{limit:previewLimit}):collectionCardsPayload(payload));
- const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state,'Vary':'Accept-Encoding'};
+ const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-CFP-Collection-Cards','X-CFP-Collection-Cards':state,'Vary':preview?'Accept, Accept-Encoding':'Accept-Encoding'};
  // First-page variant/configuration data is repetitive. Compress after all
  // validation; this changes transport only, never cache freshness or ranking.
  const encodings=(request?.headers.get('accept-encoding')||'').split(',').map(value=>value.trim().split(';').map(part=>part.trim()));

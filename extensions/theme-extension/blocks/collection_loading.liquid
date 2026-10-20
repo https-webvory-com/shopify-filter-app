@@ -1,20 +1,21 @@
 {% if template.name == 'collection' and collection %}
-  {{ 'collectionLoading.min.js' | asset_url | preload_tag: as: 'script' }}
+  {{ 'collectionLoading.min.js' | asset_url | preload_tag: as: 'script', fetchpriority: 'high' }}
   {% # theme-check-disable RemoteAsset %}
   {% # API connection hint, not a downloadable asset; this origin cannot be served by Shopify CDN. %}
   <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
   {% # theme-check-enable RemoteAsset %}
   {{ 'collectionFilterPro.css' | asset_url | preload_tag: as: 'style' }}
-  {{ 'quickView.css' | asset_url | preload_tag: as: 'style' }}
   <meta name="cfp-collection-context"
     data-shop="{{ shop.permanent_domain | escape }}"
     data-handle="{{ collection.handle | escape }}"
     data-country="{{ localization.country.iso_code | escape }}"
     data-locale="{{ request.locale.iso_code | escape }}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
-  <script src="{{ 'collectionLoading.min.js' | asset_url }}" async="async"></script>
-  <script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" async="async"></script>
-  <script>{% render 'collection_loading_start' %}</script>
+  <script src="{{ 'collectionPreviewStream.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
+  <script src="{{ 'collectionLoading.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
+  <script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
+  {% render 'collection_stream_reader' %}
+  {% render 'collection_loading_start' %}
 {% endif %}
 
 {% schema %}

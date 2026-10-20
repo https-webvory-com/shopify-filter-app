@@ -104,7 +104,7 @@ async function handleOrderPaid(shop, orderPayload) {
   }
 
   if (modifiedProductIds.size > 0) {
-    await pushScoresToMeili(shop);
+    await pushScoresToMeili(shop,[...modifiedProductIds]);
   }
 }
 
@@ -150,7 +150,7 @@ async function handleOrderCancelled(shop, orderPayload) {
   }
 
   if (modifiedProductIds.size > 0) {
-    await pushScoresToMeili(shop);
+    await pushScoresToMeili(shop,[...modifiedProductIds]);
   }
 }
 

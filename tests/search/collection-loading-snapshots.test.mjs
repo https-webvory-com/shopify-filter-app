@@ -16,7 +16,7 @@ function fixture(options={}){
  const store=createCollectionLoadingSnapshots({database,redis,now:()=>time,...options});
  const shop='fixture.myshopify.com',key=n=>`collectionFirstPage:${shop}:`+String(n).padStart(64,'a');
  const write=(n,payload='payload')=>store.save({shop,kind:'cards',key:key(n),aliases:[key(n),key(n+100)],collectionId:'1',payload,expiresAt:time+10000});
- return {store,rows,values,database,redis,shop,key,write,advance:n=>time+=n,locks:()=>locks};
+ return {store,rows,values,database,redis,shop,key,write,advance:n=>time+=n,locks:()=>locks,now:()=>time};
 }
 
 test('durable copies deduplicate handle/ID aliases, remain tenant scoped and expire',async()=>{
@@ -31,6 +31,18 @@ test('Redis resets reject old durable copies instead of resurrecting lost invali
  const f=fixture();await f.write(1);f.values.clear();
  assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);
  await f.write(1,'replacement');assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),'replacement');
+});
+
+test('durable rankings survive time expiry and card cleanup, while unchanged saves perform no database update',async()=>{
+ const f=fixture(),key=`collectionPreparedSequence:${f.shop}:background-v2:`+'b'.repeat(64);
+ const save=payload=>f.store.save({shop:f.shop,kind:'ranking',key,collectionId:'1',payload,expiresAt:f.now()+10000});
+ assert.equal(await save('saved order'),true);const original=f.rows.get(key).updatedAt.getTime();
+ await f.write(1);f.advance(86400000*30);
+ assert.equal(await f.store.load({shop:f.shop,kind:'ranking',key}),'saved order');
+ assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),null);
+ await f.write(2);assert.ok(f.rows.has(key));assert.equal(f.rows.has(f.key(1)),false);
+ await save('saved order');assert.equal(f.rows.get(key).updatedAt.getTime(),original);
+ await save('updated order');assert.ok(f.rows.get(key).updatedAt.getTime()>original);
 });
 
 test('durable byte/entry budgets evict oldest owned snapshots and oversized writes are rejected',async()=>{

@@ -221,7 +221,7 @@ test('an active visitor promotes a queued background warmup without duplicating 
 test('a visitor promotes a ready collection refresh ahead of catalog work without changing freshness or duplicating jobs',async()=>{
  const f=fixture();Object.assign(f.spec,{retainForIdle:true,collectionId:'1'});
  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
- f.advance(490000);
+ f.advance(490000);f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
  assert.equal((await f.service.get(f.spec,{warmup:true})).status,'ready');
  assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
  assert.equal((await f.service.get(f.spec)).status,'ready');
@@ -308,17 +308,28 @@ test('Redis and queue failures are surfaced instead of silently serving fallback
   await assert.rejects(f.service.get(f.spec),/Redis unavailable/);
 });
 
-test('idle beyond ten minutes serves the last usable ranking and refreshes in the background',async()=>{
+test('idle beyond ten minutes serves the saved unchanged ranking without rebuilding',async()=>{
   const f=fixture();f.spec.retainForIdle=true;let storedLifetime;
   const original=f.redis.setex;f.redis.setex=async(key,ttl,value)=>{storedLifetime=ttl;return original(key,ttl,value);};
   await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
   assert.equal(storedLifetime,86400);assert.equal(preparationLifetime,86400);
   f.advance(660000);assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
-  assert.equal(f.builds(),1);assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,5);
+  assert.equal(f.builds(),1);assert.equal(f.queued.length,1);
   const oldKey=preparationKey(f.spec);f.values.set(preparationRevisionKey(f.spec.shop),'1');
   assert.deepEqual(await f.service.get(f.spec),{status:'pending'});
   assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'ready');
   assert.notEqual(preparationKey({...f.spec,revision:'1'}),oldKey);
+});
+
+test('an unchanged database ranking restores after thirty days without scanning and product events still invalidate it',async()=>{
+ const f=fixture(),spec={...f.spec,collectionId:'1',retainForIdle:true};let saved;
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,
+  prepare:async()=>f.result,saveDurable:async({payload})=>{saved=payload;return true;},loadDurable:async()=>saved});
+ await service.get(spec,{warmup:true,precompute:true});assert.ok(saved);
+ f.values.delete(preparationKey(spec));f.advance(86400000*30);
+ assert.deepEqual(await service.get(spec),{status:'ready',...f.result});assert.equal(f.queued.length,0);
+ f.values.delete(preparationKey(spec));f.values.set(productRevisionKey(spec.shop,'1'),'1');
+ assert.equal((await service.get(spec)).status,'pending');assert.equal(f.queued.length,1);
 });
 
 test('filtered or customer-specific contexts keep short retention and retention does not change ranking identity',async()=>{
@@ -421,7 +432,7 @@ test('unchanged maintained public rankings renew without rebuilding or consuming
   f.advance(660000);
   const ready=await service.get(spec,{warmup:true,precompute:true});assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);
  }
- assert.equal(builds,1);assert.equal(validations,4);assert.equal(f.queued.length,0);
+ assert.equal(builds,1);assert.equal(validations,0);assert.equal(f.queued.length,0);
 });
 
 test('renewal cannot hide product, catalog, outside-order or private-context changes',async()=>{
@@ -433,6 +444,7 @@ test('renewal cannot hide product, catalog, outside-order or private-context cha
    validateReuse:async()=>{if(scenario==='concurrent')await f.redis.incr(productRevisionKey(spec.shop,'1'));return scenario!=='outside';},
    prepare:async()=>{builds++;return f.result;}});
   await service.get(spec,{warmup:true,precompute:true});f.advance(660000);
+  if(scenario==='concurrent')f.redis.ttl=async()=>60;
   if(scenario==='products')await f.redis.incr(productRevisionKey(spec.shop,'1'));
   if(scenario==='outsideGlobal')await f.redis.incr(productRevisionKey(spec.shop,'all'));
   if(scenario==='catalog')await f.redis.incr(rankingDataRevisionKey(spec.shop));
@@ -441,7 +453,8 @@ test('renewal cannot hide product, catalog, outside-order or private-context cha
   assert.equal(builds,1,scenario);
   if(scenario==='outside')assert.equal(ready.status,'ready'); // Existing short stock-freshness contract remains intact.
   else assert.equal(ready.status,'pending',scenario);
-  if(scenario!=='concurrent')assert.equal(f.queued.length,1,scenario);
+  if(!['concurrent','outside'].includes(scenario))assert.equal(f.queued.length,1,scenario);
+  if(scenario==='outside')assert.equal(f.queued.length,0);
  }
 });
 

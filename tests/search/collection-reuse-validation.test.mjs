@@ -26,6 +26,14 @@ test('legacy outside orders and excessive proofs rebuild while explicit placehol
  assert.equal(await validateCollectionReuse(index,spec,{ids:['x'],sourceOutsideIds:Array.from({length:1001},(_,i)=>String(i))}),false);
  assert.equal(await validateCollectionReuse(index,{...spec,pinnedIds:['x']},{ids:['x','1'],sourceOutsideIds:[]}),true);
 });
+
+test('verified event-driven public rankings reuse their versioned order without repeating outside-order scans',async()=>{
+ const index={search:()=>assert.fail('Unexpected rescan')};
+ const saved={ids:['x','1'],sourceOutsideIds:Array.from({length:2000},(_,i)=>String(i)),rankingEventsVersion:1};
+ assert.equal(await validateCollectionReuse(index,{...spec,retainForIdle:true},saved),true);
+ assert.equal(await validateCollectionReuse(index,{...spec,retainForIdle:true,needsShopifyOrder:false,sortBy:'price-ascending'},saved),true);
+ assert.equal(await validateCollectionReuse(index,{...spec,retainForIdle:false,needsShopifyOrder:false},saved),false);
+});
 test('the ranker captures outside base IDs before merchandising and excludes fixed placeholder pins',async()=>{
  const docs=['x','1','y','2'].map(id=>({id,priceMin:10}));
  const result=await prepareCollectionRanking({...spec,shop:'fixture',rule:{conditions:[]},pinnedIds:['pin']},{

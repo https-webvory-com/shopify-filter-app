@@ -14,16 +14,16 @@ function fixture(){
 }
 test('a retained ranking survives Redis eviction without scanning or waiting for another worker',async()=>{
  const f=fixture();await f.service.get(f.spec,{warmup:true,precompute:true});assert.equal(f.builds(),1);
- f.values.delete(preparationKey(f.spec));const result=await f.service.get(f.spec);
+ f.values.delete(preparationKey(f.spec));f.advance(86400000*30);const result=await f.service.get(f.spec);
  assert.equal(result.status,'ready');assert.deepEqual(result.ids,['1','2']);assert.equal(result.metadata['1'].merchandisingImage,'selected.jpg');assert.equal(f.builds(),1);assert.equal(f.jobs.length,0);
 });
-test('durable rankings cannot bypass configuration, stock, hard epochs or retention',async()=>{
- for(const change of ['configuration','product','hard','expired','corrupt']){
+test('durable rankings cannot bypass configuration, stock, hard epochs, future timestamps or corruption',async()=>{
+ for(const change of ['configuration','product','hard','future','corrupt']){
   const f=fixture();await f.service.get(f.spec,{warmup:true,precompute:true});f.values.clear();
   if(change==='configuration')f.spec={...f.spec,revision:'1'};
   if(change==='product')f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
   if(change==='hard')f.values.set(rankingDataRevisionKey(f.spec.shop,'1'),'1');
-  if(change==='expired')f.advance(86400001);
+  if(change==='future')f.advance(-1);
   if(change==='corrupt')f.disk.set(preparationKey(f.spec),'{bad');
   const result=await f.service.get(f.spec);assert.notEqual(result.status,'ready',change);assert.equal(f.builds(),1);
  }

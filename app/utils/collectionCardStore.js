@@ -37,7 +37,10 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
  function current(state,external){
   if(!state?.preparedRaw||state.epochsPresent===false||typeof state.orderRevision!=='string'||!state.orderRevision)return null;
   let prepared;try{prepared=decodePreparation(state.preparedRaw);}catch{return null;}
-  if(!Array.isArray(prepared?.ids)||!prepared.metadata||!Number.isFinite(prepared.preparedAt)||now()-prepared.preparedAt>=lifetime*1000)return null;
+  if(!Array.isArray(prepared?.ids)||!prepared.metadata||!Number.isFinite(prepared.preparedAt)||prepared.preparedAt>now())return null;
+  // Old outside-Include/pin snapshots must pass the canonical one-time
+  // adoption/build before receiving indefinite event-driven retention.
+  if(external&&prepared.rankingEventsVersion!==1)return null;
   const epochs=typeof prepared.reusableDataRevision==='string'?prepared.reusableDataRevision.split(':'):[];
   if(epochs[0]!==state.hardAll||epochs[1]!==state.hardCollection)return null;
   const productsChanged=prepared.productRevision!==state.products||external&&epochs[2]!==state.globalProducts;

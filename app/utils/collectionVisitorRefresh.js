@@ -1,16 +1,15 @@
 import {createHash} from 'node:crypto';
-import {normalizeCollectionWarmup,preparationFreshnessMs} from './collectionPreparation.js';
+import {normalizeCollectionWarmup} from './collectionPreparation.js';
 
 // Saved-card hits bypass the canonical ranker. Keep their visitor contexts in
-// the registry and refresh changed/aging rankings before the next visit expires.
+// the registry and refresh changed rankings. Age alone never queues a rebuild.
 export function createCollectionVisitorRefresh({queue,register,now=Date.now}){
  return async function({request,entry,prepared,state}){
   const record=normalizeCollectionWarmup(entry.shop,request.url,entry.collectionId);
   if(!record)return;
   await register(entry.shop,request.url,entry.collectionId);
   const externalChanged=entry.external&&prepared.reusableDataRevision?.split(':')[2]!==state.globalProducts;
-  if(prepared.productRevision===state.products&&!externalChanged&&
-     Number.isFinite(prepared.preparedAt)&&now()-prepared.preparedAt<preparationFreshnessMs-120000)return;
+  if(prepared.productRevision===state.products&&!externalChanged&&Number.isFinite(prepared.preparedAt))return;
   const priority=5,jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
   let job=await queue.getJob(jobId);
   if(job){

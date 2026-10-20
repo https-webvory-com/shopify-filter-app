@@ -318,7 +318,7 @@ export function calculateProductScores(unitsLifetime, unitsSold7Days, revenueLif
  * Pushes updated scores to Meilisearch for the given shop.
  * Uses batch updates for efficiency.
  */
-export async function pushScoresToMeili(shop) {
+export async function pushScoresToMeili(shop, changedProductIds=null) {
   try {
     // Fetch all products with their scores
     const products = await prisma.product.findMany({
@@ -341,12 +341,27 @@ export async function pushScoresToMeili(shop) {
 
     // Push in batches of 1000 to avoid timeouts
     const MEILI_BATCH = 1000;
+    const scoreTasks=[];
     for (let i = 0; i < meiliDocs.length; i += MEILI_BATCH) {
       const batch = meiliDocs.slice(i, i + MEILI_BATCH);
-      await meiliClient.index("products").updateDocuments(batch);
+      const task=await meiliClient.index("products").updateDocuments(batch);
+      if(task?.taskUid!=null)scoreTasks.push(task.taskUid);
       console.log(`OrdersSync: Pushed batch ${Math.floor(i / MEILI_BATCH) + 1} to Meilisearch (${batch.length} products).`);
     }
 
+    // Let Meili batch queued writes efficiently; bound completion polling.
+    // Partial success still changes ranking inputs and must invalidate caches.
+    let succeeded=0,failed=false;
+    for(let offset=0;offset<scoreTasks.length;offset+=8){
+      const results=await Promise.allSettled(scoreTasks.slice(offset,offset+8).map(id=>meiliClient.tasks.waitForTask(id,{timeout:120000,interval:100})));
+      for(const result of results)if(result.status==='fulfilled'&&result.value.status==='succeeded')succeeded++;else failed=true;
+    }
+    if(succeeded||!scoreTasks.length){
+      const {invalidateShop}=await import('./shopCache.server.js');
+      const memberships=await prisma.productCollection.findMany({where:{product:{shop},...(changedProductIds?{productId:{in:[...new Set(changedProductIds)]}}:{})},select:{collectionId:true},distinct:['collectionId']});
+      await invalidateShop(shop,{kind:'products',collectionIds:memberships.map(row=>row.collectionId)});
+    }
+    if(failed)throw Error('Some sales-score indexing tasks failed');
     console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);
   } catch (error) {
     console.error("OrdersSync: Failed to push scores to Meilisearch:", error);

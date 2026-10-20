@@ -18,7 +18,7 @@ export function createCollectionLoadingSnapshots({database,redis,now=Date.now,ma
  async function load({shop,kind,key}){
   if(!validShop(shop)||!validKey(shop,kind,key))return null;
   try{
-   const [current,row]=await Promise.all([generation(shop),database.collectionLoadingSnapshot.findFirst({where:{shop,kind,aliases:{has:key},expiresAt:{gt:new Date(now())}},select:{generation:true,collectionId:true,payload:true,size:true}})]);
+   const [current,row]=await Promise.all([generation(shop),database.collectionLoadingSnapshot.findFirst({where:{shop,kind,aliases:{has:key},...(kind==='ranking'?{}:{expiresAt:{gt:new Date(now())}})},select:{generation:true,collectionId:true,payload:true,size:true}})]);
    if(!row||row.generation!==current||row.size>maxEntryBytes||row.payload.byteLength!==row.size)return null;
    // Missing counters mean lost invalidation history, not a verified zero.
    if((await Promise.all(epochs(shop,row.collectionId).map(key=>redis.get(key)))).some(value=>value==null))return null;
@@ -38,9 +38,13 @@ export function createCollectionLoadingSnapshots({database,redis,now=Date.now,ma
     // Serialize this shop's budget decisions across web/worker processes.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`collection-loading:${shop}`},0))::text`;
     const table=tx.collectionLoadingSnapshot;
-    await table.deleteMany({where:{shop,expiresAt:{lte:new Date(now())}}});
-    const existing=await table.findUnique({where:{id:key},select:{validatedAt:true,generation:true}});
+    // Ranking validity follows product/configuration versions, not elapsed time.
+    // The existing per-shop byte and entry budgets still bound durable storage.
+    await table.deleteMany({where:{shop,kind:'cards',expiresAt:{lte:new Date(now())}}});
+    const existing=await table.findUnique({where:{id:key},select:{validatedAt:true,generation:true,payload:true,aliases:true}});
     if(existing?.generation===current&&existing.validatedAt.getTime()>validatedAt)return false;
+    if(kind==='ranking'&&existing?.generation===current&&existing.payload&&
+       Buffer.from(existing.payload).equals(bytes)&&JSON.stringify([...(existing.aliases||[])].sort())===JSON.stringify([...aliases].sort()))return true;
     const data={shop,kind,collectionId:String(collectionId),aliases,generation:current,payload:bytes,size,expiresAt:new Date(expiresAt),validatedAt:new Date(validatedAt),updatedAt:new Date(now())};
     await table.upsert({where:{id:key},create:{id:key,...data},update:data});
     const usage=await table.aggregate({where:{shop},_sum:{size:true},_count:true});

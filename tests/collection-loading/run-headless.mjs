@@ -325,6 +325,19 @@ try{
     await control({headRenderer:false,early:false,assetDelay:0,apiDelay:0,priceDelay:50,imageDelay:50});
     return {titlesMs:Math.round(snapshot.at),widgetDelayMs:4500,imageDelayMs:2500,liveTiming:false};
   });
+  await test('each streamed card renders before later cards finish transferring and retains its DOM identity',async()=>{
+    await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,assetDelay:8000,headDelay:0,apiDelay:50,cssDelay:0,streamDelay:160,imageDelay:50});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("document.querySelectorAll('.cfp-initial-product').length>0");
+    const first=await evaluate("(()=>{window.firstStreamCard=document.querySelector('.cfp-initial-product');return {at:performance.now(),count:document.querySelectorAll('.cfp-initial-product').length,title:firstStreamCard.textContent,widget:!!window._cfpInitStarted}})()");
+    assert.ok(first.count<25);assert.ok(first.title);assert.equal(first.widget,false);
+    const count=await evaluate("window._cfpRankedEarlyFetch.promise.then(r=>r.payload.products.length)");assert.equal(count,25);
+    await wait("document.querySelectorAll('.cfp-initial-product').length===25");
+    assert.equal(await evaluate("firstStreamCard===document.querySelector('.cfp-initial-product')"),true);
+    const state=await getState();assert.equal(state.requests.length,1);assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({streamDelay:0,assetDelay:0,headRenderer:false,early:false,hold:false});
+    return {firstCardMs:Math.round(first.at),cardsAtFirstPaint:first.count,artificialTailDelayMs:160,liveTiming:false};
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){
