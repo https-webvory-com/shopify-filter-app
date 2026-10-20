@@ -110,7 +110,7 @@
         var query = new URLSearchParams(location.search);
         if (query.has('page') && query.get('page') !== '1') return;
         if ([...query.keys()].some(function(key) {
-          return !['page','sortBy','rankingToken','preview_theme_id','_fd','_sc','pb','gclid','fbclid'].includes(key) && !key.startsWith('utm_');
+          return !['page','sortBy','rankingToken','preview_theme_id','_ab','_fd','_sc','pb','gclid','fbclid'].includes(key) && !key.startsWith('utm_');
         })) return;
         var sort = query.get('sortBy') || 'best-selling';
         if (!['best-selling','bestselling'].includes(sort) || !context.country || !context.locale || !context.handle) return;

@@ -53,7 +53,7 @@
       // The renderer must compare the complete context before consuming it.
       if (window.location.pathname.includes('/collections/') && params.get('sortBy') !== 'manual') {
         if (params.has('page') && params.get('page') !== '1') return;
-        if ([...params.keys()].some(function(key) { return !['page','sortBy','rankingToken','preview_theme_id','_fd','_sc','pb','gclid','fbclid'].includes(key) && !key.startsWith('utm_'); })) return;
+        if ([...params.keys()].some(function(key) { return !['page','sortBy','rankingToken','preview_theme_id','_ab','_fd','_sc','pb','gclid','fbclid'].includes(key) && !key.startsWith('utm_'); })) return;
         var rankedParams = new URLSearchParams();
         rankedParams.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
         rankedParams.set('shop', shop);

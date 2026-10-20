@@ -32,6 +32,15 @@ test('head preserves customer scope and rejects filtered, manual and later-page 
  const privateVisit=fixture('','VIP');assert.equal(new URL(privateVisit.calls[0].url).searchParams.get('customer_tags'),'VIP');assert.equal(new URL(privateVisit.calls[0].url).searchParams.get('responseProfile'),'collection-v1');
  privateVisit.body();assert.equal(privateVisit.calls.length,1);await privateVisit.window._cfpRankedEarlyFetch.promise;
 });
+
+test('head and body share one early request for Shopify preview links including _ab',async()=>{
+ const flags='?_ab=0&_fd=0&_sc=1&preview_theme_id=193281622387';
+ const f=fixture(flags);assert.equal(f.calls.length,1);f.body();assert.equal(f.calls.length,1);
+ const p=new URL(f.calls[0].url).searchParams;
+ for(const key of ['_ab','_fd','_sc','preview_theme_id'])assert.equal(p.has(key),false);
+ await f.window._cfpRankedEarlyFetch.promise;
+ for(const suffix of ['&page=2','&minPrice=50','&option_Color=Blue','&unknown_filter=yes'])assert.equal(fixture(flags+suffix).calls.length,0);
+});
 test('a changed body market cancels the speculative head request instead of rendering a different context',async()=>{
  const f=fixture();f.window.Shopify={country:'US',locale:'en'};f.body();assert.equal(f.calls.length,2);assert.equal(f.calls[0].options.signal.aborted,true);await f.window._cfpRankedEarlyFetch.promise;
 });

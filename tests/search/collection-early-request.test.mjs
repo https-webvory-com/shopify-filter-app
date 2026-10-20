@@ -23,6 +23,14 @@ test('filtered and later-page visits do not start speculative ranked requests',(
   for(const search of ['?page=2','?minPrice=50','?maxPrice=200','?vendors=Vendor','?option_Color=Blue','?q=dress','?options[Color][]=Blue','?tags[]=sale'])assert.equal(fixture(search).calls.length,0,search);
 });
 
+test('Shopify preview flags preserve the early request without leaking into ranking context',()=>{
+ const flags='_ab=0&_fd=0&_sc=1&preview_theme_id=193281622387';
+ const f=fixture('?'+flags);assert.equal(f.calls.length,1);
+ const params=new URL(f.calls[0].url).searchParams;
+ for(const key of ['_ab','_fd','_sc','preview_theme_id'])assert.equal(params.has(key),false);
+ for(const suffix of ['&page=2','&minPrice=50','&option_Color=Blue'])assert.equal(fixture('?'+flags+suffix).calls.length,0);
+});
+
 test('a late bootstrap cannot restart a consumed first-page request',async()=>{
  const f=fixture(),url=f.calls[0].url;
  await f.take(url,new AbortController().signal);
