@@ -357,13 +357,9 @@ sequence identity and changes during validation continue to reject reuse.
 Older snapshots retain 25-document validation until they are rebuilt with a
 separate first-five fingerprint. This does not extend ranking freshness.
 
-For draft themes whose head embed follows blocking theme styles/scripts,
-`node scripts/prepare-collection-theme-start.mjs saved-layout.liquid output-dir`
-prepares a guarded inline loader immediately after the charset and a main-area
-anchor. It writes files locally only. Back up and compare the current layout,
-then upload only the generated layout and snippet to the intended unpublished
-theme with `--nodelete`; never publish it as the live theme implicitly. Rerun
-the generator when changing the head loader so the theme copy stays in sync.
+This is a public app: delivery must use its theme extension and backend. Do not
+patch merchant layouts, copy loaders into merchant snippets, or require manual
+theme changes. The first cards mount only inside the installed app block.
 
 Browser fixture timings verify behavior with controlled delays; only fresh
 visits to the deployed storefront establish actual first-card/image times.

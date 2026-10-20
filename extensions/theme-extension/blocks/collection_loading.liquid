@@ -1,8 +1,9 @@
 {% if template.name == 'collection' and collection %}
+  {{ 'collectionLoading.js' | asset_url | preload_tag: as: 'script' }}
   <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
   <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
-  <link rel="preload" as="style" href="{{ 'collectionFilterPro.css' | asset_url }}">
-  <link rel="preload" as="style" href="{{ 'quickView.css' | asset_url }}">
+  {{ 'collectionFilterPro.css' | asset_url | preload_tag: as: 'style' }}
+  {{ 'quickView.css' | asset_url | preload_tag: as: 'style' }}
   <meta name="cfp-collection-context"
     data-shop="{{ shop.permanent_domain | escape }}"
     data-handle="{{ collection.handle | escape }}"
