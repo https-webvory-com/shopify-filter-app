@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {createCollectionCardStore,collectionCardKey} from '../../app/utils/collectionCardStore.js';
 import {encodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 import {isPublicCollectionCards} from '../../app/utils/collectionCards.js';
+import {validateCollectionCardDocuments} from '../../app/utils/collectionCardValidation.js';
+import {collectionPageFingerprint} from '../../app/utils/collectionResponse.js';
 
 function fixture(options={}){
  const shop='fixture.myshopify.com',url=`https://api.test/api/filter?shop=${shop}&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-cards-v1`;
@@ -18,6 +20,20 @@ function fixture(options={}){
  const payload={rankingToken:'background-placeholder',products:[{id:'1',variants:[{id:'v1'}],images:['red.jpg']},{id:'2'}],totalCount:2,settings:[],globalSettings:{},mergedValues:[],facets:{tags:[{value:'Heavy facets',count:2}]}};
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
+
+test('complete paged cards validate and return all 25 cached documents instead of the legacy five-card preview',async()=>{
+ const docs=Array.from({length:25},(_,i)=>({id:String(i+1),shop:'fixture.myshopify.com',status:'ACTIVE',title:'Dress '+i,handle:'dress-'+i,variants:[{id:String(i+100),available:true}]}));
+ const calls=[],index={getDocuments:async options=>{calls.push(options.limit);return {results:docs.slice(0,options.limit)};}};
+ const f=fixture({validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(index,entry,prepared,options)});
+ f.prepared.ids=docs.map(p=>p.id);f.payload.products=docs;f.payload.totalCount=25;f.payload.debug={collectionRankingStatus:'ready'};f.setSource(encodePreparation(f.prepared));
+ await(await f.begin()).finish(f.payload,collectionPageFingerprint(docs),collectionPageFingerprint(docs.slice(0,5)));
+ const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-preview-v1');
+ const request=new Request(url,{headers:{Accept:'application/x-cfp-pinned-prefix-v3, application/json'}});
+ const response=await f.store.get(request),body=await response.json();
+ assert.equal(calls.at(-1),25);assert.equal(body.products.length,25);assert.equal(body.cfpCards.preview,false);
+ docs[10].title='Changed later card';assert.equal(await f.store.get(request),null);assert.equal(calls.at(-1),25);
+ const legacy=await f.store.get(new Request(url));assert.equal((await legacy.json()).products.length,5);assert.equal(calls.at(-1),5);
+});
 
 test('a maintained old ranking can publish newly validated durable cards with an independent card lifetime',async()=>{
  const saved=[],f=fixture({saveDurable:async row=>saved.push(row)});

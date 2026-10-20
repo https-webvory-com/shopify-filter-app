@@ -302,6 +302,7 @@ try{
     await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     const after=await getState();assert.equal(after.state.builds,before.state.builds);
     assert.equal(after.requests.slice(before.requests.length).some(r=>r.status===202),false);assert.deepEqual(await cards(),first);
+    assert.equal(await evaluate('cardSnapshots[0].cards'),25);
     await control({clockOffset:0,early:false,earlyBeforeStyles:false,cardSnapshots:false});
   });
   // Run the intentionally slow same-origin image/price stress case last so

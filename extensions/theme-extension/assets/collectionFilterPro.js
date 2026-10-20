@@ -1420,7 +1420,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       grid.innerHTML = productsHtml;
     }
 
-    if(!previewOnly)renderPagination(grid, totalCount);
+    if(!previewOnly&&Number.isFinite(totalCount)&&(isLoadMore||products.length>=Math.min(PAGE_SIZE,totalCount)))renderPagination(grid,totalCount);
     if (templateName === 'search') {
       if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
       document.dispatchEvent(new Event('cfp:search-products-rendered'));

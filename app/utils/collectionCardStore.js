@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {decodePreparation,encodePreparation} from './collectionPreparationPayload.js';
-import {isPublicCollectionCards,collectionCardsResponse} from './collectionCards.js';
+import {isPublicCollectionCards,collectionCardsResponse,acceptsCollectionPinnedPrefix} from './collectionCards.js';
 import {preparationFreshnessMs} from './collectionPreparation.js';
 import {collectionHasExternalCandidates} from './collectionDependencies.js';
 
@@ -84,7 +84,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    controller.signal.throwIfAborted();
    if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;
    let previewLimit=25;
-   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1',onValidated:count=>{previewLimit=count;}}))return null;
+   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request),onValidated:count=>{previewLimit=count;}}))return null;
    const readMs=now()-readStarted;controller.signal.throwIfAborted();
    stage='session';const session=probe?{}:await createSession(request,entry,prepared);
    stage='final-state';

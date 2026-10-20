@@ -649,3 +649,7 @@ preparation. Initial responses always contain at most 25 complete cards;
 later configured pins stay in canonical pagination. Report cold proven heads, cold declines, warm
 requests, canonical first-page completion and verified-price timing separately.
 Browser-fixture timings do not establish the deployed two-second requirement.
+
+The v3 complete-card protocol validates all 25 documents on saved-card hits as
+well. The legacy five-document preview shortcut is reserved for older clients;
+it must never enable page-two pagination after sending only five complete cards.
