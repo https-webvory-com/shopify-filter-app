@@ -54,7 +54,7 @@ try{
     await wait("!!document.querySelector('.cfp-loading-notice')",15000);assert.equal((await cards()).length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);
     const snapshot=await evaluate('cardSnapshots[0]');assert.equal(snapshot.imagesLoaded,0);assert.equal(snapshot.pricesReady,0);
-    assert.deepEqual(snapshot.delays,['0s','0s','0s','0s','0s','0s']);
+    assert.deepEqual(snapshot.delays,Array(Math.min(snapshot.cards,6)).fill('0s'));
     assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
     assert.deepEqual((await cards()).slice(0,2),['1','2']);
     await wait("document.querySelector('.cfp-product-card--reveal .cfp-product-card__price').textContent!=='See product price'",15000);
@@ -63,15 +63,20 @@ try{
   });
   await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{
     await control({reset:true,hold:true,precompute:true,early:true,assetDelay:200,apiDelay:300,facetDelay:3000,clockOffset:0,cssDelay:0});
-    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    await send('Network.clearBrowserCache');await navigate();await wait("document.querySelectorAll('.cfp-product-card--preview').length===4");
     const first=await cards(),at=await evaluate('cardSnapshots[0].at');if(!redisLayer)assert.ok(at<2000,'Cards exceeded fixture target: '+at);
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price,.cfp-quick-view-btn,.cfp-product-swatches').length"),0);
+    const firstImages=await evaluate("[...document.querySelectorAll('.cfp-product-card__image--primary')].map(e=>e.getAttribute('src'))");
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')"),true);
     await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",10000);
-    assert.deepEqual(await cards(),first);let data=await getState();assert.equal(data.requests.length,1);assert.equal(data.facetResponses.length,1);
-    await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");await wait("!!document.querySelector('.cfp-facet-error')");
+    assert.equal((await cards()).length,25);assert.deepEqual((await cards()).slice(0,4),first);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.cfp-product-card__image--primary')].slice(0,4).map(e=>e.getAttribute('src'))"),firstImages);
+    let data=await getState();assert.equal(data.requests.length,1);assert.equal(data.facetResponses.length,1);
+    await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--preview').length===4");await wait("!!document.querySelector('.cfp-facet-error')");
     assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
     await control({facetFailure:false});await evaluate("document.querySelector('.cfp-facet-error button').click()");await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-    assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.deepEqual((await cards()).slice(0,4),first);assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     await control({hold:false,early:false,assetDelay:0,apiDelay:0});
     return {cardsMs:Math.round(at),facetDelayMs:3000,twoSecondTargetMet:at<2000,liveTiming:false};
   });

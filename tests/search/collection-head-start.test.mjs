@@ -22,7 +22,7 @@ function fixture(search='',tags='',delayed=false){
 }
 test('head starts the exact market/locale request before widget markup and body consumes it without duplicate fetching',async()=>{
  const f=fixture();assert.equal(f.calls.length,1);const params=new URL(f.calls[0].url).searchParams;
- assert.equal(params.get('country'),'IN');assert.equal(params.get('locale'),'en');assert.equal(params.get('responseProfile'),'collection-cards-v1');
+ assert.equal(params.get('country'),'IN');assert.equal(params.get('locale'),'en');assert.equal(params.get('responseProfile'),'collection-preview-v1');
  f.body();assert.equal(f.calls.length,1);await f.window._cfpRankedEarlyFetch.promise;
 });
 test('head preserves customer scope and rejects filtered, manual and later-page URLs',async()=>{

@@ -45,7 +45,7 @@ test('Docker performs schema setup then uses the single best-effort startup flus
   const pkg = JSON.parse(await fs.readFile('package.json', 'utf8'));
   assert.ok(pkg.scripts['docker-start'].endsWith('&& npm run setup && npm run start'));
   assert.ok(!pkg.scripts['docker-start'].includes('flush-cache'));
-  assert.ok(pkg.scripts.start.startsWith('node scripts/flush-cache.js || true; react-router-serve'));
+  assert.ok(pkg.scripts.start.startsWith('node scripts/flush-cache.js || true; node scripts/serve-with-health-watchdog.mjs'));
 });
 
 test('real ioredis maintenance process exits cleanly against an isolated loopback Redis fixture', { timeout: 15000 }, async () => {

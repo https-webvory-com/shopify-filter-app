@@ -32,9 +32,9 @@ test('a late bootstrap cannot restart a consumed first-page request',async()=>{
  assert.equal(await f.take(url,new AbortController().signal),null);
 });
 
-test('anonymous cards include configuration without a second bootstrap while targeted requests retain the complete profile',()=>{
+test('anonymous first-row preview needs no separate bootstrap while targeted requests retain the complete profile',()=>{
  const anonymous=fixture();assert.equal(anonymous.calls.length,1);assert.equal(anonymous.configurationCalls.length,0);
- assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-cards-v1');
+ assert.equal(new URL(anonymous.calls[0].url).searchParams.get('responseProfile'),'collection-preview-v1');
  const privateVisit=fixture('','VIP');assert.equal(privateVisit.configurationCalls.length,0);assert.equal(new URL(privateVisit.calls[0].url).searchParams.get('responseProfile'),'collection-v1');
 });
 test('a different sort, filter, market, customer or shop rejects and aborts the early response',async()=>{

@@ -29,15 +29,35 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
 
 export async function availableProductIds(productModel, where, filters, mergedValues) {
   const ids = [];
+  const selected = Object.entries(filters || {}).filter(([, values]) => values.length);
+  // Use a conservative database prefilter, then retain the exact option-position
+  // check below. This avoids transferring every available variant in a large
+  // collection just to test a selected color/size in the web process.
+  const variantWhere = { available: true };
+  if (selected.length) variantWhere.AND = selected.map(([name, values]) => {
+    const expanded = new Set(values.map(normalize));
+    for (const rule of mergedValues || []) {
+      if ((!rule.optionName || normalize(rule.optionName) === normalize(name)) &&
+          values.some(value => normalize(value) === normalize(rule.targetValue))) {
+        for (const value of rule.sourceValues || []) expanded.add(normalize(value));
+      }
+    }
+    return { OR: [...expanded].flatMap(value => [1, 2, 3].flatMap(position => [
+      { [`option${position}`]: { contains: value, mode: 'insensitive' } },
+      ...(value === '' ? [{ [`option${position}`]: null }] : []),
+    ])) };
+  });
   let cursor;
   for (;;) {
     const rows = await productModel.findMany({
-      where: { ...where, variants: { some: { available: true } } },
-      select: { id: true, options: true, variants: { where: { available: true }, select: { available: true, option1: true, option2: true, option3: true } } },
+      where: { ...where, variants: { some: variantWhere } },
+      select: selected.length
+        ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true } } }
+        : { id: true },
       orderBy: { id: 'asc' }, take: 1000,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    for (const row of rows) if (matchingAvailableVariants(row, filters, mergedValues).length) ids.push(row.id.split('/').pop());
+    for (const row of rows) if (!selected.length || matchingAvailableVariants(row, filters, mergedValues).length) ids.push(row.id.split('/').pop());
     if (rows.length < 1000) break;
     cursor = rows.at(-1).id;
   }

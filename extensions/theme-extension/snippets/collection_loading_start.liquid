@@ -35,7 +35,7 @@
         if (!['best-selling','bestselling'].includes(sort) || !context.country || !context.locale || !context.handle) return;
         var params = new URLSearchParams({shop:context.shop,collectionHandle:context.handle,country:context.country,locale:context.locale,sortBy:sort,page:'1',limit:'25'});
         if (context.customerTags) params.set('customer_tags',context.customerTags);
-        params.set('responseProfile',context.customerTags ? 'collection-v1' : 'collection-cards-v1');
+        params.set('responseProfile',context.customerTags ? 'collection-v1' : 'collection-preview-v1');
         params.sort();
         var url = 'https://aisearchfilter.webvory.com/api/filter?' + params;
         var previous = window._cfpRankedEarlyFetch;

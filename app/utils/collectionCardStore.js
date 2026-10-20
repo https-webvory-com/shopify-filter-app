@@ -6,7 +6,7 @@ const digest=value=>createHash('sha256').update(typeof value==='string'?value:JS
 const clean=id=>String(id).split('/').pop();
 export function collectionCardKey(request){
  if(!isPublicCollectionCards(request))return null;
- const url=new URL(request.url);url.searchParams.sort();
+ const url=new URL(request.url);url.searchParams.set('responseProfile','collection-cards-v1');url.searchParams.sort();
  return `collectionFirstPage:${url.searchParams.get('shop')}:${digest(url.pathname+'?'+url.searchParams)}`;
 }
 const retain=`

@@ -9,6 +9,8 @@
     data-country="{{ localization.country.iso_code | escape }}"
     data-locale="{{ request.locale.iso_code | escape }}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
+  <script src="{{ 'collectionLoading.js' | asset_url }}" async="async"></script>
+  <script src="{{ 'collectionFilterPro.js' | asset_url }}" async="async"></script>
   <script>{% render 'collection_loading_start' %}</script>
 {% endif %}
 

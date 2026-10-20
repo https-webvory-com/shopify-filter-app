@@ -511,7 +511,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         queryParams.set('responseProfile', 'collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
         if (String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
-          queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-cards-v1':'collection-v2');
+          queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
@@ -522,7 +522,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const rankingToken = rankedCollection ? collectionRankingTokens.get(rankingKey) || initialRankingToken : null;
       initialRankingToken = null;
       if (rankingToken) queryParams.set('rankingToken', rankingToken);
-      if(rankingToken&&queryParams.get('responseProfile')==='collection-cards-v1')queryParams.set('responseProfile','collection-v2');
+      if(rankingToken&&['collection-cards-v1','collection-preview-v1'].includes(queryParams.get('responseProfile')))queryParams.set('responseProfile','collection-v2');
       const displayUrl = new URL(window.location.href);
       displayUrl.searchParams.delete('rankingToken');
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
@@ -602,7 +602,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       if (data.products) {
-        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied);
+        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true);
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
@@ -668,7 +668,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }catch(error){
       if(signal.aborted)return;
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
-      const message=document.createElement('p');message.textContent='Filters are temporarily unavailable.';
+      const message=document.createElement('p');message.textContent=cards.cfpCards?.preview?'The remaining products and filters are temporarily unavailable.':'Filters are temporarily unavailable.';
       const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
       retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart);});
       notice.append(message,retry);(sidebar.querySelector('.cfp-sidebar__body')||sidebar).prepend(notice);
@@ -862,7 +862,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
-  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false) {
+  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
     // Render cards immediately, without displaying unverified market prices.
@@ -873,9 +873,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const grid = getProductContainer();
     grid.style.display = 'grid';
 
-    if(!isLoadMore)wishlistProducts.clear();
-    products.forEach(product=>wishlistProducts.set(product.handle,product));
-    syncWishlistProducts();
+    if(!previewOnly){
+      if(!isLoadMore)wishlistProducts.clear();
+      products.forEach(product=>wishlistProducts.set(product.handle,product));
+      syncWishlistProducts();
+    }
 
     // Update count labels
     const countLabel = document.querySelector('.cfp-product-count');
@@ -1323,6 +1325,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
       }
 
+      if(previewOnly)return `
+        <div class="cfp-product-card cfp-product-card--reveal cfp-product-card--preview" style="--cfp-reveal-delay:0ms;--cfp-reveal-duration:0ms">
+          <div class="cfp-product-card__image-wrapper"><a href="${productUrl}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
+            <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" fetchpriority="high" decoding="async" width="360" height="480" />
+          </div></a></div>
+          <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${product.title}</h3></div></a>
+        </div>`;
       let badgesHtml = '';
       const searchDisplay = templateName === 'search' ? (window.cfpSearchSettings || {}) : {};
       const s = window.collectionFilterProSettings || {};
@@ -1397,11 +1406,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       grid.innerHTML = productsHtml;
     }
 
-    renderPagination(grid, totalCount);
+    if(!previewOnly)renderPagination(grid, totalCount);
     if (templateName === 'search') {
       if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
       document.dispatchEvent(new Event('cfp:search-products-rendered'));
     }
+    if(previewOnly)return;
     const applyPricing=()=>{
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);

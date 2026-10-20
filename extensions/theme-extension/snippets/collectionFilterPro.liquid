@@ -62,7 +62,7 @@
         else return;
         rankedParams.set('sortBy', params.get('sortBy') || 'best-selling');
         rankedParams.set('page', '1'); rankedParams.set('limit', '25');
-          rankedParams.set('responseProfile', window.cfpCustomerTags || !rankedParams.has('country') ? 'collection-v1' : ['best-selling','bestselling'].includes(rankedParams.get('sortBy'))?'collection-cards-v1':'collection-v2');
+          rankedParams.set('responseProfile', window.cfpCustomerTags || !rankedParams.has('country') ? 'collection-v1' : ['best-selling','bestselling'].includes(rankedParams.get('sortBy'))?'collection-preview-v1':'collection-v2');
         rankedParams.sort();
         var earlyUrl = 'https://aisearchfilter.webvory.com/api/filter?' + rankedParams.toString();
         var previous=window._cfpRankedEarlyFetch;
