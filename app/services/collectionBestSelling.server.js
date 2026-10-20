@@ -1,5 +1,5 @@
 import redis from './redis.server.js';
-import { collectionOrderQueue, collectionRankingQueue } from './queue.server.js';
+import { collectionOrderQueue } from './queue.server.js';
 import { unauthenticated } from '../shopify.server.js';
 import { readCollectionBestSellingIds } from '../utils/collectionBestSelling.js';
 import { createHash } from 'node:crypto';
@@ -19,7 +19,8 @@ export async function refreshCollectionBestSelling(shop, collectionId) {
   await redis.set(snapshotKey(shop, collectionId), JSON.stringify({ ids, updatedAt: Date.now(), revision }));
   if (!previous || JSON.parse(previous).revision !== revision) {
     // Rebuild registered first pages only when the actual Shopify sequence changed.
-    await collectionRankingQueue.add('COLLECTION_RANKING_WARM', { shop, collectionIds:[String(collectionId).split('/').pop()] }, { priority: 10 });
+    const {scheduleCollectionWarmup}=await import('./collectionPreparation.server.js');
+    await scheduleCollectionWarmup(shop,[String(collectionId).split('/').pop()]);
   }
   return ids;
 }

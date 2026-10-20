@@ -9,12 +9,35 @@ four observed/configured markets. Discovery uses 100-row catalog pages every
 four minutes. Private/customer/filter/token contexts never seed catalog work.
 Each catalog replay is an individual job that completes and publishes the full
 ranking inside the worker before reporting success. It does not merely enqueue
-a second build. Recent warmups, catalog preparation and ranking refreshes share
-background priority 10. Small fact-backfill prerequisite jobs use priority 5,
+a second build. Catalog discovery uses background priority 10. Recent visitor
+contexts and shop dispatch sweeps use priority 5. Small fact-backfill prerequisite jobs use priority 5,
 so missing shared product inputs can be filled before expensive catalog builds.
 Existing priority-20 catalog jobs are
 promoted during discovery. Waiting visitor jobs retain priority 1. Worker
 concurrency remains one; an already running build cannot be preempted.
+
+Product/order events coalesce into one pending global sweep per shop, with a
+second job slot for updates arriving during an active sweep. Different product
+membership batches no longer create distinct warmup jobs. Global coverage is
+required because Include rules and explicit pins can depend on products outside
+the changed product's native collections. A sweep only dispatches individual
+contexts; it does not render up to 40 pages while holding the worker. Old queued
+scope batches are folded into one new sweep per shop after worker restart.
+Cold preparation is queued before attempting the optional four-second direct
+path. A worker job checks whether another producer already published matching,
+event-versioned inputs before repeating that build. Product/configuration/data
+freshness guards and complete immutable ordering remain in force.
+
+The Silk Prom Dress audit on 2026-10-20 found a saved ranking rejected for changed
+products, a direct-build timeout, and 2,075 queued background jobs. The first
+desktop visit showed real cards at 18.485 seconds; the subsequent visit with a
+fresh browser context but a prepared backend showed cards at 2.431 seconds.
+These queue changes require backend **and worker** deployment. They do not prove
+a two-second live result. Validate readiness with
+`node scripts/check-collection-loading-readiness.mjs --shop STORE.myshopify.com`,
+then measure separate fresh desktop/mobile visits, including a visit after a
+relevant product update. Report first real cards, images and verified prices
+separately. Do not reset production caches or modify merchant themes for testing.
 
 Pending Shopify order snapshots and superseded configurations cause catalog
 jobs to retry rather than report readiness. Fresh rankings are reused without

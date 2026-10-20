@@ -191,6 +191,16 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     })();
     directPending.set(key,task);return task;
   }
+  async function pending(key,spec,warmup){
+    // Start durable worker preparation immediately. A visitor's optional
+    // direct attempt must not postpone queue submission until its timeout.
+    let status,error;
+    try{status=await schedule(key,spec,warmup);}catch(cause){error=cause;}
+    const ready=await direct(key,spec,warmup);
+    if(ready)return ready;
+    if(error)throw error;
+    return {status};
+  }
   async function schedule(key, spec, warmup = false, refreshingVisit = false) {
     // Keep viewed collections ready before their bounded freshness expires.
     // Bulk catalog preparation stays behind visitor refreshes and cold visits.
@@ -290,13 +300,13 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
         report({event:'unavailable',reason:'corrupt',shop:spec.shop,collectionId:spec.collectionId,key});
         // The worker will replace this record. Avoid deleting a newly published
         // valid record if another worker completed after this read.
-        return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
+        return pending(key,spec,warmup);
       }
       if (await revision(spec.shop) !== spec.revision) return { status: 'pending' };
       if(revalidateSaved&&spec.retainForIdle===true&&spec.needsShopifyOrder===true&&value.rankingEventsVersion!==1)
-        return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
+        return pending(key,spec,warmup);
       if(spec.retainForIdle===true&&!await dataEpochMatches(spec,value.reusableDataRevision))
-        return await direct(key,spec,warmup)||{status:await schedule(key,spec,warmup)};
+        return pending(key,spec,warmup);
       const productsChanged=value.productRevision!==spec.productRevision||
         spec.retainForIdle===true&&externalCandidates(spec)&&value.reusableDataRevision!==await reuseRevision(spec);
       // Long idle retention must not extend the old ten-minute window for
@@ -304,7 +314,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       if (spec.retainForIdle === true && productsChanged &&
           Number.isFinite(value.preparedAt) && now() - value.preparedAt >= preparationFreshnessMs) {
         report({event:'unavailable',reason:'changed-products',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-value.preparedAt});
-        return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
+        return pending(key,spec,warmup);
       }
       // Only changed/legacy inputs need a rebuild. Renewing Redis storage must
       // not recalculate an unchanged database-saved product sequence.
@@ -336,7 +346,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       }
     }
     report({event:'unavailable',reason:'missing',shop:spec.shop,collectionId:spec.collectionId,key});
-    return await direct(key,spec,warmup)||{ status: await schedule(key, spec, warmup) };
+    return pending(key,spec,warmup);
   }
   async function process({ key, spec, queuedAt }) {
     if (key !== preparationKey(spec)) throw Error('Invalid preparation identity');
@@ -346,6 +356,15 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     const [startedRevision,startedDataRevision]=await Promise.all([
       productRevision(spec.shop,spec.collectionId),spec.retainForIdle===true?reuseRevision(spec):null,
     ]);
+    if(spec.retainForIdle===true){
+      let saved;try{saved=decodePreparation(await redis.get(key));}catch{}
+      if(valid(saved)&&saved.rankingEventsVersion===1&&Number.isFinite(saved.preparedAt)&&saved.preparedAt<=now()&&
+          saved.productRevision===startedRevision&&saved.reusableDataRevision===startedDataRevision&&
+          await revision(spec.shop)===spec.revision){
+        report({event:'build-reused',shop:spec.shop,collectionId:spec.collectionId,key});
+        return {products:saved.ids.length,reused:true};
+      }
+    }
     const value = await prepare(spec);
     const result=await publish(key,spec,{...value,rankingEventsVersion:1},startedRevision,{startedDataRevision});
     if(!result.superseded)report({event:'build-ready',shop:spec.shop,collectionId:spec.collectionId,key,buildMs:now()-startedAt,products:value.ids.length});

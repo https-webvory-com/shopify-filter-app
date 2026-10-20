@@ -57,8 +57,9 @@ async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
   '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };
- const ctx={module:{exports:{}},exports:{},Date,console:{error(){}},require:name=>mocks[name]};
- vm.runInNewContext((await transform(await fs.readFile('app/services/collectionBestSelling.server.js','utf8'),{format:'cjs'})).code,ctx);
+ const ctx={module:{exports:{}},exports:{},Date,warmupHook:async(shop,collectionIds)=>calls.push({name:'COLLECTION_RANKING_WARM',data:{shop,collectionIds}}),console:{error(){}},require:name=>mocks[name]};
+ const source=(await fs.readFile('app/services/collectionBestSelling.server.js','utf8')).replace("await import('./collectionPreparation.server.js')",'({scheduleCollectionWarmup:warmupHook})');
+ vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
  return {...ctx.module.exports,calls,stored:()=>stored};
 }
 

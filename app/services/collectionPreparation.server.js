@@ -12,6 +12,7 @@ import {prepareCollectionFromFacts,scheduleCollectionFactRefresh} from './collec
 import {validateCollectionReuse} from '../utils/validateCollectionReuse.js';
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot} from './collectionLoadingSnapshots.server.js';
 import {createCollectionVisitorRefresh} from '../utils/collectionVisitorRefresh.js';
+import {createCollectionWarmupScheduler} from '../utils/collectionWarmupScheduler.js';
 
 // Explicit public contexts can be prepared before the first visitor. These are
 // operational priorities, not ranking rules. Recent visitor replay remains bounded.
@@ -86,7 +87,7 @@ export async function scheduleMissingCollectionOrders(shop) {
 
 // Discover public markets from configuration and real public visits. Never turn
 // customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
-export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null) {
+export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10) {
   const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
     try{return [JSON.parse(value)];}catch{return [];}
   })];
@@ -115,7 +116,7 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null)
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){
-        if(state!=='active'&&(job.priority??job.opts?.priority??20)>10)await job.changePriority({priority:10});
+        if(state!=='active'&&(job.priority??job.opts?.priority??20)>priority)await job.changePriority({priority});
         continue;
       }
         if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
@@ -124,7 +125,7 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null)
       // background catalog between jobs. Ranking concurrency stays at one.
       // FIFO among catalog/recent builds preserves progress through unseen
       // collections; bounded prerequisite sweeps run ahead at priority 5.
-      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:10,
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority,
         attempts:5,backoff:{type:'exponential',delay:10000}});
     }
     if(rows.length<100)return;cursor=rows.at(-1).id;
@@ -173,14 +174,7 @@ export async function scheduleRegisteredCollectionWarmups() {
   }
 }
 
-export async function scheduleCollectionWarmup(shop,collectionIds=null) {
-  const scopes=collectionIds?[...new Set(collectionIds.map(id=>String(id).split('/').pop()))].sort():null;
-  const jobId='ranking-warm-'+createHash('sha256').update(JSON.stringify([shop,scopes])).digest('hex');
-  const job=await collectionRankingQueue.getJob(jobId);
-  if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state))return;
-    if(state==='completed'||state==='failed')await job.remove();}
-  await collectionRankingQueue.add('COLLECTION_RANKING_WARM',{shop,collectionIds:scopes},{jobId,priority:10,delay:500});
-}
+export const scheduleCollectionWarmup=createCollectionWarmupScheduler(collectionRankingQueue);
 
 export async function processCollectionWarmups(shop,collectionIds=null,catalogRecord=null) {
   if(catalogRecord&&!await prisma.session.findFirst({where:{shop,isOnline:false},select:{id:true}}))return {skipped:true};
@@ -198,6 +192,23 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     const normalized=normalizeCollectionWarmup(shop,url,record.collectionId);
     if (!normalized || seen.has(normalized.url)) continue;
     seen.add(normalized.url);
+    if(!catalogRecord){
+      // A sweep dispatches bounded one-context jobs. It must yield to cold
+      // visits between contexts, rather than rendering up to 40 pages itself.
+      const jobId='ranking-catalog-'+createHash('sha256').update(normalized.url).digest('hex');
+      const job=await collectionRankingQueue.getJob(jobId);
+      if(job){const state=await job.getState();
+        if(['waiting','active','prioritized','delayed'].includes(state)){
+          if(state!=='active'&&(job.priority??job.opts?.priority??20)>5)await job.changePriority({priority:5});
+          continue;
+        }
+        if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
+        await job.remove();
+      }
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record:normalized},
+        {jobId,priority:5,attempts:5,backoff:{type:'exponential',delay:10000}});
+      continue;
+    }
     const response = await loader({ request: new Request(normalized.url), params: {}, context: {
       rankingWarmup: true, rankingPrecompute: Boolean(catalogRecord),
     } });
