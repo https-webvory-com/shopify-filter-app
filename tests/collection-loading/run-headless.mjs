@@ -299,6 +299,21 @@ try{
     await wait("document.querySelector('.cfp-product-card--reveal img').naturalWidth>0",15000);
     assert.deepEqual(await evaluate('browserErrors'),[]);return snapshot;
   });
+  // Keep intentionally unfinished image/widget downloads last, so they cannot
+  // occupy the browser's connection pool during other timing/cancellation checks.
+  await test('pending products become visible before the delayed full widget without waiting for prices or images',async()=>{
+    await control({reset:true,hold:false,headRenderer:true,early:true,delay:150,assetDelay:4500,apiDelay:50,cssDelay:0,facetDelay:0,priceDelay:2500,imageDelay:2500});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
+    const snapshot=await evaluate("({at:performance.now(),widget:!!window._cfpInitStarted,cards:[...document.querySelectorAll('.cfp-initial-product')].map(c=>({title:c.querySelector('h3').textContent,href:c.querySelector('a').getAttribute('href'),loaded:c.querySelector('img').complete&&c.querySelector('img').naturalWidth>0}))})");
+    assert.equal(snapshot.widget,false);assert.ok(snapshot.cards.every(c=>c.title&&c.href.includes('/products/')));
+    assert.ok(snapshot.cards.some(c=>!c.loaded),'Titles should not wait for slow images');
+    if(!redisLayer)assert.ok(snapshot.at<2000,'Pending-to-ready fixture exceeded target: '+snapshot.at);
+    const data=await getState();assert.ok(data.requests.some(r=>r.status===202));assert.ok(data.requests.some(r=>r.status===200));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({headRenderer:false,early:false,assetDelay:0,apiDelay:0,priceDelay:50,imageDelay:50});
+    return {titlesMs:Math.round(snapshot.at),widgetDelayMs:4500,imageDelayMs:2500,liveTiming:false};
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

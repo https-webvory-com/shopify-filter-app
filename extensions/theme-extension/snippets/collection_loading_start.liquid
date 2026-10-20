@@ -90,9 +90,18 @@
   function start(){
       try {
         var meta=document.querySelector('meta[name="cfp-collection-context"]');
-        if(!meta)return false;
-        var context=window.cfpCollectionContext={shop:meta.dataset.shop,handle:meta.dataset.handle,country:meta.dataset.country,locale:meta.dataset.locale,customerTags:meta.dataset.customerTags||''};
-        if(typeof window.cfpCustomerTags==='undefined')window.cfpCustomerTags=context.customerTags;
+        // A preloaded extension asset can arrive before its Liquid metadata.
+        // Start the public request then, but never display it until Liquid
+        // confirms the market and customer scope. No merchant theme edits.
+        var provisional=!meta;
+        var handle=location.pathname.match(/\/collections\/([^/]+)/)?.[1];
+        var context=meta?{shop:meta.dataset.shop,handle:meta.dataset.handle,country:meta.dataset.country,locale:meta.dataset.locale,customerTags:meta.dataset.customerTags||''}:
+          {shop:window.Shopify?.shop,handle:handle&&decodeURIComponent(handle),country:window.Shopify?.country,locale:window.Shopify?.locale,customerTags:''};
+        if(!context.shop||!context.country||!context.locale||!context.handle)return false;
+        if(!provisional){
+          window.cfpCollectionContext=context;
+          if(typeof window.cfpCustomerTags==='undefined')window.cfpCustomerTags=context.customerTags;
+        }
         var query = new URLSearchParams(location.search);
         if (query.has('page') && query.get('page') !== '1') return;
         if ([...query.keys()].some(function(key) {
@@ -106,17 +115,43 @@
         params.sort();
         var url = 'https://aisearchfilter.webvory.com/api/filter?' + params;
         var previous = window._cfpRankedEarlyFetch;
-        if (previous && previous.url === url) return;
+        if (previous && previous.url === url) {
+          if(!provisional){previous.verified=true;previous.context=context;if(previous.deliver)previous.promise.then(previous.deliver);}
+          return provisional?false:true;
+        }
         previous?.controller.abort();
         var controller = new AbortController();
         var timer = setTimeout(function() {controller.abort();},30000);
-        window._cfpRankedEarlyFetch = {
-          url:url,controller:controller,configurationPromise:null,
-          promise:fetch(url,{signal:controller.signal,cache:'no-cache'})
-            .then(async function(response) {const payload=await response.json();try{if(response.status===200){preloadImages(payload);mountFirstRow(payload,context,controller);}}catch{}return {status:response.status,payload};})
-            .catch(function() {return null;})
-            .finally(function() {clearTimeout(timer);})
+        var entry={url:url,controller:controller,configurationPromise:null,verified:!provisional,context:context,delivered:false};
+        entry.deliver=function(result){
+          if(!result||result.status!==200||!entry.verified||entry.delivered||controller.signal.aborted||window._cfpRankedEarlyFetch!==entry)return;
+          entry.delivered=true;
+          try{preloadImages(result.payload);mountFirstRow(result.payload,entry.context,controller);}catch{}
         };
+        async function read(){
+          while(!controller.signal.aborted){
+            const response=await fetch(url,{signal:controller.signal,cache:'no-cache'});
+            const result={status:response.status,payload:await response.json()};
+            // Once the widget claims this request, its existing bounded retry
+            // loop owns pending responses. Do not add another timeout window.
+            if(response.status!==202||entry.claimed){entry.deliver(result);return result;}
+            // Only pending rankings wait. Ready cards are delivered immediately,
+            // even while the full widget is still downloading or executing.
+            const seconds=Number(response.headers?.get('Retry-After'));
+            const delay=Number.isFinite(seconds)&&seconds>0?Math.min(seconds*1000,1000):1000;
+            await new Promise(resolve=>{
+              const finish=()=>{clearTimeout(retry);controller.signal.removeEventListener('abort',finish);resolve();};
+              const retry=setTimeout(finish,delay);controller.signal.addEventListener('abort',finish,{once:true});
+              if(controller.signal.aborted)finish();
+            });
+          }
+          return null;
+        }
+        window._cfpRankedEarlyFetch = entry;
+        entry.promise=read()
+            .catch(function() {return null;})
+            .finally(function() {clearTimeout(timer);});
+        if(provisional)return false;
       } catch(error) {}
       return true;
   }

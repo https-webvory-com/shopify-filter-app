@@ -191,13 +191,15 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
     })();
     directPending.set(key,task);return task;
   }
-  async function schedule(key, spec, warmup = false) {
-    const priority = warmup ? 10 : 1;
+  async function schedule(key, spec, warmup = false, refreshingVisit = false) {
+    // Keep viewed collections ready before their bounded freshness expires.
+    // Bulk catalog preparation stays behind visitor refreshes and cold visits.
+    const priority = refreshingVisit ? 5 : warmup ? 10 : 1;
     const jobId = `collection-ranking-${createHash('sha256').update(key).digest('hex')}`;
     let job = await queue.getJob(jobId);
     if (job) {
       const state = await job.getState();
-      if (!warmup && ['waiting','prioritized','delayed'].includes(state) && (job.priority ?? job.opts?.priority) > priority) {
+      if (['waiting','prioritized','delayed'].includes(state) && (job.priority ?? job.opts?.priority) > priority) {
         await job.changePriority({ priority });
       }
       if (state === 'failed' && now() - (job.finishedOn ?? 0) < 30000) return 'failed';
@@ -306,7 +308,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       // Refresh a valid version before expiry without holding up visitors.
       if (productsChanged || !Number.isFinite(value.preparedAt) ||
           now() - value.preparedAt >= preparationFreshnessMs - 120000 || await redis.ttl(key) < 120) {
-        try { await schedule(key, spec, true); } catch { /* A usable version remains valid if refresh scheduling fails. */ }
+        try { await schedule(key, spec, true, !warmup); } catch { /* A usable version remains valid if refresh scheduling fails. */ }
       }
       if (spec.retainForIdle === true && spec.needsShopifyOrder) {
         // Adopt already prepared records on deployment too, without requiring
@@ -325,7 +327,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
             await dataEpochMatches(spec,previous.reusableDataRevision)&&
             Number.isFinite(previous.preparedAt) && now() - previous.preparedAt < preparationLifetime * 1000 &&
             await revision(spec.shop) === spec.revision) {
-          try { await schedule(key, spec, true); } catch { /* The last complete version is still usable. */ }
+          try { await schedule(key, spec, true, !warmup); } catch { /* The last complete version is still usable. */ }
           report({event:'last-order-reused',shop:spec.shop,collectionId:spec.collectionId,key,ageMs:now()-previous.preparedAt});
           return {status:'ready',ids:previous.ids,metadata:previous.metadata,orderUpdatedAt:previous.orderUpdatedAt ?? null,cacheKey:previousKey};
         }

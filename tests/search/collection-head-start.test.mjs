@@ -10,13 +10,13 @@ test('head runs the bootstrap inline before deferred asset loading, using the sa
  assert.ok(head.includes("<script>{% render 'collection_loading_start' %}</script>"));
  assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),bootstrap);
 });
-function fixture(search='',tags='',delayed=false){
+function fixture(search='',tags='',delayed=false,options={}){
  let metaPresent=!delayed,callback;const listeners={};
- const calls=[],window={location:new URL('https://store.example/collections/formal'+search),cfpCustomerTags:tags};
+ const calls=[],window={location:new URL('https://store.example/collections/formal'+search),cfpCustomerTags:tags,...(options.shopify?{Shopify:options.shopify}:{})};
  const headScript=bootstrap;
  const start=body.indexOf('  (function() {',body.indexOf('Fire API request'));
  const bodyScript=body.slice(start,body.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}','fixture.myshopify.com').replace('{{ cfp_collection_handle }}','formal').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en');
- const context={window,location:window.location,MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},document:{addEventListener:(name,fn)=>listeners[name]=fn,documentElement:{lang:'en'},querySelector:()=>metaPresent?({dataset:{shop:'fixture.myshopify.com',handle:'formal',country:'IN',locale:'en',customerTags:tags}}):null},URL,URLSearchParams,AbortController,setTimeout,clearTimeout,fetch:async(url,options)=>{calls.push({url,options});return {status:200,json:async()=>({products:[],totalCount:0})};}};
+ const context={window,location:window.location,MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){}},document:{addEventListener:(name,fn)=>listeners[name]=fn,documentElement:{lang:'en'},querySelector:()=>metaPresent?({dataset:{shop:'fixture.myshopify.com',handle:'formal',country:'IN',locale:'en',customerTags:tags}}):null},URL,URLSearchParams,AbortController,setTimeout,clearTimeout,fetch:async(url,requestOptions)=>{calls.push({url,options:requestOptions});return options.respond?options.respond(calls.length):{status:200,json:async()=>({products:[],totalCount:0})};}};
  vm.runInNewContext(headScript,context);
  return {calls,window,addMeta:()=>{metaPresent=true;callback();},domReady:()=>listeners.DOMContentLoaded?.(),body:()=>vm.runInNewContext(bodyScript,context)};
 }
@@ -43,6 +43,48 @@ test('existing collection blocks load the renderer asynchronously in head and pr
 test('late head metadata starts once and DOMContentLoaded cannot restart an obsolete market request',async()=>{
  const f=fixture('','',true);assert.equal(f.calls.length,0);f.addMeta();assert.equal(f.calls.length,1);
  f.window.Shopify={country:'US',locale:'en'};f.body();assert.equal(f.calls.length,2);f.domReady();assert.equal(f.calls.length,2);await f.window._cfpRankedEarlyFetch.promise;
+});
+
+test('preloaded loader fetches before metadata but displays only after matching customer and market confirmation',async()=>{
+ const f=fixture('','',true,{shopify:{shop:'fixture.myshopify.com',country:'IN',locale:'en'}});
+ const entry=f.window._cfpRankedEarlyFetch;
+ assert.equal(f.calls.length,1);assert.equal(entry.verified,false);
+ await entry.promise;assert.equal(entry.delivered,false);assert.equal(f.window.cfpCollectionContext,undefined);
+ f.addMeta();await Promise.resolve();
+ assert.equal(f.calls.length,1);assert.equal(entry.verified,true);assert.equal(entry.delivered,true);
+ assert.equal(f.window.cfpCollectionContext.country,'IN');
+});
+
+test('customer or market mismatch aborts provisional cards before they can display',async()=>{
+ for(const [tags,country] of [['VIP','IN'],['','US']]){
+  const f=fixture('',tags,true,{shopify:{shop:'fixture.myshopify.com',country,locale:'en'}});
+  const provisional=f.window._cfpRankedEarlyFetch;await provisional.promise;
+  assert.equal(provisional.delivered,false);f.addMeta();
+  const confirmed=f.window._cfpRankedEarlyFetch;await confirmed.promise;
+  assert.equal(f.calls.length,2);assert.equal(provisional.controller.signal.aborted,true);
+  assert.equal(provisional.delivered,false);assert.equal(confirmed.delivered,true);
+  const params=new URL(confirmed.url).searchParams;
+  assert.equal(params.get('country'),'IN');assert.equal(params.get('customer_tags'),tags||null);
+ }
+});
+
+test('pending early responses retry independently and deliver ready data without waiting for the widget',async()=>{
+ const f=fixture('','',false,{respond:count=>({status:count===1?202:200,headers:{get:()=>'.001'},json:async()=>({products:[],totalCount:0})})});
+ const entry=f.window._cfpRankedEarlyFetch;const result=await entry.promise;
+ assert.equal(result.status,200);assert.equal(f.calls.length,2);assert.equal(entry.delivered,true);
+ f.body();assert.equal(f.calls.length,2);
+});
+
+test('a cancelled pending request never retries or delivers obsolete cards',async()=>{
+ const f=fixture('','',false,{respond:()=>({status:202,json:async()=>({products:[]})})});
+ const entry=f.window._cfpRankedEarlyFetch;await Promise.resolve();entry.controller.abort();
+ assert.equal(await entry.promise,null);assert.equal(f.calls.length,1);assert.equal(entry.delivered,false);
+});
+
+test('a widget claiming a pending request takes over retries without extending the timeout window',async()=>{
+ const f=fixture('','',false,{respond:()=>({status:202,json:async()=>({products:[],debug:{collectionRankingStatus:'pending'}})})});
+ const entry=f.window._cfpRankedEarlyFetch;entry.claimed=true;
+ assert.equal((await entry.promise).status,202);assert.equal(f.calls.length,1);assert.equal(entry.delivered,false);
 });
 
 test('early image selection retains selected variants and collection-specific images',()=>{

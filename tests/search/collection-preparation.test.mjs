@@ -218,6 +218,20 @@ test('an active visitor promotes a queued background warmup without duplicating 
   await f.service.get(f.spec);assert.equal(f.queued.length,1);assert.equal(f.queued[0].opts.priority,1);
 });
 
+test('a visitor promotes a ready collection refresh ahead of catalog work without changing freshness or duplicating jobs',async()=>{
+ const f=fixture();Object.assign(f.spec,{retainForIdle:true,collectionId:'1'});
+ await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
+ f.advance(490000);
+ assert.equal((await f.service.get(f.spec,{warmup:true})).status,'ready');
+ assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
+ assert.equal((await f.service.get(f.spec)).status,'ready');
+ assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,5);
+ await f.service.get(f.spec,{warmup:true});assert.equal(f.queued[1].opts.priority,5);
+ f.values.set(productRevisionKey(f.spec.shop,'1'),'1');f.advance(120000);
+ assert.equal((await f.service.get(f.spec)).status,'pending');
+ assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,1);
+});
+
 test('relevant product updates permit a cold build to publish and request a follow-up refresh',async()=>{
   const f=fixture();f.spec.collectionId='1';let finish;
   const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>new Promise(resolve=>finish=resolve)});
@@ -300,7 +314,7 @@ test('idle beyond ten minutes serves the last usable ranking and refreshes in th
   await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
   assert.equal(storedLifetime,86400);assert.equal(preparationLifetime,86400);
   f.advance(660000);assert.deepEqual(await f.service.get(f.spec),{status:'ready',...f.result});
-  assert.equal(f.builds(),1);assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
+  assert.equal(f.builds(),1);assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,5);
   const oldKey=preparationKey(f.spec);f.values.set(preparationRevisionKey(f.spec.shop),'1');
   assert.deepEqual(await f.service.get(f.spec),{status:'pending'});
   assert.equal((await f.service.get({...f.spec,revision:'1'})).status,'ready');
@@ -331,13 +345,13 @@ test('fresh preparation does not rebuild on every request and legacy records ref
   assert.equal((await f.service.get(f.spec)).status,'ready');assert.equal(f.queued.length,2);
 });
 
-test('a changed Shopify order keeps the last complete fresh ranking while its replacement queues at low priority',async()=>{
+test('a changed Shopify order keeps the last complete fresh ranking while its replacement queues ahead of catalog preparation',async()=>{
  const f=fixture();Object.assign(f.spec,{retainForIdle:true,needsShopifyOrder:true,orderedIds:['pin','boost','ordinary'],orderRevision:'old',orderUpdatedAt:10});
  await f.service.get(f.spec);await f.service.process(f.queued[0].data);f.queued[0].state='completed';
  const changed={...f.spec,orderedIds:['ordinary','boost','pin'],orderRevision:'new',orderUpdatedAt:20};
  const ready=await f.service.get(changed);
  assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);assert.equal(ready.orderUpdatedAt,10);
- assert.equal(ready.cacheKey,preparationKey(f.spec));assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);
+ assert.equal(ready.cacheKey,preparationKey(f.spec));assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,5);
  const built={ids:['ordinary','boost','pin'],metadata:{}};
  const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>built});
  await service.process(f.queued[1].data);
@@ -368,7 +382,7 @@ test('an idle collection reuses unchanged products across an order refresh witho
  const ready=await f.service.get(changed);
  assert.equal(ready.status,'ready');assert.deepEqual(ready.ids,f.result.ids);
  assert.equal(ready.orderUpdatedAt,10);assert.equal(ready.cacheKey,preparationKey(f.spec));
- assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,10);assert.equal(f.builds(),1);
+ assert.equal(f.queued.length,2);assert.equal(f.queued[1].opts.priority,5);assert.equal(f.builds(),1);
  f.values.set(productRevisionKey(f.spec.shop,'1'),'1');
  assert.equal((await f.service.get(changed)).status,'pending');
  assert.equal(f.queued[1].opts.priority,1);

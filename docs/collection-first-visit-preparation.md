@@ -363,3 +363,28 @@ theme changes. The first cards mount only inside the installed app block.
 
 Browser fixture timings verify behavior with controlled delays; only fresh
 visits to the deployed storefront establish actual first-card/image times.
+
+### Early requests and pending ranking recovery
+
+The preloaded extension loader can start an anonymous first-page request from
+Shopify's shop, country and locale globals before its Liquid metadata arrives.
+It does not display or preload product images until that metadata confirms the
+same market and customer scope. A mismatch aborts the speculative request and
+starts the correctly scoped one. Matching requests share the same promise with
+the full widget, including its existing claimed-request protection.
+
+A 202 response no longer hands all progress back to the full widget. The small
+loader retries independently, respecting Retry-After up to one second, and
+mounts the ready image/title/link response immediately inside the app block.
+Titles do not wait for image downloads, market prices, filters or full-widget
+startup. The existing 30-second fetch deadline and context cancellation remain.
+There is no added wait on a successful response and no new card-count cap.
+When the full widget claims a still-pending request, it takes over the existing
+bounded retry loop instead of starting a second timeout window after the loader.
+
+For an already usable ranking, a shopper-triggered refresh now has priority 5,
+ahead of catalog preparation at 10 and behind cold visitor requests at 1. An
+existing queued refresh is promoted rather than duplicated; later bulk warmups
+cannot demote it. Ranking freshness, eligibility, pins and rule ordering retain
+their existing checks. These changes require backend/worker and extension
+deployment together; they do not modify merchant themes or merchant settings.
