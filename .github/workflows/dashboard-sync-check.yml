@@ -1,10 +1,10 @@
-name: Inspect dashboard sync error
+name: Read only scalar browse benchmark
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  benchmark:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -13,22 +13,6 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 3m
           script: |
-            docker ps --format '{{.Names}} {{.Status}}'
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import {Queue} from 'bullmq';
-            import {redisOptions,webhookQueue} from './app/services/queue.server.js';
-            import meiliClient from './app/services/meiliClient.server.js';
-            const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
-            try {
-              const stats=await meiliClient.index('products').getStats();
-              const embedders=(await meiliClient.index('products').getSettings()).embedders || {};
-              const embeddingTask=await meiliClient.tasks.getTask(252811);
-              console.log('SEARCH_ENGINE_STATUS',JSON.stringify({documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,embedders:Object.keys(embedders),embeddingTask:embeddingTask.status,autoEmbeddingSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
-              for(const shop of ['thedressoutlet.myshopify.com','another-shpyfy-store.myshopify.com']){
-                const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
-                for(const row of rows){const queued=await queue.getJob(row.id);console.log('SYNC_JOB',JSON.stringify({...row,shop,queueState:queued?await queued.getState():'missing',lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));}
-              }
-            }finally{await queue.close();await webhookQueue.close();await db.$disconnect();}
-            NODE
+            docker exec shopify-filter-app node --input-type=module -e 'await eval("(async()=>{"+Buffer.from("CmNvbnN0IHtkZWZhdWx0OnByaXNtYX09YXdhaXQgaW1wb3J0KCcuL2FwcC9kYi5zZXJ2ZXIuanMnKTsKY29uc3Qge2RlZmF1bHQ6UmVkaXN9PWF3YWl0IGltcG9ydCgnaW9yZWRpcycpO2NvbnN0IHtSRURJU19VUkx9PWF3YWl0IGltcG9ydCgnLi9hcHAvc2VydmljZXMvcmVkaXNDb25uZWN0aW9uLnNlcnZlci5qcycpOwpjb25zdCB7UXVldWV9PWF3YWl0IGltcG9ydCgnYnVsbG1xJyk7Y29uc3Qgcj1uZXcgUmVkaXMoUkVESVNfVVJMLHttYXhSZXRyaWVzUGVyUmVxdWVzdDoxfSk7Y29uc3QgcT1uZXcgUXVldWUoJ2NvbGxlY3Rpb25SYW5raW5nUXVldWVWMicse2Nvbm5lY3Rpb246cn0pOwp0cnl7CiBjb25zdCBzaG9wPSd0aGVkcmVzc291dGxldC5teXNob3BpZnkuY29tJyxyb3c9YXdhaXQgcHJpc21hLmNvbGxlY3Rpb24uZmluZEZpcnN0KHt3aGVyZTp7c2hvcCxoYW5kbGU6J3BsdXMtc2l6ZS1jb2NrdGFpbC1kcmVzc2VzJ30sc2VsZWN0OntpZDp0cnVlLGhhbmRsZTp0cnVlfX0pLGlkPXJvdy5pZC5zcGxpdCgnLycpLnBvcCgpOwogY29uc29sZS5sb2coJ0NPTExFQ1RJT04nLEpTT04uc3RyaW5naWZ5KHJvdykpO2NvbnNvbGUubG9nKCdRVUVVRV9DT1VOVFMnLEpTT04uc3RyaW5naWZ5KGF3YWl0IHEuZ2V0Sm9iQ291bnRzKCkpKTsKIGNvbnN0IGpvYnM9YXdhaXQgcS5nZXRKb2JzKFsnYWN0aXZlJywncHJpb3JpdGl6ZWQnLCdkZWxheWVkJywnZmFpbGVkJywnY29tcGxldGVkJ10sMCw0MDAwKTsKIGNvbnNvbGUubG9nKCdNQVRDSElOR19KT0JTJyxKU09OLnN0cmluZ2lmeShqb2JzLmZpbHRlcihqPT5KU09OLnN0cmluZ2lmeShqLmRhdGEpLmluY2x1ZGVzKGlkKSkubWFwKGo9Pih7aWQ6ai5pZCxuYW1lOmoubmFtZSxwcmlvcml0eTpqLm9wdHMucHJpb3JpdHksdGltZXN0YW1wOmoudGltZXN0YW1wLHByb2Nlc3NlZE9uOmoucHJvY2Vzc2VkT24sZmluaXNoZWRPbjpqLmZpbmlzaGVkT24sYXR0ZW1wdHNNYWRlOmouYXR0ZW1wdHNNYWRlLGZhaWxlZFJlYXNvbjpqLmZhaWxlZFJlYXNvbixyZXR1cm52YWx1ZTpqLnJldHVybnZhbHVlfSkpKSk7CiBjb25zdCBldmVudHM9KGF3YWl0IHIubHJhbmdlKCdjb2xsZWN0aW9uUHJlcGFyYXRpb25UZWxlbWV0cnk6JytzaG9wKyc6cmVjZW50JywwLDI5OSkpLm1hcChzPT5KU09OLnBhcnNlKHMpKTtjb25zb2xlLmxvZygnRVZFTlRTJyxKU09OLnN0cmluZ2lmeShldmVudHMuZmlsdGVyKGU9PlN0cmluZyhlLmNvbGxlY3Rpb25JZCkuZW5kc1dpdGgoaWQpKSkpOwogY29uc29sZS5sb2coJ0FMTF9FVkVOVF9DT1VOVFMnLEpTT04uc3RyaW5naWZ5KGV2ZW50cy5yZWR1Y2UoKG8sZSk9PihvW2UuZXZlbnQrJzonKyhlLnJlYXNvbnx8JycpXT0ob1tlLmV2ZW50Kyc6JysoZS5yZWFzb258fCcnKV18fDApKzEsbykse30pKSk7CiBjb25zdCBvdXQ9YXdhaXQgcHJpc21hLmNvbGxlY3Rpb25Mb2FkaW5nU25hcHNob3QuZmluZE1hbnkoe3doZXJlOntzaG9wLGNvbGxlY3Rpb25JZDppZH0sc2VsZWN0OntraW5kOnRydWUsaWQ6dHJ1ZSxhbGlhc2VzOnRydWUsdXBkYXRlZEF0OnRydWUsdmFsaWRhdGVkQXQ6dHJ1ZSxleHBpcmVzQXQ6dHJ1ZX19KTtjb25zb2xlLmxvZygnU05BUFNIT1RTJyxKU09OLnN0cmluZ2lmeShvdXQpKTsKfWZpbmFsbHl7YXdhaXQgcS5jbG9zZSgpO3IuZGlzY29ubmVjdCgpO2F3YWl0IHByaXNtYS4kZGlzY29ubmVjdCgpO30K","base64").toString()+"})()")'
