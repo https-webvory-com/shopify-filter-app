@@ -368,7 +368,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v2, application/json'} });
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v3, application/json'} });
       let payload = await response.json();
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
@@ -664,24 +664,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
       if(signal.aborted)return;
       if(prefix){
-        // Keep every already-visible pin through the handoff. Read complete
-        // canonical pages until they cover that prefix, then resume after them.
-        const canonical=[...full.products],target=Math.max(PAGE_SIZE,cards.products.length);
-        let lastPage=1;
-        while(canonical.length<Math.min(target,full.totalCount)){
-          const next=new URL(request);next.searchParams.set('rankingToken',full.rankingToken);next.searchParams.set('page',String(lastPage+1));
-          const response=await fetchCollectionResponse(next.toString(),signal),page=await response.json();
-          if(response.status!==200||page.rankingToken!==full.rankingToken||!Array.isArray(page.products)||!page.products.length)throw Error('Collection handoff unavailable');
-          canonical.push(...page.products);lastPage++;
-        }
-        if(signal.aborted)return;
-        if(new Set(canonical.map(p=>p.id)).size!==canonical.length)throw Error('Duplicate collection handoff products');
-        full={...full,products:canonical};activeFilters.page=lastPage;
+        // The early pins occupy page one only. Subsequent canonical pages,
+        // including any remaining pins, load only when the shopper asks.
+        activeFilters.page=1;
         if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
         const readyUrl=new URL(window.location.href);readyUrl.searchParams.set('rankingToken',full.rankingToken);window.history.replaceState(null,'',readyUrl.pathname+readyUrl.search);
       }
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       if(JSON.stringify(full.products)!==signature)renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      else if(prefix){
+        // Identical complete cards keep their DOM and verified prices. Only
+        // the now-known total and canonical pagination need to be activated.
+        updateProductCount(full.totalCount);renderPagination(getProductContainer(),full.totalCount);
+      }
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
     }catch(error){
@@ -881,6 +876,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
+  function updateProductCount(totalCount){
+    const countLabel=document.querySelector('.cfp-product-count');
+    if(!countLabel)return;
+    if(!Number.isFinite(totalCount)){countLabel.textContent='';return;}
+    countLabel.style.display=globalSettings?.showProductCount===false?'none':'';
+    countLabel.textContent=`${totalCount} product${totalCount===1?'':'s'}`;
+  }
+
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
@@ -899,16 +902,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
     // Update count labels
-    const countLabel = document.querySelector('.cfp-product-count');
-    if(countLabel&&!Number.isFinite(totalCount))countLabel.textContent='';
-    if (countLabel&&Number.isFinite(totalCount)) {
-      if (globalSettings && globalSettings.showProductCount === false) {
-        countLabel.style.display = 'none';
-      } else {
-        countLabel.style.display = '';
-        countLabel.textContent = `${totalCount} product${totalCount === 1 ? '' : 's'}`;
-      }
-    }
+    updateProductCount(totalCount);
 
     if (templateName === 'search') {
       document.title = document.title.replace(/\d+\s*results?/i, `${totalCount} result${totalCount === 1 ? '' : 's'}`);
@@ -1309,7 +1303,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
              `;
 
              swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}" 
-                  data-tooltip="${colorName}" 
+                  data-tooltip="${colorName}"
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
                            const pImg = card.querySelector('.cfp-product-card__image--primary');

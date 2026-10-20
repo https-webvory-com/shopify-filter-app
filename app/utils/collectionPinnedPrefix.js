@@ -11,9 +11,11 @@ export async function prepareCollectionPinnedPrefix(spec,{index,prisma,arrange,c
  let pins;try{pins=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;}catch{return decline('malformed-pins');}
  if(!Array.isArray(pins)||pins.some(p=>!/^gid:\/\/shopify\/Product\/\d+$/.test(p?.id||'')))return decline('malformed-pins');
  if(new Set(pins.map(p=>p.id)).size!==pins.length)return decline('duplicate-pins');
- const eligible=new Set(spec.pinnedIds),selected=pins.filter(p=>eligible.has(p.id)).map(p=>p.id.split('/').pop());
- if(!selected.length||selected.length!==eligible.size)return decline('insufficient-configured-eligible-pins');
- if(selected.length>10000)return decline('pin-response-budget');
+ const eligible=new Set(spec.pinnedIds),eligiblePins=pins.filter(p=>eligible.has(p.id));
+ if(!eligiblePins.length||eligiblePins.length!==eligible.size)return decline('insufficient-configured-eligible-pins');
+ // Public collection pages contain 25 cards. Later pins retain their canonical
+ // positions on subsequent pages; they never enlarge the initial grid.
+ const selected=eligiblePins.slice(0,25).map(p=>p.id.split('/').pop());
  const limit=selected.length;
  const page=await readRankedCollectionPage(index,{ids:selected,page:1,limit,shop:spec.shop,batchOwner,requireDocuments:true});
  // Unknown/zero prices can move pins behind all paid products. Missing or

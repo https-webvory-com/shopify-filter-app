@@ -52,7 +52,6 @@ export const loader = async ({ request, context }) => {
   let cardSnapshot;
   let pinnedPrefix=false;
   let pinnedPrefixVersion;
-  let savedCardsResponse;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -77,10 +76,7 @@ export const loader = async ({ request, context }) => {
       // Trusted background rendering can reuse validated cards, but must never
       // create a shopper's browsing session while probing readiness.
       const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit});
-      savedCardsResponse=ready;
-      // A legacy first-page snapshot cannot certify that every configured pin
-      // is present. Resolve pins before serving the all-pins protocol.
-      if(ready&&!acceptsCollectionPinnedPrefix(request))return ready;
+      if(ready)return ready;
     }
 
     // ── 0. Parse ALL query parameters upfront ─────────────────────────
@@ -612,9 +608,6 @@ export const loader = async ({ request, context }) => {
       }).map(product => product.id));
       activePinnedList = activePinnedList.filter(id => validIds.has(id));
     }
-    // A verified saved page already covers smaller pin sets. Keep that fast
-    // path; only larger sets need a separate response containing every pin.
-    if(savedCardsResponse&&activePinnedList.length<=limit)return savedCardsResponse;
 
     // ── 8. Build Meilisearch queries ───────────────────────────────────
     //
@@ -816,7 +809,7 @@ export const loader = async ({ request, context }) => {
         precompute: context?.rankingPrecompute === true,
         deferDirect:canPreviewPins,
       });}catch(error){if(!canPreviewPins)throw error;prepared={status:'pending'};reportCollectionHead(preparedSpec,'background-unavailable',error.name);}
-      if(canPreviewPins&&(prepared.status!=='ready'||activePinnedList.length>limit))try{
+      if(canPreviewPins&&prepared.status!=='ready')try{
         let declineReason;
         const version=await getCollectionHeadVersion(preparedSpec);
         const prefix=await prepareCollectionPinnedPrefix(preparedSpec,{index:meiliClient.index('products'),batchOwner:meiliClient,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,onDecline:reason=>declineReason=reason});

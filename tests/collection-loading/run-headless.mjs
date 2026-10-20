@@ -364,22 +364,30 @@ try{
     const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.ok(!state.headEvents.some(e=>e.event==='head-comparison-mismatch'));assert.deepEqual(await evaluate('browserErrors'),[]);
     return {coldPrefixMs:Math.round(at),fullRankingPausedAtPrefix:true,cardsAtPrefix:6,canonicalPaginationProducts:all.length,liveTiming:false};
   });
-  await test('all forty pins render complete cards before ranking and retain every product through multi-page handoff',async()=>{
+  await test('forty pins show 25 complete cards first and Load more keeps the remaining fifteen in order',async()=>{
     const pins=Array.from({length:41},(_,i)=>String(i+1)).filter(id=>id!=='3');
     await control({reset:true,hold:true,productCount:70,pinList:pins,early:true,headRenderer:true,assetDelay:0,apiDelay:0,cssDelay:0,imageDelay:0,priceDelay:0});
     await send('Network.clearBrowserCache');await navigate();
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===40");
-    assert.deepEqual(await cards(),pins);assert.equal((await getState()).state.builds,0);
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.deepEqual(await cards(),pins.slice(0,25));assert.equal((await getState()).state.builds,0);
     assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview').length"),0);
     await wait("[...document.querySelectorAll('.cfp-product-card__price')].slice(0,5).every(p=>/[0-9]/.test(p.textContent))");
+    await evaluate("window.firstPinnedCard=document.querySelector('.cfp-product-card--reveal');window.firstPinnedPrice=firstPinnedCard.querySelector('.cfp-product-card__price').textContent");
     assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
-    await fixture.prepareLast();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+    await fixture.prepareLast();await wait("!!document.querySelector('#cfp-load-more-btn')");
+    assert.equal((await cards()).length,25);
+    assert.equal(await evaluate("firstPinnedCard===document.querySelector('.cfp-product-card--reveal')"),true);
+    assert.equal(await evaluate("firstPinnedCard.querySelector('.cfp-product-card__price').textContent===firstPinnedPrice"),true);
+    assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'70 products');
+    assert.equal((await getState()).allRequests.filter(r=>r.page==='2').length,0);
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
     assert.deepEqual((await cards()).slice(0,40),pins);
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===70");
     const all=await cards();assert.equal(new Set(all).size,70);assert.equal(all.at(-1),'3');
     const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {pinsShown:40,canonicalProducts:70,fullRankingPausedAtPins:true,liveTiming:false};
+    return {initialCards:25,pinsAcrossFirstTwoPages:40,canonicalProducts:70,fullRankingPausedAtPins:true,liveTiming:false};
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);

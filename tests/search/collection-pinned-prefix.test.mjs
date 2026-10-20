@@ -32,3 +32,16 @@ test('only eligible configured pins in original order can establish a prefix',as
   const other=fixture();mutate(other.spec);assert.equal(await prepareCollectionPinnedPrefix(other.spec,other.deps),null);
  }
 });
+
+test('pin counts around page boundaries preserve exactly the canonical first page',async()=>{
+ for(const count of [1,24,25,26,40,50,51]){
+  const f=fixture();f.spec.pinningRule.products=f.docs.slice(0,count).map(p=>({id:'gid://shopify/Product/'+p.id}));
+  f.spec.pinnedIds=f.spec.pinningRule.products.map(p=>p.id);
+  const prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps),full=await prepareCollectionRanking(f.spec,f.deps);
+  assert.equal(prefix.ids.length,Math.min(25,count));assert.deepEqual(prefix.ids,full.ids.slice(0,Math.min(25,count)));
+ }
+ const f=fixture();f.spec.pinningRule.products=f.docs.slice(0,40).map(p=>({id:'gid://shopify/Product/'+p.id}));f.spec.pinnedIds=f.spec.pinningRule.products.map(p=>p.id);
+ f.docs[25].priceMin=0;
+ const prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps),full=await prepareCollectionRanking(f.spec,f.deps);
+ assert.deepEqual(prefix.ids,full.ids.slice(0,25));
+});

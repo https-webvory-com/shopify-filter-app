@@ -6,7 +6,7 @@ const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
-export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v2'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
+export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v3'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
 export function isPublicCollectionCards(request){
  const url=new URL(request.url),keys=[...url.searchParams.keys()],p=url.searchParams;
  return request.method==='GET'&&['collection-cards-v1','collection-preview-v1'].includes(p.get('responseProfile'))&&
@@ -25,7 +25,7 @@ export function collectionCardsPayload(payload){
 }
 export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
  if(fullCards&&!payload.collectionPinnedPrefix)return {...payload,products:(payload.products||[]).slice(0,limit),cfpCards:{version:1,preview:false}};
- if(payload.collectionPinnedPrefix?.version===2)return {...payload,cfpCards:{version:1,preview:false,prefix:true,proof:payload.collectionPinnedPrefix}};
+ if(payload.collectionPinnedPrefix?.version===2)return {...payload,products:(payload.products||[]).slice(0,Math.min(25,limit)),cfpCards:{version:1,preview:false,prefix:true,proof:payload.collectionPinnedPrefix}};
  // Only ready cards' image-selection inputs travel initially. Keep variant
  // identity/options so the existing renderer chooses exactly the same image
  // and product link when the complete, token-scoped page arrives.

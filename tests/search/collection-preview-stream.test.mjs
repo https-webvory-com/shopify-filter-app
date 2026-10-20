@@ -63,12 +63,12 @@ test('a proven cold prefix streams all cards without a total or pagination token
  for(const change of [{collectionPinnedPrefix:{version:1,inputVersion:'bad'}},{rankingToken:'made-up'},{totalCount:5},{products:[]}])await assert.rejects(read(await collectionCardsResponse({...prefix,...change},'prefix',request())));
 });
 
-test('the complete-card protocol preserves variant and pricing inputs and streams all forty pins',async()=>{
+test('the complete-card protocol preserves variant and pricing inputs while bounding forty pins to page one',async()=>{
  const products=Array.from({length:40},(_,i)=>({...payload.products[0],id:String(i+1),title:'Dress '+i,variants:[{id:String(i+100),sku:'SKU',price:100,available:true}]}));
  const prefix={...payload,products,rankingToken:null,totalCount:null,collectionPinnedPrefix:{version:2,inputVersion:'b'.repeat(64)},debug:{collectionRankingStatus:'prefix-ready'}};
  const result=await read(await collectionCardsResponse(prefix,'prefix',request()));
- assert.deepEqual(JSON.parse(JSON.stringify(result.payload.products)),products);assert.equal(result.payload.cfpCards.preview,false);
- const fullRequest=new Request(request(),{headers:{Accept:'application/x-cfp-pinned-prefix-v2, application/x-ndjson'}});
+ assert.deepEqual(JSON.parse(JSON.stringify(result.payload.products)),products.slice(0,25));assert.equal(result.payload.cfpCards.preview,false);
+ const fullRequest=new Request(request(),{headers:{Accept:'application/x-cfp-pinned-prefix-v3, application/x-ndjson'}});
  const ready=await read(await collectionCardsResponse(payload,'hit',fullRequest));
  assert.deepEqual(JSON.parse(JSON.stringify(ready.payload.products)),payload.products);assert.equal(ready.payload.cfpCards.preview,false);
 });
