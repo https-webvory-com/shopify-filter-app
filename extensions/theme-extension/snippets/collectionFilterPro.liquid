@@ -452,26 +452,12 @@
     }
   }
 
-  var topBar = document.getElementById('cfp-top-bar');
-  if (topBar && window.MutationObserver) {
-    var observer = new MutationObserver(function(mutations) {
-      if (isSyncing) return;
-      var hasNewPills = false;
-      for (var m = 0; m < mutations.length; m++) {
-        if (mutations[m].target && (mutations[m].target.id === 'cfp-horizontal-filters' || mutations[m].target.closest('#cfp-horizontal-filters'))) {
-          hasNewPills = true;
-          break;
-        }
-      }
-      if (hasNewPills) syncPillsLayout();
-    });
-    observer.observe(topBar, { childList: true, subtree: true });
-  }
+  window.cfpSyncPillsLayout = syncPillsLayout;
 
   var resizeTimer;
   window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(syncPillsLayout, 100);
+    resizeTimer = setTimeout(syncPillsLayout, 150);
   });
 
   document.addEventListener('click', function(e) {

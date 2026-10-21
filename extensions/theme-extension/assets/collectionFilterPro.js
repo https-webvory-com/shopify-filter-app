@@ -2147,6 +2147,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             }
           }
         }
+        if (typeof window.cfpSyncPillsLayout === 'function') {
+          window.cfpSyncPillsLayout();
+        }
       } else {
         horizontalContainer.innerHTML = '';
         horizontalContainer.style.display = 'none';
