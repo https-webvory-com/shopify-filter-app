@@ -4,6 +4,8 @@ import {Readable} from 'node:stream';
 import {promisify} from 'node:util';
 const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
+// Bump when saved card presentation must be rebuilt from current documents.
+export const collectionCardPresentationVersion=2;
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
 export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v3'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});

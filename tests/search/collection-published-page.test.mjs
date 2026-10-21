@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
 import {createPublishedCollectionPages,publishedCollectionKey} from '../../app/utils/collectionPublishedPage.js';
 import {loadModule} from './helpers/search-ranking.mjs';
+import {encodePreparation,decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 const sessions=await loadModule('app/services/collectionRankingSession.server.js',{'node:crypto':crypto,'./redis.server.js':{default:{setex:async()=>{}}}});
 
 function fixture(){
@@ -20,6 +21,12 @@ function fixture(){
  const publish=(options={})=>store.publish({request:request({limit:'50',responseProfile:'collection-cards-v1'}),collectionId:'1',collectionHandle:'one',prepared:{ids,metadata:{}},payload,sessionUpdatedAt:time,...options});
  return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time};
 }
+
+test('published pages from an older card presentation rebuild instead of retaining the old pinned variant',async()=>{
+ const f=fixture();await f.publish();f.values.clear();
+ const row=[...f.rows.values()][0],entry=decodePreparation(row.payload);delete entry.cardPresentationVersion;row.payload=encodePreparation(entry);
+ assert.equal(await f.store.get(f.request()),null);
+});
 
 test('published data serves two complete 25-card pages and preserves all canonical IDs for later pagination',async()=>{
  const f=fixture();assert.equal(await f.publish(),true);

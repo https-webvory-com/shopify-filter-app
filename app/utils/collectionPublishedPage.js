@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {encodePreparation,decodePreparation} from './collectionPreparationPayload.js';
-import {isPublicCollectionCards,collectionCardsResponse,acceptsPublishedCollectionPage} from './collectionCards.js';
+import {isPublicCollectionCards,collectionCardsResponse,acceptsPublishedCollectionPage,collectionCardPresentationVersion} from './collectionCards.js';
 
 export function publishedCollectionKey(request){
  const url=new URL(request.url),page=url.searchParams.get('page');
@@ -15,7 +15,7 @@ export function publishedCollectionKey(request){
 // Published versions are deliberately independent of working ranking epochs.
 // Only a complete, verified replacement is published; visits never rebuild it.
 export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,now=Date.now,lifetime=86400}){
- const valid=(entry,serving=false)=>entry?.version===1&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
+ const valid=(entry,serving=false)=>entry?.version===1&&entry.cardPresentationVersion===collectionCardPresentationVersion&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
   Array.isArray(entry.ids)&&new Set(entry.ids).size===entry.ids.length&&entry.ids.every(id=>/^\d+$/.test(id))&&
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
@@ -52,7 +52,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   const canonical=publishedCollectionKey(new Request(url)),aliases=new Set([key,canonical]);
   if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(publishedCollectionKey(new Request(url)));}
   const {rankingToken,...cards}=payload;
-  const entry={version:1,shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.

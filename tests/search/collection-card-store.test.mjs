@@ -2,7 +2,7 @@ import {createCardStateReader} from '../../app/utils/collectionCardState.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCollectionCardStore,collectionCardKey,collectionCardSnapshotRequest} from '../../app/utils/collectionCardStore.js';
-import {encodePreparation} from '../../app/utils/collectionPreparationPayload.js';
+import {encodePreparation,decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 import {isPublicCollectionCards} from '../../app/utils/collectionCards.js';
 import {validateCollectionCardDocuments} from '../../app/utils/collectionCardValidation.js';
 import {collectionPageFingerprint} from '../../app/utils/collectionResponse.js';
@@ -20,6 +20,14 @@ function fixture(options={}){
  const payload={rankingToken:'background-placeholder',products:[{id:'1',variants:[{id:'v1'}],images:['red.jpg']},{id:'2'}],totalCount:2,settings:[],globalSettings:{},mergedValues:[],facets:{tags:[{value:'Heavy facets',count:2}]}};
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
+
+test('old card presentation snapshots cannot keep serving merchandising-selected pinned variants',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ let key=collectionCardKey(f.request);if(f.values.get(key).startsWith('p1:'))key=f.values.get(key).slice(3);
+ const entry=decodePreparation(f.values.get(key));delete entry.cardPresentationVersion;
+ f.values.set(key,encodePreparation(entry));
+ assert.equal(await f.store.get(f.request),null);assert.equal(await f.store.get(f.request,{probe:true}),null);
+});
 
 test('canonical facet follow-ups upgrade saved cards so the next visit receives collection-wide filters',async()=>{
  const f=fixture();await(await f.begin()).finish(f.payload,'fp','head');

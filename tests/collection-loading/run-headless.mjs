@@ -434,6 +434,22 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
+  await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
+    const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};
+    await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,colorRule:true,pinList:['1'],productVariants,assetDelay:1600,apiDelay:0,imageDelay:0,priceDelay:0});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("!!document.querySelector('.cfp-initial-product a')");
+    assert.equal(await evaluate("new URL(document.querySelector('.cfp-initial-product a').href).searchParams.get('variant')"),'100');
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const first="document.querySelector('.cfp-product-card--reveal')";
+    assert.equal(await evaluate(`new URL(${first}.querySelector('.cfp-product-card__link').href).searchParams.get('variant')`),'100');
+    assert.equal(await evaluate(`${first}.querySelector('.cfp-swatch-active').dataset.tooltip`),'Green');
+    assert.ok((await evaluate(`${first}.querySelector('.cfp-product-card__image--primary').src`)).includes('/image/green.svg'));
+    await evaluate(`${first}.querySelector('[data-tooltip="Blue"]').click()`);
+    assert.equal(await evaluate(`new URL(${first}.querySelector('.cfp-product-card__link').href).searchParams.get('variant')`),'101');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {defaultVariant:'100',firstVariantAvailable:false,shopperChoice:'101',liveTiming:false};
+  });
   await test('early cards remain visible while the full widget shows skeletons and awaits the stream tail',async()=>{
     await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,streamDelay:180,assetDelay:1200,apiDelay:0,imageDelay:0,priceDelay:0});
     await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});

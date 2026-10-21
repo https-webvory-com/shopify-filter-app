@@ -1151,7 +1151,10 @@ export const loader = async ({ request, context }) => {
         }));
       }
       
-      let activeVariant = parsedQuery?.colorIntent?.requested.length
+      // Pinning chooses the product, not a merchandising-selected color/size.
+      // Explicit shopper filters and search retain their existing selections.
+      const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
+      let activeVariant = pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
         ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
             Object.entries(optionsFilters).every(([name, values]) => {
               const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
@@ -1222,7 +1225,7 @@ export const loader = async ({ request, context }) => {
         if (activeVariant) matchScore = highestScore;
       }
 
-      if (!activeVariant && Object.keys(optionsFilters).length === 0) {
+      if (!activeVariant && !pinnedDefault && Object.keys(optionsFilters).length === 0) {
         const selection = selectMerchandisingVariant(p, activeRule, mergedValues);
         if (selection) {
           activeVariant = localVariantPrices.find(v => String(v.id) === String(selection.variantId)) || null;
