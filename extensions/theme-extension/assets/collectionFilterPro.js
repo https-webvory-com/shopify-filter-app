@@ -3020,17 +3020,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function isHorizontalFilterLayout() {
-    // 1. Mobile is strictly drawer mode (never horizontal pills)
+    // 1. Mobile (768px and down) is strictly drawer mode (never horizontal pills)
     if (window.matchMedia('(max-width: 768px)').matches) return false;
 
-    // 2. Must be enabled in Admin App settings ("Horizontal filters" toggle ON)
-    const adminHorizontal = !!(globalSettings?.horizontalFilters ?? window.cfpGlobalSettings?.horizontalFilters);
-    if (!adminHorizontal) return false;
+    // 2. Check if admin explicitly disabled horizontal filters
+    const hasAdminSetting = typeof globalSettings?.horizontalFilters !== 'undefined' || typeof window.cfpGlobalSettings?.horizontalFilters !== 'undefined';
+    if (hasAdminSetting) {
+      const adminVal = globalSettings?.horizontalFilters ?? window.cfpGlobalSettings?.horizontalFilters;
+      if (adminVal === false) return false;
+    }
 
-    // 3. If enabled in Admin, check if merchant explicitly selected 'drawer' in theme editor
-    const blockSetting = window.collectionFilterProSettings?.filter_layout;
-    if (blockSetting === 'drawer') return false;
-
+    // 3. For tablet and desktop (> 768px): Horizontal toolbar is active!
     return true;
   }
   window.cfpIsHorizontalFilterLayout = isHorizontalFilterLayout;

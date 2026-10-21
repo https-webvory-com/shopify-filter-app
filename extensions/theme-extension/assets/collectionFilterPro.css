@@ -1345,7 +1345,6 @@ facet-filters-form,
   width: 100% !important;
   border: none !important;
   background: var(--cfp-filter-bar-bg, transparent) !important;
-  border-radius: 6px;
   box-sizing: border-box !important;
   transition: background-color 0.2s ease;
 }
@@ -1433,7 +1432,6 @@ facet-filters-form,
     margin-bottom: 20px !important;
     border: none !important;
     background: var(--cfp-filter-bar-bg, transparent) !important;
-    border-radius: 6px !important;
     width: 100% !important;
     box-sizing: border-box !important;
   }
@@ -2428,7 +2426,7 @@ facet-filters-form,
   position: sticky;
   top: var(--cfp-sticky-top, 0px);
   z-index: 3;
-  background: var(--cfp-bg);
+  background: var(--cfp-filter-bar-bg, transparent);
 }
 
 

@@ -366,17 +366,20 @@
 (function() {
   var isSyncing = false;
   function isCurrentHorizontal() {
-    // 1. Mobile is strictly drawer mode
+    // 1. Mobile (768px and down) is strictly drawer mode
     if (window.innerWidth <= 768) return false;
 
-    // 2. Admin setting "Horizontal filters" MUST be enabled (toggle ON in app admin)
-    var adminHorizontal = !!(window.cfpGlobalSettings && window.cfpGlobalSettings.horizontalFilters);
-    if (!adminHorizontal) return false;
+    // 2. Check if global setting explicitly disables it (e.g. horizontalFilters === false)
+    if (window.cfpGlobalSettings && window.cfpGlobalSettings.horizontalFilters === false) {
+      return false;
+    }
 
-    // 3. If enabled in Admin, check if merchant explicitly selected 'drawer' in theme editor
-    var block = window.collectionFilterProSettings?.filter_layout;
-    if (block === 'drawer') return false;
+    // 3. If app JS runtime function is available, query it
+    if (typeof window.cfpIsHorizontalFilterLayout === 'function') {
+      return window.cfpIsHorizontalFilterLayout();
+    }
 
+    // 4. Default for tablet and desktop (> 768px): Horizontal is active!
     return true;
   }
 
