@@ -18,10 +18,10 @@ const product={priceMin:10,tags:['sale'],available:true,variants:[{id:'gid://sho
 
 test('late prices follow the currently selected variant and market currency',()=>{
  const f=fixture();f.update(f.card,product);
- assert.equal(f.row.children[0].textContent,'₹20.00');
- assert.equal(f.row.children[1].textContent,'₹30.00');
+ assert.equal(f.row.children[0].textContent,'20.00 INR');
+ assert.equal(f.row.children[1].textContent,'30.00 INR');
  f.select('1');f.update(f.card,f.card._cfpMarketProduct);
- assert.equal(f.row.children[0].textContent,'₹10.00');assert.equal(f.row.children.length,1);
+ assert.equal(f.row.children[0].textContent,'10.00 INR');assert.equal(f.row.children.length,1);
 });
 
 test('removed cards and unavailable prices cannot replace displayed market prices',()=>{

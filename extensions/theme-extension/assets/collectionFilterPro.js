@@ -852,7 +852,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
     const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
     const currency = window.Shopify?.currency?.active || 'USD';
-    const format = value => new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
+    const format = value => currency === 'INR'
+      ? new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
+      : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
     row.replaceChildren();
     const price = document.createElement('span');
     price.className = 'cfp-product-card__price';
