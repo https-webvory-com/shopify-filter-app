@@ -1,5 +1,13 @@
 # Shopify App Template - React Router
 
+## Published collection pages
+
+Anonymous native best-selling collection requests can negotiate `application/x-cfp-published-page-v1`. Background preparation materializes the first 50 complete cards, facets and settings in the existing durable `CollectionLoadingSnapshot` table with kind `published`. Shoppers receive 25 cards per page. A published read does not validate current documents or wait for working ranking epochs; filtered, customer-specific, alternate-sort and other-market requests cannot reuse it. Existing proven-pin previews remain the fallback when no published version exists.
+
+Publication replaces a complete verified version atomically and rejects delayed older builds. The full canonical ID sequence is retained for pagination; a shared immutable token preserves the first two pages across replacement. Pages after 50 use the same ranking token and normal card hydration. A published visit registers its context without blocking rendering, and a version older than one day queues a deduplicated background refresh. Existing background catalog preparation also refreshes changed or expired working card data. The previous complete published version remains usable if refresh is delayed, subject to the existing per-shop storage budgets. Daily freshness is a target, not a guarantee during worker outages.
+
+This intentionally permits stale product details, rules and order until replacement publication. Market price verification remains separate in the storefront. No schema migration is needed. Local fixtures establish the absence of preparation/hydration on the first two published pages; they do not establish a live two-second latency guarantee.
+
 ## CSV import results
 
 Collection and search merchandising/pinning imports show an in-dialog report with imported/skipped totals and each affected rule's CSV record number, name/ID and reason. Merchandising reports malformed JSON during preview, processes valid rules even if others fail, and reports grouped same-name CSV rows or updates to existing rules. Replacing a merchandising rule uses a transaction and preserves the original rule/conditions if the edit fails; collection imports cannot replace a same-name search rule.

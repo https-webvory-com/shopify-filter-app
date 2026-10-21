@@ -24,6 +24,7 @@ import * as collectionResponse from '../../app/utils/collectionResponse.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import {createCollectionCardStore} from '../../app/utils/collectionCardStore.js';
+import {createPublishedCollectionPages} from '../../app/utils/collectionPublishedPage.js';
 import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 import {createHash} from 'node:crypto';
 
@@ -92,7 +93,12 @@ export async function createLoadingServer({redisLayer}={}) {
   async function dispatch(job){return processCollectionRankingJob(job,{prepare:preparation.process,warm,schedule});}
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
-  const cardStore=createCollectionCardStore({redis,
+  const publishedRows=new Map();
+  const createCardSession=async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);};
+  const published=createPublishedCollectionPages({redis,createSession:createCardSession,
+    saveDurable:async row=>{const old=publishedRows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;publishedRows.set(row.key,row);return true;},
+    loadDurable:async({shop:tenant,key})=>[...publishedRows.values()].find(row=>row.shop===tenant&&row.aliases.includes(key))?.payload});
+  const cardStore=createCollectionCardStore({redis,publishedPages:{get:request=>state.publishedPages?published.get(request):null,publish:options=>state.publishedPages?published.publish(options):true},
     readState:async({preparedKey})=>{const raw=await redis.get(preparedKey);let saved;try{saved=decodePreparation(raw);}catch{}return {configuration:await redis.get(preparationRevisionKey(shop))||'0',products:await redis.get(productRevisionKey(shop,'1'))||'0',globalProducts:await redis.get(productRevisionKey(shop,'all'))||'0',externalProducts:saved?.externalDependencies?await dependencies.revision(shop,saved.externalDependencies):undefined,hardAll:await redis.get('collectionRankingDataRevision:'+shop+':all')||'0',hardCollection:await redis.get('collectionRankingDataRevision:'+shop+':1')||'0',orderRevision:'native-order-v'+(state.orderVersion||0),preparedRaw:raw};},
     validateCards:async(entry,prepared)=>{const result=await ranked.readRankedCollectionPage(index,{ids:prepared.ids,page:1,limit:25,shop,attributes:entry.attributes});return collectionPageFingerprint(result.hits)===entry.validationFingerprint;},
     createSession:async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);},
@@ -112,7 +118,7 @@ export async function createLoadingServer({redisLayer}={}) {
       '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,'../utils/collectionCards.js':collectionCards,'../utils/collectionPinnedPrefix.js':pinnedPrefix,
     '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.delete('responseProfile');u.searchParams.sort();return u.search;},
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
-      saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata})===identity)return value;const token='fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
+      saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata})===identity)return value;const hash=createHash('sha256').update(identity).digest('hex');const token=state.publishedPages?hash.slice(0,8)+'-'+hash.slice(8,12)+'-'+hash.slice(12,16)+'-'+hash.slice(16,20)+'-'+hash.slice(20,32):'fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;if(state.rankingFailure==='throw')throw Error('Queue unavailable');if(state.rankingFailure==='failed')return {status:'failed'};return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{},getCollectionHeadVersion:headVersion,reportCollectionHead:(spec,path,reason)=>headEvents.push({event:'head-'+path,reason,collectionId:spec.collectionId}),rememberCollectionHead:headProofs.remember,compareCollectionHead:headProofs.compare},
       '../services/collectionCards.server.js':{getPreparedCollectionCards:(request,options)=>state.cardSnapshots?cardStore.get(request,options):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||preparationKey(options.spec)}):null},
     '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay)await new Promise(r=>setTimeout(r,state.facetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
@@ -139,7 +145,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
-        if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;headEvents.length=0;}
+        if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
@@ -153,6 +159,10 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.stormCollection){const timer=setInterval(()=>invalidate(shop,{kind:'products',collectionIds:[updates.stormCollection]}).catch(()=>{}),150);timers.add(timer);state.stormTimer=timer;}
         if(updates.stopStorm&&state.stormTimer){clearInterval(state.stormTimer);timers.delete(state.stormTimer);delete state.stormTimer;}
         if(updates.precompute)await warm(shop,null,true);
+        if(updates.publishFirst50){
+          const response=await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=50&responseProfile=collection-cards-v1'),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
+          if(response.status!==200||response.headers.get('X-CFP-Collection-Cards')!=='stored')throw Error('Published fixture preparation failed');
+        }
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests}));return;
       }
       if(url.pathname==='/__state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},trace,headEvents,requests,configurationRequests,requestStarts,queueFailures:redisLayer?.failures||[],productRevision:await redis.get(productRevisionKey(shop,'1'))||'0'}));return;}

@@ -434,6 +434,26 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
+  await test('published first fifty serve two 25-card pages while ranking and facets are unavailable',async()=>{
+    await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await control({invalidate:true,rankingFailure:'throw',facetFailure:true});
+    const baseline=await getState();
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!!document.querySelector('#cfp-load-more-btn')");
+    const first=await cards();assert.equal(new Set(first).size,25);
+    await evaluate("window.retainedPublishedCard=document.querySelector('.cfp-product-card');document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+    const firstFifty=await cards(),after=await getState();
+    assert.equal(new Set(firstFifty).size,50);assert.deepEqual(firstFifty.slice(0,25),first);
+    assert.equal(await evaluate("document.querySelector('.cfp-product-card')===window.retainedPublishedCard"),true);
+    assert.equal(after.state.builds,baseline.state.builds);assert.equal(after.trace.hydrations,baseline.trace.hydrations);assert.equal(after.trace.facetQueries,baseline.trace.facetQueries);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
+    await control({rankingFailure:null,facetFailure:false});
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===75");
+    assert.deepEqual((await cards()).slice(0,50),firstFifty);assert.equal(new Set(await cards()).size,75);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {pageSizes:[25,50,75],firstTwoPagesWithoutPreparation:true,firstCardRetained:true,liveTiming:false};
+  });
   await test('early cards retain configured columns and spacing through the full widget handoff',async()=>{
     const samples=[];
     for(const [width,desktop,mobile,expected]of [[1440,5,2,5],[1300,5,2,4],[991,5,2,4],[990,5,2,3],[769,5,2,3],[768,5,2,2],[480,5,2,2],[390,5,1,1],[1440,3,2,3]]){

@@ -95,6 +95,18 @@ try{
   assert.equal(await database.collectionLoadingSnapshot.count({where:{id:key(90)}}),0);
   await database.$executeRawUnsafe('ALTER TABLE "CollectionLoadingSnapshot" DROP CONSTRAINT "fixture_reject"');
  });
+ await check('published versions survive working resets and delayed refresh, reject older builds and replace atomically',async()=>{
+  const publishedKey=`collectionPublishedPage:${shop}:`+'d'.repeat(64),at=clock;
+  const save=(payload,validatedAt=clock)=>store.save({shop,kind:'published',key:publishedKey,collectionId:'1',payload,validatedAt,expiresAt:clock+86400000});
+  const read=()=>store.load({shop,kind:'published',key:publishedKey});
+  assert.equal(await save('complete published version'),true);
+  clock+=2*86400000;values.clear();assert.equal(await read(),'complete published version');
+  assert.equal(await save('older',at-1),false);assert.equal(await read(),'complete published version');
+  await database.$executeRawUnsafe('ALTER TABLE "CollectionLoadingSnapshot" ADD CONSTRAINT "fixture_published_reject" CHECK (size <> 7) NOT VALID');
+  assert.equal(await save('1234567'),false);assert.equal(await read(),'complete published version');
+  await database.$executeRawUnsafe('ALTER TABLE "CollectionLoadingSnapshot" DROP CONSTRAINT "fixture_published_reject"');
+  assert.equal(await save('complete replacement'),true);assert.equal(await read(),'complete replacement');
+ });
  fs.writeFileSync(path.join(directory,'results.json'),JSON.stringify({passed:results.length,results,loopbackOnly:true,productionAccess:false},null,2));
  console.log(`POSTGRES SNAPSHOT CHECKS PASSED: ${results.length}`);
 }finally{

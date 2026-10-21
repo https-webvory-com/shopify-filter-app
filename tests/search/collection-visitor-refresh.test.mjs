@@ -17,6 +17,14 @@ function fixture(){
 test('fresh saved-card hits record public visitor context without queuing unnecessary rebuilds',async()=>{
  const f=fixture();await f.run(f.input);f.advance(86400000*30);await f.run(f.input);assert.equal(f.registered.length,2);assert.equal(f.added.length,0);
 });
+
+test('published visits register without working-state reads and overdue daily refreshes use one deduplicated background job',async()=>{
+ const f=fixture(),input={request:f.input.request,entry:f.input.entry,published:true,refreshDue:false};
+ await f.run(input);assert.equal(f.registered.length,1);assert.equal(f.added.length,0);
+ input.refreshDue=true;await f.run(input);await f.run(input);
+ assert.equal(f.added.length,1);assert.equal(f.added[0].name,'COLLECTION_RANKING_CATALOG');
+ assert.equal(new URL(f.added[0].data.record.url).searchParams.get('limit'),'25');
+});
 test('changed saved rankings schedule one canonical context ahead of the catalog backlog',async()=>{
  for(const reason of ['local','external']){
   const f=fixture();

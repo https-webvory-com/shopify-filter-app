@@ -4,13 +4,16 @@ import {normalizeCollectionWarmup} from './collectionPreparation.js';
 // Saved-card hits bypass the canonical ranker. Keep their visitor contexts in
 // the registry and refresh changed rankings. Age alone never queues a rebuild.
 export function createCollectionVisitorRefresh({queue,register,now=Date.now}){
- return async function({request,entry,prepared,state}){
+ return async function({request,entry,prepared,state,published=false,refreshDue=false}){
   const record=normalizeCollectionWarmup(entry.shop,request.url,entry.collectionId);
   if(!record)return;
   await register(entry.shop,request.url,entry.collectionId);
+  if(published&&!refreshDue)return;
+  if(!published){
   const externalChanged=entry.external&&prepared.reusableDataRevision?.split(':')[2]!==(state.externalProducts??state.globalProducts);
   const salesChanged=prepared.salesDependencies&&prepared.salesDependencies.revision!==state.salesProducts;
   if(prepared.productRevision===state.products&&!externalChanged&&!salesChanged&&Number.isFinite(prepared.preparedAt))return;
+  }
   const priority=5,jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
   let job=await queue.getJob(jobId);
   if(job){

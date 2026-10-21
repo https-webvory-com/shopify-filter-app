@@ -368,7 +368,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v3, application/json'} });
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'} });
       let payload = await response.json();
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
@@ -613,7 +613,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
-      if(data.cfpCards?.version===1){
+      if(data.cfpCards?.version===1&&!data.cfpCards.published){
         sidebar.classList.add('cfp-loading');
         await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }

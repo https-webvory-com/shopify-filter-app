@@ -29,9 +29,9 @@ for _, key in ipairs(keys) do
 end
 return 1`;
 
-// A card snapshot contains no facets. Every read still verifies current cards,
-// data/configuration epochs, the backing ranking and the native order revision.
-export function createCollectionCardStore({redis,readState,validateCards,createSession,loadDurable,saveDurable,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=128*1024,lifetime=86400,readBudgetMs=500}){
+// Working card snapshots verify documents and ranking epochs. Published serving
+// versions are checked first and deliberately bypass this preparation work.
+export function createCollectionCardStore({redis,readState,validateCards,createSession,loadDurable,saveDurable,publishedPages,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=256*1024,lifetime=86400,readBudgetMs=500}){
  const sourceValid=(shop,key)=>typeof key==='string'&&key.startsWith(`collectionPreparedSequence:${shop}:background-v2:`)&&/^[a-f0-9]{64}$/.test(key.split(':').at(-1));
  const stateSignature=(state,external)=>JSON.stringify([state.configuration,state.products,external?(state.externalProducts??state.globalProducts):null,state.hardAll,state.hardCollection,state.orderRevision,state.scheduleEpoch,state.runtimeGeneration,state.epochsPresent,...(state.salesProducts!==undefined?[state.salesProducts]:[])]);
  const sequenceSignature=value=>digest([value.ids,value.metadata]);
@@ -64,6 +64,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   return JSON.stringify(current)===entry.state;
  };
  async function get(request,{probe=false,onHit}={}){
+  if(!probe&&publishedPages){const published=await publishedPages.get(request,{onHit});if(published)return published;}
   const key=collectionCardKey(request);if(!key)return null;
   const controller=new AbortController(),started=now();let timer,stage='snapshot',outcome;
   const work=async()=>{
@@ -83,7 +84,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    stage='ranking-state';const before=await readState(entry),prepared=current(before,entry.external);
    controller.signal.throwIfAborted();
    if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;
-   let previewLimit=25;
+   let previewLimit=Number(new URL(request.url).searchParams.get('limit'));
    stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request),onValidated:count=>{previewLimit=count;}}))return null;
    const readMs=now()-readStarted;controller.signal.throwIfAborted();
    stage='session';const session=probe?{}:await createSession(request,entry,prepared);
@@ -111,7 +112,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(!prepared||before.configuration!==spec.revision||spec.orderRevision!=null&&before.orderRevision!==spec.orderRevision||sequenceSignature(prepared)!==sequenceSignature({...rankingSession,orderUpdatedAt:rankingSession.updatedAt}))return null;
    const state=stateSignature(before,external),sequence=sequenceSignature(prepared);
    return {async finish(payload,validationFingerprint,previewValidationFingerprint){
-    if(!validationFingerprint||!Array.isArray(payload.products)||payload.products.length>25||!Array.isArray(attributes))return;
+    const pageSize=Number(new URL(request.url).searchParams.get('limit'));
+    if(!validationFingerprint||!Array.isArray(payload.products)||payload.products.length>pageSize||!Array.isArray(attributes))return;
     try{
      const after=await readState(identity),latest=current(after,external);
      if(!latest||stateSignature(after,external)!==state||sequenceSignature(latest)!==sequence)return;
@@ -125,9 +127,14 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(collectionCardKey(new Request(url)));}
      // Persist one payload per collection/market. Handle aliases are small
      // pointers, not another complete copy of every variant and image.
-     if(saveDurable)try{await saveDurable({shop,kind:'cards',key:canonical,aliases:[...aliases].filter(Boolean),collectionId,payload:encoded,validatedAt:entry.at,expiresAt:entry.at+lifetime*1000});}catch{}
+     const saveCards=async()=>{if(saveDurable)try{await saveDurable({shop,kind:'cards',key:canonical,aliases:[...aliases].filter(Boolean),collectionId,payload:encoded,validatedAt:entry.at,expiresAt:entry.at+lifetime*1000});}catch{}};
+     if(pageSize!==50)await saveCards();
      const finalState=await readState(identity),finalPrepared=current(finalState,external);
      if(!finalPrepared||stateSignature(finalState,external)!==state||sequenceSignature(finalPrepared)!==sequence)return;
+     if(pageSize===50&&publishedPages){
+      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
+     }
+     if(pageSize===50)await saveCards();
      for(const alias of aliases)if(alias){
       const value=alias===canonical?encoded:'p1:'+canonical;
       if(typeof redis.eval==='function')await redis.eval(retain,3,`collectionFirstPage:${shop}:retention`,`collectionFirstPage:${shop}:sizes`,alias,lifetime,value,now(),maxEntries,maxBytes,`collectionFirstPage:${shop}:`);

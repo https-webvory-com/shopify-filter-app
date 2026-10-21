@@ -35,6 +35,14 @@ test('complete paged cards validate and return all 25 cached documents instead o
  const legacy=await f.store.get(new Request(url));assert.equal((await legacy.json()).products.length,5);assert.equal(calls.at(-1),5);
 });
 
+test('a failed published replacement cannot leave a fifty-card readiness marker that prevents background retries',async()=>{
+ const saved=[],f=fixture({saveDurable:async row=>{saved.push(row);return true;},publishedPages:{get:async()=>null,publish:async()=>false}});
+ const url=new URL(f.request.url);url.searchParams.set('limit','50');const request=new Request(url);
+ const lease=await f.store.begin({request,spec:f.spec,preparedKey:`collectionPreparedSequence:${f.spec.shop}:background-v2:`+'a'.repeat(64),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id'],collectionHandle:'one'});
+ assert.equal(await lease.finish(f.payload,'fp'),false);assert.equal(saved.length,0);
+ assert.equal(await f.store.get(request,{probe:true}),null);
+});
+
 test('a maintained old ranking can publish newly validated durable cards with an independent card lifetime',async()=>{
  const saved=[],f=fixture({saveDurable:async row=>saved.push(row)});
  f.advance(2*86400000);const lease=await f.begin();assert.ok(lease);
@@ -162,6 +170,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
   '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
   '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
+  '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:()=>({get:async()=>null,publish:async()=>true})},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));

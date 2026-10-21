@@ -72,7 +72,7 @@ export const loader = async ({ request, context }) => {
         }
       });
     }
-    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&isPublicCollectionCards(request)){
+    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
       // Trusted background rendering can reuse validated cards, but must never
       // create a shopper's browsing session while probing readiness.
       const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit});
@@ -847,7 +847,7 @@ export const loader = async ({ request, context }) => {
         {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
         await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
     }
-    if(cardsOnly&&preparedSpec&&!pinnedPrefix)cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
+    if(cardsOnly&&preparedSpec&&!pinnedPrefix&&(limit!==50||context?.rankingCardsPrecompute===true))cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
     // Only updated collection clients opt into the lossless transport. Ranking
     // readiness and the immutable browsing session are established before reuse.
@@ -875,7 +875,7 @@ export const loader = async ({ request, context }) => {
       collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
       collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
     }
-    if (!needsRankedSearch&&!cardsOnly) {
+    if (!needsRankedSearch&&(!cardsOnly||context?.rankingCardsPrecompute===true&&limit===50)) {
     try {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
@@ -936,6 +936,7 @@ export const loader = async ({ request, context }) => {
         if (useRankedCollectionPagination) {
           collectionRankingStatus = 'ready';
           result = rankedPage;
+          if(cardsOnly){responsePageFingerprint=collectionPageFingerprint(result.hits);responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));}
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else {
@@ -1634,7 +1635,7 @@ export const loader = async ({ request, context }) => {
         responsePayload.collectionPinnedPrefix={version:2,inputVersion:pinnedPrefixVersion};reportCollectionHead(preparedSpec,'proven','explicit-paid-pins');
       }
       const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint);
-      return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request);
+      return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request,{previewLimit:limit});
     }
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
