@@ -2,6 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
 
+test('price and selected options must match the same available variant',async()=>{
+ const filters={Color:['Black'],Size:['2XL']};
+ const options=[{name:'Color'},{name:'Size'}];
+ const variant=(color,price)=>({available:true,option1:color,option2:'2XL',price});
+ const products=[
+  {id:'1',options,variants:[variant('Red',10),variant('Black',950)]},
+  {id:'2',options,variants:[variant('Red',10),variant('Black',{toString:()=> '500.25'})]},
+  {id:'3',options,variants:[variant('Black',null)]},
+ ];
+ const range={min:400,max:817.5};
+ assert.deepEqual(products.map(p=>matchingAvailableVariants(p,filters,[],range).length),[0,1,0]);
+ const model={findMany:async query=>{
+  assert.deepEqual(query.where.variants.some.price,{gte:400,lte:817.5});
+  assert.equal(query.select.variants.select.price,true);
+  return products;
+ }};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},filters,[],range),['2']);
+});
+
 test('availability with no option selection reads IDs only and keeps all cursor pages',async()=>{
  const rows=Array.from({length:1003},(_,i)=>({id:`gid://shopify/Product/${i+1}`}));
  const calls=[];

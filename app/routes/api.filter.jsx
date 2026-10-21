@@ -510,6 +510,8 @@ export const loader = async ({ request, context }) => {
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
+    const selectedPriceRange = minPrice > 0 || maxPrice < 9999999
+      ? { min: Math.max(0, minPrice - 0.5), max: maxPrice + 0.5 } : null;
     if (hideUnavailable) {
       await getCached('variantEligibilityFilter:' + shop, async () => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
@@ -524,7 +526,15 @@ export const loader = async ({ request, context }) => {
     if (minPrice > 0 || maxPrice < 9999999) {
       const bufferedMin = Math.max(0, minPrice - 0.5);
       const bufferedMax = maxPrice + 0.5;
-      categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
+      if (hideUnavailable) {
+        const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
+        const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange]),
+          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange), 30);
+        // Keep this in the price category so disjunctive price facets can remove it.
+        categoryFilters["priceMin"] = eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant_price__"';
+      } else {
+        categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
+      }
     }
     if (availability.length > 0) {
       if (
@@ -800,7 +810,9 @@ export const loader = async ({ request, context }) => {
         pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
         orderRevision: collectionBestSellingState.revision ?? null,
         orderUpdatedAt: collectionBestSellingState.updatedAt ?? null,
-        rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
+        // Filters suppress missing-pin injection through activePinnedList, but
+        // native best-selling keeps the order of matching configured pins.
+        rule: activeRule, pinningRule: userHasFilters && !needsShopifyOrder ? null : activePinningRule,
         globalSettings, mergedValues,
       };
       let prepared;
@@ -1127,7 +1139,7 @@ export const loader = async ({ request, context }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues) : [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, selectedPriceRange) : [...(p.variantPrices || [])];
       let productImages = [...(p.images || [])];
       let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
       if (hideUnavailable) {

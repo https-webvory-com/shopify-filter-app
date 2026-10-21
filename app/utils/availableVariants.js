@@ -9,9 +9,13 @@ export async function ensureVariantEligibilityFilter(index, tasks) {
 }
 
 // OR within an option; AND across options, on the same available variant.
-export function matchingAvailableVariants(product, filters = {}, mergedValues = []) {
+export function matchingAvailableVariants(product, filters = {}, mergedValues = [], priceRange = null) {
   return (product.variants || product.variantPrices || []).filter(variant => {
     if (variant.available !== true) return false;
+    if (priceRange) {
+      const price = variant.price == null ? NaN : Number(variant.price);
+      if (!Number.isFinite(price) || price < priceRange.min || price > priceRange.max) return false;
+    }
     return Object.entries(filters).every(([name, selected]) => {
       if (!selected.length) return true;
       const position = (product.options || []).findIndex(option => normalize(option.name) === normalize(name));
@@ -27,13 +31,14 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
   });
 }
 
-export async function availableProductIds(productModel, where, filters, mergedValues) {
+export async function availableProductIds(productModel, where, filters, mergedValues, priceRange = null) {
   const ids = [];
   const selected = Object.entries(filters || {}).filter(([, values]) => values.length);
   // Use a conservative database prefilter, then retain the exact option-position
   // check below. This avoids transferring every available variant in a large
   // collection just to test a selected color/size in the web process.
   const variantWhere = { available: true };
+  if (priceRange) variantWhere.price = { gte: priceRange.min, lte: priceRange.max };
   if (selected.length) variantWhere.AND = selected.map(([name, values]) => {
     const expanded = new Set(values.map(normalize));
     for (const rule of mergedValues || []) {
@@ -51,13 +56,13 @@ export async function availableProductIds(productModel, where, filters, mergedVa
   for (;;) {
     const rows = await productModel.findMany({
       where: { ...where, variants: { some: variantWhere } },
-      select: selected.length
-        ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true } } }
+      select: selected.length || priceRange
+        ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true, ...(priceRange ? {price: true} : {}) } } }
         : { id: true },
       orderBy: { id: 'asc' }, take: 1000,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    for (const row of rows) if (!selected.length || matchingAvailableVariants(row, filters, mergedValues).length) ids.push(row.id.split('/').pop());
+    for (const row of rows) if ((!selected.length && !priceRange) || matchingAvailableVariants(row, filters, mergedValues, priceRange).length) ids.push(row.id.split('/').pop());
     if (rows.length < 1000) break;
     cursor = rows.at(-1).id;
   }
