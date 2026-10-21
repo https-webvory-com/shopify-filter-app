@@ -1,7 +1,8 @@
 {% if template.name == 'collection' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container" style="--cfp-cols-desktop: {{ block.settings.columns_desktop | default: 3 }}; --cfp-cols-mobile: {{ block.settings.columns_mobile | default: 2 }};">
     {% render 'collectionFilterPro',
-      filter_bg_color: block.settings.filter_bg_color,
+      filter_bar_bg_color: block.settings.filter_bar_bg_color,
+      filter_bg_color: block.settings.filter_bar_bg_color,
       full_width: block.settings.full_width,
       filter_layout: block.settings.filter_layout,
       show_price_filter: block.settings.show_price_filter,
@@ -56,9 +57,9 @@
     },
     {
       "type": "color",
-      "id": "filter_bg_color",
-      "label": "Filter background color",
-      "info": "Leave empty to automatically match your store theme background color"
+      "id": "filter_bar_bg_color",
+      "label": "Filter bar background color (Parent block)",
+      "info": "Background color of the complete parent bar containing all filter buttons. Leave blank for theme default."
     },
 
     {

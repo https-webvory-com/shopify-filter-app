@@ -1340,11 +1340,14 @@ facet-filters-form,
 .cfp-top-bar {
   display: flex !important;
   flex-direction: column !important;
-  padding: 10px 0;
-  margin-bottom: 20px;
-  width: 100%;
-  border: none;
-  background: transparent;
+  padding: 12px 14px !important;
+  margin-bottom: 24px !important;
+  width: 100% !important;
+  border: none !important;
+  background: var(--cfp-filter-bar-bg, transparent) !important;
+  border-radius: 6px;
+  box-sizing: border-box !important;
+  transition: background-color 0.2s ease;
 }
 
 .cfp-top-bar__main {
@@ -1426,11 +1429,13 @@ facet-filters-form,
   .cfp-top-bar {
     display: flex !important;
     flex-direction: column !important;
-    padding: 0 !important;
+    padding: 10px 12px !important;
     margin-bottom: 20px !important;
     border: none !important;
-    background: transparent !important;
+    background: var(--cfp-filter-bar-bg, transparent) !important;
+    border-radius: 6px !important;
     width: 100% !important;
+    box-sizing: border-box !important;
   }
   .cfp-top-bar__main {
     display: flex !important;

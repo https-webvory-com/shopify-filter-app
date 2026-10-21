@@ -243,7 +243,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function syncThemeBackgroundColor() {
-    if (window.collectionFilterProSettings?.filter_bg_color) return;
+    if (window.collectionFilterProSettings?.filter_bar_bg_color || window.collectionFilterProSettings?.filter_bg_color) return;
     try {
       const candidates = [
         document.querySelector('.cfp-layout-wrapper')?.parentElement,
@@ -257,7 +257,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!el) continue;
         const bg = window.getComputedStyle(el).backgroundColor;
         if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgba(0,0,0,0)') {
-          document.documentElement.style.setProperty('--cfp-filter-pill-bg', bg);
+          document.documentElement.style.setProperty('--cfp-filter-bar-bg', bg);
           break;
         }
       }

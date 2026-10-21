@@ -19,7 +19,7 @@
 
   window.collectionFilterProSettings = {
     filter_layout: {{ filter_layout | default: 'default' | json }},
-    filter_bg_color: {{ filter_bg_color | default: '' | json }},
+    filter_bar_bg_color: {{ filter_bar_bg_color | default: filter_bg_color | default: '' | json }},
     show_price_filter: {{ show_price_filter | default: true | json }},
     show_brand_filter: {{ show_brand_filter | default: true | json }},
     show_color_filter: {{ show_color_filter | default: true | json }},
@@ -159,7 +159,7 @@
 {% render 'customization' %}
 
 {%- assign theme_detected_bg = settings.colors_background_1 | default: settings.color_background | default: settings.body_background | default: settings.bg_color | default: settings.background_color | default: settings.color_bg -%}
-{%- assign custom_filter_bg = filter_bg_color -%}
+{%- assign custom_filter_bar_bg = filter_bar_bg_color | default: filter_bg_color -%}
 
 {%- style -%}
   :root {
@@ -170,19 +170,17 @@
     --cfp-accent-hover: var(--cfp-accent);
     --cfp-accent-light: rgba(var(--color-base-text, 18, 18, 18), 0.05);
 
-    {% if custom_filter_bg != blank and custom_filter_bg != 'rgba(0,0,0,0)' %}
-      --cfp-filter-pill-bg: {{ custom_filter_bg }};
-      --cfp-surface: {{ custom_filter_bg }};
-      --cfp-bg: {{ custom_filter_bg }};
+    {% if custom_filter_bar_bg != blank and custom_filter_bar_bg != 'rgba(0,0,0,0)' %}
+      --cfp-filter-bar-bg: {{ custom_filter_bar_bg }};
     {% elsif theme_detected_bg != blank and theme_detected_bg != 'rgba(0,0,0,0)' %}
-      --cfp-filter-pill-bg: {{ theme_detected_bg }};
-      --cfp-surface: {{ theme_detected_bg }};
-      --cfp-bg: {{ theme_detected_bg }};
+      --cfp-filter-bar-bg: {{ theme_detected_bg }};
     {% else %}
-      --cfp-filter-pill-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
-      --cfp-surface: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
-      --cfp-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
+      --cfp-filter-bar-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
     {% endif %}
+
+    --cfp-filter-pill-bg: #ffffff;
+    --cfp-surface: #ffffff;
+    --cfp-bg: #ffffff;
   }
 {%- endstyle -%}
 
@@ -241,7 +239,7 @@
   {% assign s_popular_label = popular_searches_label | default: 'Popular searches:' %}
   {% assign s_popular_items = popular_searches_items | default: 'Red dresses, Prom dresses, Wedding guest, Evening gowns' %}
 
-  <div class="cfp-search-banner-wrapper" style="background-color: {{ s_bg }}; width: 100%; border-radius: 8px; margin: 20px auto 30px; padding: 48px 24px 36px; box-sizing: border-box; text-align: center;">
+  <div class="cfp-search-banner-wrapper" style="background-color: {{ s_bg }}; width: 100%; border-radius: 8px; padding: 30px 24px; box-sizing: border-box; text-align: center;">
     <div class="cfp-search-banner-inner" style="max-width: 680px; margin: 0 auto;">
       {% if s_heading != blank %}
         <h1 class="cfp-search-banner__title" style="color: {{ s_text_color }}; font-family: var(--font-heading-family, Georgia, serif); font-size: 38px; font-weight: 400; line-height: 1.25; margin: 0 0 10px; letter-spacing: -0.01em;">
