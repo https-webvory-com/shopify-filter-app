@@ -440,8 +440,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
-    let loadingNoticeTimer;
-    let loadingNotice;
     let rankingKey;
 
     syncStateToURL(); // Sync URL
@@ -531,14 +529,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!isLoadMore) {
           renderSkeleton();
         }
-        loadingNoticeTimer = setTimeout(() => {
-          if (fetchSignal.aborted) return;
-          loadingNotice = document.createElement('p');
-          loadingNotice.className = 'cfp-loading-notice';
-          loadingNotice.setAttribute('role', 'status');
-          loadingNotice.textContent = 'Loading products. This is taking longer than usual.';
-          getProductContainer().prepend(loadingNotice);
-        }, 4000);
         let data = null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
@@ -563,7 +553,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
-      clearTimeout(loadingNoticeTimer);loadingNotice?.remove();
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
         const readyUrl = new URL(window.location.href);
@@ -642,9 +631,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       retry.addEventListener('click', () => { if(retry.disabled)return;retry.disabled=true;error.remove();fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
       container.appendChild(error);
-    } finally {
-      clearTimeout(loadingNoticeTimer);
-      loadingNotice?.remove();
     }
   }
 

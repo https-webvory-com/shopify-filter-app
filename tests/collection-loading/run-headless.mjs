@@ -307,10 +307,10 @@ try{
   });
   // Run the intentionally slow same-origin image/price stress case last so
   // its outstanding HTTP/1 resource queue cannot skew later timing fixtures.
-  await test('cold pending ranking shows skeletons and loading feedback, then independent card/image/price rendering',async()=>{
+  await test('cold pending ranking keeps skeletons without a slow-loading warning, then renders cards images and prices',async()=>{
     await control({reset:true,noPins:true,colorRule:false,orderVersion:0,delay:5500,priceDelay:2500,imageDelay:3000});await navigate();
     await wait("document.querySelectorAll('.cfp-skeleton-card').length===8");assert.equal((await cards()).length,0);
-    await wait("!!document.querySelector('.cfp-loading-notice')",15000);assert.equal((await cards()).length,0);
+    await delay(4200);assert.equal(await evaluate("!!document.querySelector('.cfp-loading-notice')"),false);assert.equal((await cards()).length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",15000);
     const snapshot=await evaluate('cardSnapshots[0]');assert.equal(snapshot.imagesLoaded,0);assert.equal(snapshot.pricesReady,0);
     assert.deepEqual(snapshot.delays,Array(Math.min(snapshot.cards,6)).fill('0s'));
