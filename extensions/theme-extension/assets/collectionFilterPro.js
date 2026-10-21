@@ -593,7 +593,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             if (grid) grid.parentElement.insertBefore(dymContainer, grid);
          }
          if (dymContainer) {
-            dymContainer.innerHTML = `${data.products?.length ? '' : 'No matches found. '}Did you mean '<a href="/search?q=${encodeURIComponent(data.didYouMean)}" style="font-weight: bold; text-decoration: underline; color: #991b1b;">${data.didYouMean}</a>'?`;
+            dymContainer.innerHTML = `${data.products?.length ? '' : 'No matches found. '}Did you mean '<a href="/search?q=${encodeURIComponent(data.didYouMean)}" style="font-weight: bold; text-decoration: underline; color: #991b1b;">${escapeCardHtml(data.didYouMean)}</a>'?`;
             dymContainer.style.display = "block";
          }
       } else {
@@ -602,7 +602,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       if (data.products) {
-        renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true);
+        await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true);
       }
       if (data.settings && data.facets) {
         cfpLastSettings = data.settings;
@@ -629,6 +629,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       sidebar.classList.remove('cfp-loading');
       const container = getProductContainer();
       if (!isLoadMore) container.replaceChildren();
+      else container.querySelector('.cfp-load-more-container')?.remove();
       const error = document.createElement('div');
       error.className = 'cfp-order-error';
       error.setAttribute('role', 'status');
@@ -637,7 +638,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = 'Retry';
-      retry.addEventListener('click', () => { error.remove(); fetchAndRenderData(isLoadMore); });
+      retry.addEventListener('click', () => { if(retry.disabled)return;retry.disabled=true;error.remove();fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
       container.appendChild(error);
     } finally {
@@ -671,7 +672,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const readyUrl=new URL(window.location.href);readyUrl.searchParams.set('rankingToken',full.rankingToken);window.history.replaceState(null,'',readyUrl.pathname+readyUrl.search);
       }
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
-      if(JSON.stringify(full.products)!==signature)renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      if(JSON.stringify(full.products)!==signature)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
       else if(prefix){
         // Identical complete cards keep their DOM and verified prices. Only
         // the now-known total and canonical pagination need to be activated.
@@ -884,6 +885,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     countLabel.textContent=`${totalCount} product${totalCount===1?'':'s'}`;
   }
 
+  function escapeCardHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  }
+  const cardScriptString=value=>escapeCardHtml(JSON.stringify(String(value??'')));
+
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
@@ -894,6 +900,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     const grid = getProductContainer();
     grid.style.display = 'grid';
+
+    if(isLoadMore && products.length===0){
+      // A failed/short response must never replace cards already on screen or
+      // silently skip a page which the canonical total says still exists.
+      const displayed=grid.querySelectorAll('.cfp-product-card').length;
+      if(!Number.isFinite(totalCount)||totalCount>displayed)throw Error('No additional products returned. Please retry.');
+      grid.querySelector('.cfp-load-more-container')?.remove();
+      activeFilters.page=Math.max(1,activeFilters.page-1);
+      syncStateToURL();updateProductCount(totalCount);
+      return;
+    }
 
     if(!previewOnly){
       if(!isLoadMore)wishlistProducts.clear();
@@ -911,7 +928,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (products.length === 0) {
       const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
       let emptyMsg = searchTerms && Object.keys(activeFilters).every(k => k === 'page' || k === 'sortBy' || (Array.isArray(activeFilters[k]) ? activeFilters[k].length === 0 : !activeFilters[k]))
-         ? `No matches found for <strong>'${searchTerms}'</strong>. Please try again with a different term.`
+         ? `No matches found for <strong>'${escapeCardHtml(searchTerms)}'</strong>. Please try again with a different term.`
          : `No products match your selected filters.`;
 
       if (totalCount > 0) {
@@ -940,6 +957,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
 
     const productsHtml = products.map((product, productIndex) => {
+      const titleHtml=escapeCardHtml(product.title);
 
       let variantImg = null;
       let matchedVariantId = null;
@@ -1054,7 +1072,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         // Generate native Shopify-style responsive srcset & sizes
         const getImageSrcset = (url) => {
            if (!url || typeof url !== 'string' || url.indexOf('cdn.shopify.com') === -1) return '';
-           return `srcset="${getResizedImageUrl(url, 180)} 180w, ${getResizedImageUrl(url, 360)} 360w, ${getResizedImageUrl(url, 540)} 540w" sizes="(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw"`;
+           return `srcset="${escapeCardHtml(getResizedImageUrl(url, 180))} 180w, ${escapeCardHtml(getResizedImageUrl(url, 360))} 360w, ${escapeCardHtml(getResizedImageUrl(url, 540))} 540w" sizes="(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw"`;
         };
 
         let fallbackImg = product.images?.[0];
@@ -1298,23 +1316,23 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
              const secondaryImgJS = `
                const secImg = card.querySelector('.cfp-product-card__image--secondary');
                if (secImg) {
-                   ${hoverImgUrlForSwatch ? `secImg.removeAttribute('srcset'); secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
+                   ${hoverImgUrlForSwatch ? `secImg.removeAttribute('srcset'); secImg.src=${cardScriptString(getResizedImageUrl(hoverImgUrlForSwatch, '600x'))}; secImg.style.display='';` : `secImg.style.display='none';`}
                }
              `;
 
-             swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}" 
-                  data-tooltip="${colorName}"
+             swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}"
+                  data-tooltip="${escapeCardHtml(colorName)}"
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
                            const pImg = card.querySelector('.cfp-product-card__image--primary');
-                           if (pImg) { pImg.removeAttribute('srcset'); pImg.src='${getResizedImageUrl(data.imgUrl, '600x')}'; }
+                           if (pImg) { pImg.removeAttribute('srcset'); pImg.src=${cardScriptString(getResizedImageUrl(data.imgUrl, '600x'))}; }
                            ${secondaryImgJS.replace(/\n/g, ' ')}
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
-                           if('${data.variantId}') card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href='/products/${product.handle}?variant=${data.variantId}');
+                           if(${cardScriptString(data.variantId)}) card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href=${cardScriptString('/products/'+product.handle+'?variant='+data.variantId)});
                            window.cfpUpdateMarketCardPrice?.(card, card._cfpMarketProduct);">
-                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
+                <img src="${escapeCardHtml(getResizedImageUrl(data.imgUrl, '50x'))}" alt="${escapeCardHtml(colorName)}" />
              </div>`;
           });
 
@@ -1341,10 +1359,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       if(previewOnly)return `
         <div class="cfp-product-card cfp-product-card--reveal cfp-product-card--preview" style="--cfp-reveal-delay:0ms;--cfp-reveal-duration:0ms">
-          <div class="cfp-product-card__image-wrapper"><a href="${productUrl}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
-            <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
+          <div class="cfp-product-card__image-wrapper"><a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
+            <img src="${escapeCardHtml(primaryImg)}" ${getImageSrcset(primaryImg)} alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
           </div></a></div>
-          <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${product.title}</h3></div></a>
+          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${titleHtml}</h3></div></a>
         </div>`;
       let badgesHtml = '';
       const searchDisplay = templateName === 'search' ? (window.cfpSearchSettings || {}) : {};
@@ -1372,27 +1390,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         let hoverImg = product.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
-           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, 450)}" alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" decoding="async" width="450" height="600" />`;
+           hoverImageHtml = `<img src="${escapeCardHtml(getResizedImageUrl(hoverImgSrc, 450))}" alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" decoding="async" width="450" height="600" />`;
         }
       }
 
       return `
         <div class="cfp-product-card cfp-product-card--reveal" style="--cfp-reveal-delay: ${templateName === 'search' ? Math.min(productIndex, 5) * 75 : 0}ms; --cfp-reveal-duration: ${templateName === 'search' ? 300 : 0}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
-            <a href="${productUrl}" class="cfp-product-card__link">
+            <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">
-                <img src="${primaryImg}" ${getImageSrcset(primaryImg)} alt="${product.title}" class="cfp-product-card__image cfp-product-card__image--primary" ${imgLoadingAttr} width="360" height="480" />
+                <img src="${escapeCardHtml(primaryImg)}" ${getImageSrcset(primaryImg)} alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--primary" ${imgLoadingAttr} width="360" height="480" />
                 ${hoverImageHtml}
                 ${badgesHtml}
                 ${wishlistHtml}
               </div>
             </a>
-            ${(globalSettings && globalSettings.showQuickViewCollection !== false) ? `<button type="button" class="cfp-quick-view-btn" data-product-handle="${product.handle}">Quick View</button>` : ''}
+            ${(globalSettings && globalSettings.showQuickViewCollection !== false) ? `<button type="button" class="cfp-quick-view-btn" data-product-handle="${escapeCardHtml(product.handle)}">Quick View</button>` : ''}
           </div>
-          <a href="${productUrl}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
+          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
             <div class="cfp-product-card__info">
-              ${searchDisplay.showVendor === false ? '' : `<span class="cfp-product-card__vendor">${product.vendor}</span>`}
-              <h3 class="cfp-product-card__title">${product.title}</h3>
+              ${searchDisplay.showVendor === false ? '' : `<span class="cfp-product-card__vendor">${escapeCardHtml(product.vendor)}</span>`}
+              <h3 class="cfp-product-card__title">${titleHtml}</h3>
               ${swatchesHtml}
               ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
               <div class="cfp-product-card__price-row">
@@ -1439,6 +1457,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   function renderPagination(grid, totalCount) {
     const existing = document.querySelector('.cfp-load-more-container');
     if (existing) existing.remove();
+
+    if(!Number.isFinite(totalCount)||totalCount<0)return;
+    if(activeFilters.page===1&&grid.querySelectorAll('.cfp-product-card').length<Math.min(PAGE_SIZE,totalCount))return;
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
     if (activeFilters.page >= totalPages) return;

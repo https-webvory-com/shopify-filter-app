@@ -1120,6 +1120,18 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   let marketRenderVersion = 0;
+  const instantImagePlaceholder='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="100%" height="100%" fill="#f8fafc"/><text x="50%" y="50%" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="16">Image unavailable</text></svg>');
+  const instantEscapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const instantScriptString=value=>instantEscapeHtml(JSON.stringify(String(value??'')));
+  function instantImageUrl(value){
+    if(typeof value==='string')return value.trim();
+    if(!value||typeof value!=='object')return '';
+    return instantImageUrl(value.url||value.src||value.image);
+  }
+  function instantImages(value){
+    if(typeof value==='string')try{value=JSON.parse(value);}catch{return [instantImageUrl(value)].filter(Boolean);}
+    return (Array.isArray(value)?value:[value]).map(instantImageUrl).filter(Boolean);
+  }
   async function renderProducts(data, query, isDefault = false, contextualPricingApplied = false) {
     if (data && data.globalSettings) {
       window.cfpGlobalSettings = data.globalSettings;
@@ -1129,7 +1141,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     const grid = document.getElementById("cfp-search-products");
     const version = ++marketRenderVersion;
     const pricingProducts = data.products || [];
-    const products = pricingProducts.map(p=>({...p,_marketPricingUnavailable:true}));
+    const products = pricingProducts.map(p=>({...p,images:instantImages(p.images),
+      merchandisingImage:instantImageUrl(p.merchandisingImage),
+      variants:(p.variants||[]).filter(Boolean).map(v=>({...v,imageUrl:instantImageUrl(v.imageUrl)||instantImageUrl(v.image)})),_marketPricingUnavailable:true}));
     if (version !== marketRenderVersion) return;
     contextualPricingApplied = true;
 
@@ -1139,7 +1153,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       grid.innerHTML = query 
         ? `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
              ${emptyStateSvg}
-             <p style="margin: 0;">No matches found for <strong>'${query}'</strong>. Please try again with a different term.</p>
+             <p style="margin: 0;">No matches found for <strong>'${instantEscapeHtml(query)}'</strong>. Please try again with a different term.</p>
            </div>`
         : `<div class="cfp-search-no-results" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
              ${emptyStateSvg}
@@ -1190,11 +1204,15 @@ document.addEventListener("DOMContentLoaded", async function () {
     let html = "";
     
     // Resize shopify image URL to avoid massive memory usage on storefront
-    const getResizedImageUrl = (url, size = '600x') => {
-       if (!url || typeof url !== 'string') return url;
-       if (url.indexOf('cdn.shopify.com') === -1) return url;
-       return url.replace(/_(pico|icon|thumb|small|compact|medium|large|grande|original|1024x1024|2048x2048|master)+\./g, '.')
-                 .replace(/\.([a-zA-Z0-9]+)(\?.*)?$/, `_${size}.$1$2`);
+    const getResizedImageUrl = (value, size = '600x') => {
+       const raw=instantImageUrl(value);if(!raw)return '';
+       try{
+         const url=new URL(raw,location.href);
+         if(url.hostname==='cdn.shopify.com'||url.pathname.startsWith('/cdn/shop/')){
+           url.searchParams.set('width',String(parseInt(size,10)||600));return url.href;
+         }
+       }catch{}
+       return raw;
     };
 
     products.forEach((p) => {
@@ -1284,22 +1302,22 @@ document.addEventListener("DOMContentLoaded", async function () {
              const secondaryImgJS = `
                const secImg = card.querySelector('.cfp-secondary-img');
                if (secImg) {
-                   ${hoverImgUrlForSwatch ? `secImg.src='${getResizedImageUrl(hoverImgUrlForSwatch, '600x')}'; secImg.style.display='';` : `secImg.style.display='none';`}
+                   ${hoverImgUrlForSwatch ? `secImg.src=${instantScriptString(getResizedImageUrl(hoverImgUrlForSwatch, '600x'))}; secImg.style.display='';` : `secImg.style.display='none';`}
                }
              `;
              
              // We use onmouseenter for instant preview and onclick for selection.
              swatchesHtml += `<div class="cfp-swatch-item ${isActive} ${isHidden}" 
-                  data-tooltip="${colorName}" 
+                  data-tooltip="${instantEscapeHtml(colorName)}"
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
-                           card.querySelector('.cfp-main-img').src='${getResizedImageUrl(data.imgUrl, '600x')}';
+                           card.querySelector('.cfp-main-img').src=${instantScriptString(getResizedImageUrl(data.imgUrl, '600x'))};
                            ${secondaryImgJS.replace(/\n/g, ' ')}
                            const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
                            swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
                            this.classList.add('cfp-swatch-active');
-                           if('${data.variantId}') card.querySelector('a').href='/products/${p.handle}?variant=${data.variantId}';">
-                <img src="${getResizedImageUrl(data.imgUrl, '50x')}" alt="${colorName}" />
+                           if(${instantScriptString(data.variantId)}) card.querySelectorAll('a.cfp-search-product-card').forEach(link=>link.href=${instantScriptString('/products/'+p.handle+'?variant='+data.variantId)});">
+                <img src="${instantEscapeHtml(getResizedImageUrl(data.imgUrl, '50x'))}" alt="${instantEscapeHtml(colorName)}" />
              </div>`;
           });
           
@@ -1320,31 +1338,27 @@ document.addEventListener("DOMContentLoaded", async function () {
 
       // 3. Extract main image
       let imageUrl = "";
+      const selectedVariant=(p.variants||[]).find(v=>String(v.id).split('/').pop()===String(p.selectedVariantId||'').split('/').pop());
       if (p.selectedVariantId) {
         defaultVariantId = String(p.selectedVariantId).split('/').pop();
-        if (p.searchColor) defaultImageUrl = p.searchColorImage || '';
+        if (p.searchColor) defaultImageUrl = instantImageUrl(p.searchColorImage)||selectedVariant?.imageUrl||'';
       }
+      const sameColorImages=p.searchColor?(p.variants||[]).filter(v=>String(v[`option${colorOptionIndex+1}`]||'').trim().toLowerCase()===String(p.searchColor).trim().toLowerCase()).map(v=>v.imageUrl).filter(Boolean):[];
       if (p.searchColor) {
-        imageUrl = defaultImageUrl || 'https://placehold.co/400x500?text=Image+unavailable';
+        imageUrl = instantImageUrl(p.searchColorImage)||selectedVariant?.imageUrl||sameColorImages[0]||'';
       } else if (p.merchandisingImage) {
         imageUrl = p.merchandisingImage;
       } else if (defaultImageUrl) {
         // Always use the swatch image corresponding to the activeIndex
         imageUrl = defaultImageUrl;
-      } else if (p.images) {
-        try {
-          const imgs = typeof p.images === "string" ? JSON.parse(p.images) : p.images;
-          if (imgs && imgs.length > 0) {
-            imageUrl = typeof imgs[0] === "string" ? imgs[0] : imgs[0].url || imgs[0].src;
-          }
-        } catch (e) {}
+      } else {
+        imageUrl=selectedVariant?.imageUrl||p.images[0]||instantImageUrl(p.featuredImage)||instantImageUrl(p.image)||(p.variants||[]).find(v=>v.imageUrl)?.imageUrl||'';
       }
 
-      if (!imageUrl) {
-         imageUrl = "https://cdn.shopify.com/s/images/admin/no-image-large.gif";
-      } else {
-         imageUrl = getResizedImageUrl(imageUrl, '600x');
-      }
+      // Color-intent results may only fall back to that color's images.
+      const imageCandidates=[...new Set([imageUrl,...(p.searchColor?sameColorImages:[...p.images,selectedVariant?.imageUrl,instantImageUrl(p.featuredImage),instantImageUrl(p.image),...(p.variants||[]).map(v=>v.imageUrl)])].filter(Boolean).map(url=>getResizedImageUrl(url,'600x')))];
+      imageCandidates.push(instantImagePlaceholder);
+      imageUrl=imageCandidates.shift();
 
       const rate = 1; // Shopify storefront prices already include the visitor's market.
       let symbol = '$';
@@ -1381,28 +1395,28 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
 
       let hoverImageHtml = '';
-      if (data.globalSettings && data.globalSettings.secondImageOnHover !== false && Array.isArray(p.images) && p.images.length > 1) {
+      if (!p.searchColor && data.globalSettings && data.globalSettings.secondImageOnHover !== false && p.images.length > 1) {
         let hoverImg = p.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
-           hoverImageHtml = `<img src="${getResizedImageUrl(hoverImgSrc, '600x')}" alt="${p.title}" class="cfp-secondary-img" loading="lazy" />`;
+           hoverImageHtml = `<img src="${instantEscapeHtml(getResizedImageUrl(hoverImgSrc, '600x'))}" alt="${instantEscapeHtml(p.title)}" class="cfp-secondary-img" loading="lazy" />`;
         }
       }
 
       html += `
-        <div class="cfp-product-card" style="position:relative; width: 100%;">
+        <div class="cfp-product-card cfp-search-result-card" style="position:relative; width: 100%;">
           <div class="cfp-search-product-image-wrapper" style="position: relative;">
-            <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
+            <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
               <div class="cfp-search-product-image-wrap">
-                <img src="${imageUrl}" alt="${p.title}" class="cfp-main-img" />
+                <img src="${instantEscapeHtml(imageUrl)}" data-cfp-image-fallbacks="${instantEscapeHtml(JSON.stringify(imageCandidates))}" alt="${instantEscapeHtml(p.title)}" class="cfp-main-img" />
                 ${hoverImageHtml}
                 ${wishlistHtml}
               </div>
             </a>
-            ${(data.globalSettings && data.globalSettings.showQuickViewInstantSearch !== false) ? `<button type="button" class="cfp-quick-view-btn" data-cfp-quick-view-context="instant-search" data-product-handle="${p.handle}">Quick View</button>` : ''}
+            ${(data.globalSettings && data.globalSettings.showQuickViewInstantSearch !== false) ? `<button type="button" class="cfp-quick-view-btn" data-cfp-quick-view-context="instant-search" data-product-handle="${instantEscapeHtml(p.handle)}">Quick View</button>` : ''}
           </div>
-          <a href="${productUrl}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
-            <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${p.title}</div>
+          <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
+            <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${instantEscapeHtml(p.title)}</div>
             ${swatchesHtml}
             ${(data.globalSettings && data.globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
             <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${p._marketPricingUnavailable ? "See product price" : price}</div>
@@ -1413,6 +1427,16 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
 
     grid.innerHTML = html;
+    grid.querySelectorAll('img.cfp-main-img,img.cfp-secondary-img').forEach(image=>{
+      const fallbacks=JSON.parse(image.dataset.cfpImageFallbacks||'[]');
+      image.addEventListener('load',()=>image.classList.add('cfp-image-ready'));
+      if(image.complete&&image.naturalWidth>0)image.classList.add('cfp-image-ready');
+      image.addEventListener('error',()=>{
+        image.classList.remove('cfp-image-ready');
+        if(image.classList.contains('cfp-secondary-img')){image.remove();return;}
+        const next=fallbacks.shift();if(next)image.src=next;
+      });
+    });
     const cards = Array.from(grid.querySelectorAll('.cfp-product-card'));
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = cards[index];

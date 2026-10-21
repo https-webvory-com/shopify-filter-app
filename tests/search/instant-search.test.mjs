@@ -96,7 +96,7 @@ test('suggestions are not held behind slow product rendering',async()=>{
 
 test('instant product cards render before market pricing and ignore stale price callbacks',async()=>{
  const price={textContent:''};const card={isConnected:true,querySelector:selector=>selector==='a'?{href:'https://shop.test/products/dress?variant=2'}:price};
- const grid={innerHTML:'',querySelectorAll:()=>[card]};const callbacks=[];
+ const grid={innerHTML:'',querySelectorAll:selector=>selector==='.cfp-product-card'?[card]:[]};const callbacks=[];
  const context={window:{Shopify:{currency:{active:'USD'}},cfpMarketPricing:{apply:(_products,callback)=>{callbacks.push(callback);return new Promise(()=>{});}}},document:{getElementById:()=>grid},location:{href:'https://shop.test/'},URL,Intl};
  vm.createContext(context);
  vm.runInContext(source.slice(source.indexOf('  let marketRenderVersion'),source.lastIndexOf('\n});')),context);
@@ -109,6 +109,27 @@ test('instant product cards render before market pricing and ignore stale price 
  assert.equal(price.textContent,'');
  callbacks[1]({priceMin:10,variants:[{id:'2',price:25}],_marketPricingUnavailable:false},0);
  assert.equal(price.textContent,'$25.00');
+});
+
+test('instant cards normalize image shapes, keep Shopify filenames and preserve explicit color scope',async()=>{
+ const grid={innerHTML:'',querySelectorAll:()=>[]};
+ const context={window:{Shopify:{currency:{active:'USD'}}},document:{getElementById:()=>grid},location:{href:'https://shop.test/'},URL,Intl};
+ vm.createContext(context);vm.runInContext(source.slice(source.indexOf('  let marketRenderVersion'),source.lastIndexOf('\n});')),context);
+ const product={id:'1',handle:'dress',title:'Dress',variants:[],images:[]};
+ for(const patch of [
+   {images:JSON.stringify([null,{url:'https://cdn.shopify.com/s/files/dress.avif?v=7'}])},
+   {images:{src:'https://cdn.shopify.com/s/files/dress.avif?v=7'}},
+   {variants:[{id:'2',image:{url:'https://cdn.shopify.com/s/files/dress.avif?v=7'}}],selectedVariantId:'2'},
+ ]){
+   await context.renderProducts({products:[{...product,...patch}],globalSettings:{}},'dress');
+   const image=grid.innerHTML.match(/<img src="([^"]+)"[^>]*class="cfp-main-img"/)[1].replaceAll('&amp;','&');
+   const url=new URL(image);assert.equal(url.pathname,'/s/files/dress.avif');assert.equal(url.searchParams.get('v'),'7');assert.equal(url.searchParams.get('width'),'600');
+ }
+ await context.renderProducts({products:[{...product,images:['https://shop.test/red.svg'],searchColor:'Blue',selectedVariantId:'2',options:[{name:'Color'}],variants:[{id:'2',option1:'Blue'},{id:'3',option1:'Red',imageUrl:'https://shop.test/red.svg'}]}],globalSettings:{secondImageOnHover:true}},'blue');
+ const main=grid.innerHTML.match(/<img src="([^"]+)"[^>]*class="cfp-main-img"/)[1];assert.ok(main.startsWith('data:image/svg+xml,'));
+ const fallbacks=grid.innerHTML.match(/data-cfp-image-fallbacks="([^"]*)"/)[1];assert.ok(!fallbacks.includes('red.svg'));
+ await context.renderProducts({products:[{...product,searchColor:'Blue',selectedVariantId:'2',options:[{name:'Color'}],variants:[{id:'2',option1:'Blue'},{id:'4',option1:'Blue',image:{src:'/blue.svg'}}]}],globalSettings:{}},'blue');
+ assert.ok(grid.innerHTML.includes('src="/blue.svg"'));
 });
 
 test('the search endpoint supplies product suggestions using shop-filtered active results',async()=>{

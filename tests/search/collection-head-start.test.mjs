@@ -50,6 +50,21 @@ test('existing collection blocks load the renderer asynchronously in head and pr
  assert.equal(schema.javascript,'collectionWidget.js');assert.ok(block.includes('id="cfp-collection-ready"'));
 });
 
+test('early cards and skeletons use block column settings and the final grid breakpoints',async()=>{
+ const block=await fs.readFile('extensions/theme-extension/blocks/collection_filter_pro.liquid','utf8');
+ const app=block.match(/<div id="cfp-v1-app-container"[^>]*>/)?.[0];
+ assert.ok(app.includes('--cfp-cols-desktop: {{ block.settings.columns_desktop | default: 3 }}'));
+ assert.ok(app.includes('--cfp-cols-mobile: {{ block.settings.columns_mobile | default: 2 }}'));
+ for(const width of [1300,990,768,480]){
+   assert.ok(bootstrap.includes(`max-width:${width}px`));
+   assert.ok(body.includes(`max-width: ${width}px`));
+ }
+ assert.ok(bootstrap.includes('repeat(var(--cfp-cols-desktop,3),minmax(0,1fr))'));
+ assert.ok(bootstrap.includes('repeat(var(--cfp-cols-mobile,2),minmax(0,1fr))'));
+ assert.ok(!bootstrap.includes('repeat(4,minmax(0,1fr))'));
+ assert.ok(!body.includes('repeat(4, minmax(180px, 1fr))'));
+});
+
 
 test('late head metadata starts once and DOMContentLoaded cannot restart an obsolete market request',async()=>{
  const f=fixture('','',true);assert.equal(f.calls.length,0);f.addMeta();assert.equal(f.calls.length,1);

@@ -1,5 +1,5 @@
 {% if template.name == 'collection' %}
-  <div id="cfp-v1-app-container" class="cfp-v1-app-container">
+  <div id="cfp-v1-app-container" class="cfp-v1-app-container" style="--cfp-cols-desktop: {{ block.settings.columns_desktop | default: 3 }}; --cfp-cols-mobile: {{ block.settings.columns_mobile | default: 2 }};">
     {% render 'collectionFilterPro',
       full_width: block.settings.full_width,
       show_price_filter: block.settings.show_price_filter,

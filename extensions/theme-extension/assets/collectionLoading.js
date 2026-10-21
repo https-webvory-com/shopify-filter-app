@@ -55,7 +55,9 @@
       const app=document.querySelector('.cfp-v1-app-container');if(!app)return;
       if(!grid){
       grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';
-      const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;padding:16px;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:3/4;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}';grid.append(style);
+      // Use the app block's settings before the full widget runs. Match the
+      // final grid's breakpoints and spacing so early cards never reflow 4→5.
+      const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(var(--cfp-cols-desktop,3),minmax(0,1fr));gap:10px;padding:0;margin:0;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:1300px){.cfp-first-row{grid-template-columns:repeat(min(4,var(--cfp-cols-desktop,3)),minmax(0,1fr))}}@media(max-width:990px){.cfp-first-row{grid-template-columns:repeat(min(3,var(--cfp-cols-desktop,3)),minmax(0,1fr))}}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(var(--cfp-cols-mobile,2),minmax(0,1fr));gap:16px}}@media(max-width:480px){.cfp-first-row{gap:12px}}';grid.append(style);
       }
       for(const [index,product] of payload.products.entries()){
         if(index<rendered)continue;

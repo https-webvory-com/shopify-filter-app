@@ -390,6 +390,66 @@ try{
     const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.deepEqual(await evaluate('browserErrors'),[]);
     return {initialCards:25,pinsAcrossFirstTwoPages:40,canonicalProducts:70,fullRankingPausedAtPins:true,liveTiming:false};
   });
+  for(const exhausted of [false,true])await test(`an empty Load more response preserves existing cards (exhausted=${exhausted})`,async()=>{
+    await control({reset:true,productCount:30,precompute:true,early:false,assetDelay:0,apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const original=await cards();
+    await evaluate(`(()=>{window.retainedFirstCard=document.querySelector('.cfp-product-card');const original=window.fetch;let changed=false;window.fetch=async function(input,options){const response=await original.call(this,input,options);const url=new URL(typeof input==='string'?input:input.url,location.origin);if(!changed&&url.pathname==='/api/filter'&&url.searchParams.get('page')==='2'){changed=true;const payload=await response.json();payload.products=[];payload.totalCount=${exhausted?25:30};return new Response(JSON.stringify(payload),{status:200,headers:{'Content-Type':'application/json'}});}return response;};document.querySelector('#cfp-load-more-btn').click();})()`);
+    if(exhausted)await wait("!document.querySelector('#cfp-load-more-btn')&&!new URL(location.href).searchParams.has('page')");
+    else await wait("!!document.querySelector('.cfp-order-error button')");
+    assert.deepEqual(await cards(),original);assert.equal(await evaluate("retainedFirstCard===document.querySelector('.cfp-product-card')"),true);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-no-products')"),false);
+    assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
+    if(!exhausted){
+      await evaluate("document.querySelector('.cfp-order-error button').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
+      assert.deepEqual((await cards()).slice(0,25),original);assert.equal(new Set(await cards()).size,30);
+      assert.equal((await getState()).allRequests.filter(r=>r.page==='2').length,2);
+    }
+    assert.deepEqual(await evaluate('browserErrors'),[]);return {retainedCards:25,retriedSamePage:!exhausted};
+  });
+  await test('a Load more rendering failure offers a working retry without an unhandled rejection',async()=>{
+    await control({reset:true,productCount:30,precompute:true,early:false,assetDelay:0,apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const original=await cards();
+    await evaluate("(()=>{const grid=document.querySelector('#cfp-products-container');const insert=grid.insertAdjacentHTML;grid.insertAdjacentHTML=function(...args){this.insertAdjacentHTML=insert;throw Error('Injected card insertion failure');};document.querySelector('#cfp-load-more-btn').click();})()");
+    await wait("!!document.querySelector('.cfp-order-error button')");assert.deepEqual(await cards(),original);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    await evaluate("document.querySelector('.cfp-order-error button').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
+    assert.deepEqual((await cards()).slice(0,25),original);assert.equal(new Set(await cards()).size,30);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {retryRecovered:true,unhandledRejections:0};
+  });
+  await test('catalog text stays literal and swatch image URLs containing quotes remain clickable',async()=>{
+    await control({reset:true,productCount:30,precompute:true,early:false,assetDelay:0,apiDelay:0,priceDelay:0,imageDelay:0});
+    const title='<em>Dress "Blue" & \'Silk\'</em>',vendor='<b>Vendor & Co</b>',color='Ocean "Blue" <b> & \'Sea\'';
+    const injection=await send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{const original=window.fetch;window.fetch=async function(input,options){const response=await original.call(this,input,options);const url=new URL(typeof input==='string'?input:input.url,location.origin);if(url.pathname==='/api/filter'&&url.searchParams.get('page')==='1'&&url.searchParams.get('responseProfile')!=='collection-config-v1'&&response.status===200){const payload=await response.json();if(payload.products?.length){const product=payload.products[0];product.title=${JSON.stringify(title)};product.vendor=${JSON.stringify(vendor)};product.options=[{name:'Color',values:[${JSON.stringify(color)}]}];product.variants[0].option1=${JSON.stringify(color)};product.variants[0].imageUrl=location.origin+"/image/1.svg?shade=O'Reilly";return new Response(JSON.stringify(payload),{status:200,headers:{'Content-Type':'application/json'}});}}return response;};})()`});
+    try{
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate("document.querySelector('.cfp-product-card__title').textContent"),title);
+      assert.equal(await evaluate("document.querySelector('.cfp-product-card__vendor').textContent"),vendor);
+      assert.equal(await evaluate("document.querySelector('.cfp-product-card__image--primary').alt"),title);
+      assert.equal(await evaluate("document.querySelector('.cfp-swatch-item').dataset.tooltip"),color);
+      assert.equal(await evaluate("document.querySelector('.cfp-product-card__title em,.cfp-product-card__vendor b')===null"),true,'Catalog text must not create markup');
+      await evaluate("document.querySelector('.cfp-swatch-item').click()");
+      assert.equal(await evaluate("new URL(document.querySelector('.cfp-product-card__image--primary').src).searchParams.get('shade')"),"O'Reilly",'Swatch click must preserve the quoted image URL');
+      assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
+  });
+  await test('early cards retain configured columns and spacing through the full widget handoff',async()=>{
+    const samples=[];
+    for(const [width,desktop,mobile,expected]of [[1440,5,2,5],[1300,5,2,4],[991,5,2,4],[990,5,2,3],[769,5,2,3],[768,5,2,2],[480,5,2,2],[390,5,1,1],[1440,3,2,3]]){
+      await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,desktopColumns:desktop,mobileColumns:mobile,assetDelay:1800,apiDelay:0,priceDelay:0,imageDelay:0,cssDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<=768});
+      await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+      await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
+      const metrics=selector=>evaluate(`(()=>{const grid=document.querySelector(${JSON.stringify(selector)}),style=getComputedStyle(grid);return {columns:style.gridTemplateColumns.split(' ').length,gap:style.columnGap}})()`);
+      const early=await metrics('#cfp-first-row');assert.equal(early.columns,expected,`Early grid at ${width}px`);
+      assert.equal(await evaluate('!!window._cfpInitStarted'),false);
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-first-row')");
+      const full=await metrics('#cfp-products-container');assert.deepEqual(full,early,`Grid handoff at ${width}px`);
+      assert.deepEqual(await evaluate('browserErrors'),[]);samples.push({width,desktop,mobile,...early});
+    }
+    await control({reset:true});return {samples,liveLighthouseMeasurement:false};
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

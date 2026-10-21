@@ -231,13 +231,26 @@
   color: inherit;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease;
   position: relative;
 }
 
-.cfp-search-product-card:hover {
-  transform: translateY(-4px);
-  z-index: 10;
+/* Keep the hit area stable and the links below their sibling Quick View button. */
+.cfp-search-product-grid .cfp-search-result-card,
+.cfp-search-product-grid .cfp-search-result-card:hover,
+.cfp-search-product-grid .cfp-search-product-card:hover {
+  transform: none;
+}
+
+.cfp-search-product-grid .cfp-search-product-card:hover {
+  z-index: auto;
+}
+
+.cfp-search-product-grid .cfp-search-result-card:hover .cfp-quick-view-btn,
+.cfp-search-product-grid .cfp-search-result-card:focus-within .cfp-quick-view-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 
 .cfp-search-product-image-wrap {
@@ -265,7 +278,7 @@
   z-index: 1;
 }
 
-.cfp-search-product-image-wrapper:hover .cfp-search-product-image-wrap img.cfp-secondary-img {
+.cfp-search-product-image-wrapper:hover .cfp-search-product-image-wrap img.cfp-secondary-img.cfp-image-ready {
   opacity: 1;
 }
 

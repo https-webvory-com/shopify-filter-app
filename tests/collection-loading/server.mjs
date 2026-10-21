@@ -140,6 +140,7 @@ export async function createLoadingServer({redisLayer}={}) {
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;headEvents.length=0;}
+        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
         for(const [key,value]of Object.entries(updates))if(!['reset','invalidate','stormCollection','stopStorm','corruptPrepared','expireTokens','archive','deleteProduct'].includes(key))state[key]=value;
         if(redisLayer){if(state.hold)await redisLayer.worker.pause();else redisLayer.worker.resume();}
@@ -190,7 +191,9 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;
       }
-      if(url.pathname.startsWith('/collections/')){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body');if(state.headRenderer){
+      if(url.pathname.startsWith('/collections/')){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body')
+        .replace('class="cfp-v1-app-container"',`class="cfp-v1-app-container" style="--cfp-cols-desktop:${state.desktopColumns??4};--cfp-cols-mobile:${state.mobileColumns??2}"`)
+        .replace('columns_desktop:4,columns_mobile:2',`columns_desktop:${state.desktopColumns??4},columns_mobile:${state.mobileColumns??2}`);if(state.headRenderer){
         body=body.replace('<link rel="stylesheet"','<meta name="cfp-collection-context" data-shop="'+shop+'" data-handle="fixture" data-country="US" data-locale="en">'+headAsyncScripts+'<script defer src="/slow-theme.js"></script><link rel="stylesheet"')
           .replace('<script src="/assets/marketPricing.js">','<span id="cfp-collection-ready" hidden></span><script defer src="/assets/marketPricing.js">')
           .replace('<script src="/assets/collectionWidget.js">','<script defer src="/assets/collectionWidget.js">');
