@@ -87,7 +87,7 @@ function stable(value) {
 }
 
 export function preparationKey(spec) {
-  const {productRevision, retainForIdle, orderUpdatedAt, ...identity}=spec;
+  const {productRevision, retainForIdle, orderUpdatedAt, directFiltered, ...identity}=spec;
   // Preparation ranks the complete set. Pagination and response projections
   // must not create separate scans or prevent a limit-25 warmup serving limit-50.
   if (identity.query) {
@@ -181,7 +181,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
   }
   const directPending=new Map(),directUnavailable=new Map();
   async function direct(key,spec,warmup){
-    if(!prepareDirect||warmup||spec.retainForIdle!==true)return null;
+    if(!prepareDirect||warmup||(spec.retainForIdle!==true&&spec.directFiltered!==true))return null;
     if(directPending.has(key))return directPending.get(key);
     // Keep exhaustive compact ID/fact sorting within the existing heap budget.
     if(directPending.size||now()<(directUnavailable.get(key)||0))return null;

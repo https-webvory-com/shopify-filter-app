@@ -434,6 +434,20 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
+  await test('two filter selections finish with the ranking worker paused using exact direct preparation',async()=>{
+    const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}},{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
+    await control({reset:true,productCount:30,precompute:true,hold:true,directFacts:true,early:true,filterSettings,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const before=await getState();
+    for(const selector of ['input[name="option-Color"]','input[name="vendor"]']){
+      await evaluate(`(()=>{const input=document.querySelector(${JSON.stringify('#cfp-sidebar '+selector)});input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    }
+    const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
+    assert.equal(requests.length,2);assert.ok(requests.every(r=>r.status===200&&r.ranking==='ready'));assert.equal(after.state.builds,before.state.builds);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};
+  });
   await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
     const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};
     await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,colorRule:true,pinList:['1'],productVariants,assetDelay:1600,apiDelay:0,imageDelay:0,priceDelay:0});

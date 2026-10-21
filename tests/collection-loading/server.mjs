@@ -48,7 +48,12 @@ export async function createLoadingServer({redisLayer}={}) {
     if(sort==='priceMin:asc')products.sort((a,b)=>a.priceMin-b.priceMin);
     else if(sort==='priceMin:desc')products.sort((a,b)=>b.priceMin-a.priceMin);
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
-    return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution:options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{},processingTimeMs:1};
+    const facetDistribution=options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{};
+    if(options.facets?.includes('option_Color')){
+      facetDistribution.option_Color={};
+      for(const p of products){const position=p.options.findIndex(o=>o.name==='Color');for(const value of new Set(p.variantPrices.map(v=>v['option'+(position+1)]).filter(Boolean)))facetDistribution.option_Color[value]=(facetDistribution.option_Color[value]||0)+1;}
+    }
+    return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution,processingTimeMs:1};
   };
   const index={search:async(_q,options)=>select(options),
     getSettings:async()=>({distinctAttribute:null,pagination:{maxTotalHits:100000}}),

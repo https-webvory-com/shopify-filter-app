@@ -140,6 +140,17 @@ test('a first visitor publishes maintained rank inputs directly without waiting 
  assert.deepEqual(await s.get(f.spec),first);assert.equal(reads,1);
 });
 
+test('an opted-in public filter combination prepares exact ranking without waiting for the worker and keeps existing cache identity',async()=>{
+ const f=fixture();let reads=0;
+ const filtered={...f.spec,collectionId:'1',retainForIdle:false,query:{q:'',filter:["shop = 'fixture.myshopify.com'","option_Color = 'Black'","option_Size = '8'"]}};
+ const spec={...filtered,directFiltered:true};
+ assert.equal(preparationKey(spec),preparationKey(filtered));
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>{throw Error('Worker is paused');},prepareDirect:async value=>{reads++;assert.deepEqual(value.query,filtered.query);return f.result;},now:f.now});
+ assert.equal((await service.get(filtered)).status,'pending');assert.equal(reads,0);
+ assert.deepEqual(await service.get(spec),{status:'ready',...f.result});assert.equal(reads,1);
+ assert.deepEqual(await service.get(filtered),{status:'ready',...f.result});assert.equal(reads,1);assert.equal(f.queued.length,1);
+});
+
 test('concurrent first visitors share one direct ranking and configuration races never publish old results',async()=>{
  const f=fixture();f.spec.retainForIdle=true;let complete,reads=0;
  const s=createCollectionPreparation({redis:f.redis,queue:f.queue,prepare:async()=>f.result,prepareDirect:async()=>{reads++;return new Promise(resolve=>complete=resolve);}});

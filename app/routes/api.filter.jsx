@@ -52,6 +52,8 @@ export const loader = async ({ request, context }) => {
   let cardSnapshot;
   let pinnedPrefix=false;
   let pinnedPrefixVersion;
+  let variantEligibilityMs=0;
+  let rankingPreparationMs=0;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -512,6 +514,7 @@ export const loader = async ({ request, context }) => {
     }
     const selectedPriceRange = minPrice > 0 || maxPrice < 9999999
       ? { min: Math.max(0, minPrice - 0.5), max: maxPrice + 0.5 } : null;
+    const eligibilityStarted=Date.now();
     if (hideUnavailable) {
       await getCached('variantEligibilityFilter:' + shop, async () => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
@@ -519,7 +522,7 @@ export const loader = async ({ request, context }) => {
       }, 60);
       const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
       const eligible = await getCached('availableVariants:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues]),
-        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues), 30);
+        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
     const categoryFilters = {};
@@ -529,13 +532,14 @@ export const loader = async ({ request, context }) => {
       if (hideUnavailable) {
         const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
         const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange]),
-          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange), 30);
+          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange, {database:prisma}), 30);
         // Keep this in the price category so disjunctive price facets can remove it.
         categoryFilters["priceMin"] = eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant_price__"';
       } else {
         categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
       }
     }
+    variantEligibilityMs=Date.now()-eligibilityStarted;
     if (availability.length > 0) {
       if (
         availability.includes("in_stock") &&
@@ -806,6 +810,7 @@ export const loader = async ({ request, context }) => {
         pinEligibilityVersion: 2,
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
+        directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
         pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
         orderRevision: collectionBestSellingState.revision ?? null,
@@ -816,11 +821,13 @@ export const loader = async ({ request, context }) => {
         globalSettings, mergedValues,
       };
       let prepared;
+      const rankingStarted=Date.now();
       try{prepared = missingNativeOrder?{status:'pending'}:await getPreparedCollectionRanking(preparedSpec, {
         warmup: context?.rankingWarmup === true,
         precompute: context?.rankingPrecompute === true,
         deferDirect:canPreviewPins,
       });}catch(error){if(!canPreviewPins)throw error;prepared={status:'pending'};reportCollectionHead(preparedSpec,'background-unavailable',error.name);}
+      rankingPreparationMs=Date.now()-rankingStarted;
       if(canPreviewPins&&prepared.status!=='ready')try{
         let declineReason;
         const version=await getCollectionHeadVersion(preparedSpec);
@@ -1578,6 +1585,8 @@ export const loader = async ({ request, context }) => {
         timing: {
           meiliMs: meiliTime,
           totalMs,
+          variantEligibilityMs,
+          rankingPreparationMs,
         },
       },
       facets: {

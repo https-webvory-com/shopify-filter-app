@@ -9,6 +9,17 @@ async function fixture(){
  return {...f,control,get,state:async()=>(await fetch(origin+'/__state')).json()};
 }
 
+test('two public filters use exact direct preparation with a paused worker and remain outside public card snapshots',async()=>{
+ const f=await fixture();try{
+  await f.control({reset:true,hold:true,productCount:30,directFacts:true});
+  const filters={responseProfile:'collection-v1','options[Color][]':'Blue','vendor[]':'Fixture'};
+  const result=await f.get(filters);assert.equal(result.status,200);assert.equal(result.data.products.length,25);assert.equal(result.data.debug.collectionRankingStatus,'ready');
+  assert.ok(result.data.rankingToken);assert.equal(result.data.cfpCards,undefined);assert.equal((await f.state()).state.builds,0);
+  const second=await f.get({...filters,page:'2',rankingToken:result.data.rankingToken});assert.equal(second.status,200);
+  assert.equal(new Set([...result.data.products,...second.data.products].map(p=>p.id)).size,30);
+ }finally{f.dispose();}
+});
+
 test('pinned cards default to the original first variant across prefix, canonical, saved and published paths',async()=>{
  const f=await fixture();try{
   const variants=id=>[{id:String(id*100),option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:String(id*100+1),option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:10}];

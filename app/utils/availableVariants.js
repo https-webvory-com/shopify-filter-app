@@ -1,4 +1,54 @@
+import {Prisma} from '@prisma/client';
+
 const normalize = value => String(value ?? '').trim().toLowerCase();
+const trimCharacters='\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
+
+function selectedVariantValues(name,values,mergedValues){
+ const expanded=new Set(values.map(normalize));
+ for(const rule of mergedValues||[])if((!rule.optionName||normalize(rule.optionName)===normalize(name))&&values.some(value=>normalize(value)===normalize(rule.targetValue)))
+  for(const value of rule.sourceValues||[])expanded.add(normalize(value));
+ return [...expanded];
+}
+
+// The public route's scope is deliberately small. Unknown caller predicates
+// keep the generic Prisma path rather than silently losing a restriction.
+async function availableProductIdsInDatabase(database,where,filters,mergedValues,priceRange){
+ if(!database?.$queryRaw||typeof where.shop!=='string'||Object.keys(where).some(key=>!['shop','status','collections'].includes(key)))return null;
+ const clauses=[Prisma.sql`p."shop" = ${where.shop}`];
+ if(where.status!==undefined){
+  if(typeof where.status==='string')clauses.push(Prisma.sql`p."status" = ${where.status}`);
+  else if(where.status&&Object.keys(where.status).every(key=>['equals','mode'].includes(key))&&typeof where.status.equals==='string'&&where.status.mode==='insensitive')clauses.push(Prisma.sql`lower(p."status") = ${where.status.equals.toLowerCase()}`);
+  else return null;
+ }
+ if(where.collections!==undefined){
+  const scope=where.collections;
+  if(!scope||Object.keys(scope).length!==1||!scope.some||Object.keys(scope.some).length!==1||typeof scope.some.collectionId!=='string')return null;
+  clauses.push(Prisma.sql`EXISTS (SELECT 1 FROM "ProductCollection" pc WHERE pc."productId" = p."id" AND pc."collectionId" = ${scope.some.collectionId})`);
+ }
+ const variants=[Prisma.sql`v."productId" = p."id"`,Prisma.sql`v."available" = true`];
+ if(priceRange){
+  if(!Number.isFinite(priceRange.min)||!Number.isFinite(priceRange.max))return null;
+  variants.push(Prisma.sql`v."price" >= ${priceRange.min} AND v."price" <= ${priceRange.max}`);
+ }
+ for(const [name,values]of Object.entries(filters||{}))if(values.length){
+  const expanded=selectedVariantValues(name,values,mergedValues),key=normalize(name);
+  // Match option names at their actual position. All predicates refer to this
+  // same available variant, including price, aliases and empty option values.
+  variants.push(Prisma.sql`(
+   SELECT CASE opt.position
+    WHEN 1 THEN lower(btrim(coalesce(v."option1", ''), ${trimCharacters}))
+    WHEN 2 THEN lower(btrim(coalesce(v."option2", ''), ${trimCharacters}))
+    WHEN 3 THEN lower(btrim(coalesce(v."option3", ''), ${trimCharacters}))
+    ELSE '' END
+   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p."options") = 'array' THEN p."options" ELSE '[]'::jsonb END) WITH ORDINALITY AS opt(value, position)
+   WHERE lower(btrim(coalesce(opt.value->>'name', ''), ${trimCharacters})) = ${key}
+   ORDER BY opt.position LIMIT 1
+  ) IN (${Prisma.join(expanded)})`);
+ }
+ clauses.push(Prisma.sql`EXISTS (SELECT 1 FROM "Variant" v WHERE ${Prisma.join(variants,' AND ')})`);
+ const rows=await database.$queryRaw(Prisma.sql`SELECT p."id" FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')} ORDER BY p."id"`);
+ return rows.map(row=>row.id.split('/').pop());
+}
 
 export async function ensureVariantEligibilityFilter(index, tasks) {
   const attributes = await index.getFilterableAttributes();
@@ -31,7 +81,10 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
   });
 }
 
-export async function availableProductIds(productModel, where, filters, mergedValues, priceRange = null) {
+export async function availableProductIds(productModel, where, filters, mergedValues, priceRange = null, {database} = {}) {
+ // Return IDs directly from an exact database EXISTS query. Transferring all
+ // matching variants just to test them again in JavaScript is unnecessary.
+ if(database)try{const ids=await availableProductIdsInDatabase(database,where,filters,mergedValues,priceRange);if(ids!==null)return ids;}catch{/* Preserve the established path if this optional optimization is unavailable. */}
   const ids = [];
   const selected = Object.entries(filters || {}).filter(([, values]) => values.length);
   // Use a conservative database prefilter, then retain the exact option-position
@@ -40,13 +93,7 @@ export async function availableProductIds(productModel, where, filters, mergedVa
   const variantWhere = { available: true };
   if (priceRange) variantWhere.price = { gte: priceRange.min, lte: priceRange.max };
   if (selected.length) variantWhere.AND = selected.map(([name, values]) => {
-    const expanded = new Set(values.map(normalize));
-    for (const rule of mergedValues || []) {
-      if ((!rule.optionName || normalize(rule.optionName) === normalize(name)) &&
-          values.some(value => normalize(value) === normalize(rule.targetValue))) {
-        for (const value of rule.sourceValues || []) expanded.add(normalize(value));
-      }
-    }
+    const expanded = selectedVariantValues(name,values,mergedValues);
     return { OR: [...expanded].flatMap(value => [1, 2, 3].flatMap(position => [
       { [`option${position}`]: { contains: value, mode: 'insensitive' } },
       ...(value === '' ? [{ [`option${position}`]: null }] : []),

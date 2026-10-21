@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
 
+test('the exact database path binds filter values and returns IDs without hydrating variant documents',async()=>{
+ const hostile="Black' OR 1=1 --",model={findMany:()=>{throw Error('Variant document transfer is forbidden');}};
+ const database={$queryRaw:async query=>{assert.ok(query.values.includes(hostile.toLowerCase()));assert.equal(query.text.includes(hostile),false);assert.ok(query.text.includes('EXISTS'));return [{id:'gid://shopify/Product/1'}];}};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture',status:{equals:'active',mode:'insensitive'}},{Color:[hostile]},[],null,{database}),['1']);
+});
+
+test('unavailable exact queries retain the established availability fallback',async()=>{
+ let fallback=0;const model={findMany:async()=>{fallback++;return [{id:'1',options:[{name:'Color'}],variants:[{option1:'Black',available:true}]}];}};
+ const database={$queryRaw:async()=>{throw Error('Optional query unavailable');}};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},{Color:['Black']},[],null,{database}),['1']);assert.equal(fallback,1);
+});
+
 test('price and selected options must match the same available variant',async()=>{
  const filters={Color:['Black'],Size:['2XL']};
  const options=[{name:'Color'},{name:'Size'}];
