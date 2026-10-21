@@ -242,6 +242,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     })();
   }
 
+  function syncThemeBackgroundColor() {
+    if (window.collectionFilterProSettings?.filter_bg_color) return;
+    try {
+      const candidates = [
+        document.querySelector('.cfp-layout-wrapper')?.parentElement,
+        document.getElementById('cfp-v1-app-container')?.parentElement,
+        document.querySelector('#ProductGridContainer'),
+        document.querySelector('#MainContent'),
+        document.querySelector('main'),
+        document.body
+      ];
+      for (const el of candidates) {
+        if (!el) continue;
+        const bg = window.getComputedStyle(el).backgroundColor;
+        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgba(0,0,0,0)') {
+          document.documentElement.style.setProperty('--cfp-filter-pill-bg', bg);
+          break;
+        }
+      }
+    } catch (e) {}
+  }
+
   let activeMerchandisingRule = null;
   let isInitializing = false;
 
@@ -261,6 +283,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     window._cfpInitStarted = true;
 
     customSettings=window.collectionFilterProSettings||{};
+    syncThemeBackgroundColor();
     initDataVariables();
     parseURLState();
 

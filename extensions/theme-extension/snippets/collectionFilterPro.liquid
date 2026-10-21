@@ -19,6 +19,7 @@
 
   window.collectionFilterProSettings = {
     filter_layout: {{ filter_layout | default: 'default' | json }},
+    filter_bg_color: {{ filter_bg_color | default: '' | json }},
     show_price_filter: {{ show_price_filter | default: true | json }},
     show_brand_filter: {{ show_brand_filter | default: true | json }},
     show_color_filter: {{ show_color_filter | default: true | json }},
@@ -157,6 +158,9 @@
 
 {% render 'customization' %}
 
+{%- assign theme_detected_bg = settings.colors_background_1 | default: settings.color_background | default: settings.body_background | default: settings.bg_color | default: settings.background_color | default: settings.color_bg -%}
+{%- assign custom_filter_bg = filter_bg_color -%}
+
 {%- style -%}
   :root {
     /* Correctly wrapping Dawn RGB variables in rgb() */
@@ -165,6 +169,20 @@
 
     --cfp-accent-hover: var(--cfp-accent);
     --cfp-accent-light: rgba(var(--color-base-text, 18, 18, 18), 0.05);
+
+    {% if custom_filter_bg != blank and custom_filter_bg != 'rgba(0,0,0,0)' %}
+      --cfp-filter-pill-bg: {{ custom_filter_bg }};
+      --cfp-surface: {{ custom_filter_bg }};
+      --cfp-bg: {{ custom_filter_bg }};
+    {% elsif theme_detected_bg != blank and theme_detected_bg != 'rgba(0,0,0,0)' %}
+      --cfp-filter-pill-bg: {{ theme_detected_bg }};
+      --cfp-surface: {{ theme_detected_bg }};
+      --cfp-bg: {{ theme_detected_bg }};
+    {% else %}
+      --cfp-filter-pill-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
+      --cfp-surface: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
+      --cfp-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
+    {% endif %}
   }
 {%- endstyle -%}
 
@@ -210,7 +228,11 @@
 
   {% assign s_heading = search_heading | default: 'Find your perfect dress' %}
   {% assign s_subheading = search_subheading | default: 'Refine the details. Discover the one.' %}
-  {% assign s_bg = search_header_bg | default: '#FAF7F5' %}
+  {% assign default_banner_bg = theme_detected_bg | default: '#FAF7F5' %}
+  {% assign s_bg = search_header_bg %}
+  {% if s_bg == blank or s_bg == 'rgba(0,0,0,0)' %}
+    {% assign s_bg = default_banner_bg %}
+  {% endif %}
   {% assign s_text_color = search_header_text_color | default: '#111827' %}
   {% assign s_popular_enabled = show_popular_searches %}
   {% if s_popular_enabled == nil %}

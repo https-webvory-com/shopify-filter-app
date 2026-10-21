@@ -1,6 +1,7 @@
 {% if template.name == 'search' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
+      filter_bg_color: block.settings.filter_bg_color,
       search_header_bg: block.settings.search_header_bg,
       search_header_text_color: block.settings.search_header_text_color,
       search_heading: block.settings.search_heading,
@@ -108,6 +109,12 @@
       "id": "full_width",
       "label": "Enable Full Width Layout",
       "default": false
+    },
+    {
+      "type": "color",
+      "id": "filter_bg_color",
+      "label": "Filter background color",
+      "info": "Leave empty to automatically match your store theme background color"
     },
     {
       "type": "header",

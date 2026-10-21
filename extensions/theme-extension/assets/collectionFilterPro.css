@@ -1375,7 +1375,7 @@ facet-filters-form,
   border: 1px solid #d1d5db;
   border-radius: 4px;
   padding: 7px 14px;
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   color: #111827;
   font-weight: 500;
   font-size: 13.5px;
@@ -1412,7 +1412,7 @@ facet-filters-form,
 
 .cfp-drawer-trigger-btn:hover,
 .cfp-drawer-trigger-btn[aria-expanded="true"] {
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   border-color: #000000;
   color: #000000;
 }
@@ -1426,7 +1426,7 @@ facet-filters-form,
   .cfp-top-bar {
     display: flex !important;
     flex-direction: column !important;
-    padding: 8px 0 !important;
+    padding: 0 !important;
     margin-bottom: 20px !important;
     border: none !important;
     background: transparent !important;
@@ -1461,7 +1461,7 @@ facet-filters-form,
     letter-spacing: normal !important;
     justify-content: center !important;
     margin: 0 !important;
-    background: #ffffff !important;
+    background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff)) !important;
     color: #111827 !important;
     box-sizing: border-box !important;
   }
@@ -1478,7 +1478,7 @@ facet-filters-form,
     font-weight: 500 !important;
     font-size: 13.5px !important;
     box-sizing: border-box !important;
-    background: #ffffff !important;
+    background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff)) !important;
     color: #111827 !important;
   }
   .cfp-custom-sort__trigger span {
@@ -1690,7 +1690,7 @@ facet-filters-form,
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   color: #111827;
   border: 1px solid #d1d5db;
   border-radius: 4px;
@@ -1728,7 +1728,7 @@ facet-filters-form,
 
 .cfp-custom-sort__trigger:hover,
 .cfp-custom-sort.is-open .cfp-custom-sort__trigger {
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   border-color: #000000;
   color: #000000;
 }
@@ -1761,7 +1761,7 @@ facet-filters-form,
   top: calc(100% + 6px);
   right: 0;
   min-width: 100%;
-  background: #ffffff;
+  background: var(--cfp-surface, #ffffff);
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   z-index: 9999;
@@ -2209,7 +2209,7 @@ facet-filters-form,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   color: #111827;
   border: 1px solid #d1d5db;
   border-radius: 4px;
@@ -2246,7 +2246,7 @@ facet-filters-form,
 
 .cfp-horizontal-pill__btn:hover,
 .cfp-horizontal-pill__btn[aria-expanded="true"] {
-  background: #ffffff;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   border-color: #000000;
   color: #000000;
 }
@@ -2280,7 +2280,7 @@ facet-filters-form,
 .cfp-horizontal-pill.has-active .cfp-horizontal-pill__btn {
   border-color: #111827;
   font-weight: 600;
-  background: #f9fafb;
+  background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
 }
 
 .cfp-horizontal-pill__count {
@@ -2306,7 +2306,7 @@ facet-filters-form,
   max-width: 360px;
   max-height: 380px;
   overflow-y: auto;
-  background: #ffffff;
+  background: var(--cfp-surface, #ffffff);
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
@@ -2369,7 +2369,7 @@ facet-filters-form,
     margin-left: 12px !important;
     border: 1.5px solid #111827 !important;
     border-radius: 4px !important;
-    background: #ffffff !important;
+    background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff)) !important;
     color: #111827 !important;
     padding: 7px 14px !important;
     font-family: inherit !important;
@@ -2540,9 +2540,9 @@ facet-filters-form,
 
 @media (max-width: 768px) {
   .cfp-search-banner-wrapper {
-    padding: 32px 16px 24px !important;
+    padding: 24px 16px 24px !important;
     border-radius: 0 !important;
-    margin: 10px 0 20px !important;
+    margin: 0px 0 20px !important;
   }
   .cfp-search-banner__title {
     font-size: 26px !important;
