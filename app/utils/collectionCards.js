@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 // Bump when saved card presentation must be rebuilt from current documents.
-export const collectionCardPresentationVersion=2;
+export const collectionCardPresentationVersion=3;
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
 export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v3'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
@@ -36,7 +36,7 @@ export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
  // Only ready cards' image-selection inputs travel initially. Keep variant
  // identity/options so the existing renderer chooses exactly the same image
  // and product link when the complete, token-scoped page arrives.
- const fields=['id','title','handle','selectedVariantId','searchColor','searchColorImage','merchandisingImage',
+ const fields=['id','title','handle','selectedVariantId','pinnedProductImage','searchColor','searchColorImage','merchandisingImage',
   'metafield_custom.plus_size_collection_image','metafield_custom.mob_collection_image',
   'metafield_custom.mother_of_the_bride_collection_image','metafield_custom.wedding_collection_image'];
  return {rankingToken:payload.rankingToken,totalCount:payload.totalCount,globalSettings:payload.globalSettings,

@@ -121,6 +121,8 @@ test('early image selection retains selected variants and collection-specific im
  assert.equal(selected.image,'https://images.example/blue.jpg');assert.equal(selected.url,'/products/formal-gown?variant=11');
  assert.equal(select({...product,'metafield_custom.plus_size_collection_image':{url:'https://images.example/plus.jpg'}},'plus-size-formal',{}).image,'https://images.example/plus.jpg');
  assert.equal(select({...product,merchandisingImage:'https://images.example/blue.jpg'},'formal',{}).image,'https://images.example/blue.jpg');
+ const pinned=select({...product,selectedVariantId:'10',pinnedProductImage:product.images[0]},'formal',{});
+ assert.equal(pinned.image,product.images[0]);assert.equal(pinned.url,'/products/formal-gown?variant=10');
 });
 
 test('a late head loader adopts ready body-started data without waiting for the full renderer or fetching twice',async()=>{

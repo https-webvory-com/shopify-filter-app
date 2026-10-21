@@ -232,7 +232,9 @@ if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='..
       assert.deepEqual(Array.from(response.products.slice(0, 6), p => p.id), pins.map(p => p.id));
       assert.ok(response.products.some(p => p.id === 'gid://shopify/Product/23113'), 'Include admits the active product outside Shopify membership');
       assert.equal(response.products[1].selectedVariantId, "301");
-      assert.equal(response.products[1].merchandisingImage, "green.jpg");
+      assert.equal(response.products[1].merchandisingImage, "blue.jpg");
+      assert.equal(response.products[1].pinnedProductImage, "blue.jpg");
+      assert.equal(response.products[1].images[0], "blue.jpg");
       assert.equal(response.products[1].variants[0].option1, "Green");
       const ordinary=response.products.find(p=>p.id==='gid://shopify/Product/2');
       assert.equal(ordinary.selectedVariantId,"203");assert.equal(ordinary.variants[0].option1,"Black");

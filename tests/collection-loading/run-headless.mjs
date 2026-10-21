@@ -454,13 +454,15 @@ try{
     await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
     await wait("!!document.querySelector('.cfp-initial-product a')");
     assert.equal(await evaluate("new URL(document.querySelector('.cfp-initial-product a').href).searchParams.get('variant')"),'100');
+    assert.ok((await evaluate("document.querySelector('.cfp-initial-product img').src")).includes('/image/1.svg'));
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
     const first="document.querySelector('.cfp-product-card--reveal')";
     assert.equal(await evaluate(`new URL(${first}.querySelector('.cfp-product-card__link').href).searchParams.get('variant')`),'100');
     assert.equal(await evaluate(`${first}.querySelector('.cfp-swatch-active').dataset.tooltip`),'Green');
-    assert.ok((await evaluate(`${first}.querySelector('.cfp-product-card__image--primary').src`)).includes('/image/green.svg'));
+    assert.ok((await evaluate(`${first}.querySelector('.cfp-product-card__image--primary').src`)).includes('/image/1.svg'));
     await evaluate(`${first}.querySelector('[data-tooltip="Blue"]').click()`);
     assert.equal(await evaluate(`new URL(${first}.querySelector('.cfp-product-card__link').href).searchParams.get('variant')`),'101');
+    assert.ok((await evaluate(`${first}.querySelector('.cfp-product-card__image--primary').src`)).includes('/image/blue.svg'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {defaultVariant:'100',firstVariantAvailable:false,shopperChoice:'101',liveTiming:false};
   });

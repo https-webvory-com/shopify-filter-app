@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source=await fs.readFile('extensions/theme-extension/assets/marketPricing.js','utf8');
 function fixture({fail=false,compare=null}={}){
  const calls=[];const window={Shopify:{routes:{root:'/en/'},country:'IN',currency:{active:'INR'}}};
- const context={window,AbortController,setTimeout,clearTimeout,Date,console,fetch:async(url,opts)=>{calls.push(url);assert.equal(opts.credentials,'same-origin');if(fail)throw Error('offline');return {ok:true,json:async()=>({price_min:245000,price_max:299000,variants:[{id:42,price:245000,compare_at_price:compare}]})}}};
+ const context={window,AbortController,setTimeout,clearTimeout,Date,console,fetch:async(url,opts)=>{calls.push(url);assert.equal(opts.credentials,'same-origin');if(fail)throw Error('offline');const amount=window.Shopify.currency.active==='USD'?2800:245000;return {ok:true,json:async()=>({price_min:amount,price_max:window.Shopify.currency.active==='USD'?3500:299000,variants:[{id:42,price:amount,compare_at_price:compare}]})}}};
  vm.runInNewContext(source,context);return {window,calls,apply:window.cfpMarketPricing.apply};
 }
 const products=[{handle:'milk-cooler',priceMin:2500,priceMax:3000,variants:[{id:'gid://shopify/ProductVariant/42',price:2500,compareAtPrice:4000}]}];
@@ -18,7 +18,7 @@ test('Shopify storefront market prices replace estimates and stale compare-at pr
 });
 test('repeat requests share prices, but country changes fetch fresh storefront prices',async()=>{
  const f=fixture();await Promise.all([f.apply(products),f.apply(products)]);assert.equal(f.calls.length,1);
- f.window.Shopify.country='US';f.window.Shopify.currency.active='USD';await f.apply(products);assert.equal(f.calls.length,2);
+ f.window.Shopify.country='US';f.window.Shopify.currency.active='USD';const changed=await f.apply(products);assert.equal(f.calls.length,2);assert.equal(changed[0].variants[0].price,28);
 });
 test('failed price requests keep cards available and flag prices as unavailable',async()=>{
  const f=fixture({fail:true});const result=await f.apply(products);

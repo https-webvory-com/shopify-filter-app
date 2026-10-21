@@ -41,7 +41,7 @@
         variantId=product.selectedVariantId&&variantId||color.id||variantId;
       }
     }
-    return {image:primary,url:'/products/'+encodeURIComponent(product.handle)+(variantId&&/^\d+$/.test(variantId)?'?variant='+variantId:'')};
+    return {image:product.pinnedProductImage||primary,url:'/products/'+encodeURIComponent(product.handle)+(variantId&&/^\d+$/.test(variantId)?'?variant='+variantId:'')};
   }
   window.cfpFirstRowSelection=firstRowSelection;
   function mountFirstRow(payload,context,controller){

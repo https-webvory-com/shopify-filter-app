@@ -837,9 +837,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
     const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
-    const currency = window.Shopify?.currency?.active || 'USD';
+    const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
     const format = value => currency === 'INR'
-      ? new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
+      ? 'RS. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
       : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
     row.replaceChildren();
     const price = document.createElement('span');
@@ -1069,7 +1069,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             fallbackImg = fallbackImg.src || fallbackImg.url || '';
         }
 
-        let primaryImg = (product.searchColor ? product.searchColorImage : (customImage || variantImg || product.merchandisingImage || fallbackImg)) || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = product.pinnedProductImage || (product.searchColor ? product.searchColorImage : (customImage || variantImg || product.merchandisingImage || fallbackImg)) || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
 
         let productUrl = `/products/${product.handle}`;
@@ -1338,7 +1338,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
           swatchesHtml += `</div>`;
 
-          if (matchedColorUrl && (!customImage || colorWasFiltered)) {
+          if (!product.pinnedProductImage && matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = getResizedImageUrl(matchedColorUrl, 360);
           }
           const activeVariantId = (product.selectedVariantId && matchedVariantId) || colorsArray[activeIndex][1].variantId;

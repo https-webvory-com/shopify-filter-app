@@ -24,7 +24,7 @@ test('pinned cards default to the original first variant across prefix, canonica
  const f=await fixture();try{
   const variants=id=>[{id:String(id*100),option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:String(id*100+1),option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:10}];
   await f.control({reset:true,hold:true,productCount:30,colorRule:true,pinList:['1'],cardSnapshots:true,productVariants:{'1':variants(1),'30':variants(30)}});
-  const assertFirst=p=>{assert.equal(p.selectedVariantId,'100');assert.equal(p.variants[0].option1,'Green');assert.equal(p.variants[0].available,false);assert.equal(p.merchandisingImage,'/image/green.svg');};
+  const assertFirst=p=>{assert.equal(p.selectedVariantId,'100');assert.equal(p.variants[0].option1,'Green');assert.equal(p.variants[0].available,false);assert.equal(p.variants[0].imageUrl,'/image/green.svg');assert.equal(p.pinnedProductImage,'/image/1.svg');assert.equal(p.images[0],'/image/1.svg');assert.equal(p.merchandisingImage,'/image/1.svg');};
   const head=await f.get();assert.equal(head.header,'prefix');assertFirst(head.data.products[0]);
   await f.control({precompute:true});
   const full=await f.get({responseProfile:'collection-v1'});assertFirst(full.data.products[0]);
@@ -35,6 +35,7 @@ test('pinned cards default to the original first variant across prefix, canonica
   const filters={responseProfile:'collection-v1','options[Color][]':'Blue'};
   await f.get(filters);await f.prepareLast();const filtered=await f.get(filters);
   assert.equal(filtered.status,200);assert.equal(filtered.data.products.find(p=>p.id.endsWith('/1')).selectedVariantId,'101');
+  assert.equal(filtered.data.products.find(p=>p.id.endsWith('/1')).pinnedProductImage,undefined);
  }finally{f.dispose();}
 });
 test('a cold prefix bypasses a paused ranking backlog and hands off to complete canonical pagination without gaps',async()=>{

@@ -1161,6 +1161,8 @@ export const loader = async ({ request, context }) => {
       // Pinning chooses the product, not a merchandising-selected color/size.
       // Explicit shopper filters and search retain their existing selections.
       const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
+      const firstProductImage=productImages[0];
+      const pinnedProductImage=pinnedDefault?(typeof firstProductImage==='string'?firstProductImage:firstProductImage?.url||firstProductImage?.src||firstProductImage?.image?.url||null):null;
       let activeVariant = pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
         ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
             Object.entries(optionsFilters).every(([name, values]) => {
@@ -1241,7 +1243,7 @@ export const loader = async ({ request, context }) => {
       }
 
       if (activeVariant) {
-        if (activeVariant.imageUrl) {
+        if (activeVariant.imageUrl && !pinnedProductImage) {
           const filterVariantImage = activeVariant.imageUrl;
           productImages = [
             filterVariantImage,
@@ -1305,9 +1307,10 @@ export const loader = async ({ request, context }) => {
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
         selectedVariantId: activeVariant?.id || null,
+        ...(pinnedProductImage?{pinnedProductImage}:{}),
         searchColor: activeVariant?.searchColor || null,
         searchColorImage: activeVariant?.searchColor ? activeVariant.imageUrl : null,
-        merchandisingImage: activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null),
+        merchandisingImage: pinnedProductImage || (activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null)),
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
