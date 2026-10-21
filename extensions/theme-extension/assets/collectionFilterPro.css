@@ -1339,13 +1339,19 @@ facet-filters-form,
 /* --- NEW TOOLBAR STYLES (Responsive) --- */
 .cfp-top-bar {
   display: flex !important;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column !important;
   padding: 10px 0;
   margin-bottom: 20px;
   width: 100%;
   border: none;
   background: transparent;
+}
+
+.cfp-top-bar__main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .cfp-top-bar__left, .cfp-top-bar__right {
@@ -2013,59 +2019,199 @@ facet-filters-form,
   100% { transform: rotate(360deg); }
 }
 
-/* Desktop horizontal filters are inline; mobile retains the drawer layout. */
+/* Desktop horizontal toolbar and pills matching exact modern design */
+.cfp-horizontal-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cfp-horizontal-extra-filters {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 4px;
+}
+
+.cfp-horizontal-extra-filters.is-expanded {
+  display: flex !important;
+}
+
+.cfp-horizontal-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cfp-horizontal-pill__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
+  height: 38px;
+}
+
+.cfp-horizontal-pill__btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.cfp-horizontal-pill__btn[aria-expanded="true"] {
+  border-color: #111827;
+  background: #f3f4f6;
+  box-shadow: 0 0 0 1px #111827;
+}
+
+.cfp-horizontal-pill__btn svg.cfp-pill-chevron {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  transition: transform 0.2s ease;
+}
+
+.cfp-horizontal-pill__btn[aria-expanded="true"] svg.cfp-pill-chevron {
+  transform: rotate(180deg);
+}
+
+.cfp-horizontal-pill.has-active .cfp-horizontal-pill__btn {
+  border-color: #111827;
+  font-weight: 600;
+  background: #f9fafb;
+}
+
+.cfp-horizontal-pill__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #111827;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-left: 2px;
+}
+
+/* Floating Popover Dropdown */
+.cfp-horizontal-pill__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  z-index: 9999;
+  padding: 14px;
+  display: none;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.cfp-horizontal-pill__popover.is-open {
+  display: flex !important;
+}
+
+.cfp-horizontal-pill__popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.cfp-horizontal-pill__popover-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #4b5563;
+  letter-spacing: 0.05em;
+}
+
+.cfp-horizontal-pill__popover-clear {
+  font-size: 12px;
+  color: #ef4444;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 500;
+}
+.cfp-horizontal-pill__popover-clear:hover {
+  text-decoration: underline;
+}
+
+.cfp-horizontal-pill__popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (min-width: 769px) {
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
-  .cfp-horizontal-layout #cfp-sidebar.cfp-sidebar {
-    position: relative !important;
-    inset: auto !important;
-    width: 100% !important;
-    max-width: none !important;
-    height: auto !important;
-    max-height: none !important;
-    display: flex !important;
-    visibility: visible !important;
-    flex-direction: column !important;
-    overflow: visible;
-    z-index: 10 !important;
-    transition: none !important;
-    border-right: 0 !important;
-    margin-bottom: 20px !important;
-  }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__header,
-  .cfp-horizontal-layout #cfp-drawer-trigger-btn { display: none !important; }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__body { flex: none; padding: 0; overflow: visible; }
-  .cfp-horizontal-layout #cfp-sidebar__filter-groups {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-start;
-  }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-group {
-    position: relative;
-    flex: 0 1 auto;
-    min-width: 0;
-    padding: 0;
-    border: 1px solid var(--cfp-border);
-    border-radius: var(--cfp-radius);
-  }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-group__toggle { gap: 16px; padding: 12px 16px; }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-group__content {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    width: min(300px, calc(100vw - 32px));
+  
+  /* In Horizontal mode, MORE button is styled bold and visible in the toolbar */
+  .cfp-horizontal-layout #cfp-drawer-trigger-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1.5px solid #111827 !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    padding: 7px 14px !important;
+    font-family: inherit !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    height: 38px;
     box-sizing: border-box;
-    max-height: min(420px, 60vh);
-    overflow: auto;
-    padding: 16px;
-    background: var(--cfp-bg);
-    border: 1px solid var(--cfp-border);
-    border-radius: var(--cfp-radius);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
-    z-index: 20;
   }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { padding: 12px 0; border-top: 0; }
+  .cfp-horizontal-layout #cfp-drawer-trigger-btn:hover {
+    background: #111827 !important;
+    color: #ffffff !important;
+  }
+
+  /* In Horizontal mode, sidebar drawer and overlay are strictly disabled */
+  .cfp-horizontal-layout #cfp-sidebar,
+  .cfp-horizontal-layout #cfp-overlay,
+  .cfp-horizontal-layout .cfp-sidebar.cfp-sidebar--open,
+  .cfp-horizontal-layout .cfp-overlay.cfp-overlay--visible {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: none !important;
+  }
 }
 
 /* Keep inline filter layers above cards but below theme headers and mega menus.
@@ -2076,15 +2222,7 @@ facet-filters-form,
   z-index: 3;
   background: var(--cfp-bg);
 }
-@media (min-width: 769px) {
-  .cfp-horizontal-layout #cfp-sidebar.cfp-sidebar {
-    position: sticky !important;
-    top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px)) !important;
-    z-index: 2 !important;
-    background: var(--cfp-bg) !important;
-  }
-  .cfp-horizontal-layout #cfp-sidebar .cfp-sidebar__footer { display: none !important; }
-}
+
 
 /* Inline mobile layouts must override the shared drawer rules. */
 @media (max-width: 768px) {

@@ -281,7 +281,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     syncSortControls();
 
     if (triggerBtn) {
-      triggerBtn.addEventListener('click', openSidebar);
+      triggerBtn.addEventListener('click', handleTriggerClick);
     }
 
     setupStaticEventListeners();
@@ -694,15 +694,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const container = document.body;
     if (!container) return;
     const mobile = window.matchMedia('(max-width: 768px)').matches;
+    const isHorizontal = isHorizontalFilterLayout();
     const wasInline = mobile
       ? container.classList.contains('cfp-mobile-horizontal-scrolling') || container.classList.contains('cfp-desktop-like-mobile')
       : container.classList.contains('cfp-horizontal-layout');
-    container.classList.toggle('cfp-horizontal-layout', !!settings.horizontalFilters);
+    container.classList.toggle('cfp-horizontal-layout', isHorizontal);
     container.classList.toggle('cfp-dark-mode', !!settings.darkMode);
     const horizontalMobile = String(settings.mobileFilterLayout || '').toLowerCase().replace(/[_ ]/g, '-') === 'horizontal-scrolling';
-    const useHorizontal = !!settings.horizontalFilters || (horizontalMobile && !settings.desktopLikeOnMobile);
-    container.classList.toggle('cfp-mobile-horizontal-scrolling', useHorizontal);
-    container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile && !useHorizontal);
+    const useHorizontalMobile = isHorizontal || (horizontalMobile && !settings.desktopLikeOnMobile);
+    container.classList.toggle('cfp-mobile-horizontal-scrolling', useHorizontalMobile);
+    container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile && !useHorizontalMobile);
+
+    const triggerLabel = triggerBtn ? triggerBtn.querySelector('.cfp-drawer-btn-label') : null;
+    if (triggerLabel) {
+      triggerLabel.textContent = isHorizontal ? 'MORE' : 'Filters';
+    }
+
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) closeSidebar();
     updateStickyFilterOffsets();
   }
@@ -1517,6 +1524,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
 
     let html = '';
+    let horizontalPills = [];
 
     settings.forEach((setting, index) => {
       if (!setting.isEnabled) return;
@@ -2048,6 +2056,36 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           </div>
         </div>
       `;
+
+      const hPopoverId = `cfp-h-pop-${setting.id || index}-${type}-${key || ''}`;
+      let activeCount = 0;
+      if (type === 'price') {
+        if (activeFilters.priceRanges.length > 0 || activeFilters.minPrice > 0 || (activeFilters.maxPrice < 999999 && activeFilters.maxPrice > 0)) activeCount = 1;
+      } else if (type === 'availability') {
+        activeCount = activeFilters.availability.length;
+      } else if (Array.isArray(activeArray)) {
+        activeCount = activeArray.length;
+      }
+      const hasActivePillSelections = activeCount > 0;
+
+      horizontalPills.push(`
+        <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}">
+          <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
+            <span>${setting.label}</span>
+            ${hasActivePillSelections ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
+            <svg class="cfp-pill-chevron" viewBox="0 0 20 20" width="12" height="12"><path d="M5 8l5 5 5-5z"/></svg>
+          </button>
+          <div class="cfp-horizontal-pill__popover" id="${hPopoverId}">
+            <div class="cfp-horizontal-pill__popover-header">
+              <span class="cfp-horizontal-pill__popover-title">${setting.label}</span>
+              ${hasActivePillSelections ? `<button type="button" class="cfp-clear-group cfp-horizontal-pill__popover-clear" data-type="${type}" data-key="${key || ''}">Clear</button>` : ''}
+            </div>
+            <div class="cfp-horizontal-pill__popover-body">
+              ${groupContent}
+            </div>
+          </div>
+        </div>
+      `);
     });
 
 
@@ -2058,6 +2096,72 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       body.innerHTML = html;
     }
     body.scrollTop = scrollTop;
+
+    const horizontalContainer = document.getElementById('cfp-horizontal-filters');
+    const extraContainer = document.getElementById('cfp-horizontal-extra-filters');
+
+    if (horizontalContainer) {
+      if (isHorizontalFilterLayout()) {
+        horizontalContainer.innerHTML = horizontalPills.join('');
+        horizontalContainer.style.display = 'flex';
+        if (extraContainer) {
+          extraContainer.innerHTML = '';
+        }
+
+        const topBar = document.getElementById('cfp-top-bar');
+        const sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
+        const topBarWidth = topBar ? (topBar.getBoundingClientRect().width || window.innerWidth) : window.innerWidth;
+        const sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
+        const maxPrimaryWidth = Math.max(160, topBarWidth - sortWidth - 124);
+
+        const pillElements = Array.from(horizontalContainer.querySelectorAll('.cfp-horizontal-pill'));
+        let currentWidth = 0;
+        const extraPillElements = [];
+
+        pillElements.forEach((pill, idx) => {
+          const pillWidth = pill.getBoundingClientRect().width || 110;
+          if (idx === 0 || (currentWidth + pillWidth + 8 <= maxPrimaryWidth)) {
+            currentWidth += pillWidth + 8;
+          } else {
+            extraPillElements.push(pill);
+          }
+        });
+
+        if (extraContainer && extraPillElements.length > 0) {
+          extraPillElements.forEach(pill => extraContainer.appendChild(pill));
+          extraContainer.style.display = extraContainer.classList.contains('is-expanded') ? 'flex' : 'none';
+        }
+
+        if (triggerBtn) {
+          if (extraPillElements.length > 0) {
+            triggerBtn.style.display = 'inline-flex';
+            const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
+            if (triggerLabel) {
+              triggerLabel.textContent = extraContainer?.classList.contains('is-expanded') ? 'LESS' : 'MORE';
+            }
+          } else {
+            triggerBtn.style.display = 'none';
+            if (extraContainer) {
+              extraContainer.style.display = 'none';
+              extraContainer.classList.remove('is-expanded');
+            }
+          }
+        }
+      } else {
+        horizontalContainer.innerHTML = '';
+        horizontalContainer.style.display = 'none';
+        if (extraContainer) {
+          extraContainer.innerHTML = '';
+          extraContainer.style.display = 'none';
+          extraContainer.classList.remove('is-expanded');
+        }
+        if (triggerBtn) {
+          triggerBtn.style.display = 'inline-flex';
+          const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
+          if (triggerLabel) triggerLabel.textContent = 'Filters';
+        }
+      }
+    }
 
     // Restore inner scroll areas
     body.querySelectorAll('.cfp-scroll-area').forEach(el => {
@@ -2102,13 +2206,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
     if (topBar && typeof ResizeObserver !== 'undefined') new ResizeObserver(scheduleStickyOffsets).observe(topBar);
     document.body.addEventListener('click', event => {
-      if (isHorizontalFilterLayout() && !event.target.closest('#cfp-sidebar .cfp-group')) closeHorizontalFilterGroups();
+      if (!event.target.closest('.cfp-horizontal-pill')) {
+        document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
+          p.classList.remove('is-open');
+          const pBtn = p.parentElement ? p.parentElement.querySelector('.cfp-horizontal-pill__btn') : null;
+          if (pBtn) pBtn.setAttribute('aria-expanded', 'false');
+        });
+      }
+      if (isHorizontalFilterLayout() && !event.target.closest('#cfp-sidebar .cfp-group, .cfp-horizontal-pill')) closeHorizontalFilterGroups();
     });
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && isHorizontalFilterLayout()) {
-        const openToggle = sidebar?.querySelector('.cfp-group__toggle[aria-expanded="true"]');
-        closeHorizontalFilterGroups();
-        openToggle?.focus();
+      if (event.key === 'Escape') {
+        document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
+          p.classList.remove('is-open');
+          const pBtn = p.parentElement ? p.parentElement.querySelector('.cfp-horizontal-pill__btn') : null;
+          if (pBtn) pBtn.setAttribute('aria-expanded', 'false');
+        });
+        if (isHorizontalFilterLayout()) {
+          const openToggle = sidebar?.querySelector('.cfp-group__toggle[aria-expanded="true"]');
+          closeHorizontalFilterGroups();
+          openToggle?.focus();
+        }
       }
     });
     window.matchMedia('(min-width: 769px)').addEventListener('change', () => {
@@ -2116,10 +2234,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     });
     document.body.addEventListener('click', function(e) {
       if (e.target.closest('#cfp-drawer-trigger-btn')) {
-        openSidebar();
+        handleTriggerClick(e);
       }
     });
-    if (triggerBtn) triggerBtn.addEventListener('click', openSidebar);
     if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
     if (overlay) overlay.addEventListener('click', closeSidebar);
 
@@ -2216,14 +2333,46 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
       });
     });
+
+    const hContainers = [
+      document.getElementById('cfp-horizontal-filters'),
+      document.getElementById('cfp-horizontal-extra-filters')
+    ].filter(Boolean);
+
+    hContainers.forEach(hContainer => {
+      hContainer.querySelectorAll('.cfp-horizontal-pill__btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const popover = btn.nextElementSibling;
+          const wasOpen = popover ? popover.classList.contains('is-open') : false;
+          document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
+            p.classList.remove('is-open');
+            const pBtn = p.parentElement ? p.parentElement.querySelector('.cfp-horizontal-pill__btn') : null;
+            if (pBtn) pBtn.setAttribute('aria-expanded', 'false');
+          });
+          if (!wasOpen && popover) {
+            popover.classList.add('is-open');
+            btn.setAttribute('aria-expanded', 'true');
+          }
+        };
+      });
+    });
   }
 
   function setupDynamicFieldListeners() {
+    const filterRoots = [
+      sidebar ? sidebar.querySelector('.cfp-sidebar__body') || sidebar : null,
+      document.getElementById('cfp-horizontal-filters'),
+      document.getElementById('cfp-horizontal-extra-filters')
+    ].filter(Boolean);
+
     // Search input for all filter types
-    sidebar.querySelectorAll('.cfp-search-input').forEach(searchInput => {
-      searchInput.addEventListener('input', () => {
-        const q = searchInput.value.toLowerCase().trim();
-        const wrapper = searchInput.closest('.cfp-group');
+    filterRoots.forEach(root => {
+      root.querySelectorAll('.cfp-search-input').forEach(searchInput => {
+        searchInput.addEventListener('input', () => {
+          const q = searchInput.value.toLowerCase().trim();
+          const wrapper = searchInput.closest('.cfp-group, .cfp-horizontal-pill');
+          if (!wrapper) return;
 
         let visibleCount = 0;
 
@@ -2365,21 +2514,25 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }, 300);
       });
     });
+  });
 
     // View more toggle
-    sidebar.querySelectorAll('.cfp-view-more-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const wrapper = btn.closest('.cfp-group__content');
-        const hiddenItems = wrapper.querySelectorAll('.cfp-view-more-hidden');
-        const isExpanded = btn.textContent.includes('less');
+    filterRoots.forEach(root => {
+      root.querySelectorAll('.cfp-view-more-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const wrapper = btn.closest('.cfp-group__content, .cfp-horizontal-pill__popover-body');
+          if (!wrapper) return;
+          const hiddenItems = wrapper.querySelectorAll('.cfp-view-more-hidden');
+          const isExpanded = btn.textContent.includes('less');
 
-        if (isExpanded) {
-          hiddenItems.forEach(el => el.style.display = 'none');
-          btn.textContent = '+ View more';
-        } else {
-          hiddenItems.forEach(el => el.style.display = '');
-          btn.textContent = '- View less';
-        }
+          if (isExpanded) {
+            hiddenItems.forEach(el => el.style.display = 'none');
+            btn.textContent = '+ View more';
+          } else {
+            hiddenItems.forEach(el => el.style.display = '');
+            btn.textContent = '- View less';
+          }
+        });
       });
     });
 
@@ -2485,123 +2638,124 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       });
     }
 
-    // Dropdowns change listeners
-    sidebar.querySelectorAll('.cfp-sidebar__body select.cfp-select').forEach(select => {
-      select.addEventListener('change', () => {
-        const name = select.name;
-        const val = select.value;
+    // Dropdowns and checkboxes change listeners
+    filterRoots.forEach(root => {
+      root.querySelectorAll('select.cfp-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const name = select.name;
+          const val = select.value;
 
-        activeFilters.page = 1;
+          activeFilters.page = 1;
 
-        let arr = [];
-        if (name === 'availability') arr = activeFilters.availability;
-        else if (name === 'vendor') arr = activeFilters.vendors;
-        else if (name === 'product_type') arr = activeFilters.types;
-        else if (name === 'collection') arr = activeFilters.collections;
-        else if (name === 'tag' || name === 'tags') arr = activeFilters.tags;
-        else if (name === 'title') arr = activeFilters.titles;
-        else if (name.startsWith('option-')) {
-          const optionName = name.replace('option-', '');
-          if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
-          arr = activeFilters.options[optionName];
-        } else if (name.startsWith('metafield-')) {
-          const metafieldKey = name.replace('metafield-', '');
-          if (!activeFilters.metafields[metafieldKey]) activeFilters.metafields[metafieldKey] = [];
-          arr = activeFilters.metafields[metafieldKey];
-        }
-
-        // Clear existing selections for this dropdown and set the new one
-        arr.length = 0;
-        if (val) arr.push(val);
-
-        renderBreadcrumbs();
-        fetchAndRenderData();
-      });
-    });
-
-    // Checkboxes change listeners
-    sidebar.querySelectorAll('.cfp-sidebar__body input[type="checkbox"]').forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-        const name = checkbox.name;
-        const val = checkbox.value;
-        const checked = checkbox.checked;
-
-        const groupEl = checkbox.closest('.cfp-group');
-        const isMultiple = groupEl ? groupEl.getAttribute('data-multiple') === 'true' : true;
-
-        if (!isMultiple && checked) {
-          groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-            if (cb !== checkbox) {
-              cb.checked = false;
-              const cbVal = cb.value;
-              if (name === 'availability') updateFilterArray(activeFilters.availability, cbVal, false);
-              else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
-              else if (name === 'product_type') updateFilterArray(activeFilters.types, cbVal, false);
-              else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
-              else if (name === 'tag' || name === 'tags') {
-                updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
-                updateFilterArray(activeFilters.tags, cbVal, false);
-              }
-              else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
-              else if (name === 'title') updateFilterArray(activeFilters.titles, cbVal, false);
-              else if (name.startsWith('option-')) {
-                const optionName = name.replace('option-', '');
-                if (activeFilters.options[optionName]) updateFilterArray(activeFilters.options[optionName], cbVal, false);
-              }
-              else if (name.startsWith('metafield-')) {
-                const metafieldKey = name.replace('metafield-', '');
-                if (activeFilters.metafields[metafieldKey]) updateFilterArray(activeFilters.metafields[metafieldKey], cbVal, false);
-              }
-            }
-          });
-        }
-
-        activeFilters.page = 1;
-
-        if (name === 'availability') {
-          updateFilterArray(activeFilters.availability, val, checked);
-        } else if (name === 'vendor') {
-          updateFilterArray(activeFilters.vendors, val, checked);
-        } else if (name === 'product_type') {
-          updateFilterArray(activeFilters.types, val, checked);
-        } else if (name === 'collection') {
-          updateFilterArray(activeFilters.collections, val, checked);
-        } else if (name === 'tag' || name === 'tags') {
-          updateFilterArray(activeFilters.tags, getCleanLabel('tag', val).cleanVal, false);
-          updateFilterArray(activeFilters.tags, val, checked);
-        } else if (name === 'price') {
-          updateFilterArray(activeFilters.priceRanges, val, checked);
-          if (activeFilters.priceRanges.length > 0) {
-            let globalMin = Infinity;
-            let globalMax = 0;
-            activeFilters.priceRanges.forEach(r => {
-              const parts = r.split('-');
-              const minVal = parseFloat(parts[0]) || 0;
-              const maxVal = (parts[1] === "" || parts[1] === "Infinity" || parts[1] === "null" || parts[1] === "undefined") ? 999999 : parseFloat(parts[1]);
-              if (minVal < globalMin) globalMin = minVal;
-              if (maxVal > globalMax) globalMax = maxVal;
-            });
-            activeFilters.minPrice = globalMin;
-            activeFilters.maxPrice = globalMax;
-          } else {
-            activeFilters.minPrice = 0;
-            activeFilters.maxPrice = 999999;
+          let arr = [];
+          if (name === 'availability') arr = activeFilters.availability;
+          else if (name === 'vendor') arr = activeFilters.vendors;
+          else if (name === 'product_type') arr = activeFilters.types;
+          else if (name === 'collection') arr = activeFilters.collections;
+          else if (name === 'tag' || name === 'tags') arr = activeFilters.tags;
+          else if (name === 'title') arr = activeFilters.titles;
+          else if (name.startsWith('option-')) {
+            const optionName = name.replace('option-', '');
+            if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
+            arr = activeFilters.options[optionName];
+          } else if (name.startsWith('metafield-')) {
+            const metafieldKey = name.replace('metafield-', '');
+            if (!activeFilters.metafields[metafieldKey]) activeFilters.metafields[metafieldKey] = [];
+            arr = activeFilters.metafields[metafieldKey];
           }
-        } else if (name === 'title') {
-          updateFilterArray(activeFilters.titles, val, checked);
-        } else if (name.startsWith('option-')) {
-          const optionName = name.replace('option-', '');
-          if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
-          updateFilterArray(activeFilters.options[optionName], val, checked);
-        } else if (name.startsWith('metafield-')) {
-          const metafieldKey = name.replace('metafield-', '');
-          if (!activeFilters.metafields[metafieldKey]) activeFilters.metafields[metafieldKey] = [];
-          updateFilterArray(activeFilters.metafields[metafieldKey], val, checked);
-        }
 
-        // Fetch storefront updates in real-time (instant changes on desktop)
-        renderBreadcrumbs();
-        fetchAndRenderData();
+          // Clear existing selections for this dropdown and set the new one
+          arr.length = 0;
+          if (val) arr.push(val);
+
+          renderBreadcrumbs();
+          fetchAndRenderData();
+        });
+      });
+
+      root.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+          const name = checkbox.name;
+          const val = checkbox.value;
+          const checked = checkbox.checked;
+
+          const groupEl = checkbox.closest('.cfp-group, .cfp-horizontal-pill');
+          const isMultiple = groupEl ? groupEl.getAttribute('data-multiple') === 'true' : true;
+
+          if (!isMultiple && checked) {
+            groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+              if (cb !== checkbox) {
+                cb.checked = false;
+                const cbVal = cb.value;
+                if (name === 'availability') updateFilterArray(activeFilters.availability, cbVal, false);
+                else if (name === 'vendor') updateFilterArray(activeFilters.vendors, cbVal, false);
+                else if (name === 'product_type') updateFilterArray(activeFilters.types, cbVal, false);
+                else if (name === 'collection') updateFilterArray(activeFilters.collections, cbVal, false);
+                else if (name === 'tag' || name === 'tags') {
+                  updateFilterArray(activeFilters.tags, getCleanLabel('tag', cbVal).cleanVal, false);
+                  updateFilterArray(activeFilters.tags, cbVal, false);
+                }
+                else if (name === 'price') updateFilterArray(activeFilters.priceRanges, cbVal, false);
+                else if (name === 'title') updateFilterArray(activeFilters.titles, cbVal, false);
+                else if (name.startsWith('option-')) {
+                  const optionName = name.replace('option-', '');
+                  if (activeFilters.options[optionName]) updateFilterArray(activeFilters.options[optionName], cbVal, false);
+                }
+                else if (name.startsWith('metafield-')) {
+                  const metafieldKey = name.replace('metafield-', '');
+                  if (activeFilters.metafields[metafieldKey]) updateFilterArray(activeFilters.metafields[metafieldKey], cbVal, false);
+                }
+              }
+            });
+          }
+
+          activeFilters.page = 1;
+
+          if (name === 'availability') {
+            updateFilterArray(activeFilters.availability, val, checked);
+          } else if (name === 'vendor') {
+            updateFilterArray(activeFilters.vendors, val, checked);
+          } else if (name === 'product_type') {
+            updateFilterArray(activeFilters.types, val, checked);
+          } else if (name === 'collection') {
+            updateFilterArray(activeFilters.collections, val, checked);
+          } else if (name === 'tag' || name === 'tags') {
+            updateFilterArray(activeFilters.tags, getCleanLabel('tag', val).cleanVal, false);
+            updateFilterArray(activeFilters.tags, val, checked);
+          } else if (name === 'price') {
+            updateFilterArray(activeFilters.priceRanges, val, checked);
+            if (activeFilters.priceRanges.length > 0) {
+              let globalMin = Infinity;
+              let globalMax = 0;
+              activeFilters.priceRanges.forEach(r => {
+                const parts = r.split('-');
+                const minVal = parseFloat(parts[0]) || 0;
+                const maxVal = (parts[1] === "" || parts[1] === "Infinity" || parts[1] === "null" || parts[1] === "undefined") ? 999999 : parseFloat(parts[1]);
+                if (minVal < globalMin) globalMin = minVal;
+                if (maxVal > globalMax) globalMax = maxVal;
+              });
+              activeFilters.minPrice = globalMin;
+              activeFilters.maxPrice = globalMax;
+            } else {
+              activeFilters.minPrice = 0;
+              activeFilters.maxPrice = 999999;
+            }
+          } else if (name === 'title') {
+            updateFilterArray(activeFilters.titles, val, checked);
+          } else if (name.startsWith('option-')) {
+            const optionName = name.replace('option-', '');
+            if (!activeFilters.options[optionName]) activeFilters.options[optionName] = [];
+            updateFilterArray(activeFilters.options[optionName], val, checked);
+          } else if (name.startsWith('metafield-')) {
+            const metafieldKey = name.replace('metafield-', '');
+            if (!activeFilters.metafields[metafieldKey]) activeFilters.metafields[metafieldKey] = [];
+            updateFilterArray(activeFilters.metafields[metafieldKey], val, checked);
+          }
+
+          // Fetch storefront updates in real-time (instant changes on desktop)
+          renderBreadcrumbs();
+          fetchAndRenderData();
+        });
       });
     });
   }
@@ -2822,12 +2976,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function isHorizontalFilterLayout() {
+    const blockSetting = window.collectionFilterProSettings?.filter_layout;
+    if (blockSetting === 'drawer') return false;
+    if (blockSetting === 'horizontal') return true;
+    if (sidebar?.dataset?.templateName === 'search' || window.location.pathname.includes('/search')) return true;
     if (window.matchMedia('(min-width: 769px)').matches) return !!globalSettings.horizontalFilters;
     return !!globalSettings.horizontalFilters || (!globalSettings.desktopLikeOnMobile &&
       String(globalSettings.mobileFilterLayout || '').replace(/[_ ]/g, '-') === 'horizontal-scrolling');
   }
 
   function closeHorizontalFilterGroups() {
+    document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
+      p.classList.remove('is-open');
+      const pBtn = p.parentElement ? p.parentElement.querySelector('.cfp-horizontal-pill__btn') : null;
+      if (pBtn) pBtn.setAttribute('aria-expanded', 'false');
+    });
     if (!sidebar) return;
     sidebar.querySelectorAll('.cfp-group__toggle[aria-expanded="true"]').forEach(toggle => {
       const contentId = toggle.getAttribute('aria-controls');
@@ -2837,9 +3000,42 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     });
   }
 
+  function handleTriggerClick(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (isHorizontalFilterLayout()) {
+      let extraContainer = document.getElementById('cfp-horizontal-extra-filters');
+      if (!extraContainer) {
+        extraContainer = document.createElement('div');
+        extraContainer.id = 'cfp-horizontal-extra-filters';
+        extraContainer.className = 'cfp-horizontal-extra-filters';
+        const topBar = document.getElementById('cfp-top-bar');
+        if (topBar) topBar.appendChild(extraContainer);
+      }
+      const isExpanded = extraContainer.classList.toggle('is-expanded');
+      extraContainer.style.display = isExpanded ? 'flex' : 'none';
+      const triggerLabel = triggerBtn ? triggerBtn.querySelector('.cfp-drawer-btn-label') : null;
+      if (triggerLabel) {
+        triggerLabel.textContent = isExpanded ? 'LESS' : 'MORE';
+      }
+      if (triggerBtn) {
+        triggerBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+      }
+      if (sidebar) {
+        sidebar.classList.remove('cfp-sidebar--open');
+        sidebar.setAttribute('aria-hidden', 'true');
+      }
+      if (overlay) overlay.classList.remove('cfp-overlay--visible');
+      document.body.style.overflow = '';
+      return;
+    }
+    openSidebar();
+  }
+
   function openSidebar() {
     if (!sidebar) return;
-    if (isInlineFilterLayout()) return;
     sidebar.classList.add('cfp-sidebar--open');
     if (overlay) overlay.classList.add('cfp-overlay--visible');
     sidebar.removeAttribute('aria-hidden');
@@ -2856,16 +3052,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
-    if (isInlineFilterLayout()) {
-      sidebar.removeAttribute('aria-hidden');
-      closeHorizontalFilterGroups();
-    }
-    else sidebar.setAttribute('aria-hidden', 'true');
+    sidebar.setAttribute('aria-hidden', 'true');
+    closeHorizontalFilterGroups();
     if (triggerBtn) {
       triggerBtn.setAttribute('aria-expanded', 'false');
-      if (!isInlineFilterLayout()) {
-        try { triggerBtn.focus(); } catch(e) {}
-      }
+      try { triggerBtn.focus(); } catch(e) {}
     }
     document.body.style.overflow = '';
   }

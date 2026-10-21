@@ -2,6 +2,7 @@
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
       full_width: block.settings.full_width,
+      filter_layout: block.settings.filter_layout,
       show_price_filter: block.settings.show_price_filter,
       show_brand_filter: block.settings.show_brand_filter,
       show_color_filter: block.settings.show_color_filter,
@@ -34,6 +35,17 @@
   "target": "section",
   "templates": ["search"],
   "settings": [
+    {
+      "type": "select",
+      "id": "filter_layout",
+      "label": "Filter Layout",
+      "options": [
+        { "value": "default", "label": "Use App Settings" },
+        { "value": "horizontal", "label": "Horizontal Toolbar (with MORE button)" },
+        { "value": "drawer", "label": "Drawer (Off-Canvas)" }
+      ],
+      "default": "horizontal"
+    },
     {
       "type": "checkbox",
       "id": "full_width",
@@ -76,7 +88,10 @@
       "options": [
         { "value": "left", "label": "Left" },
         { "value": "center", "label": "Center" },
-        { "value": "right", "label": "Right" }
+        { "value": "right", "label
+        
+        ": "Right" }
+        
       ],
       "default": "left"
     },

@@ -18,6 +18,7 @@
   window.cfpCurrencyCode = "{{ cart.currency.iso_code }}";
 
   window.collectionFilterProSettings = {
+    filter_layout: {{ filter_layout | default: 'default' | json }},
     show_price_filter: {{ show_price_filter | default: true | json }},
     show_brand_filter: {{ show_brand_filter | default: true | json }},
     show_color_filter: {{ show_color_filter | default: true | json }},
@@ -333,42 +334,176 @@
 
 <!-- Top Bar (Injected above products) -->
 <div id="cfp-top-bar" class="cfp-top-bar" style="display:none;">
-  <div class="cfp-top-bar__left">
-    <button id="cfp-drawer-trigger-btn" class="cfp-drawer-trigger-btn" aria-label="Open filters" aria-expanded="false" aria-controls="cfp-sidebar">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="21" y1="6" x2="14" y2="6"></line>
-        <line x1="10" y1="6" x2="3" y2="6"></line>
-        <line x1="21" y1="12" x2="12" y2="12"></line>
-        <line x1="8" y1="12" x2="3" y2="12"></line>
-        <line x1="21" y1="18" x2="16" y2="18"></line>
-        <line x1="12" y1="18" x2="3" y2="18"></line>
-        <circle cx="12" cy="6" r="2"></circle>
-        <circle cx="10" cy="12" r="2"></circle>
-        <circle cx="14" cy="18" r="2"></circle>
-      </svg>
-      <span>Filters</span>
-      <span class="cfp-active-badge" id="cfp-active-count" style="display:none;">0</span>
-    </button>
-  </div>
-  <div class="cfp-top-bar__right">
-    <div class="cfp-custom-sort" id="cfp-custom-sort">
-      <div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger">
-        <span id="cfp-custom-sort-label">{% if template.name == 'search' %}Relevance{% else %}Best selling{% endif %}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </div>
-      <div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown">
-        {% if template.name == 'search' %}
-        <div class="cfp-custom-sort__option" data-value="relevance">Relevance</div>
-        {% endif %}
-        <div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div>
-        <div class="cfp-custom-sort__option" data-value="trending">Trending</div>
-        <div class="cfp-custom-sort__option" data-value="price-ascending">Price: Low to High</div>
-        <div class="cfp-custom-sort__option" data-value="price-descending">Price: High to Low</div>
-        <div class="cfp-custom-sort__option" data-value="created-descending">Date: New to Old</div>
+  <div class="cfp-top-bar__main">
+    <div class="cfp-top-bar__left">
+      <div id="cfp-horizontal-filters" class="cfp-horizontal-filters" style="display:none;"></div>
+      <button id="cfp-drawer-trigger-btn" class="cfp-drawer-trigger-btn" aria-label="Open filters" aria-expanded="false" aria-controls="cfp-sidebar">
+        <span class="cfp-drawer-btn-label">Filters</span>
+        <svg class="cfp-filter-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="4" y1="21" x2="4" y2="14"></line>
+          <line x1="4" y1="10" x2="4" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12" y2="3"></line>
+          <line x1="20" y1="21" x2="20" y2="16"></line>
+          <line x1="20" y1="12" x2="20" y2="3"></line>
+          <line x1="1" y1="14" x2="7" y2="14"></line>
+          <line x1="9" y1="8" x2="15" y2="8"></line>
+          <line x1="17" y1="16" x2="23" y2="16"></line>
+        </svg>
+        <span class="cfp-active-badge" id="cfp-active-count" style="display:none;">0</span>
+      </button>
+    </div>
+    <div class="cfp-top-bar__right">
+      <div class="cfp-custom-sort" id="cfp-custom-sort">
+        <div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger">
+          <span id="cfp-custom-sort-label">{% if template.name == 'search' %}Relevance{% else %}Best selling{% endif %}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown">
+          {% if template.name == 'search' %}
+          <div class="cfp-custom-sort__option" data-value="relevance">Relevance</div>
+          {% endif %}
+          <div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div>
+          <div class="cfp-custom-sort__option" data-value="trending">Trending</div>
+          <div class="cfp-custom-sort__option" data-value="price-ascending">Price: Low to High</div>
+          <div class="cfp-custom-sort__option" data-value="price-descending">Price: High to Low</div>
+          <div class="cfp-custom-sort__option" data-value="created-descending">Date: New to Old</div>
+        </div>
       </div>
     </div>
   </div>
+  <div id="cfp-horizontal-extra-filters" class="cfp-horizontal-extra-filters" style="display:none;"></div>
 </div>
+
+<script>
+(function() {
+  var isSyncing = false;
+  function syncPillsLayout() {
+    if (isSyncing) return;
+    var isHorizontal = window.collectionFilterProSettings?.filter_layout !== 'drawer';
+    if (!isHorizontal) return;
+
+    var topBar = document.getElementById('cfp-top-bar');
+    var hFilters = document.getElementById('cfp-horizontal-filters');
+    var extra = document.getElementById('cfp-horizontal-extra-filters');
+    var triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
+    var sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
+    if (!topBar || !hFilters || !extra) return;
+
+    var allPills = Array.from(topBar.querySelectorAll('.cfp-horizontal-pill'));
+    if (allPills.length === 0) return;
+
+    isSyncing = true;
+    try {
+      // Temporarily move all pills to hFilters to measure natural widths
+      allPills.forEach(function(pill) {
+        hFilters.appendChild(pill);
+      });
+
+      var topBarWidth = topBar.getBoundingClientRect().width || window.innerWidth;
+      var sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
+      // Reserve space for MORE button (~100px) and gaps (~24px)
+      var maxPrimaryWidth = Math.max(160, topBarWidth - sortWidth - 124);
+
+      var currentWidth = 0;
+      var primaryPills = [];
+      var extraPills = [];
+
+      allPills.forEach(function(pill) {
+        var pillWidth = pill.getBoundingClientRect().width || 110;
+        if (primaryPills.length === 0 || (currentWidth + pillWidth + 8 <= maxPrimaryWidth)) {
+          currentWidth += pillWidth + 8;
+          primaryPills.push(pill);
+        } else {
+          extraPills.push(pill);
+        }
+      });
+
+      primaryPills.forEach(function(pill) {
+        hFilters.appendChild(pill);
+      });
+
+      extraPills.forEach(function(pill) {
+        extra.appendChild(pill);
+      });
+
+      if (triggerBtn) {
+        if (extraPills.length > 0) {
+          triggerBtn.style.display = 'inline-flex';
+          var label = triggerBtn.querySelector('.cfp-drawer-btn-label');
+          if (label) {
+            label.textContent = extra.classList.contains('is-expanded') ? 'LESS' : 'MORE';
+          }
+          triggerBtn.setAttribute('aria-expanded', extra.classList.contains('is-expanded') ? 'true' : 'false');
+        } else {
+          triggerBtn.style.display = 'none';
+          extra.style.display = 'none';
+          extra.classList.remove('is-expanded');
+        }
+      }
+
+      if (extra.classList.contains('is-expanded') && extraPills.length > 0) {
+        extra.style.display = 'flex';
+      } else {
+        extra.style.display = 'none';
+      }
+    } finally {
+      isSyncing = false;
+    }
+  }
+
+  var topBar = document.getElementById('cfp-top-bar');
+  if (topBar && window.MutationObserver) {
+    var observer = new MutationObserver(function(mutations) {
+      if (isSyncing) return;
+      var hasNewPills = false;
+      for (var m = 0; m < mutations.length; m++) {
+        if (mutations[m].target && (mutations[m].target.id === 'cfp-horizontal-filters' || mutations[m].target.closest('#cfp-horizontal-filters'))) {
+          hasNewPills = true;
+          break;
+        }
+      }
+      if (hasNewPills) syncPillsLayout();
+    });
+    observer.observe(topBar, { childList: true, subtree: true });
+  }
+
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(syncPillsLayout, 100);
+  });
+
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('#cfp-drawer-trigger-btn');
+    if (!btn) return;
+
+    var isHorizontal = window.collectionFilterProSettings?.filter_layout !== 'drawer';
+    if (!isHorizontal) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    var extra = document.getElementById('cfp-horizontal-extra-filters');
+    if (!extra) return;
+
+    var isExpanded = extra.classList.toggle('is-expanded');
+    extra.style.display = isExpanded ? 'flex' : 'none';
+    var label = btn.querySelector('.cfp-drawer-btn-label');
+    if (label) label.textContent = isExpanded ? 'LESS' : 'MORE';
+    btn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+
+    var sb = document.getElementById('cfp-sidebar');
+    if (sb) {
+      sb.classList.remove('cfp-sidebar--open');
+      sb.setAttribute('aria-hidden', 'true');
+    }
+    var ov = document.getElementById('cfp-overlay');
+    if (ov) ov.classList.remove('cfp-overlay--visible');
+    document.body.style.overflow = '';
+  }, true);
+})();
+</script>
 
 <div id="cfp-breadcrumbs" class="cfp-breadcrumbs" style="display:none; width: 100%; margin-bottom: 20px;"></div>
 
@@ -428,7 +563,7 @@ and complete widget markup so their download cannot block parsing the widget.{%-
 {% if template.name == 'search' %}
 <script src="{{ 'searchSettings.js' | asset_url }}" defer="defer"></script>
 {% endif %}
-<script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" fetchpriority="high" defer="defer"></script>
+<script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}&t={{ 'now' | date: '%s' }}" fetchpriority="high" defer="defer"></script>
 {% if template.name == 'search' %}
   {{ 'searchBanners.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'searchBanners.js' | asset_url }}" defer="defer"></script>
