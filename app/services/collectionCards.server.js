@@ -22,6 +22,7 @@ const store=createCollectionCardStore({redis,readState:createCardStateReader(red
 });
 export const getPreparedCollectionCards=store.get;
 export const beginPreparedCollectionCards=options=>{
+ if(!options.spec)return store.begin(options);
  const canonicalKey=preparationKey(options.spec);
  // A retained older order can keep an existing page usable during a refresh,
  // but must not be promoted to a new long-lived first-page snapshot.

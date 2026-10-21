@@ -434,6 +434,38 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
+  await test('early cards remain visible while the full widget shows skeletons and awaits the stream tail',async()=>{
+    await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,streamDelay:180,assetDelay:1200,apiDelay:0,imageDelay:0,priceDelay:0});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("document.querySelectorAll('.cfp-initial-product').length>0");
+    await wait("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length>0");
+    await delay(200);
+    assert.equal(await evaluate("[...document.querySelectorAll('.cfp-initial-product')].some(card=>card.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))"),true,'Widget skeletons must not remove or hide visible early cards');
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",15000);
+    await wait("!document.querySelector('#cfp-first-row')");
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {visibleDuringSkeletonHandoff:true,finalCards:25,liveTiming:false};
+  });
+  await test('saved cards include collection filters on the next visit without another facet request',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
+    await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,early:true,noMerchandising:true,filterSettings,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await wait("document.querySelector('#cfp-sidebar__filter-groups').textContent.includes('Fixture')");
+    const first=await cards(),baseline=await getState();assert.equal(baseline.facetResponses.length,1);
+    const filters=await evaluate("document.querySelector('#cfp-sidebar__filter-groups').textContent");
+    assert.ok(filters.includes('80'),'Facet counts must cover all products, not the first page: '+filters);
+    await control({facetFailure:true,facetDelay:5000});
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await delay(500);
+    const after=await getState();assert.equal(after.facetResponses.length,baseline.facetResponses.length);
+    assert.equal(after.trace.facetQueries,baseline.trace.facetQueries);assert.deepEqual(await cards(),first);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar__filter-groups').textContent"),filters);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {cards:25,facetCount:80,extraFacetRequests:0,liveTiming:false};
+  });
   await test('published first fifty serve two 25-card pages while ranking and facets are unavailable',async()=>{
     await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await control({invalidate:true,rankingFailure:'throw',facetFailure:true});

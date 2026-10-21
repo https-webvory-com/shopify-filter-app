@@ -613,7 +613,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
-      if(data.cfpCards?.version===1&&!data.cfpCards.published){
+      const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
+      if(data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady){
         sidebar.classList.add('cfp-loading');
         await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }

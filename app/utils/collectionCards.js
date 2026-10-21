@@ -23,9 +23,12 @@ export function collectionCardsPayload(payload){
  const {facets,...rest}=payload;
  // Complete, losslessly encoded configuration travels with cards. Rendering
  // never needs to wait for a separate configuration/facet response.
- return packCollectionResponse({...rest,cfpCards:{version:1}},{profile:'collection-v1'});
+ return packCollectionResponse({...rest,...(payload.cfpCards?.facetsReady===true?{facets}:{}),cfpCards:{version:1,...payload.cfpCards}},{profile:'collection-v1'});
 }
 export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
+ // Card-only routes have not queried collection-wide facets. Only explicitly
+ // saved, complete facets may travel with a ready first page.
+ if(!payload.cfpCards?.published&&payload.cfpCards?.facetsReady!==true){const {facets,...cards}=payload;payload=cards;}
  if(fullCards&&!payload.collectionPinnedPrefix)return {...payload,products:(payload.products||[]).slice(0,limit),cfpCards:{version:1,preview:false,...payload.cfpCards}};
  if(payload.collectionPinnedPrefix?.version===2)return {...payload,products:(payload.products||[]).slice(0,Math.min(25,limit)),cfpCards:{version:1,preview:false,prefix:true,proof:payload.collectionPinnedPrefix}};
  // Only ready cards' image-selection inputs travel initially. Keep variant

@@ -51,7 +51,9 @@
     const dismissSkeleton=()=>{const overlay=document.getElementById('cfp-skeleton-overlay');if(overlay){overlay.classList.add('cfp-skeleton-done');overlay.style.setProperty('display','none','important');}};
     const stop=()=>{observer.disconnect();clearTimeout(timer);controller.signal.removeEventListener('abort',stop);delete controller.cfpPreviewUpdate;grid?.remove();};
     const inspect=()=>{scheduled=false;
-      if(controller.signal.aborted||document.querySelector('#cfp-products-container .cfp-product-card')){stop();return;}
+      // The widget installs skeletons before it can adopt the early response.
+      // Keep actual cards visible until their real replacements are mounted.
+      if(controller.signal.aborted||document.querySelector('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)')){stop();return;}
       const app=document.querySelector('.cfp-v1-app-container');if(!app)return;
       if(!grid){
       grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';

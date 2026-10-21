@@ -11,6 +11,17 @@ export function collectionCardKey(request){
  const url=new URL(request.url);url.searchParams.set('responseProfile','collection-cards-v1');url.searchParams.sort();
  return `collectionFirstPage:${url.searchParams.get('shop')}:${digest(url.pathname+'?'+url.searchParams)}`;
 }
+export function collectionCardSnapshotRequest(request){
+ const url=new URL(request.url);
+ if(new Set(url.searchParams.keys()).size!==[...url.searchParams.keys()].length)return null;
+ if(['collection-v1','collection-v2'].includes(url.searchParams.get('responseProfile'))){
+  // Called only after the canonical route has validated its ranking session.
+  // All customer/filter/page restrictions still pass through the public gate.
+  url.searchParams.delete('rankingToken');url.searchParams.set('responseProfile','collection-cards-v1');
+ }
+ const normalized=new Request(url,{method:request.method});
+ return isPublicCollectionCards(normalized)?normalized:null;
+}
 const retain=`
 local old=redis.call('HGET',KEYS[2],KEYS[3])
 redis.call('SETEX',KEYS[3],ARGV[1],ARGV[2])
@@ -95,29 +106,57 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    // Do not make ready cards wait for optional queue/registry work. Trusted
    // background probes must not masquerade as shopper visits or enqueue loops.
    if(!probe&&onHit)Promise.resolve().then(()=>onHit({request,entry,prepared:afterPrepared,state:after})).catch(()=>{});
-   return collectionCardsResponse({...entry.payload,rankingToken:session.token,debug:{...entry.payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
+   let payload=entry.payload;
+   // Soft updates can retain unchanged cards, but collection-wide counts must
+   // match all saved product epochs, including products outside this page.
+   if(payload.cfpCards?.facetsReady&&entry.state!==stateSignature(after,entry.external)){
+    const {facets,...cards}=payload;payload={...cards,cfpCards:{...cards.cfpCards,facetsReady:false}};
+   }
+   return collectionCardsResponse({...payload,rankingToken:session.token,debug:{...payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
   }catch{return null;}
   };
   try{outcome=await Promise.race([work(),new Promise(resolve=>{timer=setTimeout(()=>{stage='timeout:'+stage;controller.abort();resolve(null);},readBudgetMs);})]);return outcome;}
   finally{clearTimeout(timer);controller.abort();try{observe({event:outcome?'cards-ready':'cards-unavailable',reason:outcome?undefined:stage,shop:new URL(request.url).searchParams.get('shop'),readMs:now()-started});}catch{}}
  }
  async function begin({request,spec,preparedKey,rankingSession,attributes,collectionHandle,startedAt}){
+  request=collectionCardSnapshotRequest(request);if(!request)return null;
+  let retainedEntry;
+  // A token-scoped facet follow-up already has its immutable ranking session.
+  // Upgrade its saved card entry without rebuilding the preparation spec.
+  if(!spec&&rankingSession)try{
+   const shop=new URL(request.url).searchParams.get('shop');
+   let raw=await redis.get(collectionCardKey(request));
+   if(raw?.startsWith('p1:')){
+    const target=raw.slice(3),prefix=`collectionFirstPage:${shop}:`;
+    if(!target.startsWith(prefix)||!/^[a-f0-9]{64}$/.test(target.slice(prefix.length)))return null;
+    raw=await redis.get(target);
+   }
+   if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'cards',key:collectionCardKey(request)});
+   retainedEntry=decodePreparation(raw);
+   if(retainedEntry?.version!==1||retainedEntry.policyVersion!==2||retainedEntry.shop!==shop)return null;
+   spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true};
+   preparedKey=retainedEntry.preparedKey;
+  }catch{return null;}
   const key=collectionCardKey(request),shop=spec?.shop,collectionId=clean(spec?.collectionId);
   if(!key||spec?.retainForIdle!==true||!/^\d+$/.test(collectionId)||!sourceValid(shop,preparedKey))return null;
   try{
-   const external=collectionHasExternalCandidates(spec);
+   const external=retainedEntry?.external??collectionHasExternalCandidates(spec);
    const identity={shop,collectionId,preparedKey,external};
    const before=await readState(identity),prepared=current(before,external);
+   if(retainedEntry&&!compatibleState(retainedEntry,before))return null;
    if(Number.isFinite(before.scheduleChangedAt)&&before.scheduleChangedAt>(startedAt??0))return null;
    if(!prepared||before.configuration!==spec.revision||spec.orderRevision!=null&&before.orderRevision!==spec.orderRevision||sequenceSignature(prepared)!==sequenceSignature({...rankingSession,orderUpdatedAt:rankingSession.updatedAt}))return null;
    const state=stateSignature(before,external),sequence=sequenceSignature(prepared);
-   return {async finish(payload,validationFingerprint,previewValidationFingerprint){
+   return {async finish(payload,validationFingerprint,previewValidationFingerprint,{facetsReady=false}={}){
     const pageSize=Number(new URL(request.url).searchParams.get('limit'));
     if(!validationFingerprint||!Array.isArray(payload.products)||payload.products.length>pageSize||!Array.isArray(attributes))return;
     try{
      const after=await readState(identity),latest=current(after,external);
      if(!latest||stateSignature(after,external)!==state||sequenceSignature(latest)!==sequence)return;
      const {facets,rankingToken,...cards}=payload;
+     if(facetsReady&&facets&&Array.isArray(cards.settings)){
+      cards.facets=facets;cards.cfpCards={version:1,facetsReady:true};
+     }
      const entry={version:1,policyVersion:2,...identity,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;

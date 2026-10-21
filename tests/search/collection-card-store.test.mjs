@@ -1,7 +1,7 @@
 import {createCardStateReader} from '../../app/utils/collectionCardState.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionCardStore,collectionCardKey} from '../../app/utils/collectionCardStore.js';
+import {createCollectionCardStore,collectionCardKey,collectionCardSnapshotRequest} from '../../app/utils/collectionCardStore.js';
 import {encodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 import {isPublicCollectionCards} from '../../app/utils/collectionCards.js';
 import {validateCollectionCardDocuments} from '../../app/utils/collectionCardValidation.js';
@@ -20,6 +20,34 @@ function fixture(options={}){
  const payload={rankingToken:'background-placeholder',products:[{id:'1',variants:[{id:'v1'}],images:['red.jpg']},{id:'2'}],totalCount:2,settings:[],globalSettings:{},mergedValues:[],facets:{tags:[{value:'Heavy facets',count:2}]}};
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
+
+test('canonical facet follow-ups upgrade saved cards so the next visit receives collection-wide filters',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp','head');
+ const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-v1');url.searchParams.set('rankingToken','validated-token');
+ const lease=await f.store.begin({request:new Request(url),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id','shop','status'],collectionHandle:'one'});
+ assert.ok(lease);assert.equal(await lease.finish(f.payload,'fp','head',{facetsReady:true}),true);
+ url.searchParams.delete('rankingToken');url.searchParams.set('responseProfile','collection-preview-v1');
+ const request=new Request(url,{headers:{Accept:'application/x-cfp-pinned-prefix-v3'}});
+ const ready=await(await f.store.get(request)).json();
+ assert.equal(ready.cfpCards.facetsReady,true);assert.deepEqual(ready.facets,f.payload.facets);assert.deepEqual(ready.settings,f.payload.settings);
+ assert.deepEqual(ready.products,f.payload.products);assert.equal(ready.totalCount,2);
+ // A change elsewhere in this collection invalidates counts even while all
+ // first-page cards and the bounded saved ranking remain reusable.
+ f.state.products='changed';
+ const changed=await(await f.store.get(request)).json();
+ assert.equal(changed.cfpCards.facetsReady,false);assert.equal(changed.facets,undefined);assert.deepEqual(changed.products,ready.products);
+});
+
+test('saved-filter upgrades cannot adopt a different sequence, market, configuration or filtered request',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-v1');url.searchParams.set('rankingToken','validated-token');
+ const options={request:new Request(url),rankingSession:{ids:['2','1'],metadata:f.prepared.metadata},attributes:['id']};
+ assert.equal(await f.store.begin(options),null);
+ options.rankingSession={ids:f.prepared.ids,metadata:f.prepared.metadata};
+ const other=new URL(url);other.searchParams.set('country','US');assert.equal(await f.store.begin({...options,request:new Request(other)}),null);
+ f.state.configuration='changed';assert.equal(await f.store.begin(options),null);
+ for(const extra of ['option_Color=Black','customerTags=VIP','page=2','rankingToken=another'])assert.equal(collectionCardSnapshotRequest(new Request(url+'&'+extra)),null,extra);
+});
 
 test('complete paged cards validate and return all 25 cached documents instead of the legacy five-card preview',async()=>{
  const docs=Array.from({length:25},(_,i)=>({id:String(i+1),shop:'fixture.myshopify.com',status:'ACTIVE',title:'Dress '+i,handle:'dress-'+i,variants:[{id:String(i+100),available:true}]}));

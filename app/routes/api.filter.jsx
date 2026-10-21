@@ -847,7 +847,7 @@ export const loader = async ({ request, context }) => {
         {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
         await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
     }
-    if(cardsOnly&&preparedSpec&&!pinnedPrefix&&(limit!==50||context?.rankingCardsPrecompute===true))cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
+    if(rankingSession&&!pinnedPrefix&&(cardsOnly||['collection-v1','collection-v2'].includes(url.searchParams.get('responseProfile')))&&(limit!==50||context?.rankingCardsPrecompute===true))cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
     // Only updated collection clients opt into the lossless transport. Ranking
     // readiness and the immutable browsing session are established before reuse.
@@ -936,7 +936,7 @@ export const loader = async ({ request, context }) => {
         if (useRankedCollectionPagination) {
           collectionRankingStatus = 'ready';
           result = rankedPage;
-          if(cardsOnly){responsePageFingerprint=collectionPageFingerprint(result.hits);responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));}
+          if(cardsOnly||cardSnapshot){responsePageFingerprint=collectionPageFingerprint(result.hits);responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));}
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else {
@@ -1634,9 +1634,10 @@ export const loader = async ({ request, context }) => {
         if(!await rememberCollectionHead(preparedSpec,pinnedPrefixVersion,rankingSession.ids))return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
         responsePayload.collectionPinnedPrefix={version:2,inputVersion:pinnedPrefixVersion};reportCollectionHead(preparedSpec,'proven','explicit-paid-pins');
       }
-      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint);
+      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint,{facetsReady:context?.rankingCardsPrecompute===true&&limit===50});
       return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request,{previewLimit:limit});
     }
+    await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint,{facetsReady:true});
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {
