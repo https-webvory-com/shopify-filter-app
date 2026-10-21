@@ -208,127 +208,94 @@
      */
   </style>
 
-  <div class="cfp-page-header" style="text-align: center; margin: 40px auto; max-width: 600px;">
-    <h1 style="margin-bottom: 20px; font-size: 28px;">Search</h1>
+  {% assign s_heading = search_heading | default: 'Find your perfect dress' %}
+  {% assign s_subheading = search_subheading | default: 'Refine the details. Discover the one.' %}
+  {% assign s_bg = search_header_bg | default: '#FAF7F5' %}
+  {% assign s_text_color = search_header_text_color | default: '#111827' %}
+  {% assign s_popular_enabled = show_popular_searches %}
+  {% if s_popular_enabled == nil %}
+    {% assign s_popular_enabled = true %}
+  {% endif %}
+  {% assign s_popular_label = popular_searches_label | default: 'Popular searches:' %}
+  {% assign s_popular_items = popular_searches_items | default: 'Red dresses, Prom dresses, Wedding guest, Evening gowns' %}
 
-    <style>
-        /* Force thin grey border and override Dawn's thick black borders */
-        .cfp-inline-search-form .field:after,
-        .cfp-inline-search-form .field:before {
-          box-shadow: none !important;
-          border: none !important;
-        }
-        .cfp-inline-search-form .field {
-          border: 1px solid rgba(0, 0, 0, 0.2) !important;
-          border-radius: 4px !important;
-          background: #fff;
-          display: flex !important;
-          align-items: center !important;
-          position: relative;
-          height: 44px;
-          overflow: hidden;
-        }
-        .cfp-inline-search-form .field__input {
-          border: none !important;
-          box-shadow: none !important;
-          outline: none !important;
-          width: 100% !important;
-          height: 100% !important;
-          padding: 0 40px 0 16px !important;
-          margin: 0 !important;
-          font-size: 16px !important;
-          text-align: left !important;
-          background: transparent !important;
-        }
+  <div class="cfp-search-banner-wrapper" style="background-color: {{ s_bg }}; width: 100%; border-radius: 8px; margin: 20px auto 30px; padding: 48px 24px 36px; box-sizing: border-box; text-align: center;">
+    <div class="cfp-search-banner-inner" style="max-width: 680px; margin: 0 auto;">
+      {% if s_heading != blank %}
+        <h1 class="cfp-search-banner__title" style="color: {{ s_text_color }}; font-family: var(--font-heading-family, Georgia, serif); font-size: 38px; font-weight: 400; line-height: 1.25; margin: 0 0 10px; letter-spacing: -0.01em;">
+          {{ s_heading | escape }}
+        </h1>
+      {% endif %}
+      {% if s_subheading != blank %}
+        <p class="cfp-search-banner__subtitle" style="color: {{ s_text_color }}; opacity: 0.75; font-size: 15.5px; margin: 0 0 24px; line-height: 1.4;">
+          {{ s_subheading | escape }}
+        </p>
+      {% endif %}
 
-        /* Hide native WebKit search cancel button */
-        .cfp-inline-search-form .field__input::-webkit-search-decoration,
-        .cfp-inline-search-form .field__input::-webkit-search-cancel-button,
-        .cfp-inline-search-form .field__input::-webkit-search-results-button,
-        .cfp-inline-search-form .field__input::-webkit-search-results-decoration {
-          -webkit-appearance: none !important;
-          appearance: none !important;
-        }
-
-        .cfp-inline-search-form .field__input:focus {
-          box-shadow: none !important;
-          outline: none !important;
-        }
-        .cfp-inline-search-form .field__label {
-          display: none !important; /* Hide floating label, we will use standard placeholder */
-        }
-        .cfp-inline-search-form .field__button {
-          position: absolute;
-          right: 0;
-          top: 0;
-          height: 100%;
-          width: 44px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          color: rgba(0,0,0,0.6);
-        }
-        .cfp-inline-search-form .field__clear-button {
-          position: absolute;
-          right: 44px; /* Before search icon */
-          top: 0;
-          height: 100%;
-          width: 30px;
-          display: none; /* Show only when there is text */
-          align-items: center;
-          justify-content: center;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          color: rgba(0,0,0,0.4);
-        }
-        .cfp-inline-search-form .field__clear-button:hover {
-          color: rgba(0,0,0,0.8);
-        }
-      </style>
-
-      <form action="{{ routes.search_url }}" method="get" class="cfp-inline-search-form" style="margin-bottom: 20px;">
-        <div class="field">
+      <form action="{{ routes.search_url }}" method="get" class="cfp-inline-search-form" style="margin: 0 auto; max-width: 640px;">
+        <div class="field cfp-search-input-field">
+          <button type="submit" class="cfp-search-icon-btn" aria-label="Search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </button>
           <input
-            class="field__input"
+            class="field__input cfp-search-main-input"
             id="Cfp-Search-In-Template"
             type="search"
             name="q"
             value="{{ search.terms | escape }}"
-            placeholder="Search for..."
+            placeholder="Search..."
+            autocomplete="off"
           >
-          <button type="button" class="field__clear-button" id="Cfp-Clear-Search-Btn" aria-label="Clear Search">
+          <button type="button" class="field__clear-button" id="Cfp-Clear-Search-Btn" aria-label="Clear Search" style="display: {% if search.terms != blank %}flex{% else %}none{% endif %};">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-          <button type="submit" class="field__button" aria-label="Search">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </button>
         </div>
       </form>
 
-      <script>
-        document.addEventListener('DOMContentLoaded', function() {
-          var searchInput = document.getElementById('Cfp-Search-In-Template');
-          var clearBtn = document.getElementById('Cfp-Clear-Search-Btn');
-          if (searchInput && clearBtn) {
-            function toggleClearBtn() {
-              clearBtn.style.display = searchInput.value.length > 0 ? 'flex' : 'none';
-            }
-            toggleClearBtn();
-            searchInput.addEventListener('input', toggleClearBtn);
+      {% if s_popular_enabled and s_popular_items != blank %}
+        {% assign items_array = s_popular_items | split: ',' %}
+        <div class="cfp-popular-searches" style="margin-top: 16px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px;">
+          {% if s_popular_label != blank %}
+            <span class="cfp-popular-searches__label" style="font-size: 13px; color: {{ s_text_color }}; opacity: 0.65; margin-right: 4px;">{{ s_popular_label }}</span>
+          {% endif %}
+          {% for item in items_array %}
+            {% assign clean_item = item | strip %}
+            {% if clean_item != blank %}
+              {% assign is_current_term = false %}
+              {% assign search_terms_lower = search.terms | downcase %}
+              {% assign clean_item_lower = clean_item | downcase %}
+              {% if search.terms != blank and search_terms_lower == clean_item_lower %}
+                {% assign is_current_term = true %}
+              {% endif %}
+              <a href="{{ routes.search_url }}?q={{ clean_item | url_encode }}" class="cfp-popular-search-chip{% if is_current_term %} is-active{% endif %}" data-term="{{ clean_item | escape }}">
+                {{ clean_item | escape }}
+              </a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
 
-            clearBtn.addEventListener('click', function() {
-              searchInput.value = '';
-              toggleClearBtn();
-              searchInput.focus();
-              searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var searchInput = document.getElementById('Cfp-Search-In-Template');
+        var clearBtn = document.getElementById('Cfp-Clear-Search-Btn');
+        if (searchInput && clearBtn) {
+          function toggleClearBtn() {
+            clearBtn.style.display = searchInput.value.length > 0 ? 'flex' : 'none';
           }
-        });
-      </script>
+          toggleClearBtn();
+          searchInput.addEventListener('input', toggleClearBtn);
+
+          clearBtn.addEventListener('click', function() {
+            searchInput.value = '';
+            toggleClearBtn();
+            searchInput.focus();
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+          });
+        }
+      });
+    </script>
   </div>
 {% endif %}
 
@@ -378,15 +345,42 @@
 <script>
 (function() {
   var isSyncing = false;
+  function isCurrentHorizontal() {
+    // 1. Mobile is strictly drawer mode
+    if (window.innerWidth <= 768) return false;
+
+    // 2. Admin setting "Horizontal filters" MUST be enabled (toggle ON in app admin)
+    var adminHorizontal = !!(window.cfpGlobalSettings && window.cfpGlobalSettings.horizontalFilters);
+    if (!adminHorizontal) return false;
+
+    // 3. If enabled in Admin, check if merchant explicitly selected 'drawer' in theme editor
+    var block = window.collectionFilterProSettings?.filter_layout;
+    if (block === 'drawer') return false;
+
+    return true;
+  }
+
   function syncPillsLayout() {
     if (isSyncing) return;
-    var isHorizontal = window.collectionFilterProSettings?.filter_layout !== 'drawer';
-    if (!isHorizontal) return;
-
-    var topBar = document.getElementById('cfp-top-bar');
     var hFilters = document.getElementById('cfp-horizontal-filters');
     var extra = document.getElementById('cfp-horizontal-extra-filters');
     var triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
+    var isHorizontal = isCurrentHorizontal();
+
+    if (!isHorizontal) {
+      if (hFilters) { hFilters.innerHTML = ''; hFilters.style.display = 'none'; }
+      if (extra) { extra.innerHTML = ''; extra.style.display = 'none'; extra.classList.remove('is-expanded'); }
+      if (triggerBtn) {
+        triggerBtn.classList.remove('is-hidden');
+        triggerBtn.style.setProperty('display', 'inline-flex', 'important');
+        var l = triggerBtn.querySelector('.cfp-drawer-btn-label');
+        if (l) l.textContent = 'Filters';
+        triggerBtn.setAttribute('aria-expanded', 'false');
+      }
+      return;
+    }
+
+    var topBar = document.getElementById('cfp-top-bar');
     var sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
     if (!topBar || !hFilters || !extra) return;
 
@@ -402,50 +396,72 @@
 
       var topBarWidth = topBar.getBoundingClientRect().width || window.innerWidth;
       var sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
-      // Reserve space for MORE button (~100px) and gaps (~24px)
-      var maxPrimaryWidth = Math.max(160, topBarWidth - sortWidth - 124);
 
-      var currentWidth = 0;
-      var primaryPills = [];
-      var extraPills = [];
+      // Available width for pills when NO MORE button is shown (reserve sort box + 28px gap)
+      var availableWidthNoMore = Math.max(160, topBarWidth - sortWidth - 28);
 
-      allPills.forEach(function(pill) {
-        var pillWidth = pill.getBoundingClientRect().width || 110;
-        if (primaryPills.length === 0 || (currentWidth + pillWidth + 8 <= maxPrimaryWidth)) {
-          currentWidth += pillWidth + 8;
-          primaryPills.push(pill);
-        } else {
-          extraPills.push(pill);
+      var pillWidths = allPills.map(function(pill) {
+        return Math.ceil(pill.getBoundingClientRect().width) || 105;
+      });
+
+      // Total width of all pills combined including 10px gap between each
+      var totalPillsWidth = pillWidths.reduce(function(sum, w, i) {
+        return sum + w + (i > 0 ? 10 : 0);
+      }, 0);
+
+      // CONDITION: If all filters fit in the first row without the MORE button, DO NOT show MORE button!
+      if (totalPillsWidth <= availableWidthNoMore) {
+        // All pills fit in Row 1!
+        extra.innerHTML = '';
+        extra.style.display = 'none';
+        extra.classList.remove('is-expanded');
+
+        if (triggerBtn) {
+          triggerBtn.classList.add('is-hidden');
+          triggerBtn.style.setProperty('display', 'none', 'important');
+          triggerBtn.setAttribute('aria-expanded', 'false');
         }
-      });
+      } else {
+        // Extra filters cannot adjust in Row 1 -> show MORE button and place overflowing filters in Row 2
+        var moreBtnWidth = triggerBtn ? (triggerBtn.getBoundingClientRect().width || 90) : 90;
+        // Available width for pills in Row 1 when MORE button is present (sortWidth + moreBtnWidth + gaps)
+        var availableWidthWithMore = Math.max(120, topBarWidth - sortWidth - moreBtnWidth - 40);
 
-      primaryPills.forEach(function(pill) {
-        hFilters.appendChild(pill);
-      });
+        var currentWidth = 0;
+        var primaryPills = [];
+        var extraPills = [];
 
-      extraPills.forEach(function(pill) {
-        extra.appendChild(pill);
-      });
+        allPills.forEach(function(pill, idx) {
+          var pillWidth = pillWidths[idx];
+          var neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
+          if (primaryPills.length === 0 || neededWidth <= availableWidthWithMore) {
+            currentWidth = neededWidth;
+            primaryPills.push(pill);
+          } else {
+            extraPills.push(pill);
+          }
+        });
 
-      if (triggerBtn) {
-        if (extraPills.length > 0) {
-          triggerBtn.style.display = 'inline-flex';
+        // Ensure primary pills in hFilters, extra in extraContainer
+        primaryPills.forEach(function(pill) { hFilters.appendChild(pill); });
+        extraPills.forEach(function(pill) { extra.appendChild(pill); });
+
+        if (triggerBtn) {
+          triggerBtn.classList.remove('is-hidden');
+          triggerBtn.style.setProperty('display', 'inline-flex', 'important');
+          var isExpanded = extra.classList.contains('is-expanded');
           var label = triggerBtn.querySelector('.cfp-drawer-btn-label');
           if (label) {
-            label.textContent = extra.classList.contains('is-expanded') ? 'LESS' : 'MORE';
+            label.textContent = isExpanded ? 'LESS' : 'MORE';
           }
-          triggerBtn.setAttribute('aria-expanded', extra.classList.contains('is-expanded') ? 'true' : 'false');
-        } else {
-          triggerBtn.style.display = 'none';
-          extra.style.display = 'none';
-          extra.classList.remove('is-expanded');
+          triggerBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
         }
-      }
 
-      if (extra.classList.contains('is-expanded') && extraPills.length > 0) {
-        extra.style.display = 'flex';
-      } else {
-        extra.style.display = 'none';
+        if (extra.classList.contains('is-expanded') && extraPills.length > 0) {
+          extra.style.display = 'flex';
+        } else {
+          extra.style.display = 'none';
+        }
       }
     } finally {
       isSyncing = false;
@@ -464,8 +480,8 @@
     var btn = e.target.closest('#cfp-drawer-trigger-btn');
     if (!btn) return;
 
-    var isHorizontal = window.collectionFilterProSettings?.filter_layout !== 'drawer';
-    if (!isHorizontal) return;
+    var isHorizontal = isCurrentHorizontal();
+    if (!isHorizontal) return; // If mobile or drawer mode, allow normal drawer open
 
     e.preventDefault();
     e.stopImmediatePropagation();

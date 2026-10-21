@@ -698,16 +698,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const wasInline = mobile
       ? container.classList.contains('cfp-mobile-horizontal-scrolling') || container.classList.contains('cfp-desktop-like-mobile')
       : container.classList.contains('cfp-horizontal-layout');
-    container.classList.toggle('cfp-horizontal-layout', isHorizontal);
+    container.classList.toggle('cfp-horizontal-layout', isHorizontal && !mobile);
     container.classList.toggle('cfp-dark-mode', !!settings.darkMode);
-    const horizontalMobile = String(settings.mobileFilterLayout || '').toLowerCase().replace(/[_ ]/g, '-') === 'horizontal-scrolling';
-    const useHorizontalMobile = isHorizontal || (horizontalMobile && !settings.desktopLikeOnMobile);
-    container.classList.toggle('cfp-mobile-horizontal-scrolling', useHorizontalMobile);
-    container.classList.toggle('cfp-desktop-like-mobile', !!settings.desktopLikeOnMobile && !useHorizontalMobile);
+    container.classList.toggle('cfp-mobile-horizontal-scrolling', false);
+    container.classList.toggle('cfp-desktop-like-mobile', false);
 
     const triggerLabel = triggerBtn ? triggerBtn.querySelector('.cfp-drawer-btn-label') : null;
     if (triggerLabel) {
-      triggerLabel.textContent = isHorizontal ? 'MORE' : 'Filters';
+      triggerLabel.textContent = (isHorizontal && !mobile) ? 'MORE' : 'Filters';
     }
 
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) closeSidebar();
@@ -2112,41 +2110,60 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
         const topBarWidth = topBar ? (topBar.getBoundingClientRect().width || window.innerWidth) : window.innerWidth;
         const sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
-        const maxPrimaryWidth = Math.max(160, topBarWidth - sortWidth - 124);
 
         const pillElements = Array.from(horizontalContainer.querySelectorAll('.cfp-horizontal-pill'));
-        let currentWidth = 0;
-        const extraPillElements = [];
+        const availableWidthNoMore = Math.max(160, topBarWidth - sortWidth - 28);
+        const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
+        const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
 
-        pillElements.forEach((pill, idx) => {
-          const pillWidth = pill.getBoundingClientRect().width || 110;
-          if (idx === 0 || (currentWidth + pillWidth + 8 <= maxPrimaryWidth)) {
-            currentWidth += pillWidth + 8;
-          } else {
-            extraPillElements.push(pill);
+        if (totalPillsWidth <= availableWidthNoMore) {
+          // All pills fit in Row 1 without MORE button!
+          if (extraContainer) {
+            extraContainer.innerHTML = '';
+            extraContainer.style.display = 'none';
+            extraContainer.classList.remove('is-expanded');
           }
-        });
+          if (triggerBtn) {
+            triggerBtn.classList.add('is-hidden');
+            triggerBtn.style.setProperty('display', 'none', 'important');
+            triggerBtn.setAttribute('aria-expanded', 'false');
+          }
+        } else {
+          // Extra pills overflow to Row 2
+          const moreBtnWidth = triggerBtn ? (triggerBtn.getBoundingClientRect().width || 90) : 90;
+          const availableWidthWithMore = Math.max(120, topBarWidth - sortWidth - moreBtnWidth - 40);
 
-        if (extraContainer && extraPillElements.length > 0) {
-          extraPillElements.forEach(pill => extraContainer.appendChild(pill));
-          extraContainer.style.display = extraContainer.classList.contains('is-expanded') ? 'flex' : 'none';
-        }
+          let currentWidth = 0;
+          const primaryPills = [];
+          const extraPillElements = [];
 
-        if (triggerBtn) {
-          if (extraPillElements.length > 0) {
-            triggerBtn.style.display = 'inline-flex';
+          pillElements.forEach((pill, idx) => {
+            const pillWidth = pillWidths[idx];
+            const neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
+            if (primaryPills.length === 0 || neededWidth <= availableWidthWithMore) {
+              currentWidth = neededWidth;
+              primaryPills.push(pill);
+            } else {
+              extraPillElements.push(pill);
+            }
+          });
+
+          if (extraContainer && extraPillElements.length > 0) {
+            extraPillElements.forEach(pill => extraContainer.appendChild(pill));
+            extraContainer.style.display = extraContainer.classList.contains('is-expanded') ? 'flex' : 'none';
+          }
+
+          if (triggerBtn) {
+            triggerBtn.classList.remove('is-hidden');
+            triggerBtn.style.setProperty('display', 'inline-flex', 'important');
             const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
             if (triggerLabel) {
               triggerLabel.textContent = extraContainer?.classList.contains('is-expanded') ? 'LESS' : 'MORE';
             }
-          } else {
-            triggerBtn.style.display = 'none';
-            if (extraContainer) {
-              extraContainer.style.display = 'none';
-              extraContainer.classList.remove('is-expanded');
-            }
+            triggerBtn.setAttribute('aria-expanded', extraContainer?.classList.contains('is-expanded') ? 'true' : 'false');
           }
         }
+
         if (typeof window.cfpSyncPillsLayout === 'function') {
           window.cfpSyncPillsLayout();
         }
@@ -2159,9 +2176,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           extraContainer.classList.remove('is-expanded');
         }
         if (triggerBtn) {
-          triggerBtn.style.display = 'inline-flex';
+          triggerBtn.classList.remove('is-hidden');
+          triggerBtn.style.setProperty('display', 'inline-flex', 'important');
           const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
           if (triggerLabel) triggerLabel.textContent = 'Filters';
+          triggerBtn.setAttribute('aria-expanded', 'false');
         }
       }
     }
@@ -2974,19 +2993,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function isInlineFilterLayout() {
-    return isHorizontalFilterLayout() || (window.matchMedia('(max-width: 768px)').matches &&
-      (globalSettings.desktopLikeOnMobile || String(globalSettings.mobileFilterLayout || '').replace(/[_ ]/g, '-') === 'horizontal-scrolling'));
+    return isHorizontalFilterLayout();
   }
 
   function isHorizontalFilterLayout() {
+    // 1. Mobile is strictly drawer mode (never horizontal pills)
+    if (window.matchMedia('(max-width: 768px)').matches) return false;
+
+    // 2. Must be enabled in Admin App settings ("Horizontal filters" toggle ON)
+    const adminHorizontal = !!(globalSettings?.horizontalFilters ?? window.cfpGlobalSettings?.horizontalFilters);
+    if (!adminHorizontal) return false;
+
+    // 3. If enabled in Admin, check if merchant explicitly selected 'drawer' in theme editor
     const blockSetting = window.collectionFilterProSettings?.filter_layout;
     if (blockSetting === 'drawer') return false;
-    if (blockSetting === 'horizontal') return true;
-    if (sidebar?.dataset?.templateName === 'search' || window.location.pathname.includes('/search')) return true;
-    if (window.matchMedia('(min-width: 769px)').matches) return !!globalSettings.horizontalFilters;
-    return !!globalSettings.horizontalFilters || (!globalSettings.desktopLikeOnMobile &&
-      String(globalSettings.mobileFilterLayout || '').replace(/[_ ]/g, '-') === 'horizontal-scrolling');
+
+    return true;
   }
+  window.cfpIsHorizontalFilterLayout = isHorizontalFilterLayout;
 
   function closeHorizontalFilterGroups() {
     document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {

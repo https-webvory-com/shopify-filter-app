@@ -1,6 +1,13 @@
 {% if template.name == 'search' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
+      search_header_bg: block.settings.search_header_bg,
+      search_header_text_color: block.settings.search_header_text_color,
+      search_heading: block.settings.search_heading,
+      search_subheading: block.settings.search_subheading,
+      show_popular_searches: block.settings.show_popular_searches,
+      popular_searches_label: block.settings.popular_searches_label,
+      popular_searches_items: block.settings.popular_searches_items,
       full_width: block.settings.full_width,
       filter_layout: block.settings.filter_layout,
       show_price_filter: block.settings.show_price_filter,
@@ -36,6 +43,56 @@
   "templates": ["search"],
   "settings": [
     {
+      "type": "header",
+      "content": "Search Header Banner"
+    },
+    {
+      "type": "color",
+      "id": "search_header_bg",
+      "label": "Banner background color",
+      "default": "#FAF7F5"
+    },
+    {
+      "type": "color",
+      "id": "search_header_text_color",
+      "label": "Banner text color",
+      "default": "#111827"
+    },
+    {
+      "type": "text",
+      "id": "search_heading",
+      "label": "Heading",
+      "default": "Find your perfect dress"
+    },
+    {
+      "type": "text",
+      "id": "search_subheading",
+      "label": "Subheading",
+      "default": "Refine the details. Discover the one."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_popular_searches",
+      "label": "Show popular searches",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "popular_searches_label",
+      "label": "Popular searches label",
+      "default": "Popular searches:"
+    },
+    {
+      "type": "text",
+      "id": "popular_searches_items",
+      "label": "Popular searches (comma-separated)",
+      "default": "Red dresses, Prom dresses, Wedding guest, Evening gowns"
+    },
+    {
+      "type": "header",
+      "content": "Layout Settings"
+    },
+    {
       "type": "select",
       "id": "filter_layout",
       "label": "Filter Layout",
@@ -44,7 +101,7 @@
         { "value": "horizontal", "label": "Horizontal Toolbar (with MORE button)" },
         { "value": "drawer", "label": "Drawer (Off-Canvas)" }
       ],
-      "default": "horizontal"
+      "default": "default"
     },
     {
       "type": "checkbox",
