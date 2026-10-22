@@ -2428,7 +2428,7 @@ facet-filters-form,
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
-    gap: 0 28px !important;
+    gap: 0 20px !important;
     align-items: flex-start !important;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -2574,7 +2574,7 @@ facet-filters-form,
     visibility: visible !important;
     position: -webkit-sticky !important;
     position: sticky !important;
-    top: max(80px, calc(var(--cfp-sticky-top, 0px) + 15px)) !important;
+    top: max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) !important;
     left: auto !important;
     right: auto !important;
     bottom: auto !important;
@@ -2583,7 +2583,7 @@ facet-filters-form,
     width: 260px !important;
     max-width: 260px !important;
     height: fit-content !important;
-    max-height: calc(100vh - 100px) !important;
+    max-height: none !important;
     z-index: 2 !important;
     transform: none !important;
     box-shadow: none !important;
@@ -2595,19 +2595,8 @@ facet-filters-form,
     margin: 0 !important;
     background: var(--cfp-surface, #ffffff) !important;
     transition: none !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
+    overflow: visible !important;
     box-sizing: border-box !important;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-  }
-
-  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
@@ -2619,6 +2608,16 @@ facet-filters-form,
     padding: 0 0 14px 0 !important;
     border-bottom: none !important;
     flex-shrink: 0 !important;
+    position: static !important;
+    top: auto !important;
+    background: transparent !important;
+    z-index: auto !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body {
+    padding: 0 !important;
+    overflow: visible !important;
+    flex-grow: 0 !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
