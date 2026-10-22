@@ -954,10 +954,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       return;
     }
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    const isHorizontal = isHorizontalFilterLayout();
+    const layout = getEffectiveLayout();
+    const shouldHideCount = isMobile || layout === 'horizontal' || layout === 'drawer';
     const unit = templateName === 'search' ? (totalCount === 1 ? 'result' : 'results') : (totalCount === 1 ? 'product' : 'products');
     countLabels.forEach(lbl => {
-      if (isMobile || isHorizontal) {
+      if (shouldHideCount) {
         lbl.style.display = 'none';
       } else {
         lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';

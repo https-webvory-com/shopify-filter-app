@@ -2380,7 +2380,9 @@ facet-filters-form,
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
   
   .cfp-horizontal-layout .cfp-product-count,
-  .cfp-horizontal-layout #cfp-product-count {
+  .cfp-horizontal-layout #cfp-product-count,
+  .cfp-drawer-layout .cfp-product-count,
+  .cfp-drawer-layout #cfp-product-count {
     display: none !important;
     visibility: hidden !important;
   }
