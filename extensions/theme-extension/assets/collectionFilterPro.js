@@ -946,9 +946,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       countLabels.forEach(lbl => { lbl.textContent = ''; lbl.style.display = 'none'; });
       return;
     }
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
     const unit = templateName === 'search' ? (totalCount === 1 ? 'result' : 'results') : (totalCount === 1 ? 'product' : 'products');
     countLabels.forEach(lbl => {
-      lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';
+      if (isMobile) {
+        lbl.style.display = 'none';
+      } else {
+        lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';
+      }
       lbl.textContent = `${totalCount} ${unit}`;
     });
   }

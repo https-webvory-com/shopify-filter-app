@@ -1452,6 +1452,12 @@ facet-filters-form,
     margin: 0 !important;
     padding: 0 !important;
   }
+  .cfp-product-count,
+  #cfp-product-count,
+  .cfp-top-bar .cfp-product-count,
+  #cfp-top-bar #cfp-product-count {
+    display: none !important;
+  }
   .cfp-drawer-trigger-btn {
     width: 100% !important;
     height: 38px !important;
