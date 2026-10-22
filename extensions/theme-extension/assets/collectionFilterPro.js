@@ -753,13 +753,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.borderTop = 'none';
         breadcrumbs.style.marginTop = '0';
       } else if (layout === 'horizontal' && !mobile) {
-        if (topBar && breadcrumbs.parentElement !== topBar) {
-          topBar.appendChild(breadcrumbs);
-        }
-        breadcrumbs.style.padding = '8px 0 0 0';
-        breadcrumbs.style.margin = '6px 0 0 0';
-        breadcrumbs.style.borderTop = '1px solid var(--cfp-border, #e5e7eb)';
-        breadcrumbs.style.borderBottom = 'none';
+        breadcrumbs.style.display = 'none';
+        breadcrumbs.innerHTML = '';
       } else {
         const filterBody = sidebar?.querySelector('.cfp-sidebar__body');
         if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -2208,7 +2203,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
         const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
 
-        if (totalPillsWidth <= availableWidthNoMore) {
+        const maxPillsRow1 = 5; // When more than 5 filter elements exist, show MORE/LESS and place the rest in Row 2
+        const needsMore = (pillElements.length > maxPillsRow1) || (totalPillsWidth > availableWidthNoMore);
+
+        if (!needsMore) {
           // All pills fit in Row 1 without MORE button!
           if (extraContainer) {
             extraContainer.innerHTML = '';
@@ -2232,7 +2230,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           pillElements.forEach((pill, idx) => {
             const pillWidth = pillWidths[idx];
             const neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
-            if (primaryPills.length === 0 || neededWidth <= availableWidthWithMore) {
+            const canFitInRow1 = (primaryPills.length < maxPillsRow1) && (primaryPills.length === 0 || neededWidth <= availableWidthWithMore);
+            if (canFitInRow1) {
               currentWidth = neededWidth;
               primaryPills.push(pill);
             } else {
@@ -3015,7 +3014,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const breadcrumbs = document.getElementById('cfp-breadcrumbs');
     if (!breadcrumbs) return;
 
-    if (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) {
+    if ((globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) || (isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches)) {
       breadcrumbs.style.display = 'none';
       breadcrumbs.innerHTML = '';
       return;
@@ -3320,13 +3319,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.borderTop = 'none';
           breadcrumbs.style.marginTop = '0';
         } else if (layout === 'horizontal' && !mobile) {
-          if (topBar && breadcrumbs.parentElement !== topBar) {
-            topBar.appendChild(breadcrumbs);
-          }
-          breadcrumbs.style.padding = '8px 0 0 0';
-          breadcrumbs.style.margin = '6px 0 0 0';
-          breadcrumbs.style.borderTop = '1px solid var(--cfp-border, #e5e7eb)';
-          breadcrumbs.style.borderBottom = 'none';
+          breadcrumbs.style.display = 'none';
+          breadcrumbs.innerHTML = '';
         } else {
           const filterBody = sidebar.querySelector('.cfp-sidebar__body');
           if (filterBody && breadcrumbs.parentElement !== filterBody) {
