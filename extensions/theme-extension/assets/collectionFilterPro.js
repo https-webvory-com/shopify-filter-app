@@ -839,7 +839,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
     const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
     const format = value => currency === 'INR'
-      ? 'RS. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
+      ? 'Rs. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
       : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
     row.replaceChildren();
     const price = document.createElement('span');

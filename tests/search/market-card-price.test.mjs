@@ -18,11 +18,11 @@ const product={priceMin:10,tags:['sale'],available:true,variants:[{id:'gid://sho
 
 test('late prices follow the currently selected variant and market currency',()=>{
  const f=fixture();f.update(f.card,product);
- assert.equal(f.row.children[0].textContent,'RS. 20.00 INR');
- assert.equal(f.row.children[1].textContent,'RS. 30.00 INR');
+ assert.equal(f.row.children[0].textContent,'Rs. 20.00 INR');
+ assert.equal(f.row.children[1].textContent,'Rs. 30.00 INR');
  f.select('1');f.update(f.card,f.card._cfpMarketProduct);
- assert.equal(f.row.children[0].textContent,'RS. 10.00 INR');assert.equal(f.row.children.length,1);
- for(const [currency,expected]of [['USD','$10.00'],['GBP','£10.00'],['JPY','¥10'],['INR','RS. 10.00 INR']]){
+ assert.equal(f.row.children[0].textContent,'Rs. 10.00 INR');assert.equal(f.row.children.length,1);
+ for(const [currency,expected]of [['USD','$10.00'],['GBP','£10.00'],['JPY','¥10'],['INR','Rs. 10.00 INR']]){
   f.setCurrency(currency);f.update(f.card,f.card._cfpMarketProduct);assert.equal(f.row.children[0].textContent,expected);
  }
 });
