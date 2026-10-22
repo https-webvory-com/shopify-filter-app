@@ -2564,15 +2564,18 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar {
     order: 2 !important;
     display: flex !important;
+    flex-direction: column !important;
     visibility: visible !important;
-    position: static !important;
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    top: calc(var(--cfp-sticky-top, var(--header-height, 0px)) + 20px) !important;
     inset: auto !important;
     flex: 0 0 260px !important;
     width: 260px !important;
     max-width: 260px !important;
     height: auto !important;
-    max-height: none !important;
-    z-index: auto !important;
+    max-height: calc(100vh - var(--cfp-sticky-top, var(--header-height, 0px)) - 36px) !important;
+    z-index: 10 !important;
     transform: none !important;
     box-shadow: none !important;
     border-right: 1px solid var(--cfp-border, #e5e7eb) !important;
@@ -2583,7 +2586,30 @@ facet-filters-form,
     margin: 0 !important;
     background: transparent !important;
     transition: none !important;
-    overflow: visible !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #d1d5db transparent !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
+    width: 4px !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb {
+    background: #d1d5db !important;
+    border-radius: 4px !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
@@ -2594,6 +2620,7 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header {
     padding: 0 0 14px 0 !important;
     border-bottom: none !important;
+    flex-shrink: 0 !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
