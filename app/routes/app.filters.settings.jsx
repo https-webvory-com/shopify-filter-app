@@ -443,9 +443,9 @@ export default function FilterSettings() {
             value={desktopLayout}
             onChange={(val) => handleSettingChange("desktopFilterLayout", val)}
             options={[
-              { value: "horizontal", label: "Horizontal Toolbar (Top pills with MORE/LESS)" },
-              { value: "vertical", label: "Vertical Sidebar (Left column)" },
-              { value: "drawer", label: "Drawer (Off-Canvas slide-out)" },
+              { value: "horizontal", label: "Horizontal Toolbar" },
+              { value: "vertical", label: "Vertical Sidebar" },
+              { value: "drawer", label: "Drawer" },
             ]}
           />
           <SettingSelect disabled={isSaving}
