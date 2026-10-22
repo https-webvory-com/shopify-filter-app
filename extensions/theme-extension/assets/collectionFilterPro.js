@@ -1716,10 +1716,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         for (let i = 0; i < points; i++) {
           const percent = (i / (points - 1)) * 100;
           const val = displayMinLimit + (i / (points - 1)) * (displayMaxLimit - displayMinLimit);
+          let tickPosition = `left: ${percent}%; transform: translateX(-50%); align-items: center;`;
+          if (i === 0) {
+            tickPosition = `left: 0; transform: none; align-items: flex-start;`;
+          } else if (i === points - 1) {
+            tickPosition = `right: 0; left: auto; transform: none; align-items: flex-end;`;
+          }
           ticksHtml += `
-            <div style="position: absolute; left: ${percent}%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; top: 16px; z-index: 0; pointer-events: none;">
+            <div style="position: absolute; ${tickPosition} display: flex; flex-direction: column; top: 16px; z-index: 0; pointer-events: none;">
               <div style="width: 1px; height: 8px; background: ${sliderColor}; margin-bottom: 4px;"></div>
-              <span style="font-size: 11px; color: #6d7175; font-weight: 400;">${formatValue(val)}</span>
+              <span style="font-size: 11px; color: #6d7175; font-weight: 400; white-space: nowrap;">${formatValue(val)}</span>
             </div>
           `;
         }

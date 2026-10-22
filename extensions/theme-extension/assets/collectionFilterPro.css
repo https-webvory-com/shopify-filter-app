@@ -507,7 +507,13 @@ facet-filters-form,
   padding: 1px 7px;
 }
 
-/* â”€â”€â”€ Price Range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Price Range ──────────────────────────────────────────────────────────── */
+.cfp-price-range {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 10px 10px !important;
+}
 .cfp-price-inputs {
   display: flex;
   align-items: center !important;
@@ -1428,7 +1434,7 @@ facet-filters-form,
   .cfp-top-bar {
     display: flex !important;
     flex-direction: column !important;
-    padding: 10px 12px !important;
+    padding: 10px 0px !important;
     margin-bottom: 20px !important;
     border: none !important;
     background: var(--cfp-filter-bar-bg, transparent) !important;
@@ -2428,7 +2434,7 @@ facet-filters-form,
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
-    gap: 0 20px !important;
+    gap: 0 28px !important;
     align-items: flex-start !important;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -2583,7 +2589,7 @@ facet-filters-form,
     width: 260px !important;
     max-width: 260px !important;
     height: fit-content !important;
-    max-height: none !important;
+    max-height: calc(100vh - max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) - 20px) !important;
     z-index: 2 !important;
     transform: none !important;
     box-shadow: none !important;
@@ -2595,8 +2601,22 @@ facet-filters-form,
     margin: 0 !important;
     background: var(--cfp-surface, #ffffff) !important;
     transition: none !important;
-    overflow: visible !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
     box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #e5e7eb transparent !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
+    width: 4px !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb {
+    background: #e5e7eb !important;
+    border-radius: 4px !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
@@ -2605,19 +2625,15 @@ facet-filters-form,
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header {
-    padding: 0 0 14px 0 !important;
+    padding: 12px 0 12px 0 !important;
     border-bottom: none !important;
     flex-shrink: 0 !important;
-    position: static !important;
-    top: auto !important;
-    background: transparent !important;
-    z-index: auto !important;
-  }
-
-  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body {
-    padding: 0 !important;
-    overflow: visible !important;
-    flex-grow: 0 !important;
+    position: sticky !important;
+    top: 0 !important;
+    background: var(--cfp-surface, #ffffff) !important;
+    z-index: 10 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
@@ -2635,7 +2651,7 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body {
     padding: 0 !important;
     overflow: visible !important;
-    flex-grow: 0 !important;
+    flex-grow: 1 !important;
   }
 
   .cfp-vertical-layout #cfp-products-container,
@@ -2781,9 +2797,8 @@ facet-filters-form,
 
 @media (max-width: 768px) {
   .cfp-search-banner-wrapper {
-    padding: 24px 16px 24px !important;
+    padding: 20px 10px !important;
     border-radius: 0 !important;
-    margin: 0px 0 20px !important;
   }
   .cfp-search-banner__title {
     font-size: 26px !important;
