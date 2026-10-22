@@ -25,6 +25,11 @@ export const action = async ({ request }) => {
       payload[key] = value === 'true';
     }
   }
+  if (formData.has('desktopFilterLayout')) {
+    const value = formData.get('desktopFilterLayout');
+    if (!['horizontal', 'vertical', 'drawer'].includes(value)) return { success: false, error: 'Invalid desktop layout' };
+    payload.desktopFilterLayout = value;
+  }
   if (formData.has('mobileFilterLayout')) {
     const value = formData.get('mobileFilterLayout');
     if (!['off-canvas', 'horizontal-scrolling'].includes(value)) return { success: false, error: 'Invalid mobile layout' };
@@ -207,6 +212,9 @@ export default function FilterSettings() {
   }, [actionData, shopify]);
 
   const [horizontalFilters, setHorizontalFilters] = useState(settings?.horizontalFilters || false);
+  const [desktopLayout, setDesktopLayout] = useState(
+    settings?.desktopFilterLayout || (settings?.horizontalFilters ? "horizontal" : "drawer")
+  );
   const [mobileLayout, setMobileLayout] = useState(settings?.mobileFilterLayout || "off-canvas");
 
   const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
@@ -226,7 +234,14 @@ export default function FilterSettings() {
   const handleSettingChange = (key, value) => {
     if (key === "prioritizeSortOverPinning") setSortOverPinning(value);
     else if (key === "prioritizeSortOverMerchandising") setSortOverMerchandising(value);
-    else if (key === "horizontalFilters") setHorizontalFilters(value);
+    else if (key === "desktopFilterLayout") {
+      setDesktopLayout(value);
+      setHorizontalFilters(value === "horizontal");
+    }
+    else if (key === "horizontalFilters") {
+      setHorizontalFilters(value);
+      setDesktopLayout(value ? "horizontal" : "drawer");
+    }
     else if (key === "mobileFilterLayout") setMobileLayout(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
@@ -422,11 +437,16 @@ export default function FilterSettings() {
           />
         </SettingsSection>
         <SettingsSection title="Filters Settings">
-          <SettingToggle disabled={isSaving}
-                        label="Horizontal filters"
-            description="Indicates whether to show the filters on the top or left side."
-            value={horizontalFilters}
-            onChange={(val) => handleSettingChange("horizontalFilters", val)}
+          <SettingSelect disabled={isSaving}
+            label="Desktop filter layout"
+            description="Choose how filters appear on desktop and tablet: Horizontal toolbar, Vertical sidebar, or Drawer."
+            value={desktopLayout}
+            onChange={(val) => handleSettingChange("desktopFilterLayout", val)}
+            options={[
+              { value: "horizontal", label: "Horizontal Toolbar (Top pills with MORE/LESS)" },
+              { value: "vertical", label: "Vertical Sidebar (Left column)" },
+              { value: "drawer", label: "Drawer (Off-Canvas slide-out)" },
+            ]}
           />
           <SettingSelect disabled={isSaving}
                         label="Mobile filter layout"

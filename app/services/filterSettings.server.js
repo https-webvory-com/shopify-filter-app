@@ -16,22 +16,57 @@ export async function getFilterGlobalSettings(shop) {
     });
   }
 
-  return settings;
+  const integrations = (settings.integrations && typeof settings.integrations === 'object') ? settings.integrations : {};
+  const desktopFilterLayout = integrations.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer');
+
+  return {
+    ...settings,
+    desktopFilterLayout,
+  };
 }
 
 /**
  * Update global filter settings for a shop
  */
 export async function updateFilterGlobalSettings(shop, data) {
+  const updateData = { ...data };
+
+  if (typeof data.desktopFilterLayout === 'string') {
+    const current = await prisma.filterGlobalSetting.findUnique({
+      where: { shop },
+      select: { integrations: true },
+    });
+    const currentIntegrations = (current?.integrations && typeof current.integrations === 'object') ? current.integrations : {};
+    updateData.integrations = {
+      ...currentIntegrations,
+      desktopFilterLayout: data.desktopFilterLayout,
+    };
+    updateData.horizontalFilters = data.desktopFilterLayout === 'horizontal';
+    delete updateData.desktopFilterLayout;
+  } else if (typeof data.horizontalFilters === 'boolean') {
+    const current = await prisma.filterGlobalSetting.findUnique({
+      where: { shop },
+      select: { integrations: true },
+    });
+    const currentIntegrations = (current?.integrations && typeof current.integrations === 'object') ? current.integrations : {};
+    updateData.integrations = {
+      ...currentIntegrations,
+      desktopFilterLayout: data.horizontalFilters ? 'horizontal' : 'drawer',
+    };
+  }
+
   const settings = await prisma.filterGlobalSetting.upsert({
     where: { shop },
-    update: data,
+    update: updateData,
     create: {
       shop,
-      ...data,
+      ...updateData,
     },
   });
   
   await invalidateShop(shop);
-  return settings;
+  return {
+    ...settings,
+    desktopFilterLayout: updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
+  };
 }

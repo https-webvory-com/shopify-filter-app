@@ -717,21 +717,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const container = document.body;
     if (!container) return;
     const mobile = window.matchMedia('(max-width: 768px)').matches;
-    const isHorizontal = isHorizontalFilterLayout();
-    const wasInline = mobile
-      ? container.classList.contains('cfp-mobile-horizontal-scrolling') || container.classList.contains('cfp-desktop-like-mobile')
-      : container.classList.contains('cfp-horizontal-layout');
-    container.classList.toggle('cfp-horizontal-layout', isHorizontal && !mobile);
+    const layout = mobile ? 'drawer' : getEffectiveLayout();
+    const wasInline = container.classList.contains('cfp-horizontal-layout') || container.classList.contains('cfp-vertical-layout');
+
+    container.classList.toggle('cfp-horizontal-layout', layout === 'horizontal');
+    container.classList.toggle('cfp-vertical-layout', layout === 'vertical');
+    container.classList.toggle('cfp-drawer-layout', layout === 'drawer');
     container.classList.toggle('cfp-dark-mode', !!settings.darkMode);
     container.classList.toggle('cfp-mobile-horizontal-scrolling', false);
     container.classList.toggle('cfp-desktop-like-mobile', false);
 
     const triggerLabel = triggerBtn ? triggerBtn.querySelector('.cfp-drawer-btn-label') : null;
     if (triggerLabel) {
-      triggerLabel.textContent = (isHorizontal && !mobile) ? 'MORE' : 'Filters';
+      triggerLabel.textContent = (layout === 'horizontal') ? 'MORE' : 'Filters';
     }
 
-    if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) closeSidebar();
+    if (layout === 'vertical' && sidebar && !mobile) {
+      sidebar.setAttribute('aria-hidden', 'false');
+    }
+
+    if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) {
+      if (layout !== 'vertical') closeSidebar();
+    }
     updateStickyFilterOffsets();
   }
 
@@ -3015,25 +3022,43 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
-  function isInlineFilterLayout() {
-    return isHorizontalFilterLayout();
+  function getEffectiveLayout() {
+    // 1. Mobile (768px and down) is strictly drawer mode
+    if (window.matchMedia('(max-width: 768px)').matches) return 'drawer';
+
+    // 2. Check layout from globalSettings
+    const layout = globalSettings?.desktopFilterLayout ||
+                   window.cfpGlobalSettings?.desktopFilterLayout ||
+                   globalSettings?.integrations?.desktopFilterLayout ||
+                   window.cfpGlobalSettings?.integrations?.desktopFilterLayout;
+
+    if (layout === 'vertical') return 'vertical';
+    if (layout === 'drawer') return 'drawer';
+    if (layout === 'horizontal') return 'horizontal';
+
+    // 3. Fallback to boolean horizontalFilters
+    const isHorizontal = globalSettings?.horizontalFilters ?? window.cfpGlobalSettings?.horizontalFilters;
+    if (isHorizontal === true) return 'horizontal';
+    if (isHorizontal === false) return 'drawer';
+
+    // 4. Default for tablet and desktop (> 768px): Horizontal is active!
+    return 'horizontal';
   }
+  window.cfpGetEffectiveLayout = getEffectiveLayout;
 
   function isHorizontalFilterLayout() {
-    // 1. Mobile (768px and down) is strictly drawer mode (never horizontal pills)
-    if (window.matchMedia('(max-width: 768px)').matches) return false;
-
-    // 2. Check if admin explicitly disabled horizontal filters
-    const hasAdminSetting = typeof globalSettings?.horizontalFilters !== 'undefined' || typeof window.cfpGlobalSettings?.horizontalFilters !== 'undefined';
-    if (hasAdminSetting) {
-      const adminVal = globalSettings?.horizontalFilters ?? window.cfpGlobalSettings?.horizontalFilters;
-      if (adminVal === false) return false;
-    }
-
-    // 3. For tablet and desktop (> 768px): Horizontal toolbar is active!
-    return true;
+    return getEffectiveLayout() === 'horizontal';
   }
   window.cfpIsHorizontalFilterLayout = isHorizontalFilterLayout;
+
+  function isVerticalFilterLayout() {
+    return getEffectiveLayout() === 'vertical';
+  }
+  window.cfpIsVerticalFilterLayout = isVerticalFilterLayout;
+
+  function isInlineFilterLayout() {
+    return isHorizontalFilterLayout() || isVerticalFilterLayout();
+  }
 
   function closeHorizontalFilterGroups() {
     document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
@@ -3099,6 +3124,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (!sidebar) return;
     if (document.activeElement && sidebar.contains(document.activeElement)) {
       document.activeElement.blur();
+    }
+    if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
+      sidebar.setAttribute('aria-hidden', 'false');
+      closeHorizontalFilterGroups();
+      return;
     }
     sidebar.classList.remove('cfp-sidebar--open');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');

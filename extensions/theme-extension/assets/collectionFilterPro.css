@@ -2407,6 +2407,96 @@ facet-filters-form,
     pointer-events: none !important;
     transform: none !important;
   }
+
+  /* ─── Drawer Layout (Desktop) ────────────────────────────────────── */
+  .cfp-drawer-layout #cfp-horizontal-filters,
+  .cfp-drawer-layout #cfp-horizontal-extra-filters {
+    display: none !important;
+  }
+  .cfp-drawer-layout #cfp-drawer-trigger-btn {
+    display: inline-flex !important;
+  }
+
+  /* ─── Vertical Sidebar Layout (Desktop) ──────────────────────────── */
+  .cfp-vertical-layout .cfp-layout-wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 32px !important;
+    align-items: flex-start !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .cfp-vertical-layout #cfp-top-bar {
+    order: 1 !important;
+    width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+  .cfp-vertical-layout #cfp-top-bar #cfp-drawer-trigger-btn,
+  .cfp-vertical-layout #cfp-top-bar #cfp-horizontal-filters,
+  .cfp-vertical-layout #cfp-top-bar #cfp-horizontal-extra-filters {
+    display: none !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar {
+    order: 2 !important;
+    display: flex !important;
+    visibility: visible !important;
+    position: static !important;
+    inset: auto !important;
+    flex: 0 0 260px !important;
+    width: 260px !important;
+    max-width: 260px !important;
+    height: auto !important;
+    max-height: none !important;
+    z-index: auto !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border-right: 1px solid var(--cfp-border, #e5e7eb) !important;
+    border-top: none !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    padding: 0 20px 20px 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    transition: none !important;
+    overflow: visible !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
+    transform: none !important;
+    left: auto !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header {
+    padding: 0 0 14px 0 !important;
+    border-bottom: none !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__footer,
+  .cfp-vertical-layout #cfp-overlay,
+  .cfp-vertical-layout .cfp-overlay.cfp-overlay--visible {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body {
+    padding: 0 !important;
+    overflow: visible !important;
+    flex-grow: 0 !important;
+  }
+
+  .cfp-vertical-layout #cfp-products-container,
+  .cfp-vertical-layout .cfp-products-grid,
+  .cfp-vertical-layout .cfp-layout-wrapper > *:not(.cfp-sidebar):not(.cfp-top-bar):not(.cfp-breadcrumbs) {
+    order: 3 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+  }
 }
 
 /* Mobile is strictly drawer mode */
