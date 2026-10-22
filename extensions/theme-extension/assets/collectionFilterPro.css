@@ -2432,7 +2432,104 @@ facet-filters-form,
     order: 1 !important;
     width: 100% !important;
     flex: 0 0 100% !important;
+    padding: 6px 0 14px 0 !important;
+    margin-bottom: 8px !important;
+    border-bottom: 1px solid var(--cfp-border, #e5e7eb) !important;
+    box-sizing: border-box !important;
+    min-height: auto !important;
   }
+
+  .cfp-vertical-layout .cfp-top-bar__main {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 16px !important;
+  }
+
+  .cfp-vertical-layout .cfp-top-bar__left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .cfp-vertical-layout .cfp-top-bar__right {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    margin-left: auto !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumbs {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto !important;
+    border: none !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-chip {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 4px !important;
+    padding: 5px 10px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #111827 !important;
+    line-height: 1.4 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-chip:hover {
+    background: #ebeef2 !important;
+    border-color: #d1d5db !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-remove {
+    background: transparent !important;
+    border: none !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    color: #6b7280 !important;
+    padding: 0 0 0 2px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: color 0.15s ease !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-remove:hover {
+    color: #ef4444 !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-clear {
+    color: #111827 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 8px !important;
+    margin-left: 4px !important;
+    transition: color 0.15s ease !important;
+    white-space: nowrap !important;
+  }
+
+  .cfp-vertical-layout .cfp-breadcrumb-clear:hover {
+    color: #ef4444 !important;
+  }
+
   .cfp-vertical-layout #cfp-top-bar #cfp-drawer-trigger-btn,
   .cfp-vertical-layout #cfp-drawer-trigger-btn,
   .cfp-vertical-layout .cfp-drawer-trigger-btn,

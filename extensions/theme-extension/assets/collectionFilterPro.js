@@ -740,6 +740,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
     }
 
+    const breadcrumbs = document.getElementById('cfp-breadcrumbs');
+    if (breadcrumbs) {
+      if (layout === 'vertical' && !mobile) {
+        const topBarLeft = topBar?.querySelector('.cfp-top-bar__left');
+        if (topBarLeft && breadcrumbs.parentElement !== topBarLeft) {
+          topBarLeft.appendChild(breadcrumbs);
+        }
+        breadcrumbs.style.padding = '0';
+        breadcrumbs.style.marginBottom = '0';
+        breadcrumbs.style.borderBottom = 'none';
+      } else {
+        const filterBody = sidebar?.querySelector('.cfp-sidebar__body');
+        if (filterBody && breadcrumbs.parentElement !== filterBody) {
+          filterBody.prepend(breadcrumbs);
+        }
+        breadcrumbs.style.padding = '12px 0';
+        breadcrumbs.style.marginBottom = '0';
+        breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+      }
+    }
+
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) {
       if (layout !== 'vertical') closeSidebar();
     }
@@ -2966,7 +2987,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     Object.keys(activeFilters.options).forEach(k => {
       activeFilters.options[k].forEach(v => {
         const { label, cleanVal } = getCleanLabel(`option-${k}`, v);
-        addChip(cleanVal, `option-${k}`, v);
+        const displayLabel = label ? `${label}: ${cleanVal}` : cleanVal;
+        addChip(displayLabel, `option-${k}`, v);
       });
     });
 
@@ -2984,13 +3006,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
     if (hasFilters) {
-      chipsHTML += `<span class="cfp-breadcrumb-clear" style="cursor:pointer; font-size:13px; text-decoration:underline; margin-left:10px;">Clear All</span>`;
+      chipsHTML += `<button type="button" class="cfp-breadcrumb-clear">Clear all</button>`;
       breadcrumbs.innerHTML = chipsHTML;
       breadcrumbs.style.display = 'flex';
 
       // Attach events
       breadcrumbs.querySelectorAll('.cfp-breadcrumb-chip').forEach(chip => {
-        chip.querySelector('.cfp-breadcrumb-remove').addEventListener('click', () => {
+        chip.querySelector('.cfp-breadcrumb-remove')?.addEventListener('click', (e) => {
+          e.stopPropagation();
           const t = chip.getAttribute('data-type');
           const v = chip.getAttribute('data-val');
           removeFilter(t, v);
@@ -2999,7 +3022,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       const clearBtn = breadcrumbs.querySelector('.cfp-breadcrumb-clear');
       if (clearBtn) {
-        clearBtn.addEventListener('click', clearAllFilters);
+        clearBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          clearAllFilters();
+        });
       }
     } else {
       breadcrumbs.style.display = 'none';
@@ -3195,11 +3221,25 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         topBar.style.display = 'flex';
       }
       if (breadcrumbs) {
-        const filterBody = sidebar.querySelector('.cfp-sidebar__body');
-        (filterBody || sidebar).prepend(breadcrumbs);
-        breadcrumbs.style.padding = '12px 0';
-        breadcrumbs.style.marginBottom = '0';
-        breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+        const mobile = window.matchMedia('(max-width: 768px)').matches;
+        const layout = mobile ? 'drawer' : getEffectiveLayout();
+        if (layout === 'vertical' && !mobile) {
+          const topBarLeft = topBar?.querySelector('.cfp-top-bar__left');
+          if (topBarLeft && breadcrumbs.parentElement !== topBarLeft) {
+            topBarLeft.appendChild(breadcrumbs);
+          }
+          breadcrumbs.style.padding = '0';
+          breadcrumbs.style.marginBottom = '0';
+          breadcrumbs.style.borderBottom = 'none';
+        } else {
+          const filterBody = sidebar.querySelector('.cfp-sidebar__body');
+          if (filterBody && breadcrumbs.parentElement !== filterBody) {
+            filterBody.prepend(breadcrumbs);
+          }
+          breadcrumbs.style.padding = '12px 0';
+          breadcrumbs.style.marginBottom = '0';
+          breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+        }
       }
       wrapper.appendChild(sidebar);
 
