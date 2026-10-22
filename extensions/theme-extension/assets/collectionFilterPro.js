@@ -2120,7 +2120,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       html += `
-        <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="${config.multipleSelection === true}">
+        <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="true">
           <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="${groupId}">
             <div style="display: flex; align-items: center; gap: 6px;">
               <span>${setting.label}</span>
@@ -2153,7 +2153,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const hasActivePillSelections = activeCount > 0;
 
       horizontalPills.push(`
-        <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}">
+        <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}" data-multiple="true">
           <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
             <span>${setting.label}</span>
             ${hasActivePillSelections ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
@@ -2186,6 +2186,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (horizontalContainer) {
       if (isHorizontalFilterLayout()) {
+        const currentlyOpenPopover = document.querySelector('.cfp-horizontal-pill__popover.is-open');
+        const openGroup = currentlyOpenPopover?.closest('.cfp-horizontal-pill')?.getAttribute('data-group');
+        const openPopoverScrollArea = currentlyOpenPopover?.querySelector('.cfp-scroll-area');
+        const openPopoverScrollTop = openPopoverScrollArea ? openPopoverScrollArea.scrollTop : 0;
+
         horizontalContainer.innerHTML = horizontalPills.join('');
         horizontalContainer.style.display = 'flex';
         if (extraContainer) {
@@ -2252,6 +2257,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
         if (typeof window.cfpSyncPillsLayout === 'function') {
           window.cfpSyncPillsLayout();
+        }
+
+        if (openGroup) {
+          const restoredPill = document.querySelector(`.cfp-horizontal-pill[data-group="${openGroup}"]`);
+          if (restoredPill) {
+            const pop = restoredPill.querySelector('.cfp-horizontal-pill__popover');
+            const btn = restoredPill.querySelector('.cfp-horizontal-pill__btn');
+            if (pop) {
+              pop.classList.add('is-open');
+              const scrollArea = pop.querySelector('.cfp-scroll-area');
+              if (scrollArea && openPopoverScrollTop > 0) {
+                scrollArea.scrollTop = openPopoverScrollTop;
+              }
+            }
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+          }
         }
       } else {
         horizontalContainer.innerHTML = '';
@@ -2801,7 +2822,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           const checked = checkbox.checked;
 
           const groupEl = checkbox.closest('.cfp-group, .cfp-horizontal-pill');
-          const isMultiple = groupEl ? groupEl.getAttribute('data-multiple') === 'true' : true;
+          const isMultiple = groupEl ? (groupEl.getAttribute('data-single-select') !== 'true') : true;
 
           if (!isMultiple && checked) {
             groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -2927,11 +2948,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       activeFilters.maxPrice = 999999;
       activeFilters.priceRanges = [];
     }
-    else if (type === 'option') {
-      activeFilters.options[key] = [];
+    else if (type === 'option' || type === 'options' || type.startsWith('option-')) {
+      const optKey = key || type.replace('option-', '');
+      if (activeFilters.options) {
+        activeFilters.options[optKey] = [];
+        Object.keys(activeFilters.options).forEach(k => {
+          if (k.toLowerCase() === optKey.toLowerCase()) {
+            activeFilters.options[k] = [];
+          }
+        });
+      }
     }
-    else if (type === 'metafield') {
-      activeFilters.metafields[key] = [];
+    else if (type === 'metafield' || type.startsWith('metafield-')) {
+      const metaKey = key || type.replace('metafield-', '');
+      if (activeFilters.metafields) {
+        activeFilters.metafields[metaKey] = [];
+        Object.keys(activeFilters.metafields).forEach(k => {
+          if (k.toLowerCase() === metaKey.toLowerCase()) {
+            activeFilters.metafields[k] = [];
+          }
+        });
+      }
     }
     activeFilters.page = 1;
     renderBreadcrumbs();
