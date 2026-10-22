@@ -248,7 +248,7 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     // Validate existing complete cards before reconstructing the ranking spec.
     // This probe checks live epochs/order/documents and creates no visitor
     // session or follow-up warmup. Ready pages yield worker time to cold pages.
-    const readyUrl=new URL(normalized.url);readyUrl.searchParams.set('responseProfile','collection-cards-v1');
+    const readyUrl=new URL(normalized.url);readyUrl.searchParams.set('responseProfile','collection-cards-v1');readyUrl.searchParams.set('limit','50');
     try{
       const ready=await getPreparedCollectionCards(new Request(readyUrl),{probe:true});
       if(ready?.status===200&&ready.headers?.get('X-CFP-Collection-Cards')==='hit'){
@@ -270,7 +270,7 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     // persisted by this trusted background-only rendering context.
     if(payload?.warmup===true){
       result.rankingContextsReady++;
-      const cardsUrl=new URL(normalized.url);cardsUrl.searchParams.set('responseProfile','collection-cards-v1');
+      const cardsUrl=new URL(normalized.url);cardsUrl.searchParams.set('responseProfile','collection-cards-v1');cardsUrl.searchParams.set('limit','50');
       let cardsReady=false;
       try{
         const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});

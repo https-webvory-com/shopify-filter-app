@@ -35,6 +35,16 @@ test('Redis resets reject old durable copies instead of resurrecting lost invali
  await f.write(1,'replacement');assert.equal(await f.store.load({shop:f.shop,kind:'cards',key:f.key(1)}),'replacement');
 });
 
+test('published serving data survives working epoch resets and daily expiry until a complete replacement exists',async()=>{
+ const f=fixture(),key=`collectionPublishedPage:${f.shop}:`+'c'.repeat(64);
+ assert.equal(await f.store.save({shop:f.shop,kind:'published',key,collectionId:'1',payload:'published complete cards',expiresAt:f.now()+10000}),true);
+ f.values.clear();f.advance(86400000*2);await f.write(2);
+ assert.equal(await f.store.load({shop:f.shop,kind:'published',key}),'published complete cards');
+ assert.equal(await f.store.load({shop:'other.myshopify.com',kind:'published',key}),null);
+ assert.equal(await f.store.save({shop:f.shop,kind:'published',key,collectionId:'1',payload:'older build',validatedAt:1,expiresAt:f.now()+10000}),false);
+ assert.equal(await f.store.load({shop:f.shop,kind:'published',key}),'published complete cards');
+});
+
 test('durable rankings survive time expiry and card cleanup, while unchanged saves perform no database update',async()=>{
  const f=fixture(),key=`collectionPreparedSequence:${f.shop}:background-v2:`+'b'.repeat(64);
  const save=payload=>f.store.save({shop:f.shop,kind:'ranking',key,collectionId:'1',payload,expiresAt:f.now()+10000});

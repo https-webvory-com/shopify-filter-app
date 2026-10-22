@@ -12,16 +12,19 @@ function fixture(templateName = 'collection', settings = {}) {
  const card={querySelector(selector){if(selector.includes('price-row'))return row;if(selector.includes('__link'))return {href};if(selector.includes('__image-container'))return image;return null;}};
  const context={templateName,window:{Shopify:{currency:{active:'INR'}},cfpSearchSettings:settings},location:{origin:'https://shop.test'},URL,Intl,document:{createElement:()=>({style:{},textContent:''})}};
  vm.runInNewContext(helper,context);
- return {card,row,image,update:context.window.cfpUpdateMarketCardPrice,select:id=>{href='https://shop.test/products/dress?variant='+id;}};
+ return {card,row,image,update:context.window.cfpUpdateMarketCardPrice,setCurrency:code=>{context.window.Shopify.currency.active=code;},select:id=>{href='https://shop.test/products/dress?variant='+id;}};
 }
 const product={priceMin:10,tags:['sale'],available:true,variants:[{id:'gid://shopify/ProductVariant/1',price:10,compareAtPrice:null},{id:'gid://shopify/ProductVariant/2',price:20,compareAtPrice:30}]};
 
 test('late prices follow the currently selected variant and market currency',()=>{
  const f=fixture();f.update(f.card,product);
- assert.equal(f.row.children[0].textContent,'₹20.00');
- assert.equal(f.row.children[1].textContent,'₹30.00');
+ assert.equal(f.row.children[0].textContent,'Rs. 20.00 INR');
+ assert.equal(f.row.children[1].textContent,'Rs. 30.00 INR');
  f.select('1');f.update(f.card,f.card._cfpMarketProduct);
- assert.equal(f.row.children[0].textContent,'₹10.00');assert.equal(f.row.children.length,1);
+ assert.equal(f.row.children[0].textContent,'Rs. 10.00 INR');assert.equal(f.row.children.length,1);
+ for(const [currency,expected]of [['USD','$10.00'],['GBP','£10.00'],['JPY','¥10'],['INR','Rs. 10.00 INR']]){
+  f.setCurrency(currency);f.update(f.card,f.card._cfpMarketProduct);assert.equal(f.row.children[0].textContent,expected);
+ }
 });
 
 test('removed cards and unavailable prices cannot replace displayed market prices',()=>{

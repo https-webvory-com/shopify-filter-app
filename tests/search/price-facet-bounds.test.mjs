@@ -55,10 +55,11 @@ test('price bounds query excludes its own range while retaining other selections
   const end = source.indexOf('    const meiliStart =', start);
   const context = { queries: [], baseFilters: ['shop = "fixture"'], searchQuery: '',
     activeCategories: ['priceMin', 'option_Fabric'], categoryFilters: {
-      priceMin: 'priceMin >= 90 AND priceMin <= 200', option_Fabric: 'option_Fabric = "Chiffon"',
+      priceMin: 'id IN ["price-qualified-variant"]', option_Fabric: 'option_Fabric = "Chiffon"',
     } };
   vm.runInNewContext(source.slice(start, end), context);
   const priceQuery = context.queries.find(query => query.facets.includes('priceMin'));
   assert.ok(priceQuery.filter.includes('option_Fabric = "Chiffon"'));
   assert.ok(!priceQuery.filter.some(filter => filter.includes('priceMin')));
+  assert.ok(!priceQuery.filter.some(filter => filter.includes('price-qualified-variant')));
 });

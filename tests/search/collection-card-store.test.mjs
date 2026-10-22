@@ -1,8 +1,8 @@
 import {createCardStateReader} from '../../app/utils/collectionCardState.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionCardStore,collectionCardKey} from '../../app/utils/collectionCardStore.js';
-import {encodePreparation} from '../../app/utils/collectionPreparationPayload.js';
+import {createCollectionCardStore,collectionCardKey,collectionCardSnapshotRequest} from '../../app/utils/collectionCardStore.js';
+import {encodePreparation,decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 import {isPublicCollectionCards} from '../../app/utils/collectionCards.js';
 import {validateCollectionCardDocuments} from '../../app/utils/collectionCardValidation.js';
 import {collectionPageFingerprint} from '../../app/utils/collectionResponse.js';
@@ -21,6 +21,42 @@ function fixture(options={}){
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
 
+test('old card presentation snapshots cannot keep serving merchandising-selected pinned variants',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ let key=collectionCardKey(f.request);if(f.values.get(key).startsWith('p1:'))key=f.values.get(key).slice(3);
+ const entry=decodePreparation(f.values.get(key));delete entry.cardPresentationVersion;
+ f.values.set(key,encodePreparation(entry));
+ assert.equal(await f.store.get(f.request),null);assert.equal(await f.store.get(f.request,{probe:true}),null);
+});
+
+test('canonical facet follow-ups upgrade saved cards so the next visit receives collection-wide filters',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp','head');
+ const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-v1');url.searchParams.set('rankingToken','validated-token');
+ const lease=await f.store.begin({request:new Request(url),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id','shop','status'],collectionHandle:'one'});
+ assert.ok(lease);assert.equal(await lease.finish(f.payload,'fp','head',{facetsReady:true}),true);
+ url.searchParams.delete('rankingToken');url.searchParams.set('responseProfile','collection-preview-v1');
+ const request=new Request(url,{headers:{Accept:'application/x-cfp-pinned-prefix-v3'}});
+ const ready=await(await f.store.get(request)).json();
+ assert.equal(ready.cfpCards.facetsReady,true);assert.deepEqual(ready.facets,f.payload.facets);assert.deepEqual(ready.settings,f.payload.settings);
+ assert.deepEqual(ready.products,f.payload.products);assert.equal(ready.totalCount,2);
+ // A change elsewhere in this collection invalidates counts even while all
+ // first-page cards and the bounded saved ranking remain reusable.
+ f.state.products='changed';
+ const changed=await(await f.store.get(request)).json();
+ assert.equal(changed.cfpCards.facetsReady,false);assert.equal(changed.facets,undefined);assert.deepEqual(changed.products,ready.products);
+});
+
+test('saved-filter upgrades cannot adopt a different sequence, market, configuration or filtered request',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-v1');url.searchParams.set('rankingToken','validated-token');
+ const options={request:new Request(url),rankingSession:{ids:['2','1'],metadata:f.prepared.metadata},attributes:['id']};
+ assert.equal(await f.store.begin(options),null);
+ options.rankingSession={ids:f.prepared.ids,metadata:f.prepared.metadata};
+ const other=new URL(url);other.searchParams.set('country','US');assert.equal(await f.store.begin({...options,request:new Request(other)}),null);
+ f.state.configuration='changed';assert.equal(await f.store.begin(options),null);
+ for(const extra of ['option_Color=Black','customerTags=VIP','page=2','rankingToken=another'])assert.equal(collectionCardSnapshotRequest(new Request(url+'&'+extra)),null,extra);
+});
+
 test('complete paged cards validate and return all 25 cached documents instead of the legacy five-card preview',async()=>{
  const docs=Array.from({length:25},(_,i)=>({id:String(i+1),shop:'fixture.myshopify.com',status:'ACTIVE',title:'Dress '+i,handle:'dress-'+i,variants:[{id:String(i+100),available:true}]}));
  const calls=[],index={getDocuments:async options=>{calls.push(options.limit);return {results:docs.slice(0,options.limit)};}};
@@ -33,6 +69,14 @@ test('complete paged cards validate and return all 25 cached documents instead o
  assert.equal(calls.at(-1),25);assert.equal(body.products.length,25);assert.equal(body.cfpCards.preview,false);
  docs[10].title='Changed later card';assert.equal(await f.store.get(request),null);assert.equal(calls.at(-1),25);
  const legacy=await f.store.get(new Request(url));assert.equal((await legacy.json()).products.length,5);assert.equal(calls.at(-1),5);
+});
+
+test('a failed published replacement cannot leave a fifty-card readiness marker that prevents background retries',async()=>{
+ const saved=[],f=fixture({saveDurable:async row=>{saved.push(row);return true;},publishedPages:{get:async()=>null,publish:async()=>false}});
+ const url=new URL(f.request.url);url.searchParams.set('limit','50');const request=new Request(url);
+ const lease=await f.store.begin({request,spec:f.spec,preparedKey:`collectionPreparedSequence:${f.spec.shop}:background-v2:`+'a'.repeat(64),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id'],collectionHandle:'one'});
+ assert.equal(await lease.finish(f.payload,'fp'),false);assert.equal(saved.length,0);
+ assert.equal(await f.store.get(request,{probe:true}),null);
 });
 
 test('a maintained old ranking can publish newly validated durable cards with an independent card lifetime',async()=>{
@@ -162,6 +206,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
   '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
   '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
+  '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:()=>({get:async()=>null,publish:async()=>true})},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));

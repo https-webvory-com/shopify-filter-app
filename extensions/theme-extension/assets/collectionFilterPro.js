@@ -391,7 +391,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-pinned-prefix-v3, application/json'} });
+      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'} });
       let payload = await response.json();
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
@@ -463,8 +463,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
-    let loadingNoticeTimer;
-    let loadingNotice;
     let rankingKey;
 
     syncStateToURL(); // Sync URL
@@ -554,14 +552,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!isLoadMore) {
           renderSkeleton();
         }
-        loadingNoticeTimer = setTimeout(() => {
-          if (fetchSignal.aborted) return;
-          loadingNotice = document.createElement('p');
-          loadingNotice.className = 'cfp-loading-notice';
-          loadingNotice.setAttribute('role', 'status');
-          loadingNotice.textContent = 'Loading products. This is taking longer than usual.';
-          getProductContainer().prepend(loadingNotice);
-        }, 4000);
         let data = null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
@@ -586,7 +576,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
-      clearTimeout(loadingNoticeTimer);loadingNotice?.remove();
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
         const readyUrl = new URL(window.location.href);
@@ -636,7 +625,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
-      if(data.cfpCards?.version===1){
+      const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
+      if(data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady){
         sidebar.classList.add('cfp-loading');
         await completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
@@ -664,9 +654,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       retry.addEventListener('click', () => { if(retry.disabled)return;retry.disabled=true;error.remove();fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
       container.appendChild(error);
-    } finally {
-      clearTimeout(loadingNoticeTimer);
-      loadingNotice?.remove();
     }
   }
 
@@ -885,8 +872,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
     const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
-    const currency = window.Shopify?.currency?.active || 'USD';
-    const format = value => new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
+    const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
+    const format = value => currency === 'INR'
+      ? 'Rs. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
+      : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
     row.replaceChildren();
     const price = document.createElement('span');
     price.className = 'cfp-product-card__price';
@@ -1115,7 +1104,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             fallbackImg = fallbackImg.src || fallbackImg.url || '';
         }
 
-        let primaryImg = (product.searchColor ? product.searchColorImage : (customImage || variantImg || product.merchandisingImage || fallbackImg)) || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
+        let primaryImg = product.pinnedProductImage || (product.searchColor ? product.searchColorImage : (customImage || variantImg || product.merchandisingImage || fallbackImg)) || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_600x.gif';
         primaryImg = getResizedImageUrl(primaryImg, 360);
 
         let productUrl = `/products/${product.handle}`;
@@ -1384,7 +1373,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
           swatchesHtml += `</div>`;
 
-          if (matchedColorUrl && (!customImage || colorWasFiltered)) {
+          if (!product.pinnedProductImage && matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = getResizedImageUrl(matchedColorUrl, 360);
           }
           const activeVariantId = (product.selectedVariantId && matchedVariantId) || colorsArray[activeIndex][1].variantId;

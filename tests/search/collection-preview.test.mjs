@@ -27,3 +27,13 @@ test('preview shares validated card snapshot keys and retains strict anonymous f
  assert.equal(collectionCardKey(preview),collectionCardKey(cards));assert.equal(isPublicCollectionCards(preview),true);
  for(const extra of ['customer_tags=VIP','tags=red','option_Color=Red','rankingToken=token','page=2'])assert.equal(isPublicCollectionCards(new Request(url+'&'+extra)),false,extra);
 });
+
+test('complete previews send saved full-collection filters but omit uncomputed prefix facets',async()=>{
+ const payload={rankingToken:'ready',totalCount:100,products:[{id:'1',title:'Dress',handle:'dress'}],settings:[],facets:{options:{Color:[{value:'Black',count:100}]}}};
+ const request=new Request(url,{headers:{Accept:'application/x-cfp-pinned-prefix-v3'}});
+ const saved=await(await collectionCardsResponse({...payload,cfpCards:{version:1,facetsReady:true}},'hit',request)).json();
+ assert.deepEqual(saved.facets,payload.facets);assert.equal(saved.cfpCards.facetsReady,true);
+ const notComputed=await(await collectionCardsResponse(payload,'stored',request)).json();assert.equal(notComputed.facets,undefined);
+ const prefix=await(await collectionCardsResponse({...payload,collectionPinnedPrefix:{version:2,inputVersion:'a'.repeat(64)}},'prefix',request)).json();
+ assert.equal(prefix.facets,undefined);assert.equal(prefix.cfpCards.prefix,true);
+});

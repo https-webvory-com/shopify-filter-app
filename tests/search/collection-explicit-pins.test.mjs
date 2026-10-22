@@ -36,6 +36,7 @@ for(const mode of ['legacy','imported-include','imported-no-include']) for(const
   }}};
   const merch=await loadModule('app/services/merchandising.server.js',{'../db.server.js':{default:prisma}});
   const sessions=new Map();
+  const preparation=readyPreparation({index,prisma,arrange:merch.applyMerchandisingRules}),specs=[];
   const mocks={
     'react-router':{data:(v,opts)=>({...v,_status:opts?.status??200})},'../db.server':{default:prisma},
     '../utils/searchColor.js':color,'../utils/availableVariants.js':variants,'../utils/spellingCorrection.js':{spellingCorrection},
@@ -46,7 +47,7 @@ for(const mode of ['legacy','imported-include','imported-no-include']) for(const
     '../services/shopCache.server':{getCached:async(key,read)=>key.startsWith('globalSettings:')?{showOnlyInStock:true}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:collection,resolvedCollectionTitle:'Cocktail Dresses',activeGroupFilters:[]}:read()},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>({ids:ordinary.map(p=>p.id),status:'ready'})},
     '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,
-    '../services/collectionPreparation.server.js':readyPreparation({index,prisma,arrange:merch.applyMerchandisingRules}),
+    '../services/collectionPreparation.server.js':{...preparation,getPreparedCollectionRanking:async spec=>{specs.push(spec);return preparation.getPreparedCollectionRanking(spec);}},
     '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:()=>sortBy,getCollectionRankingSession:async(_s,_f,token)=>sessions.get(token),saveCollectionRankingSession:async(_s,_f,ids,_u,metadata)=>{const s={token:'test-token',ids,metadata};sessions.set(s.token,s);return s;}},
   };
   const {loader}=await loadModule('app/routes/api.filter.jsx',mocks);
@@ -63,4 +64,9 @@ for(const mode of ['legacy','imported-include','imported-no-include']) for(const
   const filtered=await loader({request:new Request(`https://fixture/api/filter?shop=${shop}&collectionHandle=cocktail-dress&sortBy=${sortBy}&page=1&limit=25&vendor=Example`)});
   assert.equal(filtered.crash,undefined,filtered.error);
   assert.ok(filtered.products.every(p=>!outside.has(Number(p.id.split('/').pop()))),'Filters suppress explicit outside-collection pin injection');
+  if(sortBy==='best-selling'){
+    assert.deepEqual(Array.from(specs.at(-1).pinnedIds),[],'Filtered ranking must not inject configured pins missing from its query');
+    assert.deepEqual(specs.at(-1).pinningRule.products,pins,'Matching filtered pins retain the configured comparator order');
+    assert.ok(specs.at(-1).query.filter.some(filter=>filter.includes('vendor IN')));
+  }
 });

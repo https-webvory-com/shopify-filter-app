@@ -62,6 +62,9 @@ test('missing-input population runs only in the worker while visitors keep a bou
  await f.service.prepareCollectionFromFacts(spec,{populate:true});
  await f.rankingCalls[1].deps.loadFacts([]);assert.equal(f.loads[1].signal,undefined);assert.equal(f.loads[1].allowMissing,true);
  assert.equal(await f.service.prepareCollectionFromFacts({...spec,retainForIdle:false}),null);
+ const filtered={...spec,retainForIdle:false,directFiltered:true,query:{q:'',filter:["option_Color = 'Red'","option_Size = '8'"]}};
+ assert.deepEqual(await f.service.prepareCollectionFromFacts(filtered),{ids:['1'],metadata:{}});
+ assert.deepEqual(f.rankingCalls.at(-1).spec.query,filtered.query);
 });
 
 test('existing prerequisite jobs are promoted without duplicating the job',async()=>{

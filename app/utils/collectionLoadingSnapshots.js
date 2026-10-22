@@ -17,7 +17,7 @@ export function collectionSnapshotStorageText(payload){
 
 const validShop=shop=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop||'');
 const validKey=(shop,kind,key)=>{
- const prefix=kind==='ranking'?`collectionPreparedSequence:${shop}:background-v2:`:kind==='cards'?`collectionFirstPage:${shop}:`:null;
+ const prefix=kind==='ranking'?`collectionPreparedSequence:${shop}:background-v2:`:kind==='cards'?`collectionFirstPage:${shop}:`:kind==='published'?`collectionPublishedPage:${shop}:`:null;
  return prefix&&typeof key==='string'&&key.startsWith(prefix)&&/^[a-f0-9]{64}$/.test(key.slice(prefix.length));
 };
 export function createCollectionLoadingSnapshots({database,redis,now=Date.now,maxBytes=256*1024*1024,maxEntries=8192,maxEntryBytes=2*1024*1024,observe=()=>{}}){
@@ -33,6 +33,12 @@ export function createCollectionLoadingSnapshots({database,redis,now=Date.now,ma
  async function load({shop,kind,key}){
   if(!validShop(shop)||!validKey(shop,kind,key))return null;
   try{
+   if(kind==='published'){
+    const row=await database.collectionLoadingSnapshot.findFirst({where:{shop,kind,aliases:{has:key}},select:{payload:true,size:true}});
+    if(!row||row.size>maxEntryBytes||row.payload.byteLength!==row.size)return null;
+    const payload=collectionSnapshotStorageText(row.payload);
+    return Buffer.byteLength(payload)<=maxEntryBytes?payload:null;
+   }
    const [current,row]=await Promise.all([generation(shop),database.collectionLoadingSnapshot.findFirst({where:{shop,kind,aliases:{has:key},...(kind==='ranking'?{}:{expiresAt:{gt:new Date(now())}})},select:{generation:true,collectionId:true,payload:true,size:true}})]);
    if(!row||row.generation!==current||row.size>maxEntryBytes||row.payload.byteLength!==row.size)return null;
    // Missing counters mean lost invalidation history, not a verified zero.
@@ -60,7 +66,7 @@ export function createCollectionLoadingSnapshots({database,redis,now=Date.now,ma
     // The existing per-shop byte and entry budgets still bound durable storage.
     await table.deleteMany({where:{shop,kind:'cards',expiresAt:{lte:new Date(now())}}});
     const existing=await table.findUnique({where:{id:key},select:{validatedAt:true,generation:true,payload:true,aliases:true}});
-    if(existing?.generation===current&&existing.validatedAt.getTime()>validatedAt)return false;
+    if(existing&&(kind==='published'||existing.generation===current)&&existing.validatedAt.getTime()>validatedAt)return false;
     // Only replace versions belonging to an explicitly identical context. A
     // late older build cannot delete the newer version saved by another worker.
     const previous=scopeKey?await table.findMany({where:{shop,kind,collectionId:String(collectionId),aliases:{has:scopeKey}},select:{id:true,validatedAt:true},take:maxEntries+1}):[];

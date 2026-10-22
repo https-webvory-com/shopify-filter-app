@@ -8,6 +8,36 @@ async function fixture(){
  const get=async(extra,accept='application/x-cfp-pinned-prefix-v3, application/json')=>{const p=new URLSearchParams({shop:'headless-fixture.myshopify.com',country:'US',locale:'en',collectionHandle:'fixture',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1',...extra});const response=await fetch(origin+'/api/filter?'+p,{headers:{Accept:accept}});return {status:response.status,header:response.headers.get('X-CFP-Collection-Cards'),data:await response.json()};};
  return {...f,control,get,state:async()=>(await fetch(origin+'/__state')).json()};
 }
+
+test('two public filters use exact direct preparation with a paused worker and remain outside public card snapshots',async()=>{
+ const f=await fixture();try{
+  await f.control({reset:true,hold:true,productCount:30,directFacts:true});
+  const filters={responseProfile:'collection-v1','options[Color][]':'Blue','vendor[]':'Fixture'};
+  const result=await f.get(filters);assert.equal(result.status,200);assert.equal(result.data.products.length,25);assert.equal(result.data.debug.collectionRankingStatus,'ready');
+  assert.ok(result.data.rankingToken);assert.equal(result.data.cfpCards,undefined);assert.equal((await f.state()).state.builds,0);
+  const second=await f.get({...filters,page:'2',rankingToken:result.data.rankingToken});assert.equal(second.status,200);
+  assert.equal(new Set([...result.data.products,...second.data.products].map(p=>p.id)).size,30);
+ }finally{f.dispose();}
+});
+
+test('pinned cards default to the original first variant across prefix, canonical, saved and published paths',async()=>{
+ const f=await fixture();try{
+  const variants=id=>[{id:String(id*100),option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:String(id*100+1),option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:10}];
+  await f.control({reset:true,hold:true,productCount:30,colorRule:true,pinList:['1'],cardSnapshots:true,productVariants:{'1':variants(1),'30':variants(30)}});
+  const assertFirst=p=>{assert.equal(p.selectedVariantId,'100');assert.equal(p.variants[0].option1,'Green');assert.equal(p.variants[0].available,false);assert.equal(p.variants[0].imageUrl,'/image/green.svg');assert.equal(p.pinnedProductImage,'/image/1.svg');assert.equal(p.images[0],'/image/1.svg');assert.equal(p.merchandisingImage,'/image/1.svg');};
+  const head=await f.get();assert.equal(head.header,'prefix');assertFirst(head.data.products[0]);
+  await f.control({precompute:true});
+  const full=await f.get({responseProfile:'collection-v1'});assertFirst(full.data.products[0]);
+  assert.equal(full.data.products.find(p=>p.id.endsWith('/30')).selectedVariantId,'3001');
+  const saved=await f.get();assert.equal(saved.header,'hit');assertFirst(saved.data.products[0]);
+  await f.control({publishedPages:true,publishFirst50:true});
+  const published=await f.get({},'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json');assert.equal(published.header,'published');assertFirst(published.data.products[0]);
+  const filters={responseProfile:'collection-v1','options[Color][]':'Blue'};
+  await f.get(filters);await f.prepareLast();const filtered=await f.get(filters);
+  assert.equal(filtered.status,200);assert.equal(filtered.data.products.find(p=>p.id.endsWith('/1')).selectedVariantId,'101');
+  assert.equal(filtered.data.products.find(p=>p.id.endsWith('/1')).pinnedProductImage,undefined);
+ }finally{f.dispose();}
+});
 test('a cold prefix bypasses a paused ranking backlog and hands off to complete canonical pagination without gaps',async()=>{
  const f=await fixture();try{
   await f.control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],imageDelay:0,priceDelay:0});

@@ -52,6 +52,8 @@ export const loader = async ({ request, context }) => {
   let cardSnapshot;
   let pinnedPrefix=false;
   let pinnedPrefixVersion;
+  let variantEligibilityMs=0;
+  let rankingPreparationMs=0;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -72,7 +74,7 @@ export const loader = async ({ request, context }) => {
         }
       });
     }
-    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&isPublicCollectionCards(request)){
+    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
       // Trusted background rendering can reuse validated cards, but must never
       // create a shopper's browsing session while probing readiness.
       const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit});
@@ -510,6 +512,9 @@ export const loader = async ({ request, context }) => {
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
+    const selectedPriceRange = minPrice > 0 || maxPrice < 9999999
+      ? { min: Math.max(0, minPrice - 0.5), max: maxPrice + 0.5 } : null;
+    const eligibilityStarted=Date.now();
     if (hideUnavailable) {
       await getCached('variantEligibilityFilter:' + shop, async () => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
@@ -517,15 +522,24 @@ export const loader = async ({ request, context }) => {
       }, 60);
       const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
       const eligible = await getCached('availableVariants:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues]),
-        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues), 30);
+        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
     const categoryFilters = {};
     if (minPrice > 0 || maxPrice < 9999999) {
       const bufferedMin = Math.max(0, minPrice - 0.5);
       const bufferedMax = maxPrice + 0.5;
-      categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
+      if (hideUnavailable) {
+        const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
+        const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange]),
+          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange, {database:prisma}), 30);
+        // Keep this in the price category so disjunctive price facets can remove it.
+        categoryFilters["priceMin"] = eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant_price__"';
+      } else {
+        categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
+      }
     }
+    variantEligibilityMs=Date.now()-eligibilityStarted;
     if (availability.length > 0) {
       if (
         availability.includes("in_stock") &&
@@ -796,19 +810,24 @@ export const loader = async ({ request, context }) => {
         pinEligibilityVersion: 2,
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
+        directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
         pinnedIds: activePinnedList, orderedIds: collectionBestSellingIds,
         orderRevision: collectionBestSellingState.revision ?? null,
         orderUpdatedAt: collectionBestSellingState.updatedAt ?? null,
-        rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule,
+        // Filters suppress missing-pin injection through activePinnedList, but
+        // native best-selling keeps the order of matching configured pins.
+        rule: activeRule, pinningRule: userHasFilters && !needsShopifyOrder ? null : activePinningRule,
         globalSettings, mergedValues,
       };
       let prepared;
+      const rankingStarted=Date.now();
       try{prepared = missingNativeOrder?{status:'pending'}:await getPreparedCollectionRanking(preparedSpec, {
         warmup: context?.rankingWarmup === true,
         precompute: context?.rankingPrecompute === true,
         deferDirect:canPreviewPins,
       });}catch(error){if(!canPreviewPins)throw error;prepared={status:'pending'};reportCollectionHead(preparedSpec,'background-unavailable',error.name);}
+      rankingPreparationMs=Date.now()-rankingStarted;
       if(canPreviewPins&&prepared.status!=='ready')try{
         let declineReason;
         const version=await getCollectionHeadVersion(preparedSpec);
@@ -835,7 +854,7 @@ export const loader = async ({ request, context }) => {
         {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
         await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
     }
-    if(cardsOnly&&preparedSpec&&!pinnedPrefix)cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
+    if(rankingSession&&!pinnedPrefix&&(cardsOnly||['collection-v1','collection-v2'].includes(url.searchParams.get('responseProfile')))&&(limit!==50||context?.rankingCardsPrecompute===true))cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
     // Only updated collection clients opt into the lossless transport. Ranking
     // readiness and the immutable browsing session are established before reuse.
@@ -863,7 +882,7 @@ export const loader = async ({ request, context }) => {
       collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
       collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
     }
-    if (!needsRankedSearch&&!cardsOnly) {
+    if (!needsRankedSearch&&(!cardsOnly||context?.rankingCardsPrecompute===true&&limit===50)) {
     try {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
@@ -924,6 +943,7 @@ export const loader = async ({ request, context }) => {
         if (useRankedCollectionPagination) {
           collectionRankingStatus = 'ready';
           result = rankedPage;
+          if(cardsOnly||cardSnapshot){responsePageFingerprint=collectionPageFingerprint(result.hits);responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));}
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else {
@@ -1127,7 +1147,7 @@ export const loader = async ({ request, context }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues) : [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, selectedPriceRange) : [...(p.variantPrices || [])];
       let productImages = [...(p.images || [])];
       let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
       if (hideUnavailable) {
@@ -1138,7 +1158,12 @@ export const loader = async ({ request, context }) => {
         }));
       }
       
-      let activeVariant = parsedQuery?.colorIntent?.requested.length
+      // Pinning chooses the product, not a merchandising-selected color/size.
+      // Explicit shopper filters and search retain their existing selections.
+      const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
+      const firstProductImage=productImages[0];
+      const pinnedProductImage=pinnedDefault?(typeof firstProductImage==='string'?firstProductImage:firstProductImage?.url||firstProductImage?.src||firstProductImage?.image?.url||null):null;
+      let activeVariant = pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
         ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
             Object.entries(optionsFilters).every(([name, values]) => {
               const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
@@ -1209,7 +1234,7 @@ export const loader = async ({ request, context }) => {
         if (activeVariant) matchScore = highestScore;
       }
 
-      if (!activeVariant && Object.keys(optionsFilters).length === 0) {
+      if (!activeVariant && !pinnedDefault && Object.keys(optionsFilters).length === 0) {
         const selection = selectMerchandisingVariant(p, activeRule, mergedValues);
         if (selection) {
           activeVariant = localVariantPrices.find(v => String(v.id) === String(selection.variantId)) || null;
@@ -1218,7 +1243,7 @@ export const loader = async ({ request, context }) => {
       }
 
       if (activeVariant) {
-        if (activeVariant.imageUrl) {
+        if (activeVariant.imageUrl && !pinnedProductImage) {
           const filterVariantImage = activeVariant.imageUrl;
           productImages = [
             filterVariantImage,
@@ -1282,9 +1307,10 @@ export const loader = async ({ request, context }) => {
         status: (p.status || "ACTIVE").toLowerCase(),
         options: localOptions,
         selectedVariantId: activeVariant?.id || null,
+        ...(pinnedProductImage?{pinnedProductImage}:{}),
         searchColor: activeVariant?.searchColor || null,
         searchColorImage: activeVariant?.searchColor ? activeVariant.imageUrl : null,
-        merchandisingImage: activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null),
+        merchandisingImage: pinnedProductImage || (activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null)),
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
@@ -1562,6 +1588,8 @@ export const loader = async ({ request, context }) => {
         timing: {
           meiliMs: meiliTime,
           totalMs,
+          variantEligibilityMs,
+          rankingPreparationMs,
         },
       },
       facets: {
@@ -1621,9 +1649,10 @@ export const loader = async ({ request, context }) => {
         if(!await rememberCollectionHead(preparedSpec,pinnedPrefixVersion,rankingSession.ids))return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
         responsePayload.collectionPinnedPrefix={version:2,inputVersion:pinnedPrefixVersion};reportCollectionHead(preparedSpec,'proven','explicit-paid-pins');
       }
-      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint);
-      return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request);
+      const stored=await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint,{facetsReady:context?.rankingCardsPrecompute===true&&limit===50});
+      return collectionCardsResponse(responsePayload,pinnedPrefix?'prefix':stored?'stored':'miss',request,{previewLimit:limit});
     }
+    await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint,{facetsReady:true});
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {

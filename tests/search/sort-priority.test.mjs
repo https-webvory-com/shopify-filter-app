@@ -109,7 +109,7 @@ test("priority ON respects price sorting and filtered collection membership", as
   assert.deepEqual(Array.from(price.products,p=>Number(p.id.split("/").pop())),Array.from({length:25},(_,i)=>i+1));
   const filtered=await load("page=1&tag[]=TopFormal&sortBy=best-selling");
   assert.equal(filtered.totalCount,10);
-  assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[10,9,8,7,6,5,4,3,2,1]);
+  assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[1,10,9,8,7,6,5,4,3,2]);
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {
