@@ -2372,8 +2372,100 @@ facet-filters-form,
   gap: 8px;
 }
 
+.cfp-clear-all-top {
+  display: none;
+}
+
 @media (min-width: 769px) {
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
+  
+  .cfp-horizontal-layout .cfp-clear-all-top {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-left: 6px;
+    transition: color 0.15s ease;
+    white-space: nowrap;
+  }
+  .cfp-horizontal-layout .cfp-clear-all-top:hover {
+    color: #ef4444;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumbs {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin-top: 10px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid var(--cfp-border, #e5e7eb) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-chip {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 4px !important;
+    padding: 5px 10px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #111827 !important;
+    line-height: 1.4 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-chip:hover {
+    background: #ebeef2 !important;
+    border-color: #d1d5db !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-remove {
+    background: transparent !important;
+    border: none !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    color: #6b7280 !important;
+    padding: 0 0 0 2px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: color 0.15s ease !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-remove:hover {
+    color: #ef4444 !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-clear {
+    color: #111827 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 8px !important;
+    margin-left: 4px !important;
+    transition: color 0.15s ease !important;
+    white-space: nowrap !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-clear:hover {
+    color: #ef4444 !important;
+  }
   
   /* In Horizontal mode, MORE button is styled bold and visible in the toolbar */
   .cfp-horizontal-layout #cfp-drawer-trigger-btn {
@@ -2434,7 +2526,7 @@ facet-filters-form,
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
-    gap: 0 28px !important;
+    gap: 0 20px !important;
     align-items: flex-start !important;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -2580,7 +2672,7 @@ facet-filters-form,
     visibility: visible !important;
     position: -webkit-sticky !important;
     position: sticky !important;
-    top: max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) !important;
+    top: max(120px, calc(var(--cfp-sticky-top, 0px) + 15px)) !important;
     left: auto !important;
     right: auto !important;
     bottom: auto !important;
@@ -2597,7 +2689,7 @@ facet-filters-form,
     border-top: none !important;
     border-bottom: none !important;
     border-left: none !important;
-    padding: 0 20px 20px 16px !important;
+    padding: 0 10px 20px 10px !important;
     margin: 0 !important;
     background: var(--cfp-surface, #ffffff) !important;
     transition: none !important;
@@ -2629,7 +2721,7 @@ facet-filters-form,
     border-bottom: none !important;
     flex-shrink: 0 !important;
     position: sticky !important;
-    top: 0 !important;
+    top: 0px !important;
     background: var(--cfp-surface, #ffffff) !important;
     z-index: 10 !important;
     width: 100% !important;

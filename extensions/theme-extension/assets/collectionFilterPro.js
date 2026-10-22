@@ -750,6 +750,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.padding = '0';
         breadcrumbs.style.marginBottom = '0';
         breadcrumbs.style.borderBottom = 'none';
+        breadcrumbs.style.borderTop = 'none';
+        breadcrumbs.style.marginTop = '0';
+      } else if (layout === 'horizontal' && !mobile) {
+        if (topBar && breadcrumbs.parentElement !== topBar) {
+          topBar.appendChild(breadcrumbs);
+        }
+        breadcrumbs.style.padding = '8px 0 0 0';
+        breadcrumbs.style.margin = '6px 0 0 0';
+        breadcrumbs.style.borderTop = '1px solid var(--cfp-border, #e5e7eb)';
+        breadcrumbs.style.borderBottom = 'none';
       } else {
         const filterBody = sidebar?.querySelector('.cfp-sidebar__body');
         if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -758,6 +768,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.padding = '12px 0';
         breadcrumbs.style.marginBottom = '0';
         breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+        breadcrumbs.style.borderTop = 'none';
+        breadcrumbs.style.marginTop = '0';
       }
     }
 
@@ -2354,8 +2366,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       clearBtn.addEventListener('click', clearAllFilters);
     }
 
-    // Individual group clear button click handler
+    // Individual group clear button click handler & top clear all button
     document.body.addEventListener('click', function(e) {
+      const clearAllTopBtn = e.target.closest('#cfp-clear-all-top, .cfp-clear-all-top');
+      if (clearAllTopBtn) {
+        e.stopPropagation();
+        e.preventDefault();
+        clearAllFilters();
+        return;
+      }
       const clearGroupBtn = e.target.closest('.cfp-clear-group');
       if (clearGroupBtn) {
         e.stopPropagation();
@@ -3075,6 +3094,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       activeCount.textContent = count;
       activeCount.style.display = count > 0 ? 'inline-flex' : 'none';
     }
+
+    const topClearBtn = document.getElementById('cfp-clear-all-top');
+    if (topClearBtn) {
+      const isHorizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
+      topClearBtn.style.display = (count > 0 && isHorizontal) ? 'inline-flex' : 'none';
+    }
   }
 
   function getEffectiveLayout() {
@@ -3254,6 +3279,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.padding = '0';
           breadcrumbs.style.marginBottom = '0';
           breadcrumbs.style.borderBottom = 'none';
+          breadcrumbs.style.borderTop = 'none';
+          breadcrumbs.style.marginTop = '0';
+        } else if (layout === 'horizontal' && !mobile) {
+          if (topBar && breadcrumbs.parentElement !== topBar) {
+            topBar.appendChild(breadcrumbs);
+          }
+          breadcrumbs.style.padding = '8px 0 0 0';
+          breadcrumbs.style.margin = '6px 0 0 0';
+          breadcrumbs.style.borderTop = '1px solid var(--cfp-border, #e5e7eb)';
+          breadcrumbs.style.borderBottom = 'none';
         } else {
           const filterBody = sidebar.querySelector('.cfp-sidebar__body');
           if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -3262,6 +3297,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.padding = '12px 0';
           breadcrumbs.style.marginBottom = '0';
           breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+          breadcrumbs.style.borderTop = 'none';
+          breadcrumbs.style.marginTop = '0';
         }
       }
       wrapper.appendChild(sidebar);
