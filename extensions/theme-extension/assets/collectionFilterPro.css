@@ -2046,44 +2046,72 @@ facet-filters-form,
   position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
 }
 
-/* Count markup is controlled by the shop's showProductCount setting. */
+/* Box / Button Chips Count Badge */
 .cfp-button-chip .cfp-checkbox__count {
-  border: 0 !important;
-  height: auto !important;
-  min-width: 0 !important;
-  margin-left: 6px !important;
-  padding: 0 !important;
-  background: transparent !important;
-  color: inherit !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #f0f2f5 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 1px 7px !important;
   font-size: 11px !important;
-}
-
-/* 8. Price Slider Overrides */
-.noUi-handle {
-  width: 20px !important;
+  font-weight: 500 !important;
+  line-height: 1.3 !important;
+  margin-left: 8px !important;
+  min-width: 20px !important;
   height: 20px !important;
-  border-radius: 50% !important;
-  background: #fff !important;
-  border: 1px solid #000 !important;
-  box-shadow: none !important;
-}
-.noUi-handle::after, .noUi-handle::before {
-  display: none !important;
-}
-.noUi-handle .noUi-touch-area {
-  position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  transition: all 0.15s ease !important;
 }
 
-/* Count markup is controlled by the shop's showProductCount setting. */
-.cfp-button-chip .cfp-checkbox__count {
-  border: 0 !important;
-  height: auto !important;
-  min-width: 0 !important;
-  margin-left: 6px !important;
-  padding: 0 !important;
-  background: transparent !important;
-  color: inherit !important;
+.cfp-button-chip:hover .cfp-checkbox__count {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.cfp-button-chip input:checked ~ span .cfp-checkbox__count {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Swatch Grid Top-Right Count Badge */
+.cfp-swatch-count--top-right {
+  position: absolute !important;
+  top: 2px !important;
+  right: 4px !important;
+  margin: 0 !important;
   font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  padding: 2px 6px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  border-radius: 9px !important;
+  background: #f0f2f5 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+  transition: all 0.15s ease !important;
+}
+
+.cfp-color-swatch:hover .cfp-swatch-count--top-right {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.cfp-color-swatch input:checked ~ .cfp-swatch-count--top-right {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
 }
 
 /* 10. Swatch Grids */
@@ -2879,7 +2907,7 @@ facet-filters-form,
   border-color: var(--cfp-border) !important;
 }
 .cfp-dark-mode #cfp-sidebar .cfp-search-input::placeholder { color: var(--cfp-text-muted) !important; }
-.cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: transparent !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: rgba(255, 255, 255, 0.15) !important; color: #fff !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-sidebar__footer { background: var(--cfp-bg) !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-button-chip input:checked + span { background: #000 !important; border-color: #fff !important; }
 

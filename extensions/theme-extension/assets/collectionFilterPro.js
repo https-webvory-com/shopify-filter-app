@@ -1991,13 +1991,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     let labelFlexDir, labelJustify, textAlign, gap;
 
                     if (isGrid && !isColor) {
-                      // Grid layout (Length, Sleeve type) - Large image, text below
-                      vWidth = '100%';
-                      vHeight = '65px';
+                      // Grid layout (Length, Sleeve type, Back Style) - Large image/circle, text below
+                      vWidth = '64px';
+                      vHeight = '64px';
                       labelFlexDir = 'column';
                       labelJustify = 'center';
                       textAlign = 'center';
-                      gap = '6px';
+                      gap = '8px';
                     } else {
                       // Normal list layout (Colors) - small circle, text right
                       vWidth = showLabel ? '22px' : '36px';
@@ -2008,19 +2008,31 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                       gap = '8px';
                     }
 
-                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/${isGrid ? 'contain' : 'cover'} no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
+                    const bgStyle = isImageItem ? `background: #f8f9fa url('${colorValue}') center/contain no-repeat; border: 1px solid #e2e8f0 !important;` : `background:${colorValue || '#f8f9fa'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
 
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle ? (showLabel && !isGrid ? 'border-radius: 50% !important;' : 'border-radius: 50% !important;') : 'border-radius: 4px !important;'} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
+                    const placeholderSvg = (!isImageItem && isGrid && !isColor) ? `
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7v1H3v-1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 12 2z"></path>
+                        <path d="M5 16l2 6h10l2-6"></path>
+                      </svg>
+                    ` : '';
 
+                    const isTopRightCount = isGrid && !isColor;
+                    const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
+
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px auto !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2)); box-shadow: 0 0 0 2px #000;' : ''}">${placeholderSvg}</span>`;
+
+                    const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
+                        ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
                         ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 13px; text-align: ${textAlign} !important; color: #202223; line-height: 1.2; word-break: break-word; ${spanWidthStyle} margin: 0 !important; padding: 0 !important;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
-                        ${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}
+                        ${!isTopRightCount ? countHtml : ''}
                       </label>
                     `;
                   }).join('');
