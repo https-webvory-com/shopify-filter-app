@@ -940,11 +940,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   function updateProductCount(totalCount){
-    const countLabel=document.querySelector('.cfp-product-count');
-    if(!countLabel)return;
-    if(!Number.isFinite(totalCount)){countLabel.textContent='';return;}
-    countLabel.style.display=globalSettings?.showProductCount===false?'none':'';
-    countLabel.textContent=`${totalCount} product${totalCount===1?'':'s'}`;
+    const countLabels = document.querySelectorAll('.cfp-product-count');
+    if (!countLabels || countLabels.length === 0) return;
+    if (!Number.isFinite(totalCount)) {
+      countLabels.forEach(lbl => { lbl.textContent = ''; lbl.style.display = 'none'; });
+      return;
+    }
+    const unit = templateName === 'search' ? (totalCount === 1 ? 'result' : 'results') : (totalCount === 1 ? 'product' : 'products');
+    countLabels.forEach(lbl => {
+      lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';
+      lbl.textContent = `${totalCount} ${unit}`;
+    });
   }
 
   function escapeCardHtml(value) {
