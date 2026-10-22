@@ -2239,11 +2239,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           extraContainer.classList.remove('is-expanded');
         }
         if (triggerBtn) {
-          triggerBtn.classList.remove('is-hidden');
-          triggerBtn.style.setProperty('display', 'inline-flex', 'important');
-          const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
-          if (triggerLabel) triggerLabel.textContent = 'Filters';
-          triggerBtn.setAttribute('aria-expanded', 'false');
+          if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
+            triggerBtn.classList.add('is-hidden');
+            triggerBtn.style.setProperty('display', 'none', 'important');
+            triggerBtn.setAttribute('aria-expanded', 'false');
+          } else {
+            triggerBtn.classList.remove('is-hidden');
+            triggerBtn.style.setProperty('display', 'inline-flex', 'important');
+            const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
+            if (triggerLabel) triggerLabel.textContent = 'Filters';
+            triggerBtn.setAttribute('aria-expanded', 'false');
+          }
         }
       }
     }

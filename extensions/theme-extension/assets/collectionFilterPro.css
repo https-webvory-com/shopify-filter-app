@@ -2452,8 +2452,12 @@ facet-filters-form,
     min-width: 0 !important;
     display: flex !important;
     align-items: center !important;
+    justify-content: flex-start !important;
     flex-wrap: wrap !important;
     gap: 12px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
   }
 
   .cfp-vertical-layout .cfp-product-count {
@@ -2548,6 +2552,13 @@ facet-filters-form,
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+    position: absolute !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar {
