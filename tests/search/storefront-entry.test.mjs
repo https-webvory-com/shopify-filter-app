@@ -33,6 +33,13 @@ test('pages without an app block download no full widget and clean up their obse
  const f=fixture();f.domReady();assert.equal(f.scripts.length,0);assert.equal(f.disconnected(),true);assert.equal(f.window._cfpWidgetEntryLoaded,false);
  const late=fixture({readyState:'complete'});assert.equal(late.scripts.length,0);assert.equal(late.window._cfpWidgetEntryLoaded,false);
 });
+
+test('search and collection blocks use the versioned Liquid runtime URL without a malformed timestamp suffix',async()=>{
+ for(const name of ['snippets/collectionFilterPro.liquid','blocks/collection_loading.liquid']){
+  const liquid=await fs.readFile(base+name,'utf8');
+  assert.ok(liquid.includes('data-cfp-runtime="{{ \'collectionFilterPro.min.js\' | asset_url }}"'),name);
+ }
+});
 test('registered extension JavaScript entry points remain below the 10000-byte budget',async()=>{
  for(const name of ['collection_filter_pro','collection_loading']){
   const block=await fs.readFile(base+'blocks/'+name+'.liquid','utf8');
