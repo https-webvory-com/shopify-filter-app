@@ -2434,9 +2434,13 @@ facet-filters-form,
     flex: 0 0 100% !important;
   }
   .cfp-vertical-layout #cfp-top-bar #cfp-drawer-trigger-btn,
+  .cfp-vertical-layout #cfp-drawer-trigger-btn,
+  .cfp-vertical-layout .cfp-drawer-trigger-btn,
   .cfp-vertical-layout #cfp-top-bar #cfp-horizontal-filters,
   .cfp-vertical-layout #cfp-top-bar #cfp-horizontal-extra-filters {
     display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar {
@@ -2477,6 +2481,8 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__footer,
   .cfp-vertical-layout #cfp-overlay,
+  .cfp-vertical-layout .cfp-overlay,
+  .cfp-vertical-layout #cfp-overlay.cfp-overlay--visible,
   .cfp-vertical-layout .cfp-overlay.cfp-overlay--visible {
     display: none !important;
     visibility: hidden !important;

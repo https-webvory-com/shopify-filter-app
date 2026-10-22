@@ -365,29 +365,33 @@
 <script>
 (function() {
   var isSyncing = false;
-  function isCurrentHorizontal() {
+  function getCurrentLayout() {
     // 1. Mobile (768px and down) is strictly drawer mode
-    if (window.innerWidth <= 768) return false;
+    if (window.innerWidth <= 768) return 'drawer';
 
     // 2. If app JS runtime function is available, query it
-    if (typeof window.cfpIsHorizontalFilterLayout === 'function') {
-      return window.cfpIsHorizontalFilterLayout();
+    if (typeof window.cfpGetEffectiveLayout === 'function') {
+      return window.cfpGetEffectiveLayout();
     }
 
     // 3. Check layout from global settings
     var layout = window.cfpGlobalSettings?.desktopFilterLayout ||
                  window.cfpGlobalSettings?.integrations?.desktopFilterLayout;
-    if (layout === 'vertical') return false;
-    if (layout === 'drawer') return false;
-    if (layout === 'horizontal') return true;
+    if (layout === 'vertical') return 'vertical';
+    if (layout === 'drawer') return 'drawer';
+    if (layout === 'horizontal') return 'horizontal';
 
     // 4. Check if global setting explicitly disables it (e.g. horizontalFilters === false)
     if (window.cfpGlobalSettings && window.cfpGlobalSettings.horizontalFilters === false) {
-      return false;
+      return 'drawer';
     }
 
     // 5. Default for tablet and desktop (> 768px): Horizontal is active!
-    return true;
+    return 'horizontal';
+  }
+
+  function isCurrentHorizontal() {
+    return getCurrentLayout() === 'horizontal';
   }
 
   function syncPillsLayout() {
@@ -395,9 +399,20 @@
     var hFilters = document.getElementById('cfp-horizontal-filters');
     var extra = document.getElementById('cfp-horizontal-extra-filters');
     var triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
-    var isHorizontal = isCurrentHorizontal();
+    var currentLayout = getCurrentLayout();
 
-    if (!isHorizontal) {
+    if (currentLayout === 'vertical') {
+      if (hFilters) { hFilters.innerHTML = ''; hFilters.style.display = 'none'; }
+      if (extra) { extra.innerHTML = ''; extra.style.display = 'none'; extra.classList.remove('is-expanded'); }
+      if (triggerBtn) {
+        triggerBtn.classList.add('is-hidden');
+        triggerBtn.style.setProperty('display', 'none', 'important');
+        triggerBtn.setAttribute('aria-expanded', 'false');
+      }
+      return;
+    }
+
+    if (currentLayout === 'drawer') {
       if (hFilters) { hFilters.innerHTML = ''; hFilters.style.display = 'none'; }
       if (extra) { extra.innerHTML = ''; extra.style.display = 'none'; extra.classList.remove('is-expanded'); }
       if (triggerBtn) {
@@ -510,8 +525,13 @@
     var btn = e.target.closest('#cfp-drawer-trigger-btn');
     if (!btn) return;
 
-    var isHorizontal = isCurrentHorizontal();
-    if (!isHorizontal) return; // If mobile or drawer mode, allow normal drawer open
+    var layout = getCurrentLayout();
+    if (layout === 'vertical') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (layout === 'drawer') return; // If mobile or drawer mode, allow normal drawer open
 
     e.preventDefault();
     e.stopImmediatePropagation();
