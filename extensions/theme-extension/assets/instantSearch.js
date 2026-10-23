@@ -105,9 +105,18 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   async function fetchSearchJSON(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Search request failed: ' + response.status);
-    return response.json();
+    const market=instantCacheMarket();
+    const query=new URL(url,location.href).searchParams.get('q')||'';
+    for(let attempt=0;attempt<31;attempt++){
+      const response=await fetch(url);
+      if(!response.ok)throw new Error('Search request failed: '+response.status);
+      const data=await response.json();
+      if(response.status!==202||!data.marketAvailabilityPending)return data;
+      if(attempt===30)throw new Error('Product availability is still preparing');
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      const input=document.getElementById('cfp-main-search-input');
+      if(instantCacheMarket()!==market||(input&&input.value.trim().toLowerCase()!==query.trim().toLowerCase()))throw new Error('Search changed');
+    }
   }
 
   function highlightSearchText(value, query) {

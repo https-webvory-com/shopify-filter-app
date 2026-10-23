@@ -46,3 +46,10 @@ test('public banner lookup validates shop/rate limits, reads fresh, and falls ba
   fail=true;assert.deepEqual((await (await api.loader(request('fixture.myshopify.com'))).json()).banners,[]);
   allowed=false;assert.equal((await api.loader(request('fixture.myshopify.com'))).status,429);
 });
+
+
+test('banner content supports multiple lines while headings and unsafe controls remain rejected',()=>{
+ const result=helpers.validateSearchBanner(form({...valid,content:'First line\r\nSecond line\nThird line'}));
+ assert.equal(result.content,'First line\nSecond line\nThird line');
+ for(const change of [{heading:'Line one\nLine two'},{content:'Unsafe\u0000text'},{content:'Unsafe\u000btext'}])assert.throws(()=>helpers.validateSearchBanner(form({...valid,...change})),helpers.BannerValidationError);
+});

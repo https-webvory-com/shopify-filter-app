@@ -9,7 +9,7 @@ window.runBannerChecks = async () => {
   const post=async values=>{const r=await fetch('/admin',{method:'POST',body:new URLSearchParams(values)});const d=await r.json();if(d.error)throw Error(d.error);return d;};
   const list=async()=> (await(await fetch('/admin')).json()).rules;
   const clear=async()=>{for(const b of await list())await post({intent:'delete',id:b.id});};
-  const campaign={intent:'create',query:'summer dress',placement:'grid',position:'2',heading:'Summer offer',content:'A limited offer',targetUrl:'/collections/all',buttonLabel:'Shop now',isActive:'true'};
+  const campaign={intent:'create',query:'summer dress',placement:'grid',position:'2',heading:'Summer offer',content:'A limited offer',targetUrl:'/collections/all',buttonLabel:'Shop now',backgroundColor:'#112233',textColor:'#fefefe',isActive:'true'};
   const cards=()=>[...doc().querySelectorAll('[data-product]')].map(e=>e.dataset.product).join(',');
   const banners=()=>doc().querySelectorAll('[data-cfp-banner]');
   const fill=async(name,value)=>{const el=doc().querySelector(`[name="${name}"]`);if(el.type==='radio'){doc().querySelector(`[name="${name}"][value="${value}"]`).click();await delay(30);return;}const proto=el.tagName==='SELECT'?win().HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?win().HTMLTextAreaElement.prototype:win().HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new (win().Event)(el.tagName==='SELECT'?'change':'input',{bubbles:true}));await delay(30);};
@@ -25,10 +25,52 @@ window.runBannerChecks = async () => {
       await click('Enable');await wait(()=>[...doc().querySelectorAll('button')].some(b=>b.textContent==='Disable'));assert((await list())[0].isActive===true,'Enable not saved');
       win().confirm=()=>true;await click('Delete');await wait(()=>doc().body.textContent.includes('No banners yet.'));assert((await list()).length===0,'Delete not saved');
     });
+    await test('multiline edits persist and toggling another banner preserves the draft',async()=>{
+      await post({...campaign,query:'first banner'});await post({...campaign,query:'other banner'});
+      await navigate('/admin-ui');await wait(()=>doc().querySelectorAll('.sb-saved').length===2);
+      const article=query=>[...doc().querySelectorAll('.sb-saved')].find(a=>a.querySelector('.sb-saved-body h4')?.textContent===query);
+      const libraryChange=(selector,value)=>{const e=doc().querySelector(selector);const proto=e.tagName==='SELECT'?win().HTMLSelectElement.prototype:win().HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(e,value);e.dispatchEvent(new(win().Event)(e.tagName==='SELECT'?'change':'input',{bubbles:true}));};
+      libraryChange('[aria-label="Search banners"]','other');await wait(()=>doc().querySelectorAll('.sb-saved').length===1);assert(!!article('other banner'),'Library search ignored query');
+      libraryChange('[aria-label="Filter banner status"]','disabled');await wait(()=>doc().body.textContent.includes('No matching banners'));
+      await click('Clear filters');await wait(()=>doc().querySelectorAll('.sb-saved').length===2);
+
+      article('first banner').querySelector('button').click();await delay(80);
+      await fill('heading','Unsaved heading');await fill('content','First line\nSecond line');
+      [...article('other banner').querySelectorAll('button')].find(b=>b.textContent==='Disable').click();
+      await wait(()=>article('other banner').textContent.includes('Disabled'));
+      assert(doc().querySelector('[name=heading]').value==='Unsaved heading','Toggle cleared unsaved heading');
+      assert(doc().querySelector('[name=content]').value==='First line\nSecond line','Toggle cleared multiline draft');
+      await click('Update banner');await wait(()=>doc().querySelector('[name=query]').value==='');
+      const saved=(await list()).find(b=>b.query==='first banner');assert(saved.content==='First line\nSecond line','Multiline content not persisted');
+      await navigate('/admin-ui');await wait(()=>doc().querySelectorAll('.sb-saved').length===2);
+      article('first banner').querySelector('button').click();await delay(80);
+      assert(doc().querySelector('[name=content]').value==='First line\nSecond line','Reload lost multiline content');
+      [...article('first banner').querySelectorAll('button')].find(b=>b.textContent==='Disable').click();
+      await wait(()=>article('first banner').textContent.includes('Disabled'));
+      assert(doc().querySelector('[name=isActive]').value==='false','Edited banner status did not follow explicit toggle');
+      assert(doc().querySelector('[name=heading]').value==='Unsaved heading','Same-banner toggle cleared editor');
+      await clear();
+    });
     await post(campaign);
-    await test('grid banner occupies its numbered slot without replacing products or counts',async()=>{await navigate('/search?q=summer+dress');await wait(()=>banners().length===1);assert(cards()==='1,2,3,4','Product order changed');assert(doc().querySelector('#product-count').textContent==='4 products','Count changed');const children=[...doc().querySelector('ul').children];assert(children[1].dataset.cfpBanner,'Wrong slot');assert(banners()[0].tagName==='LI','Invalid list semantics');assert(banners()[0].querySelector('a').getAttribute('href')==='/collections/all','Link not applied');});
+    await test('grid banner occupies its numbered slot without replacing products or counts',async()=>{await navigate('/search?q=summer+dress');await wait(()=>banners().length===1);assert(cards()==='1,2,3,4','Product order changed');assert(doc().querySelector('#product-count').textContent==='4 products','Count changed');const children=[...doc().querySelector('ul').children];assert(children[1].dataset.cfpBanner,'Wrong slot');assert(win().getComputedStyle(banners()[0]).backgroundColor==='rgb(17, 34, 51)','Background color ignored');assert(win().getComputedStyle(banners()[0].querySelector('h3')).color==='rgb(254, 254, 254)','Text color ignored');assert(banners()[0].tagName==='LI','Invalid list semantics');assert(banners()[0].querySelector('a').getAttribute('href')==='/collections/all','Link not applied');});
     await test('case and extra spaces match, longer unrelated query does not',async()=>{await navigate('/search?q=%20SUMMER%20%20DRESS%20');await wait(()=>banners().length===1);await navigate('/search?q=summer+dress+sale');assert(banners().length===0,'Non-exact query matched');assert(cards()==='1,2,3,4','Non-matching search damaged');});
     await test('top and grid placements coexist; text is escaped',async()=>{await post({...campaign,placement:'top',imageUrl:'https://banner-fixture.invalid/image.png',heading:'<img src=x onerror=alert(1)>'});await navigate('/search?q=summer+dress');await wait(()=>banners().length===2);assert(doc().querySelector('.cfp-search-banner--top').parentElement!==doc().querySelector('ul'),'Top banner in grid');assert(doc().querySelector('.cfp-search-banner--top h3').textContent==='<img src=x onerror=alert(1)>','Heading escaped incorrectly');assert(!doc().querySelector('.cfp-search-banner--top h3 img'),'HTML executed');assert(cards()==='1,2,3,4','Products lost');});
+    await test('top banners and images span the full width in every filter layout',async()=>{
+      const top=(await list()).find(b=>b.placement==='top');
+      await post({...campaign,intent:'update',id:top.id,placement:'top',imageUrl:'https://banner-fixture.invalid/wide.svg',heading:'',content:'',buttonLabel:''});
+      for(const [width,layout]of [[1100,'vertical'],[1100,'horizontal'],[1100,'drawer'],[375,'vertical']]){
+        frame.style.width=width+'px';await navigate('/search?q=summer+dress&layout='+layout);
+        await wait(()=>doc().querySelector('.cfp-search-banner--top img')?.naturalWidth===1200);
+        const b=doc().querySelector('.cfp-search-banner--top'),image=b.querySelector('img'),wrapper=doc().querySelector('.cfp-layout-wrapper');
+        assert(!wrapper.contains(b),'Top banner became a flex/grid column in '+layout);
+        assert(Math.abs(b.getBoundingClientRect().width-wrapper.getBoundingClientRect().width)<2,'Banner width incorrect in '+layout+': '+b.getBoundingClientRect().width+' vs '+wrapper.getBoundingClientRect().width);
+        assert(Math.abs(image.getBoundingClientRect().width-b.getBoundingClientRect().width)<2,'Image does not fill banner in '+layout);
+        assert(Math.abs(image.getBoundingClientRect().width/image.getBoundingClientRect().height-3)<0.02,'Image aspect ratio constrained in '+layout);
+        assert(cards()==='1,2,3,4','Layout changed product ordering');
+        assert(doc().querySelector('.cfp-search-banner--grid')?.parentElement.id==='cfp-products-container','Grid tile placement changed');
+      }
+      frame.style.width='1100px';await navigate('/search?q=summer+dress');await wait(()=>banners().length===2);
+    });
     await test('rerender, filtering and load-more do not duplicate or drop products',async()=>{doc().querySelector('ul').innerHTML='<li data-product="5"><a href="/products/p5">P5</a></li>';await delay(200);assert(doc().querySelectorAll('.cfp-search-banner--grid').length===0,'Out-of-range grid promotion retained');doc().querySelector('ul').insertAdjacentHTML('beforeend','<li data-product="6"><a href="/products/p6">P6</a></li>');doc().dispatchEvent(new (win().Event)('cfp:search-products-rendered'));await wait(()=>doc().querySelectorAll('.cfp-search-banner--grid').length===1);assert(cards()==='5,6','Load more changed products');assert(doc().querySelectorAll('.cfp-search-banner--top').length===1,'Duplicate top banner');});
     await test('absolute grid positions honor app pagination offset',async()=>{await post({...campaign,position:'6',heading:'Page two offer'});await navigate('/search?q=summer+dress&offset=4&page=2');await wait(()=>doc().querySelectorAll('.cfp-search-banner--grid').length===1);assert(doc().querySelector('.cfp-search-banner--grid h3').textContent==='Page two offer','First-page banner repeated');assert([...doc().querySelector('ul').children][1].dataset.cfpBanner,'Wrong page-two position');});
     await test('native Dawn-style search derives page size and places later-page grid campaigns',async()=>{await navigate('/search?q=summer+dress&native=true');await wait(()=>banners().length===2);await navigate('/search?q=summer+dress&native=true&page=2');await wait(()=>banners().length===2);assert(doc().querySelector('.cfp-search-banner--grid h3').textContent==='Page two offer','Native page repeated first-page campaign');assert(cards()==='1,2,3,4','Native pagination changed products');});

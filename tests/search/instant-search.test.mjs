@@ -149,6 +149,7 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../services/rateLimiter.server':{rateLimit:async()=>true},
   '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
  };
+ mocks['../services/marketAvailability.server.js']={getMarketAvailableProductIds:async()=>undefined};
  const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>{if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext(code,context);
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
@@ -174,4 +175,13 @@ test('a genuine spelling prompt never claims no products when results exist',asy
  await f.context.performSearch('drees');
  const banner=f.element('cfp-did-you-mean-container').innerHTML;
  assert.ok(banner.includes('Did you mean'));assert.ok(!banner.includes('nothing found'));assert.ok(!banner.includes('No matches found'));
+});
+
+
+test('instant search waits for market stock preparation and cancels an obsolete query',async()=>{
+ const f=fixture();let calls=0;f.context.setTimeout=resolve=>resolve();
+ f.context.fetch=async()=>({ok:true,status:++calls===1?202:200,json:async()=>calls===1?{marketAvailabilityPending:true}:{products:[{title:'Available dress'}]}});
+ const result=await f.context.fetchSearchJSON('https://api.test/api/search?q=blue%20dress');assert.equal(calls,2);assert.equal(result.products[0].title,'Available dress');
+ f.context.fetch=async()=>({ok:true,status:202,json:async()=>({marketAvailabilityPending:true})});f.element('cfp-main-search-input').value='different query';
+ await assert.rejects(f.context.fetchSearchJSON('https://api.test/api/search?q=blue%20dress'),/Search changed/);
 });

@@ -13,8 +13,9 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   try {
-    await saveSearchBanner(session.shop, await request.formData());
-    return { success: true };
+    const form = await request.formData();
+    await saveSearchBanner(session.shop, form);
+    return { success: true, intent: form.get('intent'), id: form.get('id') || null, isActive: form.get('isActive') === 'true' };
   } catch (error) {
     if (error.code === 'P2002') return { error: 'A banner already uses this query, placement and position. Edit it or choose another position.' };
     if (error.code === 'P2025') return { error: 'Banner not found.' };
@@ -168,9 +169,11 @@ export default function SearchBanners() {
   const busy = fetcher.state !== 'idle';
   const reset = () => { setEditing(null); setValues(defaults); setActive(true); };
   useEffect(() => {
-    if (fetcher.state === 'idle' && fetcher.data?.success) {
+    if (fetcher.state !== 'idle' || !fetcher.data?.success) return;
+    const { intent, id, isActive } = fetcher.data;
+    if (intent === 'create' || intent === 'update' || (intent === 'delete' && id === editing)) {
       setEditing(null); setValues(defaults); setActive(true);
-    }
+    } else if (intent === 'toggle' && id === editing) setActive(isActive);
   }, [fetcher.state, fetcher.data]);
   return (
     <s-page heading="Search Banners">
@@ -184,12 +187,13 @@ export default function SearchBanners() {
         <section className="sb-card" aria-labelledby="banner-editor-title">
           <div className="sb-card-head"><h3 id="banner-editor-title">{editing ? 'Edit banner' : 'Create banner'}</h3><p>Set your audience, add your creative, and preview your promotion.</p></div>
           <fetcher.Form method="post" aria-busy={busy}>
+            <fieldset disabled={busy} aria-label="Banner editor" style={{ border:0, margin:0, padding:0, minWidth:0 }}>
             <input type="hidden" name="intent" value={editing ? 'update' : 'create'} />
             {editing && <input type="hidden" name="id" value={editing} />}
             <div className="sb-section">
             <h4><span className="sb-step">1</span>Search targeting</h4>
             {field('query', 'Search query', 200, {required:true, placeholder:'e.g. summer dresses', 'aria-describedby':'banner-query-help'})}
-            <p id="banner-query-help" className="sb-help">Matches the complete query, ignoring case and extra spaces.</p>
+            <p id="banner-query-help" className="sb-help">Appears on the full search results page for a matching submitted query, ignoring case and extra spaces.</p>
             <div className="sb-field"><span id="banner-placement-label" style={{ fontSize:12, fontWeight:600 }}>Banner placement</span><div className="sb-placement" role="radiogroup" aria-labelledby="banner-placement-label"><label className="sb-placement-option"><input type="radio" name="placement" value="top" checked={values.placement === 'top'} onChange={change('placement')} /><div><strong>Top of results</strong><span>A wide image banner above products.</span></div></label><label className="sb-placement-option"><input type="radio" name="placement" value="grid" checked={values.placement === 'grid'} onChange={change('placement')} /><div><strong>Product grid</strong><span>A promotional tile between products.</span></div></label></div></div>
             {values.placement === 'grid' && field('position','Product grid position',undefined,{type:'number',required:true,min:1,max:10000,step:1})}
             {values.placement === 'grid' && <p className="sb-help">Position 1 appears before the first product. Positions beyond the results are hidden. Banners do not replace products.</p>}
@@ -214,6 +218,7 @@ export default function SearchBanners() {
               {editing && <button disabled={busy} type="button" onClick={reset} className="sb-button">Cancel</button>}
               <button disabled={busy} type="submit" className="sb-button sb-primary">{busy ? 'Saving...' : editing ? 'Update banner' : 'Create banner'}</button>
             </div>
+          </fieldset>
           </fetcher.Form>
         </section>
         <aside className="sb-preview-panel" aria-label="Banner preview">

@@ -95,3 +95,34 @@ for(const flag of ['showOnlyInStock','prioritizeSortOverPinning','prioritizeSort
 test('published cards decline safely when current settings cannot be read',async()=>{
  const f=fixture({readGlobalSettings:async()=>{throw Error('unavailable');}});await f.publish();assert.equal(await f.store.get(f.request()),null);
 });
+
+
+test('new visits reject old pin and merchandising configurations and prioritize a replacement',async()=>{
+ let revision='one';const f=fixture({readConfigurationRevision:async()=>revision});await f.publish({configuration:'one'});
+ const first=await(await f.store.get(f.request())).json();revision='two';const hits=[];
+ assert.equal(await f.store.get(f.request(),{onHit:value=>hits.push(value)}),null);
+ await Promise.resolve();assert.equal(hits.length,1);assert.equal(hits[0].refreshDue,true);
+ const second=await(await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).json();
+ assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
+ f.advance(1);await f.publish({configuration:'two'});assert.equal((await f.store.get(f.request())).status,200);
+});
+
+test('unversioned publications safely fall back rather than hiding newly saved rules',async()=>{
+ const f=fixture({readConfigurationRevision:async()=>'0'});await f.publish();assert.equal(await f.store.get(f.request()),null);
+});
+
+test('products that become sold out cannot escape through either published page',async()=>{
+ let eligible=true;const calls=[];const f=fixture({readGlobalSettings:async()=>({showOnlyInStock:true}),validateProducts:async input=>{calls.push(input);return eligible;}});
+ f.payload.globalSettings={showOnlyInStock:true};await f.publish();const first=await(await f.store.get(f.request())).json();
+ assert.equal(calls[0].products.length,25);assert.equal(calls[0].shop,'fixture.myshopify.com');
+ eligible=false;assert.equal(await f.store.get(f.request()),null);
+ assert.equal((await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).status,409);
+});
+
+
+test('changed shopper-market eligibility rejects a published count even when its displayed cards remain available',async()=>{
+ let market='old';const f=fixture({readMarketAvailabilityRevision:async()=>market});
+ f.payload.globalSettings={showOnlyInStock:true};await f.publish({marketAvailabilityRevision:'old'});
+ assert.equal((await f.store.get(f.request())).status,200);market='new';assert.equal(await f.store.get(f.request()),null);
+ f.advance(1);await f.publish({marketAvailabilityRevision:'new'});assert.equal((await f.store.get(f.request())).status,200);
+});

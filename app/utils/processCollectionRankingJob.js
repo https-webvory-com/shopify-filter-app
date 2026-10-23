@@ -1,5 +1,6 @@
 const upgradedShops=new Set();
-export async function processCollectionRankingJob(job, {prepare,warm,schedule,facts}) {
+export async function processCollectionRankingJob(job, {prepare,warm,schedule,facts,marketAvailability}) {
+  if(job.name==='COLLECTION_MARKET_AVAILABILITY')return marketAvailability(job.data);
   if(job.name==='COLLECTION_FACTS_REFRESH')return facts(job.data);
   if(job.name==='COLLECTION_RANKING_PREPARE'){
     const result=await prepare(job.data);

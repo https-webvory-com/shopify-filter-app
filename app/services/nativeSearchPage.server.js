@@ -26,7 +26,7 @@ function mergeFacets(target, stats, distribution = {}, sourceStats = {}) {
 // Returns null when the deployed index/rule cannot execute this plan exactly.
 // No index configuration or product writes occur on a visitor request.
 export async function rankNativeSearchPage({ shop, query, options, rule, pinningRule, parsedQuery,
-  globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [] }) {
+  globalSettings = {}, marketAvailableIds=null, mergedValues = [], page = 1, limit = 10, facetKeys = [] }) {
   // The admin picker intentionally requests the full eligible list.
   if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) return null;
   const sortBy = options.sortBy || 'relevance';
@@ -64,6 +64,7 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
     else base.push(`${globalSettings.showOnlyInStock ? 'cfpSearchAvailableColors' : 'cfpSearchColors'} IN ${JSON.stringify(values)}`);
   }
   if (pinIds.length) base.push(`NOT (id IN ${JSON.stringify(pinIds.map(id => id.split('/').pop()))})`);
+  const marketAllowed=Array.isArray(marketAvailableIds)?new Set(marketAvailableIds.map(gid)):null;
   let pins = [];
   if (pinIds.length) {
     const rows = await prisma.product.findMany({ where: { shop, status: { equals: 'active', mode: 'insensitive' },
@@ -71,7 +72,7 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
     const valid = new Map(rows.map(p => [gid(p.id), normal(p)]));
     for (const id of pinIds) {
       const p = valid.get(id);
-      if (!p || (globalSettings.showOnlyInStock && !p.variants.some(v => v.available === true))) continue;
+      if (!p || (marketAllowed&&!marketAllowed.has(id)) || (globalSettings.showOnlyInStock && !p.variants.some(v => v.available === true))) continue;
       if (parsedQuery?.colorIntent?.requested.length) {
         const v = selectSearchColorVariant(p, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         if (!v || (globalSettings.showOnlyInStock && v.available === false)) continue;

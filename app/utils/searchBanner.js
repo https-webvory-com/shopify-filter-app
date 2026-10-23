@@ -14,9 +14,10 @@ export function validateBannerUrl(value, image = false) {
 }
 
 export function validateSearchBanner(form) {
-  const text = (key, max, required = false) => {
-    const value = String(form.get(key) || '').trim();
-    if (value.length > max || /[\u0000-\u001f\u007f]/u.test(value) || (required && !value)) throw new BannerValidationError(`Enter ${key} with ${required ? '1' : '0'}–${max} characters.`);
+  const text = (key, max, required = false, multiline = false) => {
+    const value = String(form.get(key) || '').replace(/\r\n?/g, '\n').trim();
+    const unsafe = multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u : /[\u0000-\u001f\u007f]/u;
+    if (value.length > max || unsafe.test(value) || (required && !value)) throw new BannerValidationError(`Enter ${key} with ${required ? '1' : '0'} to ${max} characters.`);
     return value;
   };
   const query = normalizeRedirectQuery(text('query', 200, true));
@@ -31,7 +32,7 @@ export function validateSearchBanner(form) {
     return value;
   };
   const imageUrl = validateBannerUrl(form.get('imageUrl'), true);
-  const heading = text('heading', 200), content = text('content', 2000), description = text('description', 300), buttonLabel = text('buttonLabel', 80);
+  const heading = text('heading', 200), content = text('content', 2000, false, true), description = text('description', 300), buttonLabel = text('buttonLabel', 80);
   const targetUrl = validateBannerUrl(form.get('targetUrl'));
   if (placement === 'top' && !imageUrl) throw new BannerValidationError('Top banners need an image URL.');
   if (!imageUrl && !heading && !content) throw new BannerValidationError('Add an image, heading or content.');

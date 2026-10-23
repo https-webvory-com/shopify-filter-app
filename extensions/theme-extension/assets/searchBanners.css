@@ -3,7 +3,7 @@
 .cfp-search-banner__link:focus-visible { outline: 3px solid currentColor; outline-offset: -3px; }
 .cfp-search-banner img { display: block; width: 100%; max-width: 100%; height: auto; object-fit: contain; }
 .cfp-search-banner--top { width: 100%; margin-bottom: 24px; }
-.cfp-search-banner--top img { max-height: 265px; }
+.cfp-search-banner--top img { width: 100%; height: auto; max-height: none; object-fit: contain; }
 .cfp-search-banner--grid { align-self: stretch; }
 .cfp-products-grid > .cfp-search-banner--grid { width: auto !important; max-width: 100% !important; }
 .cfp-search-banner--grid img { aspect-ratio: 1; object-fit: cover; }

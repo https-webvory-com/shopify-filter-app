@@ -348,3 +348,12 @@ test('pin picker lightweight retrieval retains exact color variant eligibility',
   assert.deepEqual(Array.from(result.products, p => p.id), [gid(1)]);
   assert.ok(calls.every(o => o.attributesToRetrieve.includes('options') && o.attributesToRetrieve.includes('variantPrices')));
 });
+
+
+test('shopper-market stock restrictions exclude unavailable explicit search pins before counting and paging',async()=>{
+ const saved=[product(900,{id:gid(900),variants:product(900).variantPrices})];
+ const f=await fixture({docs:[product(1),product(2)],saved,pins:{products:[{id:gid(900)}]},settings:{showOnlyInStock:true}});
+ const result=await f.service.rankSearchResults({...f.spec,marketAvailableIds:['2']});
+ assert.deepEqual(Array.from(result.products,p=>p.id),[gid(2)]);assert.equal(result.total,1);assert.equal(result.pinnedCount,0);
+ const empty=await f.service.rankSearchResults({...f.spec,marketAvailableIds:[]});assert.equal(empty.total,0);assert.equal(empty.products.length,0);
+});

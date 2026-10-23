@@ -15,15 +15,15 @@ try {
   socket=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);
   await Promise.race([new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});}),delay(10000).then(()=>{throw Error('Chrome connection timeout');})]);
   let next=0;const pending=new Map();
-  socket.addEventListener('message',event=>{const m=JSON.parse(event.data);if(!m.id)return;const p=pending.get(m.id);pending.delete(m.id);clearTimeout(p?.timer);m.error?p?.reject(Error(m.error.message)):p?.resolve(m.result);});
+  socket.addEventListener('message',event=>{const m=JSON.parse(event.data);if(m.method==='Fetch.requestPaused'){send('Fetch.fulfillRequest',{requestId:m.params.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'image/svg+xml'}],body:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400"><rect width="1200" height="400" fill="purple"/></svg>').toString('base64')}).catch(()=>{});return;}if(!m.id)return;const p=pending.get(m.id);pending.delete(m.id);clearTimeout(p?.timer);m.error?p?.reject(Error(m.error.message)):p?.resolve(m.result);});
   const send=(method,params={},timeout=15000)=>new Promise((resolve,reject)=>{const id=++next,timer=setTimeout(()=>{pending.delete(id);reject(Error('Browser command timed out: '+method));},timeout);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true},45000);if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
-  await send('Page.enable');await send('Runtime.enable');
+  await send('Page.enable');await send('Runtime.enable');await send('Fetch.enable',{patterns:[{urlPattern:'https://banner-fixture.invalid/wide.svg'}]});
   const version=await send('Browser.getVersion');await send('Page.navigate',{url:origin+'/test-runner'});
   let ready=false;for(let i=0;i<100;i++){if(await evaluate('typeof window.runBannerChecks === "function"')){ready=true;break;}await delay(100);}if(!ready)throw Error('Runner failed to load');
   const results=await evaluate('window.runBannerChecks()');await fs.writeFile('scratch/banner-headless-results.json',JSON.stringify({headless:true,browser:version.product,environment:'Real isolated PostgreSQL; actual editor/service/API/banner assets; fixture authentication and theme grids',results},null,2));
   for(const r of results)console.log((r.passed?'PASS ':'FAIL ')+r.name+(r.error?': '+r.error:''));
-  if(results.length!==17||results.some(r=>!r.passed))throw Error('Banner browser checks incomplete or failed');
+  if(results.length!==19||results.some(r=>!r.passed))throw Error('Banner browser checks incomplete or failed');
   console.log('HEADLESS BANNER CHECKS PASSED: '+results.length);
 } catch(error) {await fs.writeFile('scratch/banner-headless-failure.json',JSON.stringify({error:error.message}));throw error;}
 finally {socket?.close();chrome.kill();await fixture.dispose();}

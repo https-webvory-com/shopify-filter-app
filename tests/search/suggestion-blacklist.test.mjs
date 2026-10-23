@@ -11,6 +11,7 @@ import { spellingCorrection } from '../../app/utils/spellingCorrection.js';
 export async function load(file, mocks) {
   const {code} = await transform(await fs.readFile(file, 'utf8'), {loader:'jsx',format:'cjs'});
   const context = {module:{exports:{}},exports:{},URL,Response,console:{error(){}},require:name=>{
+    if(name==='../services/marketAvailability.server.js')return {getMarketAvailableProductIds:async()=>undefined};
     if (!(name in mocks)) throw Error('Unexpected import '+name);
     return mocks[name];
   }};

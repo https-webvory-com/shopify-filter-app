@@ -1,3 +1,4 @@
+import {getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
 import { parseQuery } from "../services/queryParser.server.js";
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
@@ -57,8 +58,12 @@ export const loader = async ({ request }) => {
 
     if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
 
+    let marketAvailableIds=null;
     if (globalSettings?.showOnlyInStock) {
       meiliFilters.push(`available = true`);
+      marketAvailableIds=await getMarketAvailableProductIds(shop,url.searchParams.get('country'));
+      if(marketAvailableIds===null)return data({products:[],marketAvailabilityPending:true},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+      if(Array.isArray(marketAvailableIds))meiliFilters.push(marketAvailableIds.length?'id IN '+JSON.stringify(marketAvailableIds):'id = "__no_market_available_products__"');
     }
 
     if (aiExtracted.min_price !== undefined && aiExtracted.min_price !== null) {
@@ -110,7 +115,7 @@ export const loader = async ({ request }) => {
 
     const ranking = pinningRule || merchandisingRule ? await rankSearchResults({
       shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy },
-      rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
+      rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, marketAvailableIds, limit,
       mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
     }) : null;
     const meiliRes = ranking ? { hits: ranking.products, semanticHitCount: ranking.semanticHitCount }

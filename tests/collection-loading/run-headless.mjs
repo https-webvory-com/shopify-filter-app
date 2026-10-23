@@ -501,7 +501,7 @@ try{
   });
   await test('published first fifty serve two 25-card pages while ranking and facets are unavailable',async()=>{
     await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
-    await control({invalidate:true,rankingFailure:'throw',facetFailure:true});
+    await control({unrelatedExternalUpdate:true,rankingFailure:'throw',facetFailure:true});
     const baseline=await getState();
     await send('Network.clearBrowserCache');await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!!document.querySelector('#cfp-load-more-btn')");
@@ -618,6 +618,29 @@ try{
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await evaluate("window.scrollCalls=[];window.scrollTo=(...args)=>window.scrollCalls.push(args);const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
     await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.equal(await evaluate('window.scrollCalls.length'),0,'disabled scrolling');
+  });
+  await test('published rule changes refresh two new storefront visits',async()=>{
+    await control({reset:true,productCount:60,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !!document.querySelector('#cfp-load-more-btn')");
+    assert.deepEqual((await cards()).slice(0,2),['1','2']);
+    await control({pin:'4',boost:'5',invalidate:true,hold:false,delay:20});
+    for(let visit=0;visit<2;visit++){
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !!document.querySelector('#cfp-load-more-btn')");
+      assert.deepEqual((await cards()).slice(0,2),['4','5']);
+    }
+    const responses=await getState();assert.ok(responses.allRequests.some(r=>r.status===200&&r.source!=='published'));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('market stock filtering keeps pins, counts and empty results consistent with the shopper country',async()=>{
+    await control({reset:true,productCount:60,pin:'4',boost:'5',hold:false,delay:20,globalSettings:{showOnlyInStock:true},marketAvailableByCountry:{US:['4','5'],IN:['5']}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===2 && window._cfpInitialized");
+    assert.deepEqual(await cards(),['4','5']);assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'2 products');
+    await control({country:'IN'});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===1 && window._cfpInitialized");
+    assert.deepEqual(await cards(),['5']);assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'1 product');
+    await control({marketAvailableByCountry:{IN:[]}});await navigate();await wait('window._cfpInitialized');assert.equal((await cards()).length,0);
+    await control({marketPending:true,globalSettings:{showOnlyInStock:false}});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {US:2,IN:1,noPurchasableProducts:0,disabledSettingRestoresCatalog:true};
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);

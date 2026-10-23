@@ -55,7 +55,7 @@
     observer?.disconnect();
     document.querySelectorAll('[data-cfp-banner]').forEach(el => el.remove());
     const grid = document.getElementById('cfp-products-container') || document.querySelector('main #product-grid');
-    const anchor = grid || document.querySelector('main .template-search');
+    const anchor = grid?.closest('.cfp-layout-wrapper') || grid || document.querySelector('main .template-search');
     if (anchor) {
       const products = grid ? [...grid.children].filter(el => !el.classList.contains('cfp-load-more-container') && (el.classList.contains('cfp-product-card') || el.querySelector('a[href*="/products/"]'))) : [];
       const page = Math.max(1, Number(new URLSearchParams(location.search).get('page')) || 1);
