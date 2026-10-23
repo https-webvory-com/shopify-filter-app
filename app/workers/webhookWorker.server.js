@@ -42,12 +42,6 @@ async function processWebhookJob(job) {
         if(id)await handleProductUpdate(shop,{id:String(id).split('/').pop(),admin_graphql_api_id:id},job);
         break;
       }
-      case "METAFIELDS_CREATE":
-      case "METAFIELDS_UPDATE":
-      case "METAFIELDS_DELETE":
-        if(payload.owner_resource==='product'&&payload.owner_id)await handleProductUpdate(shop,{id:payload.owner_id},job);
-        break;
-
       case "PRODUCTS_CREATE":
       case "PRODUCTS_UPDATE":
         await handleProductUpdate(shop, payload, job);

@@ -126,10 +126,19 @@ test('product deletion retries retain affected collections after DB memberships 
   assert.deepEqual(Array.from(worker.invalidations[1].externalProof.tags),['OldTag']);
 });
 
-for(const topic of ['INVENTORY_LEVELS_UPDATE','INVENTORY_ITEMS_UPDATE','METAFIELDS_UPDATE'])test(`${topic} refreshes filter facts and invalidates only after successful sync`,async()=>{
+for(const topic of ['INVENTORY_LEVELS_UPDATE','INVENTORY_ITEMS_UPDATE'])test(`${topic} refreshes filter facts and invalidates only after successful sync`,async()=>{
  const worker=await loadWorker(undefined,false,false,'filterFacts');
- const payload=topic==='METAFIELDS_UPDATE'?{owner_resource:'product',owner_id:1}:{id:2,inventory_item_id:2};
+ const payload={id:2,inventory_item_id:2};
  await worker.process({name:topic,data:{shop:'fixture.myshopify.com',payload}});
  assert.ok(worker.calls.some(call=>call[0]==='sync'&&call[2]==='gid://shopify/Product/1'));assert.equal(worker.invalidations[0].kind,'products');
  await assert.rejects((await loadWorker(Error('Sync failed'))).process({name:topic,data:{shop:'fixture.myshopify.com',payload}}),/Sync failed/);
+});
+
+test('app subscriptions use supported product and inventory topics, never metafield value topics',async()=>{
+ const config=await fs.readFile('shopify.app.toml','utf8');
+ assert.doesNotMatch(config,/"metafields\/(?:create|update|delete)"/);
+ const subscription=config.match(/uri = "\/webhooks\/products"\s+topics = \[([^\]]+)\]/)?.[1];
+ assert.ok(subscription);
+ const topics=[...subscription.matchAll(/"([^"]+)"/g)].map(match=>match[1]);
+ assert.deepEqual(topics,['products/update','products/create','products/delete','inventory_levels/update','inventory_items/update']);
 });

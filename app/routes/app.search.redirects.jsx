@@ -60,6 +60,10 @@ const redirectStyles = `
   .rd-button:disabled { opacity: .5; cursor: not-allowed; }
   .rd-primary { background: var(--rd-purple); border-color: var(--rd-purple); color: #fff; flex: 1; }
   .rd-primary:hover { background: #4c1d95; }
+  .rd-enable { color: #166534; border-color: #86c99c; background: #ecfdf3; }
+  .rd-enable:hover { background: #dcfce7; border-color: #4aa76b; }
+  .rd-disable { color: #9f2929; border-color: #edaaaa; background: #fff1f0; }
+  .rd-disable:hover { background: #ffe2df; border-color: #d97878; }
   .rd-danger { color: #b14747; border-color: transparent; }
   .rd-danger:hover { background: #fff3f2; }
   .rd-note { display: flex; gap: 10px; align-items: flex-start; margin-top: 15px; padding: 0 4px; color: #82798c; font-size: 12px; line-height: 1.6; }
@@ -159,7 +163,7 @@ export default function SearchRedirects() {
               <div className="rd-destination"><RedirectIcon size={16} /><span className="rd-url"><span style={{ color: '#9a8fa5' }}>Destination </span>{rule.targetUrl}</span></div>
               <div className="rd-actions">
               <button disabled={busy} className="rd-button" onClick={() => { setEditing(rule.id); setQueries(rule.queries.map(q => q.query).join('\n')); setTargetUrl(rule.targetUrl); setActive(rule.isActive); document.getElementById('redirect-editor-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.getElementById('redirect-queries')?.focus({ preventScroll: true }); }}>Edit</button>
-              <button disabled={busy} className="rd-button" onClick={() => fetcher.submit({ intent: 'toggle', id: rule.id, isActive: String(!rule.isActive) }, { method: 'post' })}>{rule.isActive ? 'Disable' : 'Enable'}</button>
+              <button disabled={busy} className={`rd-button ${rule.isActive ? 'rd-disable' : 'rd-enable'}`} onClick={() => fetcher.submit({ intent: 'toggle', id: rule.id, isActive: String(!rule.isActive) }, { method: 'post' })}>{rule.isActive ? 'Disable' : 'Enable'}</button>
               <button disabled={busy} className="rd-button rd-danger" onClick={() => { if (window.confirm('Delete this redirect?')) fetcher.submit({ intent: 'delete', id: rule.id }, { method: 'post' }); }}>Delete</button>
               </div>
             </article>
