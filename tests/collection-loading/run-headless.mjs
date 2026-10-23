@@ -83,6 +83,41 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     await control({hold:false,headRenderer:false,assetDelay:0,apiDelay:0,facetDelay:0});
   });
+  await test('filter requests overlap card rendering and complete filter controls precede grid replacement',async()=>{
+    const hook=await send('Page.addScriptToEvaluateOnNewDocument',{source:`(()=>{
+      window.filterScheduling={requests:[],renders:[]};
+      const fetchOriginal=window.fetch;window.fetch=function(input,options){
+        const url=new URL(typeof input==='string'?input:input.url,location.origin);
+        const full=url.pathname==='/api/filter'&&url.searchParams.get('responseProfile')==='collection-v1';
+        if(full)filterScheduling.requests.push(performance.now());
+        return fetchOriginal.call(this,input,options).then(async response=>{
+          if(!full||response.status!==200)return response;
+          const payload=await response.json();
+          // Model full metadata enriching the first card without changing IDs,
+          // eligibility or facets, so this scenario needs a grid replacement.
+          if(payload.products?.length)payload.products[0]._fixtureCanonicalDetails=true;
+          return new Response(JSON.stringify(payload),{status:response.status,headers:{'Content-Type':'application/json'}});
+        });
+      };
+      const descriptor=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
+      Object.defineProperty(Element.prototype,'innerHTML',{...descriptor,set(value){
+        if(this.id==='cfp-products-container'&&String(value).includes('cfp-product-card--reveal')){
+          filterScheduling.renders.push({at:performance.now(),filters:document.querySelectorAll('#cfp-sidebar input').length});
+          const until=performance.now()+300;while(performance.now()<until){}
+        }
+        descriptor.set.call(this,value);
+      }});
+    })()`});
+    try{
+      await control({reset:true,hold:true,precompute:true,early:true,assetDelay:0,apiDelay:0,facetDelay:200,filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}],globalSettings:{showFilterOptionsWithOneItem:true}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      const timings=await evaluate('filterScheduling');
+      assert.ok(timings.renders.length>=2);assert.equal(timings.requests.length,1);
+      assert.ok(timings.requests[0]<timings.renders[0].at,'Filter request waited for product rendering');
+      assert.ok(timings.renders.at(-1).filters>0,'Complete filters waited for grid replacement');
+      assert.deepEqual(await evaluate('browserErrors'),[]);return timings;
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:hook.identifier});}
+  });
   await test('a delayed head loader adopts body-started cards before the full widget arrives',async()=>{
     await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,headDelay:700,assetDelay:3500,apiDelay:100,cssDelay:0,facetDelay:0});
     await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
@@ -557,12 +592,13 @@ try{
     await send('Emulation.setDeviceMetricsOverride',{width:375,height:667,deviceScaleFactor:1,mobile:true});
     for(const [settings,expected] of [
       [{mobileFilterLayout:'horizontal-scrolling',showQuickViewCollection:false},'cfp-mobile-horizontal-scrolling'],
-      [{desktopLikeOnMobile:true,showQuickViewCollection:true},'cfp-desktop-like-mobile'],
-      [{mobileFilterLayout:'off-canvas',desktopLikeOnMobile:false,showQuickViewCollection:false},null],
+      [{desktopLikeOnMobile:true,mobileFilterLayout:'horizontal-scrolling',showQuickViewCollection:true},'cfp-mobile-horizontal-scrolling'],
+      [{mobileFilterLayout:'off-canvas',desktopLikeOnMobile:true,showQuickViewCollection:false},null],
     ]){
       await control({reset:true,hold:false,globalSettings:settings});await navigate();
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
       assert.equal(await evaluate("document.querySelectorAll('.cfp-quick-view-btn').length"),settings.showQuickViewCollection?25:0);
+      assert.equal(await evaluate("document.body.classList.contains('cfp-desktop-like-mobile')"),false,'removed setting is ignored');
       if(expected){
         assert.equal(await evaluate(`document.body.classList.contains('${expected}')`),true);
         assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).position"),'sticky');
@@ -587,6 +623,37 @@ try{
       assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__image--secondary')"),enabled,'secondary image');
     }
   });
+  await test('mobile layout controls open usable filter options and preserve drawer behavior',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}},{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
+    const tap=async selector=>{
+      const point=await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest',inline:'nearest'});const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
+    };
+    for(const width of [320,390,768]){
+      await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:true});
+      await control({reset:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'horizontal-scrolling',showFilterOptionsWithOneItem:true}});
+      await navigate();await wait("document.querySelectorAll('#cfp-sidebar .cfp-group').length===2 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')"),'false','mobile horizontal filters should start collapsed');
+      await tap('#cfp-sidebar .cfp-group__toggle');
+      const panel=await evaluate("(()=>{const el=document.querySelector('#cfp-sidebar .cfp-group__content'),r=el.getBoundingClientRect();return{visible:el.checkVisibility(),top:r.top,bottom:r.bottom,left:r.left,right:r.right};})()");
+      assert.ok(panel.visible&&panel.top>=0&&panel.bottom<=844&&panel.left>=0&&panel.right<=width,JSON.stringify(panel));
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-group__content')).position"),'fixed');
+      await tap('#cfp-sidebar .cfp-group:nth-child(2) .cfp-group__toggle');
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')"),'false','opening another group must close the first');
+      await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=true]').length"),0);
+      await tap('#cfp-sidebar .cfp-group__toggle');await tap('#cfp-sidebar input[name=vendor]');
+      await wait("document.querySelector('#cfp-sidebar input[name=vendor]')?.checked && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate("document.body.style.overflow"),'');assert.equal((await cards()).length,25);
+      await control({reset:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'off-canvas',showFilterOptionsWithOneItem:true}});await navigate();
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      await tap('#cfp-drawer-trigger-btn');
+      const drawer=await evaluate("({open:document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open'),hidden:document.querySelector('#cfp-sidebar').getAttribute('aria-hidden'),mobile:matchMedia('(max-width:768px)').matches,width:innerWidth,layout:window.cfpGlobalSettings?.mobileFilterLayout,classes:document.body.className,button:document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().toJSON()})");
+      assert.ok(drawer.open&&drawer.hidden!=='true',JSON.stringify(drawer));
+      await tap('#cfp-close-btn');assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getAttribute('aria-hidden')"),'true');
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('settings audit filter counts, single-value visibility and breadcrumbs',async()=>{
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
@@ -607,7 +674,7 @@ try{
       assert.equal(await evaluate(`document.body.classList.contains('cfp-${layout}-layout')`),true);
       await evaluate("window.scrollCalls=[];window.scrollTo=(...args)=>window.scrollCalls.push(args);const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
       await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-      assert.equal(await evaluate('window.scrollCalls.length>0'),layout==='vertical','scroll only in vertical mode');
+      assert.equal(await evaluate('window.scrollCalls.length>0'),true,'scroll on filter changes in each desktop layout');
       await send('Emulation.setDeviceMetricsOverride',{width:375,height:667,deviceScaleFactor:1,mobile:true});
       await wait("document.body.classList.contains('cfp-mobile-horizontal-scrolling')");
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getAttribute('aria-hidden')"),'false');
@@ -618,6 +685,30 @@ try{
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await evaluate("window.scrollCalls=[];window.scrollTo=(...args)=>window.scrollCalls.push(args);const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
     await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.equal(await evaluate('window.scrollCalls.length'),0,'disabled scrolling');
+  });
+  await test('scroll setting moves the viewport for filter changes across layouts and waits for drawer close',async()=>{
+    const filters=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
+    for(const [width,desktop,mobile] of [[1440,'vertical','off-canvas'],[1440,'horizontal','off-canvas'],[1440,'drawer','off-canvas'],[390,'vertical','horizontal-scrolling'],[390,'vertical','off-canvas']]){
+      await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<769});
+      await control({reset:true,hold:false,delay:20,productCount:60,filterSettings:filters,globalSettings:{desktopFilterLayout:desktop,mobileFilterLayout:mobile,showFilterOptionsWithOneItem:true,scrollUpOnFilterValuesChange:true}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      await evaluate('window.scrollTo({top:700,behavior:"instant"})');await wait('scrollY>400');
+      const drawer=width>768?desktop==='drawer':mobile==='off-canvas';
+      if(drawer)await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      await evaluate("const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+      if(drawer){await delay(150);assert.ok(await evaluate('scrollY>400'),'Do not scroll while the drawer is open');await evaluate("document.querySelector('#cfp-apply-btn').click()");}
+      await wait("scrollY<5 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      await evaluate('window.scrollTo({top:700,behavior:"instant"})');await wait('scrollY>400');
+      await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+      assert.ok(await evaluate('scrollY>400'),'Load more must not scroll to the top');
+      await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"price-ascending\"]').click()");
+      await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.ok(await evaluate('scrollY>400'),'Sorting must not count as a filter-value change');
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+    await control({reset:true,hold:false,delay:20,productCount:60,filterSettings:filters,globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true,scrollUpOnFilterValuesChange:false}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate('window.scrollTo({top:700,behavior:"instant"});const input=document.querySelector("#cfp-sidebar input[name=vendor]");input.checked=true;input.dispatchEvent(new Event("change",{bubbles:true}));');
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.ok(await evaluate('scrollY>400'),'Disabled setting must retain scroll position');
   });
   await test('published rule changes refresh two new storefront visits',async()=>{
     await control({reset:true,productCount:60,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});

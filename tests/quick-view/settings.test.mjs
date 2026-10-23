@@ -110,13 +110,13 @@ test('every Filter setting saves independently with authenticated tenant and str
   '../services/filterSettings.server':{updateFilterGlobalSettings:async(shop,data)=>{assert.equal(shop,'fixture.myshopify.com');saved=data;calls++;}},
  });
  const post=body=>route.action({request:new Request('https://fixture.test/settings',{method:'POST',body:new URLSearchParams(body)})});
- for(const key of ['horizontalFilters','showAttributeBasedBreadcrumb','showFilterOptionsWithOneItem','showProductCount','scrollUpOnFilterValuesChange','hideUnavailableVariantsWhenSelected','desktopLikeOnMobile','prioritizeSortOverPinning','prioritizeSortOverMerchandising']){
+ for(const key of ['horizontalFilters','showAttributeBasedBreadcrumb','showFilterOptionsWithOneItem','showProductCount','scrollUpOnFilterValuesChange','hideUnavailableVariantsWhenSelected','prioritizeSortOverPinning','prioritizeSortOverMerchandising']){
   for(const value of ['true','false']){assert.equal((await post({[key]:value})).success,true);assert.deepEqual(Object.keys(saved),[key]);assert.equal(saved[key],value==='true');}
  }
  for(const [key,values]of Object.entries({desktopFilterLayout:['horizontal','vertical','drawer'],mobileFilterLayout:['off-canvas','horizontal-scrolling']})){
   for(const value of values){assert.equal((await post({[key]:value})).success,true);assert.equal(saved[key],value);}
  }
- const before=calls;for(const body of [{},{desktopFilterLayout:'invalid'},{mobileFilterLayout:'invalid'},{darkMode:'yes'}])assert.equal((await post(body)).success,false);
+ const before=calls;for(const body of [{},{desktopFilterLayout:'invalid'},{mobileFilterLayout:'invalid'},{darkMode:'yes'},{desktopLikeOnMobile:'true'}])assert.equal((await post(body)).success,false);
  assert.equal(calls,before);
 });
 

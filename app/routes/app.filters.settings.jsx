@@ -17,7 +17,7 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   
   const payload = {};
-  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'desktopLikeOnMobile', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
+  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
   for (const key of booleanSettings) {
     if (formData.has(key)) {
       const value = formData.get(key);
@@ -223,7 +223,6 @@ export default function FilterSettings() {
   const [scrollOnChange, setScrollOnChange] = useState(settings?.scrollUpOnFilterValuesChange || false);
 
   const [hideUnavailableVariants, setHideUnavailableVariants] = useState(settings?.hideUnavailableVariantsWhenSelected || false);
-  const [desktopLikeOnMobile, setDesktopLikeOnMobile] = useState(settings?.desktopLikeOnMobile || false);
 
   const [sortOverPinning, setSortOverPinning] = useState(settings?.prioritizeSortOverPinning ?? false);
   const [sortOverMerchandising, setSortOverMerchandising] = useState(settings?.prioritizeSortOverMerchandising ?? false);
@@ -239,7 +238,6 @@ export default function FilterSettings() {
     setShowProductCount(settings?.showProductCount ?? true);
     setScrollOnChange(settings?.scrollUpOnFilterValuesChange ?? false);
     setHideUnavailableVariants(settings?.hideUnavailableVariantsWhenSelected ?? false);
-    setDesktopLikeOnMobile(settings?.desktopLikeOnMobile ?? false);
     setSortOverPinning(settings?.prioritizeSortOverPinning ?? false);
     setSortOverMerchandising(settings?.prioritizeSortOverMerchandising ?? false);
   }, [settings, nav.state]);
@@ -263,7 +261,6 @@ export default function FilterSettings() {
     else if (key === "showProductCount") setShowProductCount(value);
     else if (key === "scrollUpOnFilterValuesChange") setScrollOnChange(value);
     else if (key === "hideUnavailableVariantsWhenSelected") setHideUnavailableVariants(value);
-    else if (key === "desktopLikeOnMobile") setDesktopLikeOnMobile(value);
 
     const formData = new FormData();
     formData.set(key, String(value));
@@ -492,21 +489,15 @@ export default function FilterSettings() {
           />
           <SettingToggle disabled={isSaving}
                         label="Scroll up on filter values change"
-            description="When enabled, the widget scrolls up the browser view to the top when a user clicks on a filter option. This is for the vertical filter view only."
+            description="Scroll to the top of the page when filter values change in any layout. If the filter drawer is open, scrolling waits until it closes. Reload the storefront after saving."
             value={scrollOnChange}
             onChange={(val) => handleSettingChange("scrollUpOnFilterValuesChange", val)}
           />
           <SettingToggle disabled={isSaving}
                         label="Hide unavailable variants if a filter value is selected"
-            description="When enabled, the app hides unavailable variants if a filter value is selected."
+            description="After a filter is selected, show only available variants matching the selection. Products without an available match are excluded. Applies to app filter results and product cards; reload the storefront after saving."
             value={hideUnavailableVariants}
             onChange={(val) => handleSettingChange("hideUnavailableVariantsWhenSelected", val)}
-          />
-          <SettingToggle disabled={isSaving}
-                        label="Desktop-like filters on mobile"
-            description="When enabled, the desktop filter style is used on mobile."
-            value={desktopLikeOnMobile}
-            onChange={(val) => handleSettingChange("desktopLikeOnMobile", val)}
           />
         </SettingsSection>
       </div>

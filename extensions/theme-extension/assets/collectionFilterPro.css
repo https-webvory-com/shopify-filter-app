@@ -1143,25 +1143,6 @@ facet-filters-form,
 
 /* --- Global Filter Settings Styles --- */
 @media (max-width: 768px) {
-  .cfp-desktop-like-mobile .cfp-sidebar {
-    position: static !important;
-    transform: none !important;
-    width: 100% !important;
-    height: auto !important;
-    z-index: 1 !important;
-    background: transparent !important;
-    display: block !important;
-  }
-  .cfp-desktop-like-mobile .cfp-overlay {
-    display: none !important;
-  }
-  .cfp-desktop-like-mobile .cfp-close-btn {
-    display: none !important;
-  }
-  .cfp-desktop-like-mobile .cfp-mobile-trigger {
-    display: none !important;
-  }
-
   /* Horizontal Scrolling Mobile Layout */
   .cfp-mobile-horizontal-scrolling .cfp-sidebar {
     position: static !important;
@@ -2800,7 +2781,6 @@ facet-filters-form,
 
 /* Inline mobile layouts must override the shared drawer rules. */
 @media (max-width: 768px) {
-  .cfp-desktop-like-mobile #cfp-sidebar.cfp-sidebar,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar.cfp-sidebar {
     position: relative !important;
     inset: auto !important;
@@ -2817,11 +2797,8 @@ facet-filters-form,
     border-right: 0 !important;
     box-shadow: none !important;
   }
-  .cfp-desktop-like-mobile #cfp-drawer-trigger-btn,
   .cfp-mobile-horizontal-scrolling #cfp-drawer-trigger-btn,
-  .cfp-desktop-like-mobile #cfp-sidebar .cfp-sidebar__header,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__header { display: none !important; }
-  .cfp-desktop-like-mobile #cfp-sidebar .cfp-sidebar__body,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body {
     display: block !important;
     flex: none !important;
@@ -2837,17 +2814,11 @@ facet-filters-form,
   }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group { flex: 0 0 220px; box-sizing: border-box; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content { max-height: 360px; overflow-y: auto; }
-  .cfp-desktop-like-mobile #cfp-sidebar.cfp-sidebar,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar.cfp-sidebar {
     position: sticky !important;
     top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px)) !important;
     z-index: 2 !important;
   }
-  .cfp-desktop-like-mobile #cfp-sidebar.cfp-sidebar {
-    max-height: calc(100dvh - var(--cfp-sticky-top, 0px) - var(--cfp-toolbar-height, 0px) - 16px) !important;
-    overflow-y: auto !important;
-  }
-  .cfp-desktop-like-mobile #cfp-sidebar .cfp-sidebar__footer,
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__footer { display: none !important; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content {
     max-height: min(360px, 50dvh);
