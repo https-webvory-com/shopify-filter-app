@@ -631,16 +631,16 @@ try{
     const responses=await getState();assert.ok(responses.allRequests.some(r=>r.status===200&&r.source!=='published'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('market stock filtering keeps pins, counts and empty results consistent with the shopper country',async()=>{
-    await control({reset:true,productCount:60,pin:'4',boost:'5',hold:false,delay:20,globalSettings:{showOnlyInStock:true},marketAvailableByCountry:{US:['4','5'],IN:['5']}});
-    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===2 && window._cfpInitialized");
-    assert.deepEqual(await cards(),['4','5']);assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'2 products');
-    await control({country:'IN'});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===1 && window._cfpInitialized");
-    assert.deepEqual(await cards(),['5']);assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'1 product');
-    await control({marketAvailableByCountry:{IN:[]}});await navigate();await wait('window._cfpInitialized');assert.equal((await cards()).length,0);
-    await control({marketPending:true,globalSettings:{showOnlyInStock:false}});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {US:2,IN:1,noPurchasableProducts:0,disabledSettingRestoresCatalog:true};
+  await test('stock rollback keeps collection and search cards available with the saved stock toggle enabled',async()=>{
+    for(const query of ['', '?q=dress'])for(let visit=0;visit<2;visit++){
+      await control({reset:true,productCount:60,hold:false,delay:20,globalSettings:{showOnlyInStock:true}});
+      await navigate(query);await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !!document.querySelector('#cfp-load-more-btn')");
+      const first=await cards();assert.equal(new Set(first).size,25);
+      await evaluate("document.querySelector('#cfp-load-more-btn').click()");
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+      const all=await cards();assert.equal(new Set(all).size,50);assert.deepEqual(all.slice(0,25),first);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);

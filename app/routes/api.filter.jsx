@@ -1,4 +1,3 @@
-import {getMarketAvailableProductIds,marketAvailabilityVersion} from '../services/marketAvailability.server.js';
 import {extraFilterTypes,extraSelections,readExtraProductFacts,extraIdsFilter,extraFilterChoices} from '../utils/extraProductFilters.js';
 import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,saleIdsFilter} from '../utils/percentSaleFilter.js';
 import { selectSearchColorVariant } from "../utils/searchColor.js";
@@ -502,12 +501,8 @@ export const loader = async ({ request, context }) => {
     // ── 7. Build Meilisearch filters ───────────────────────────────────
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
-    let marketAvailableIds=null;
     if (globalSettings?.showOnlyInStock) {
       baseFilters.push(`available = true`);
-      marketAvailableIds=await getMarketAvailableProductIds(shop,country);
-      if(marketAvailableIds===null)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityPending:true}}, {status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
-      if(Array.isArray(marketAvailableIds))baseFilters.push(marketAvailableIds.length?'id IN '+JSON.stringify(marketAvailableIds):'id = "__no_market_available_products__"');
     }
 
     // Build Include rules filters (only when user has NO active filters)
@@ -663,7 +658,7 @@ export const loader = async ({ request, context }) => {
         const variant = selectSearchColorVariant(product, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         return variant && (!globalSettings?.showOnlyInStock || variant.available !== false);
       }).map(product => product.id));
-      activePinnedList = activePinnedList.filter(id => validIds.has(id) && (!marketAvailableIds || marketAvailableIds.includes(String(id).split('/').pop())));
+      activePinnedList = activePinnedList.filter(id => validIds.has(id));
     }
 
     // ── 8. Build Meilisearch queries ───────────────────────────────────
@@ -883,7 +878,6 @@ export const loader = async ({ request, context }) => {
     if (useRankedCollectionPagination && !rankingSession) {
       preparedSpec = {
         pinEligibilityVersion: 2,
-        marketAvailabilityRevision:Array.isArray(marketAvailableIds)?marketAvailabilityVersion(marketAvailableIds):undefined,
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
@@ -1071,7 +1065,7 @@ export const loader = async ({ request, context }) => {
     if (needsRankedSearch) {
       const result = await rankSearchResults({ shop, query: searchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
-        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, marketAvailableIds, mergedValues, page, limit, facetKeys: targetFacets });
+        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: targetFacets });
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
       collectionPageTotal = result.total;
       facetDistribution = result.facetDistribution;
@@ -1219,11 +1213,6 @@ export const loader = async ({ request, context }) => {
 
     if (collectionRankingApplied && paginatedSlice.some(p => !p.title || (p.status && p.status.toLowerCase() !== 'active'))) {
       throw new Error('Collection ranking session expired; product eligibility changed');
-    }
-
-    if(collectionRankingApplied&&Array.isArray(marketAvailableIds)){
-      const marketAllowed=new Set(marketAvailableIds);
-      if(paginatedSlice.some(p=>!marketAllowed.has(String(p.id).split('/').pop())))throw new Error('Collection ranking session expired; market availability changed');
     }
 
     // Out-of-stock pinned products are now filtered BEFORE pagination.

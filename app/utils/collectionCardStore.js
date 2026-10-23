@@ -104,7 +104,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    controller.signal.throwIfAborted();
    if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;
    let previewLimit=Number(new URL(request.url).searchParams.get('limit'));
-   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{request,preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request),onValidated:count=>{previewLimit=count;}}))return null;
+   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request),onValidated:count=>{previewLimit=count;}}))return null;
    const readMs=now()-readStarted;controller.signal.throwIfAborted();
    stage='session';const session=probe?{}:await createSession(request,entry,prepared);
    stage='final-state';
@@ -165,7 +165,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      if(facetsReady&&facets&&Array.isArray(cards.settings)){
       cards.facets=facets;cards.cfpCards={version:1,facetsReady:true};
      }
-     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,configuration:spec.revision,marketAvailabilityRevision:spec.marketAvailabilityRevision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
+     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);
@@ -179,7 +179,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      const finalState=await readState(identity),finalPrepared=current(finalState,external);
      if(!finalPrepared||stateSignature(finalState,external)!==state||sequenceSignature(finalPrepared)!==sequence)return;
      if(pageSize===50&&publishedPages){
-      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,marketAvailabilityRevision:spec.marketAvailabilityRevision,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
+      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
      }
      if(pageSize===50)await saveCards();
      for(const alias of aliases)if(alias){

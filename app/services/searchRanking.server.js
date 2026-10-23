@@ -14,10 +14,10 @@ const variants = rows => (rows || []).map(v => ({ ...v,
 // Both search surfaces rank the eligible set before allocating page slots.
 // Never inject an inactive product or a pin that violates the query's color.
 export async function rankSearchResults({ shop, query, options, rule, pinningRule,
-  parsedQuery, globalSettings = {}, marketAvailableIds=null, mergedValues = [], page = 1, limit = 10, facetKeys = [], membershipOnly = false }) {
+  parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [], membershipOnly = false }) {
   try {
     const result = !membershipOnly && await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
-      parsedQuery, globalSettings, marketAvailableIds, mergedValues, page, limit, facetKeys });
+      parsedQuery, globalSettings, mergedValues, page, limit, facetKeys });
     if (result) return result;
   } catch (error) {
     console.error('Native search page unavailable; using compatible ranking:', error.name);
@@ -96,9 +96,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
       products.push({ ...valid.get(id), variants: variants(valid.get(id).variants), _originalIndex: products.length });
     }
   }
-  const marketAllowed=Array.isArray(marketAvailableIds)?new Set(marketAvailableIds.map(gid)):null;
   const eligible = products.filter(p => {
-    if(marketAllowed&&!marketAllowed.has(p.id))return false;
     if (p.status && String(p.status).toLowerCase() !== 'active') return false;
     if (globalSettings.showOnlyInStock && !p.variants?.some(v => v.available === true)) return false;
     if (!parsedQuery?.colorIntent?.requested.length) return true;

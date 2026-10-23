@@ -11,7 +11,6 @@ import { spellingCorrection } from '../../app/utils/spellingCorrection.js';
 export async function load(file, mocks) {
   const {code} = await transform(await fs.readFile(file, 'utf8'), {loader:'jsx',format:'cjs'});
   const context = {module:{exports:{}},exports:{},URL,Response,console:{error(){}},require:name=>{
-    if(name==='../services/marketAvailability.server.js')return {getMarketAvailableProductIds:async()=>undefined};
     if (!(name in mocks)) throw Error('Unexpected import '+name);
     return mocks[name];
   }};
@@ -86,7 +85,7 @@ test('rule writes are scoped to the authenticated shop and rejected edits preser
   assert.equal(rows.size,2);
 });
 
-export async function searchApi(getRules) {
+export async function searchApi(getRules, globalSettings = {}) {
   const products=[{id:'1',title:'Blue Dress',status:'ACTIVE',options:[],tags:[],variantPrices:[]},{id:'2',title:'Red Dress',status:'ACTIVE',options:[],tags:[],variantPrices:[]}];
   return load('app/routes/api.search.jsx',{
     '../services/queryParser.server.js':{parseQuery:async()=>null},
@@ -94,7 +93,7 @@ export async function searchApi(getRules) {
     '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:getRules},'react-router':{data:(v,i)=>Response.json(v,i)},
     '../db.server':{__esModule:true,default:{}},'../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
     '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
-    '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},'../services/rateLimiter.server':{rateLimit:async()=>true},
+    '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>globalSettings},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/semanticSearch.server':{semanticSearch:async()=>({hits:products})},
   });
 }
@@ -111,6 +110,15 @@ test('blacklist database failures suppress suggestions without failing product s
   const route=await searchApi(async()=>{throw Error('Database unavailable');});
   const response=await route.loader({request:new Request('https://fixture/api/search?'+new URLSearchParams({shop,q:'dress'}))});
   const result=await response.json();assert.equal(response.status,200);assert.equal(result.products.length,2);assert.deepEqual(result.suggestions,[]);
+});
+
+test('saved stock toggle cannot block instant products on an unavailable country preparation job',async()=>{
+  const route=await searchApi(async()=>[],{showOnlyInStock:true});
+  for(const country of ['IN','US'])for(let visit=0;visit<2;visit++){
+    const response=await route.loader({request:new Request('https://fixture/api/search?'+new URLSearchParams({shop,q:'dress',country}))});
+    const result=await response.json();assert.equal(response.status,200);assert.equal(result.products.length,2);
+    assert.equal(result.globalSettings.showOnlyInStock,true);assert.equal(result.marketAvailabilityPending,undefined);
+  }
 });
 test('admin actions reject duplicates, preserve validation errors and avoid exposing database errors',async()=>{
   const {db}=database();const s=await service(db);

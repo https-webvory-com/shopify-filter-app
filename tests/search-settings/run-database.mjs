@@ -8,4 +8,5 @@ try {
   run('tests/search-banners/prepare-client.mjs');
   run('tests/search-redirect/start-postgres.mjs'); started = true;
   run('tests/search-settings/check-postgres.mjs');
+  if (process.argv.includes('--browser')) run('tests/search-settings/run-headless.mjs');
 } finally { if (started) run('tests/search-redirect/stop-postgres.mjs'); }

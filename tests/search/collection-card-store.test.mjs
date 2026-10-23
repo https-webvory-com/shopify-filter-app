@@ -199,22 +199,15 @@ test('validated visitor hits notify refresh without waiting, while probes and re
 test('production card adapter rejects fallback ranking keys and reads tenant-scoped current epochs',async()=>{
  const {loadModule}=await import('./helpers/search-ranking.mjs');
  const {preparationKey}=await import('../../app/utils/collectionPreparation.js');
- const calls=[],availabilityCalls=[],spec={shop:'fixture.myshopify.com',collectionId:'gid://shopify/Collection/1'};let publishedOptions;
+ const calls=[],spec={shop:'fixture.myshopify.com',collectionId:'gid://shopify/Collection/1'};
  const redis={mget:async(...keys)=>{calls.push(keys);return ['1','2','3','4','5',JSON.stringify({revision:'current-native'}),'prepared'];}};
  const adapter=await loadModule('app/services/collectionCards.server.js',{
-  './marketAvailability.server.js':{getMarketAvailableProductIds:async()=>['123','456'],marketAvailabilityVersion:()=> 'test-market'},
-  '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]},product:{count:async args=>{availabilityCalls.push(args);return 1;}}}},'./collectionLoadingSnapshots.server.js':{loadCollectionLoadingSnapshot:async()=>null,saveCollectionLoadingSnapshot:async()=>false},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
+  '../db.server.js':{default:{merchandisingRule:{findMany:async()=>[]}}},'./collectionLoadingSnapshots.server.js':{loadCollectionLoadingSnapshot:async()=>null,saveCollectionLoadingSnapshot:async()=>false},'./redis.server.js':{default:redis},'./meiliClient.server.js':{default:{}},
   '../utils/collectionCardState.js':{createCardStateReader},'../utils/collectionCardStore.js':{createCollectionCardStore:()=>({get:()=>null,begin:options=>options})},
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
   '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
-  '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:options=>(publishedOptions=options,{get:async()=>null,publish:async()=>true})},
+  '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:()=>({get:async()=>null,publish:async()=>true})},
  });
- for(const enabled of [true,false]){
-  assert.equal(await publishedOptions.validateProducts({shop:spec.shop,products:[{id:'123'}],globalSettings:{showOnlyInStock:enabled},request:new Request("https://api.test/?country=US")}),true);
-  const where=availabilityCalls.at(-1).where;assert.equal(where.shop,spec.shop);assert.deepEqual(where.id.in,['gid://shopify/Product/123']);assert.equal(where.status,'active');
-  assert.equal(where.variants?.some?.available,enabled?true:undefined);
- }
- assert.equal(await publishedOptions.validateProducts({shop:spec.shop,products:[{id:'123'},{id:'456'}],globalSettings:{showOnlyInStock:true},request:new Request("https://api.test/?country=US")}),false);
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));
  const state=await adapter.createCardStateReader(redis)({...spec,collectionId:'1',preparedKey:'source'});

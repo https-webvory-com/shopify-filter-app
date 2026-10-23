@@ -30,12 +30,6 @@ if (!process.argv.includes('--child')) {
       assert.ok(globalThis[name], `${name} was not initialized`);
       return globalThis[name].waitUntilReady();
     }));
-    // Exercise the deferred factory through the real ranking dispatcher. An
-    // obsolete revision exits before any Storefront request or database work.
-    assert.deepEqual(await globalThis.__collectionRankingWorker.processor({
-      name:'COLLECTION_MARKET_AVAILABILITY',
-      data:{shop:'startup-fixture.myshopify.com', country:'IN', revision:'obsolete'},
-    }), {superseded:true});
   } else {
     for (const name of names) assert.equal(globalThis[name], undefined);
     const {createRequestHandler} = await import('react-router');

@@ -223,7 +223,6 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
 if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='../utils/collectionCards.js')return collectionCards;if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
-    if(name==='../services/marketAvailability.server.js')return {getMarketAvailableProductIds:async()=>undefined};
     if (!(name in mocks)) throw new Error(`Unexpected import ${name}`);
     return mocks[name];
   } };

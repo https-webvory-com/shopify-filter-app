@@ -41,7 +41,6 @@ async function loadModule(file, mocks) {
     if (name === "../db.server.js") return { __esModule: true, default: {} };
     if (["react", "react-router", "@shopify/app-bridge-react", "@shopify/shopify-app-react-router/server"].includes(name)) return {};
 if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='../utils/collectionCards.js')return collectionCards;if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
-    if(name==='../services/marketAvailability.server.js')return {getMarketAvailableProductIds:async()=>undefined};
     throw Error("Unexpected import " + name);
   } };
   vm.runInNewContext((await transform(source, { loader: file.endsWith("jsx") ? "jsx" : "js", format: "cjs" })).code, context);

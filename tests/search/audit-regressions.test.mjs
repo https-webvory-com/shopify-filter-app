@@ -111,7 +111,6 @@ async function route(file,mocks){
    if(name==='../utils/merchandisingCondition.js')return {normalizeCondition,validConditions,resolveCollectionTargets};
    if(name.startsWith('../components/')||['react','react-router','@shopify/app-bridge-react'].includes(name))return {};
 if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='../utils/collectionCards.js')return collectionCards;if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
-   if(name==='../services/marketAvailability.server.js')return {getMarketAvailableProductIds:async()=>undefined};
    throw Error('Unexpected import '+name);
  }};
  vm.runInNewContext((await transform((await fs.readFile(file,'utf8')).replace('await import("../services/shopCache.server")','({invalidateShop: async()=>{}})').replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})'),{loader:'jsx',format:'cjs'})).code,context);

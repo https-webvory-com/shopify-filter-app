@@ -71,6 +71,16 @@ try{
     await goAdmin();await click('Edit');await fill('blue dress','contains');await click('Update rule');await wait("document.querySelector('input[name=term]').value===''");
     const labels=await search();assert.ok(!labels.some(value=>value.startsWith('Blue Dress')));assert.ok(labels.includes('Red Dress'));
   });
+  await test('toggling a rule preserves unsaved editor text and synchronizes its status',async()=>{
+    await goAdmin();await click('Edit');await fill('Unsaved draft','exact');
+    await click('Disable');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Enable')");
+    assert.equal(await evaluate("document.querySelector('input[name=term]').value"),'Unsaved draft');
+    assert.equal(await evaluate("document.querySelector('select[name=operator]').value"),'exact');
+    assert.equal(await evaluate("document.querySelector('input[name=isActive]').value"),'false');
+    await click('Enable');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Disable')");
+    assert.equal(await evaluate("document.querySelector('input[name=term]').value"),'Unsaved draft');
+    assert.equal(await evaluate("document.querySelector('input[name=isActive]').value"),'true');
+  });
   await test('disable and enable are reflected on the next repeated search',async()=>{
     await goAdmin();await click('Disable');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Enable')");
     assert.ok((await search()).includes('Blue Dress'));

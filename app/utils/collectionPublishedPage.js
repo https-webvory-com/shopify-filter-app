@@ -18,7 +18,7 @@ export function publishedCollectionKey(request){
 }
 // Published versions are deliberately independent of working ranking epochs.
 // Only a complete, verified replacement is published; visits never rebuild it.
-export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,readMarketAvailabilityRevision,validateProducts,now=Date.now,lifetime=86400}){
+export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,now=Date.now,lifetime=86400}){
  const valid=(entry,serving=false)=>entry?.version===1&&entry.cardPresentationVersion===collectionCardPresentationVersion&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
   Array.isArray(entry.ids)&&new Set(entry.ids).size===entry.ids.length&&entry.ids.every(id=>/^\d+$/.test(id))&&
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
@@ -34,14 +34,14 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'published',key});
    if(!raw||Buffer.byteLength(raw)>2*1024*1024)return null;
    const entry=decodePreparation(raw);if(entry.shop!==shop||!entry.aliases?.includes(key)||!valid(entry,true))return null;
-   const refresh=()=>{
-    if(onHit&&page===1){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
+   // Retire stock-restricted publications from the reverted release, as well
+   // as publications with an obsolete pin or merchandising configuration.
+   if(page===1&&(entry.marketAvailabilityRevision!=null||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop))))){
+    if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});
     }
-   };
-   // New visits must not use the pin/rule configuration from an old publication.
-   // Existing page-two sessions retain their frozen order unless eligibility changes.
-   if(page===1&&readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop))){refresh();return null;}
+    return null;
+   }
    // Presentation preferences must be fresh even while the last complete
    // product publication is retained. Eligibility changes require a new order.
    let globalSettings=entry.payload.globalSettings;
@@ -54,22 +54,12 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     }
     globalSettings=current;
    }
-   if(page===1&&globalSettings?.showOnlyInStock===true&&readMarketAvailabilityRevision){
-    const revision=await readMarketAvailabilityRevision(shop,params.get('country'));
-    if(!revision||entry.marketAvailabilityRevision!==revision){refresh();return null;}
-   }
-   const products=entry.payload.products.slice((page-1)*25,page*25);
-   if(validateProducts&&!await validateProducts({shop,products,globalSettings,request})){
-    refresh();
-    if(page===2)return Response.json({error:'Collection availability changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
-    return null;
-   }
    const session=await createSession(request,entry,{ids:entry.ids,metadata:entry.metadata});
    if(page===2&&session.token!==token)return null;
    // One immutable copy per shared ranking token keeps page two on the same
    // published version even if a replacement is published between clicks.
    if(page===1)await redis.setex(`collectionPublishedSession:${shop}:${session.token}`,3600,raw);
-   const response=await collectionCardsResponse({...entry.payload,globalSettings,products,rankingToken:session.token,
+   const response=await collectionCardsResponse({...entry.payload,globalSettings,products:entry.payload.products.slice((page-1)*25,page*25),rankingToken:session.token,
     cfpCards:{version:1,preview:false,published:true,publishedAt:entry.at,refreshDue:now()-entry.at>=lifetime*1000},
     debug:{...entry.payload.debug,collectionRankingStatus:'ready',collectionPublishedPage:true}},'published',request,{previewLimit:25});
    if(onHit&&page===1){
@@ -79,14 +69,14 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    return response;
   }catch{return null;}
  }
- async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityRevision}){
+ async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration}){
   const key=publishedCollectionKey(request);if(!key||new URL(request.url).searchParams.get('limit')!=='50')return false;
   const shop=new URL(request.url).searchParams.get('shop'),url=new URL(request.url);
   url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));
   const canonical=publishedCollectionKey(new Request(url)),aliases=new Set([key,canonical]);
   if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(publishedCollectionKey(new Request(url)));}
   const {rankingToken,...cards}=payload;
-  const entry={version:1,marketAvailabilityRevision,cardPresentationVersion:collectionCardPresentationVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.

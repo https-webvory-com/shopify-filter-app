@@ -28,6 +28,17 @@ test('published pages from an older card presentation rebuild instead of retaini
  assert.equal(await f.store.get(f.request()),null);
 });
 
+test('rollback retires stock-restricted publications without waiting for country preparation',async()=>{
+ const f=fixture();await f.publish();f.values.clear();
+ for(const row of f.rows.values()){
+  const entry=decodePreparation(row.payload);entry.marketAvailabilityRevision='reverted-stock-proof';row.payload=encodePreparation(entry);
+ }
+ const refresh=[];assert.equal(await f.store.get(f.request(),{onHit:hit=>refresh.push(hit)}),null);
+ await Promise.resolve();assert.equal(refresh.length,1);assert.equal(refresh[0].refreshDue,true);
+ f.advance(1);await f.publish();const response=await f.store.get(f.request());
+ assert.equal(response.status,200);assert.equal((await response.json()).products.length,25);
+});
+
 test('published data serves two complete 25-card pages and preserves all canonical IDs for later pagination',async()=>{
  const f=fixture();assert.equal(await f.publish(),true);
  const first=await f.store.get(f.request());assert.equal(first.headers.get('X-CFP-Collection-Cards'),'published');
@@ -96,7 +107,6 @@ test('published cards decline safely when current settings cannot be read',async
  const f=fixture({readGlobalSettings:async()=>{throw Error('unavailable');}});await f.publish();assert.equal(await f.store.get(f.request()),null);
 });
 
-
 test('new visits reject old pin and merchandising configurations and prioritize a replacement',async()=>{
  let revision='one';const f=fixture({readConfigurationRevision:async()=>revision});await f.publish({configuration:'one'});
  const first=await(await f.store.get(f.request())).json();revision='two';const hits=[];
@@ -109,20 +119,4 @@ test('new visits reject old pin and merchandising configurations and prioritize 
 
 test('unversioned publications safely fall back rather than hiding newly saved rules',async()=>{
  const f=fixture({readConfigurationRevision:async()=>'0'});await f.publish();assert.equal(await f.store.get(f.request()),null);
-});
-
-test('products that become sold out cannot escape through either published page',async()=>{
- let eligible=true;const calls=[];const f=fixture({readGlobalSettings:async()=>({showOnlyInStock:true}),validateProducts:async input=>{calls.push(input);return eligible;}});
- f.payload.globalSettings={showOnlyInStock:true};await f.publish();const first=await(await f.store.get(f.request())).json();
- assert.equal(calls[0].products.length,25);assert.equal(calls[0].shop,'fixture.myshopify.com');
- eligible=false;assert.equal(await f.store.get(f.request()),null);
- assert.equal((await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).status,409);
-});
-
-
-test('changed shopper-market eligibility rejects a published count even when its displayed cards remain available',async()=>{
- let market='old';const f=fixture({readMarketAvailabilityRevision:async()=>market});
- f.payload.globalSettings={showOnlyInStock:true};await f.publish({marketAvailabilityRevision:'old'});
- assert.equal((await f.store.get(f.request())).status,200);market='new';assert.equal(await f.store.get(f.request()),null);
- f.advance(1);await f.publish({marketAvailabilityRevision:'new'});assert.equal((await f.store.get(f.request())).status,200);
 });

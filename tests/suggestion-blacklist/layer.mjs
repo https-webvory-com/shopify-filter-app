@@ -30,7 +30,8 @@ export const api=await load('app/routes/api.search.jsx',{
     return service.getActiveSuggestionBlacklist(requestedShop);
   }},
   'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:db},
-  '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null},
+  '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
+  '../services/searchRanking.server.js':{rankSearchResults:async()=>{throw Error('Unexpected ranking in the unconfigured blacklist fixture');}},
   '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
   '../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>({})},
   '../services/rateLimiter.server':{rateLimit:async()=>true},

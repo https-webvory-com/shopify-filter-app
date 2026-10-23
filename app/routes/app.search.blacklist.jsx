@@ -14,8 +14,9 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   try {
-    await saveSuggestionBlacklist(session.shop, await request.formData());
-    return { success: true };
+    const form = await request.formData();
+    await saveSuggestionBlacklist(session.shop, form);
+    return { success: true, intent: form.get('intent'), id: form.get('id'), isActive: form.get('isActive') === 'true' };
   } catch (error) {
     if (error.code === 'P2002') return { error: 'This term and operator already exist. Edit the existing blacklist rule.' };
     if (error.code === 'P2025') return { error: 'Blacklist rule not found.' };
@@ -35,7 +36,12 @@ export default function SearchBlacklist() {
   const reset = () => { setEditing(null); setTerm(''); setOperator('contains'); setActive(true); };
   useEffect(() => {
     if (fetcher.state === 'idle' && fetcher.data?.success) {
-      setEditing(null); setTerm(''); setOperator('contains'); setActive(true);
+      const result = fetcher.data;
+      if (result.intent === 'create' || result.intent === 'update' || (result.intent === 'delete' && result.id === editing)) {
+        setEditing(null); setTerm(''); setOperator('contains'); setActive(true);
+      } else if (result.intent === 'toggle' && result.id === editing) {
+        setActive(result.isActive);
+      }
     }
   }, [fetcher.state, fetcher.data]);
   return (
@@ -50,10 +56,10 @@ export default function SearchBlacklist() {
           <fetcher.Form method="post" style={{ display: 'grid', gap: 16 }}>
             <input type="hidden" name="intent" value={editing ? 'update' : 'create'} />
             {editing && <input type="hidden" name="id" value={editing} />}
-            <label>Suggestion term<input name="term" value={term} onChange={e => setTerm(e.target.value)} required maxLength={200} placeholder="e.g. clearance" style={fieldStyle} /></label>
-            <label>Matching operator<select name="operator" value={operator} onChange={e => setOperator(e.target.value)} style={fieldStyle}><option value="contains">Contains</option><option value="exact">Exact match</option></select></label>
+            <label>Suggestion term<input disabled={busy} name="term" value={term} onChange={e => setTerm(e.target.value)} required maxLength={200} placeholder="e.g. clearance" style={fieldStyle} /></label>
+            <label>Matching operator<select disabled={busy} name="operator" value={operator} onChange={e => setOperator(e.target.value)} style={fieldStyle}><option value="contains">Contains</option><option value="exact">Exact match</option></select></label>
             <span>Contains hides suggestions containing the phrase. Exact match hides only the complete phrase.</span>
-            <label><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Enabled</label>
+            <label><input disabled={busy} type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> Enabled</label>
             <input type="hidden" name="isActive" value={String(active)} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button disabled={busy} type="submit" className="search-config-primary">{busy ? 'Saving...' : editing ? 'Update rule' : 'Create rule'}</button>

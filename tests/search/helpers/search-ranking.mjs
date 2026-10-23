@@ -1,4 +1,3 @@
-import {marketAvailabilityVersion} from '../../../app/utils/marketAvailability.js';
 import * as productFilterFacts from '../../../app/utils/productFilterFacts.js';
 import * as extraProductFilters from '../../../app/utils/extraProductFilters.js';
 import * as percentSaleFilter from '../../../app/utils/percentSaleFilter.js';
@@ -21,8 +20,6 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if (!(name in mocks)) {
-      // Existing synthetic catalogs have no market restrictions; dedicated tests inject market proofs.
-      if(name.endsWith('/marketAvailability.server.js'))return {getMarketAvailableProductIds:async()=>undefined,marketAvailabilityVersion};
       if(name==='../utils/collectionCards.js')return collectionCards;
       if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;
       if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
