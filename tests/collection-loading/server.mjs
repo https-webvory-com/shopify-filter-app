@@ -263,7 +263,7 @@ export async function createLoadingServer({redisLayer}={}) {
   // Timing cases navigate away before reset. Close only this fixture's old
   // sockets so intentionally delayed images cannot occupy the next case's pool.
   server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
-  return {server,state,trace,facetRequests,documents:docs,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
+  return {server,state,trace,facetRequests,documents:docs,sessionCount:()=>sessions.size,latestRankingToken:()=>[...sessions.keys()].at(-1)||null,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
     dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
 }

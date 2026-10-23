@@ -150,6 +150,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function syncStateToURL() {
     const params = new URLSearchParams(window.location.search);
+    params.delete('rankingToken');
 
     if (activeFilters.q) params.set('q', activeFilters.q);
     else params.delete('q');
@@ -608,9 +609,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (fetchSignal.aborted) return;
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
-        const readyUrl = new URL(window.location.href);
-        readyUrl.searchParams.set('rankingToken', data.rankingToken);
-        window.history.replaceState(null, '', readyUrl.pathname + readyUrl.search);
       }
       console.log('[CFP] API response:', { products: data.products?.length, totalCount: data.totalCount });
 
@@ -709,7 +707,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         // including any remaining pins, load only when the shopper asks.
         activeFilters.page=1;
         if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
-        const readyUrl=new URL(window.location.href);readyUrl.searchParams.set('rankingToken',full.rankingToken);window.history.replaceState(null,'',readyUrl.pathname+readyUrl.search);
       }
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       if(JSON.stringify(full.products)!==signature)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);

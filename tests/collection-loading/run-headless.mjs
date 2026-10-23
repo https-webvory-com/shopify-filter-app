@@ -119,7 +119,8 @@ try{
   });
   let oldToken,oldIds;
   await test('load more keeps token order without duplicate products and puts zero-price product last',async()=>{
-    oldToken=await evaluate("new URL(location.href).searchParams.get('rankingToken')");
+    oldToken=fixture.latestRankingToken();
+    assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
     oldIds=await cards();assert.equal(new Set(oldIds).size,30);assert.equal(oldIds.at(-1),'3');
     const data=await getState();assert.ok(data.requests.some(r=>r.page==='2'&&r.token===oldToken&&r.status===200));return {products:oldIds.length,zeroPriceLast:oldIds.at(-1)};
@@ -190,7 +191,7 @@ try{
     const data=await getState();assert.equal(data.state.builds,2);assert.deepEqual(data.queueFailures,[]);
   });
   await test('expired page-two token automatically restarts once from page one',async()=>{
-    const token=await evaluate("new URL(location.href).searchParams.get('rankingToken')");await control({expireTokens:true});
+    const token=fixture.latestRankingToken();await control({expireTokens:true});
     await navigate('?page=2&rankingToken='+encodeURIComponent(token));await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     assert.ok([null,'1'].includes(await evaluate("new URL(location.href).searchParams.get('page')")));
     const data=await getState();assert.equal(data.requests.filter(r=>r.status===409).length,1);
@@ -359,7 +360,7 @@ try{
     assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'');
     await fixture.prepareLast();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    assert.deepEqual((await cards()).slice(0,prefix.length),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),true);
+    assert.deepEqual((await cards()).slice(0,prefix.length),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);assert.ok(fixture.latestRankingToken());
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
     const all=await cards();assert.equal(new Set(all).size,30);assert.equal(all.at(-1),'3');
     const state=await getState();assert.ok(state.headEvents.some(e=>e.event==='head-comparison-match'));assert.ok(!state.headEvents.some(e=>e.event==='head-comparison-mismatch'));assert.deepEqual(await evaluate('browserErrors'),[]);
@@ -533,6 +534,24 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);samples.push({width,desktop,mobile,...early});
     }
     await control({reset:true});return {samples,liveLighthouseMeasurement:false};
+  });
+  await test('ranking tokens stay internal across pagination, legacy links and expired sessions',async()=>{
+    await control({reset:true,precompute:true,noPins:true,delay:1,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !!document.querySelector('#cfp-load-more-btn')");
+    const token=fixture.latestRankingToken();assert.ok(token);
+    assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
+    const first=await cards();
+    await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
+    const all=await cards();assert.equal(new Set(all).size,30);assert.deepEqual(all.slice(0,25),first);
+    assert.ok((await getState()).allRequests.some(r=>r.page==='2'&&r.token===token&&r.status===200));
+    assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
+    await navigate('?page=2&rankingToken='+encodeURIComponent(token)+'&_ab=0');await wait("document.querySelectorAll('.cfp-product-card--reveal').length===5");
+    assert.deepEqual(await cards(),all.slice(25));assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
+    assert.equal(await evaluate("new URL(location.href).searchParams.get('_ab')"),'0');
+    await control({expireTokens:true});
+    await navigate('?page=2&rankingToken='+encodeURIComponent(token));await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !!document.querySelector('#cfp-load-more-btn')");
+    assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {initial:25,afterLoadMore:30,uniqueProducts:30,legacyLinkAccepted:true,expiredSessionRestarted:true,tokenInAddressBar:false};
   });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
