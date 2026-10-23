@@ -1598,53 +1598,47 @@ export default function FilterGroups() {
                         if (col.id === "status") {
                           return (
                             <td key="status" style={{ padding: "18px 20px" }}>
-                              {group.isDefault ? (
-                                <span className="badge-always-active">
-                                  Always Active
-                                </span>
-                              ) : (
-                                <label
+                              <label
+                                style={{
+                                  position: "relative",
+                                  display: "inline-block",
+                                  width: "40px",
+                                  height: "22px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={group.status}
+                                  onChange={() => handleToggle(group.id)}
+                                  style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span
+                                  className="toggle-switch-slider"
                                   style={{
-                                    position: "relative",
-                                    display: "inline-block",
-                                    width: "40px",
-                                    height: "22px",
-                                    cursor: "pointer",
+                                    position: "absolute",
+                                    inset: 0,
+                                    borderRadius: "34px",
+                                    backgroundColor: group.status
+                                      ? "#10B981"
+                                      : "#e2e8f0",
+                                    transition: "all 0.3s ease",
                                   }}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={group.status}
-                                    onChange={() => handleToggle(group.id)}
-                                    style={{ opacity: 0, width: 0, height: 0 }}
-                                  />
                                   <span
-                                    className="toggle-switch-slider"
                                     style={{
                                       position: "absolute",
-                                      inset: 0,
-                                      borderRadius: "34px",
-                                      backgroundColor: group.status
-                                        ? "#10B981"
-                                        : "#e2e8f0",
-                                      transition: "all 0.3s ease",
+                                      height: "16px",
+                                      width: "16px",
+                                      left: group.status ? "20px" : "4px",
+                                      bottom: "3px",
+                                      backgroundColor: "white",
+                                      transition: "0.2s",
+                                      borderRadius: "50%",
                                     }}
-                                  >
-                                    <span
-                                      style={{
-                                        position: "absolute",
-                                        height: "16px",
-                                        width: "16px",
-                                        left: group.status ? "20px" : "4px",
-                                        bottom: "3px",
-                                        backgroundColor: "white",
-                                        transition: "0.2s",
-                                        borderRadius: "50%",
-                                      }}
-                                    />
-                                  </span>
-                                </label>
-                              )}
+                                  />
+                                </span>
+                              </label>
                             </td>
                           );
                         }

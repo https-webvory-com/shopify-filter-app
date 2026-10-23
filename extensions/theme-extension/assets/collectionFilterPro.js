@@ -750,6 +750,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.padding = '0';
         breadcrumbs.style.marginBottom = '0';
         breadcrumbs.style.borderBottom = 'none';
+        breadcrumbs.style.borderTop = 'none';
+        breadcrumbs.style.marginTop = '0';
+      } else if (layout === 'horizontal' && !mobile) {
+        breadcrumbs.style.display = 'none';
+        breadcrumbs.innerHTML = '';
       } else {
         const filterBody = sidebar?.querySelector('.cfp-sidebar__body');
         if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -758,6 +763,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.padding = '12px 0';
         breadcrumbs.style.marginBottom = '0';
         breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+        breadcrumbs.style.borderTop = 'none';
+        breadcrumbs.style.marginTop = '0';
       }
     }
 
@@ -940,11 +947,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   function updateProductCount(totalCount){
-    const countLabel=document.querySelector('.cfp-product-count');
-    if(!countLabel)return;
-    if(!Number.isFinite(totalCount)){countLabel.textContent='';return;}
-    countLabel.style.display=globalSettings?.showProductCount===false?'none':'';
-    countLabel.textContent=`${totalCount} product${totalCount===1?'':'s'}`;
+    const countLabels = document.querySelectorAll('.cfp-product-count');
+    if (!countLabels || countLabels.length === 0) return;
+    if (!Number.isFinite(totalCount)) {
+      countLabels.forEach(lbl => { lbl.textContent = ''; lbl.style.display = 'none'; });
+      return;
+    }
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const layout = getEffectiveLayout();
+    const shouldHideCount = isMobile || layout === 'horizontal' || layout === 'drawer';
+    const unit = templateName === 'search' ? (totalCount === 1 ? 'result' : 'results') : (totalCount === 1 ? 'product' : 'products');
+    countLabels.forEach(lbl => {
+      if (shouldHideCount) {
+        lbl.style.display = 'none';
+      } else {
+        lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';
+      }
+      lbl.textContent = `${totalCount} ${unit}`;
+    });
   }
 
   function escapeCardHtml(value) {
@@ -1705,10 +1725,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         for (let i = 0; i < points; i++) {
           const percent = (i / (points - 1)) * 100;
           const val = displayMinLimit + (i / (points - 1)) * (displayMaxLimit - displayMinLimit);
+          let tickPosition = `left: ${percent}%; transform: translateX(-50%); align-items: center;`;
+          if (i === 0) {
+            tickPosition = `left: 0; transform: none; align-items: flex-start;`;
+          } else if (i === points - 1) {
+            tickPosition = `right: 0; left: auto; transform: none; align-items: flex-end;`;
+          }
           ticksHtml += `
-            <div style="position: absolute; left: ${percent}%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; top: 16px; z-index: 0; pointer-events: none;">
+            <div style="position: absolute; ${tickPosition} display: flex; flex-direction: column; top: 16px; z-index: 0; pointer-events: none;">
               <div style="width: 1px; height: 8px; background: ${sliderColor}; margin-bottom: 4px;"></div>
-              <span style="font-size: 11px; color: #6d7175; font-weight: 400;">${formatValue(val)}</span>
+              <span style="font-size: 11px; color: #6d7175; font-weight: 400; white-space: nowrap;">${formatValue(val)}</span>
             </div>
           `;
         }
@@ -1965,13 +1991,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     let labelFlexDir, labelJustify, textAlign, gap;
 
                     if (isGrid && !isColor) {
-                      // Grid layout (Length, Sleeve type) - Large image, text below
-                      vWidth = '100%';
-                      vHeight = '65px';
+                      // Grid layout (Length, Sleeve type, Back Style) - Large image/circle, text below
+                      vWidth = '64px';
+                      vHeight = '64px';
                       labelFlexDir = 'column';
                       labelJustify = 'center';
                       textAlign = 'center';
-                      gap = '6px';
+                      gap = '8px';
                     } else {
                       // Normal list layout (Colors) - small circle, text right
                       vWidth = showLabel ? '22px' : '36px';
@@ -1982,19 +2008,31 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                       gap = '8px';
                     }
 
-                    const bgStyle = isImageItem ? `background: url('${colorValue}') center/${isGrid ? 'contain' : 'cover'} no-repeat; border: none !important;` : `background:${colorValue}; border: 1px solid ${isWhite ? '#ddd' : '#e1e3e5'} !important;`;
+                    const bgStyle = isImageItem ? `background: #f8f9fa url('${colorValue}') center/contain no-repeat; border: 1px solid #e2e8f0 !important;` : `background:${colorValue || '#f8f9fa'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
 
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-block; ${isCircle ? (showLabel && !isGrid ? 'border-radius: 50% !important;' : 'border-radius: 50% !important;') : 'border-radius: 4px !important;'} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));' : ''}"></span>`;
+                    const placeholderSvg = (!isImageItem && isGrid && !isColor) ? `
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7v1H3v-1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 12 2z"></path>
+                        <path d="M5 16l2 6h10l2-6"></path>
+                      </svg>
+                    ` : '';
 
+                    const isTopRightCount = isGrid && !isColor;
+                    const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
+
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px auto !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2)); box-shadow: 0 0 0 2px #000;' : ''}">${placeholderSvg}</span>`;
+
+                    const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
+                        ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
                         ${showLabel ? `<span class="cfp-swatch-label" style="font-family: 'Poppins', sans-serif; font-size: 13px; text-align: ${textAlign} !important; color: #202223; line-height: 1.2; word-break: break-word; ${spanWidthStyle} margin: 0 !important; padding: 0 !important;">${getDisplayLabel(item.value, prefix)}</span>` : `<span class="cfp-swatch-label" style="display: none !important;">${getDisplayLabel(item.value, prefix)}</span>`}
-                        ${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}
+                        ${!isTopRightCount ? countHtml : ''}
                       </label>
                     `;
                   }).join('');
@@ -2091,7 +2129,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       html += `
-        <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="${config.multipleSelection === true}">
+        <div class="cfp-group" data-group="${type}-${key || ''}" data-multiple="true">
           <button class="cfp-group__toggle" aria-expanded="${!isCollapsed}" aria-controls="${groupId}">
             <div style="display: flex; align-items: center; gap: 6px;">
               <span>${setting.label}</span>
@@ -2124,7 +2162,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const hasActivePillSelections = activeCount > 0;
 
       horizontalPills.push(`
-        <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}">
+        <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}" data-multiple="true">
           <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
             <span>${setting.label}</span>
             ${hasActivePillSelections ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
@@ -2157,6 +2195,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (horizontalContainer) {
       if (isHorizontalFilterLayout()) {
+        const currentlyOpenPopover = document.querySelector('.cfp-horizontal-pill__popover.is-open');
+        const openGroup = currentlyOpenPopover?.closest('.cfp-horizontal-pill')?.getAttribute('data-group');
+        const openPopoverScrollArea = currentlyOpenPopover?.querySelector('.cfp-scroll-area');
+        const openPopoverScrollTop = openPopoverScrollArea ? openPopoverScrollArea.scrollTop : 0;
+
         horizontalContainer.innerHTML = horizontalPills.join('');
         horizontalContainer.style.display = 'flex';
         if (extraContainer) {
@@ -2173,7 +2216,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
         const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
 
-        if (totalPillsWidth <= availableWidthNoMore) {
+        const maxPillsRow1 = 5; // When more than 5 filter elements exist, show MORE/LESS and place the rest in Row 2
+        const needsMore = (pillElements.length > maxPillsRow1) || (totalPillsWidth > availableWidthNoMore);
+
+        if (!needsMore) {
           // All pills fit in Row 1 without MORE button!
           if (extraContainer) {
             extraContainer.innerHTML = '';
@@ -2197,7 +2243,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           pillElements.forEach((pill, idx) => {
             const pillWidth = pillWidths[idx];
             const neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
-            if (primaryPills.length === 0 || neededWidth <= availableWidthWithMore) {
+            const canFitInRow1 = (primaryPills.length < maxPillsRow1) && (primaryPills.length === 0 || neededWidth <= availableWidthWithMore);
+            if (canFitInRow1) {
               currentWidth = neededWidth;
               primaryPills.push(pill);
             } else {
@@ -2224,6 +2271,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (typeof window.cfpSyncPillsLayout === 'function') {
           window.cfpSyncPillsLayout();
         }
+
+        if (openGroup) {
+          const restoredPill = document.querySelector(`.cfp-horizontal-pill[data-group="${openGroup}"]`);
+          if (restoredPill) {
+            const pop = restoredPill.querySelector('.cfp-horizontal-pill__popover');
+            const btn = restoredPill.querySelector('.cfp-horizontal-pill__btn');
+            if (pop) {
+              pop.classList.add('is-open');
+              const scrollArea = pop.querySelector('.cfp-scroll-area');
+              if (scrollArea && openPopoverScrollTop > 0) {
+                scrollArea.scrollTop = openPopoverScrollTop;
+              }
+            }
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+          }
+        }
       } else {
         horizontalContainer.innerHTML = '';
         horizontalContainer.style.display = 'none';
@@ -2233,11 +2296,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           extraContainer.classList.remove('is-expanded');
         }
         if (triggerBtn) {
-          triggerBtn.classList.remove('is-hidden');
-          triggerBtn.style.setProperty('display', 'inline-flex', 'important');
-          const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
-          if (triggerLabel) triggerLabel.textContent = 'Filters';
-          triggerBtn.setAttribute('aria-expanded', 'false');
+          if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
+            triggerBtn.classList.add('is-hidden');
+            triggerBtn.style.setProperty('display', 'none', 'important');
+            triggerBtn.setAttribute('aria-expanded', 'false');
+          } else {
+            triggerBtn.classList.remove('is-hidden');
+            triggerBtn.style.setProperty('display', 'inline-flex', 'important');
+            const triggerLabel = triggerBtn.querySelector('.cfp-drawer-btn-label');
+            if (triggerLabel) triggerLabel.textContent = 'Filters';
+            triggerBtn.setAttribute('aria-expanded', 'false');
+          }
         }
       }
     }
@@ -2331,8 +2400,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       clearBtn.addEventListener('click', clearAllFilters);
     }
 
-    // Individual group clear button click handler
+    // Individual group clear button click handler & top clear all button
     document.body.addEventListener('click', function(e) {
+      const clearAllTopBtn = e.target.closest('#cfp-clear-all-top, .cfp-clear-all-top');
+      if (clearAllTopBtn) {
+        e.stopPropagation();
+        e.preventDefault();
+        clearAllFilters();
+        return;
+      }
       const clearGroupBtn = e.target.closest('.cfp-clear-group');
       if (clearGroupBtn) {
         e.stopPropagation();
@@ -2759,7 +2835,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           const checked = checkbox.checked;
 
           const groupEl = checkbox.closest('.cfp-group, .cfp-horizontal-pill');
-          const isMultiple = groupEl ? groupEl.getAttribute('data-multiple') === 'true' : true;
+          const isMultiple = groupEl ? (groupEl.getAttribute('data-single-select') !== 'true') : true;
 
           if (!isMultiple && checked) {
             groupEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -2885,11 +2961,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       activeFilters.maxPrice = 999999;
       activeFilters.priceRanges = [];
     }
-    else if (type === 'option') {
-      activeFilters.options[key] = [];
+    else if (type === 'option' || type === 'options' || type.startsWith('option-')) {
+      const optKey = key || type.replace('option-', '');
+      if (activeFilters.options) {
+        activeFilters.options[optKey] = [];
+        Object.keys(activeFilters.options).forEach(k => {
+          if (k.toLowerCase() === optKey.toLowerCase()) {
+            activeFilters.options[k] = [];
+          }
+        });
+      }
     }
-    else if (type === 'metafield') {
-      activeFilters.metafields[key] = [];
+    else if (type === 'metafield' || type.startsWith('metafield-')) {
+      const metaKey = key || type.replace('metafield-', '');
+      if (activeFilters.metafields) {
+        activeFilters.metafields[metaKey] = [];
+        Object.keys(activeFilters.metafields).forEach(k => {
+          if (k.toLowerCase() === metaKey.toLowerCase()) {
+            activeFilters.metafields[k] = [];
+          }
+        });
+      }
     }
     activeFilters.page = 1;
     renderBreadcrumbs();
@@ -2935,7 +3027,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const breadcrumbs = document.getElementById('cfp-breadcrumbs');
     if (!breadcrumbs) return;
 
-    if (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) {
+    if ((globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) || (isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches)) {
       breadcrumbs.style.display = 'none';
       breadcrumbs.innerHTML = '';
       return;
@@ -3051,6 +3143,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (activeCount) {
       activeCount.textContent = count;
       activeCount.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+
+    const topClearBtn = document.getElementById('cfp-clear-all-top');
+    if (topClearBtn) {
+      const isHorizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
+      topClearBtn.style.display = (count > 0 && isHorizontal) ? 'inline-flex' : 'none';
     }
   }
 
@@ -3231,6 +3329,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.padding = '0';
           breadcrumbs.style.marginBottom = '0';
           breadcrumbs.style.borderBottom = 'none';
+          breadcrumbs.style.borderTop = 'none';
+          breadcrumbs.style.marginTop = '0';
+        } else if (layout === 'horizontal' && !mobile) {
+          breadcrumbs.style.display = 'none';
+          breadcrumbs.innerHTML = '';
         } else {
           const filterBody = sidebar.querySelector('.cfp-sidebar__body');
           if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -3239,6 +3342,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.padding = '12px 0';
           breadcrumbs.style.marginBottom = '0';
           breadcrumbs.style.borderBottom = '1px solid var(--cfp-border)';
+          breadcrumbs.style.borderTop = 'none';
+          breadcrumbs.style.marginTop = '0';
         }
       }
       wrapper.appendChild(sidebar);

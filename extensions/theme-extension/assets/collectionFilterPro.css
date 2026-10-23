@@ -507,7 +507,13 @@ facet-filters-form,
   padding: 1px 7px;
 }
 
-/* â”€â”€â”€ Price Range â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Price Range ──────────────────────────────────────────────────────────── */
+.cfp-price-range {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 10px 10px !important;
+}
 .cfp-price-inputs {
   display: flex;
   align-items: center !important;
@@ -1440,7 +1446,7 @@ facet-filters-form,
   .cfp-top-bar {
     display: flex !important;
     flex-direction: column !important;
-    padding: 10px 12px !important;
+    padding: 10px 0px !important;
     margin-bottom: 20px !important;
     border: none !important;
     background: var(--cfp-filter-bar-bg, transparent) !important;
@@ -1463,6 +1469,12 @@ facet-filters-form,
     border: none !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+  .cfp-product-count,
+  #cfp-product-count,
+  .cfp-top-bar .cfp-product-count,
+  #cfp-top-bar #cfp-product-count {
+    display: none !important;
   }
   .cfp-drawer-trigger-btn {
     width: 100% !important;
@@ -2046,44 +2058,72 @@ facet-filters-form,
   position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
 }
 
-/* Count markup is controlled by the shop's showProductCount setting. */
+/* Box / Button Chips Count Badge */
 .cfp-button-chip .cfp-checkbox__count {
-  border: 0 !important;
-  height: auto !important;
-  min-width: 0 !important;
-  margin-left: 6px !important;
-  padding: 0 !important;
-  background: transparent !important;
-  color: inherit !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #f0f2f5 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 1px 7px !important;
   font-size: 11px !important;
-}
-
-/* 8. Price Slider Overrides */
-.noUi-handle {
-  width: 20px !important;
+  font-weight: 500 !important;
+  line-height: 1.3 !important;
+  margin-left: 8px !important;
+  min-width: 20px !important;
   height: 20px !important;
-  border-radius: 50% !important;
-  background: #fff !important;
-  border: 1px solid #000 !important;
-  box-shadow: none !important;
-}
-.noUi-handle::after, .noUi-handle::before {
-  display: none !important;
-}
-.noUi-handle .noUi-touch-area {
-  position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; line-height: 1; color: #000; white-space: nowrap;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  transition: all 0.15s ease !important;
 }
 
-/* Count markup is controlled by the shop's showProductCount setting. */
-.cfp-button-chip .cfp-checkbox__count {
-  border: 0 !important;
-  height: auto !important;
-  min-width: 0 !important;
-  margin-left: 6px !important;
-  padding: 0 !important;
-  background: transparent !important;
-  color: inherit !important;
+.cfp-button-chip:hover .cfp-checkbox__count {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.cfp-button-chip input:checked ~ span .cfp-checkbox__count {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Swatch Grid Top-Right Count Badge */
+.cfp-swatch-count--top-right {
+  position: absolute !important;
+  top: 2px !important;
+  right: 4px !important;
+  margin: 0 !important;
   font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  padding: 2px 6px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  border-radius: 9px !important;
+  background: #f0f2f5 !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+  transition: all 0.15s ease !important;
+}
+
+.cfp-color-swatch:hover .cfp-swatch-count--top-right {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.cfp-color-swatch input:checked ~ .cfp-swatch-count--top-right {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
 }
 
 /* 10. Swatch Grids */
@@ -2372,8 +2412,101 @@ facet-filters-form,
   gap: 8px;
 }
 
+.cfp-clear-all-top {
+  display: none;
+}
+
 @media (min-width: 769px) {
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
+  
+  .cfp-horizontal-layout .cfp-product-count,
+  .cfp-horizontal-layout #cfp-product-count,
+  .cfp-drawer-layout .cfp-product-count,
+  .cfp-drawer-layout #cfp-product-count {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  .cfp-horizontal-layout .cfp-clear-all-top {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-left: 6px;
+    transition: color 0.15s ease;
+    white-space: nowrap;
+  }
+  .cfp-horizontal-layout .cfp-clear-all-top:hover {
+    color: #ef4444;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumbs {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-chip {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 4px !important;
+    padding: 5px 10px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    color: #111827 !important;
+    line-height: 1.4 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-chip:hover {
+    background: #ebeef2 !important;
+    border-color: #d1d5db !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-remove {
+    background: transparent !important;
+    border: none !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    color: #6b7280 !important;
+    padding: 0 0 0 2px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: color 0.15s ease !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-remove:hover {
+    color: #ef4444 !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-clear {
+    color: #111827 !important;
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 8px !important;
+    margin-left: 4px !important;
+    transition: color 0.15s ease !important;
+    white-space: nowrap !important;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-clear:hover {
+    color: #ef4444 !important;
+  }
   
   /* In Horizontal mode, MORE button is styled bold and visible in the toolbar */
   .cfp-horizontal-layout #cfp-drawer-trigger-btn {
@@ -2434,7 +2567,7 @@ facet-filters-form,
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
-    gap: 32px !important;
+    gap: 0 20px !important;
     align-items: flex-start !important;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -2444,8 +2577,8 @@ facet-filters-form,
     order: 1 !important;
     width: 100% !important;
     flex: 0 0 100% !important;
-    padding: 6px 0 14px 0 !important;
-    margin-bottom: 8px !important;
+    padding: 6px 16px 12px 16px !important;
+    margin: 0 0 14px 0 !important;
     border-bottom: 1px solid var(--cfp-border, #e5e7eb) !important;
     box-sizing: border-box !important;
     min-height: auto !important;
@@ -2464,8 +2597,22 @@ facet-filters-form,
     min-width: 0 !important;
     display: flex !important;
     align-items: center !important;
+    justify-content: flex-start !important;
     flex-wrap: wrap !important;
-    gap: 8px !important;
+    gap: 12px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+
+  .cfp-vertical-layout .cfp-product-count {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #374151 !important;
+    white-space: nowrap !important;
+    letter-spacing: -0.01em !important;
+    display: inline-flex !important;
+    align-items: center !important;
   }
 
   .cfp-vertical-layout .cfp-top-bar__right {
@@ -2550,31 +2697,59 @@ facet-filters-form,
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+    position: absolute !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar {
     order: 2 !important;
     display: flex !important;
+    flex-direction: column !important;
     visibility: visible !important;
-    position: static !important;
-    inset: auto !important;
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    top: max(120px, calc(var(--cfp-sticky-top, 0px) + 15px)) !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    align-self: flex-start !important;
     flex: 0 0 260px !important;
     width: 260px !important;
     max-width: 260px !important;
-    height: auto !important;
-    max-height: none !important;
-    z-index: auto !important;
+    height: fit-content !important;
+    max-height: calc(100vh - max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) - 20px) !important;
+    z-index: 2 !important;
     transform: none !important;
     box-shadow: none !important;
     border-right: 1px solid var(--cfp-border, #e5e7eb) !important;
     border-top: none !important;
     border-bottom: none !important;
     border-left: none !important;
-    padding: 0 20px 20px 0 !important;
+    padding: 0 10px 20px 10px !important;
     margin: 0 !important;
-    background: transparent !important;
+    background: var(--cfp-surface, #ffffff) !important;
     transition: none !important;
-    overflow: visible !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #e5e7eb transparent !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
+    width: 4px !important;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb {
+    background: #e5e7eb !important;
+    border-radius: 4px !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
@@ -2583,8 +2758,15 @@ facet-filters-form,
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header {
-    padding: 0 0 14px 0 !important;
+    padding: 12px 0 12px 0 !important;
     border-bottom: none !important;
+    flex-shrink: 0 !important;
+    position: sticky !important;
+    top: 0px !important;
+    background: var(--cfp-surface, #ffffff) !important;
+    z-index: 10 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header .cfp-close-btn,
@@ -2602,7 +2784,7 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body {
     padding: 0 !important;
     overflow: visible !important;
-    flex-grow: 0 !important;
+    flex-grow: 1 !important;
   }
 
   .cfp-vertical-layout #cfp-products-container,
@@ -2737,7 +2919,7 @@ facet-filters-form,
   border-color: var(--cfp-border) !important;
 }
 .cfp-dark-mode #cfp-sidebar .cfp-search-input::placeholder { color: var(--cfp-text-muted) !important; }
-.cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: transparent !important; }
+.cfp-dark-mode #cfp-sidebar .cfp-button-chip .cfp-checkbox__count { background: rgba(255, 255, 255, 0.15) !important; color: #fff !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-sidebar__footer { background: var(--cfp-bg) !important; }
 .cfp-dark-mode #cfp-sidebar .cfp-button-chip input:checked + span { background: #000 !important; border-color: #fff !important; }
 
@@ -2748,9 +2930,8 @@ facet-filters-form,
 
 @media (max-width: 768px) {
   .cfp-search-banner-wrapper {
-    padding: 24px 16px 24px !important;
+    padding: 20px 10px !important;
     border-radius: 0 !important;
-    margin: 0px 0 20px !important;
   }
   .cfp-search-banner__title {
     font-size: 26px !important;
