@@ -1,3 +1,5 @@
+import {hasUsableExtraFacets} from './extraProductFilters.js';
+import {hasUsableSaleFacets} from './percentSaleFilter.js';
 import {createHash} from 'node:crypto';
 import {decodePreparation,encodePreparation} from './collectionPreparationPayload.js';
 import {isPublicCollectionCards,collectionCardsResponse,acceptsCollectionPinnedPrefix,collectionCardPresentationVersion} from './collectionCards.js';
@@ -94,6 +96,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    let entry;try{entry=decodePreparation(raw);}catch{return null;}
    controller.signal.throwIfAborted();
    if(entry?.version!==1||entry.policyVersion!==2||entry.cardPresentationVersion!==collectionCardPresentationVersion||entry.shop!==shop||!/^\d+$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
+   if(!hasUsableExtraFacets(entry.payload))return null;
+   if(!hasUsableSaleFacets(entry.payload))return null;
    if(!hasUsableProductTitleFacets(entry.payload))return null;
    if(!hasUsableCollectionNavigation(entry.payload))return null;
    stage='ranking-state';const before=await readState(entry),prepared=current(before,entry.external);

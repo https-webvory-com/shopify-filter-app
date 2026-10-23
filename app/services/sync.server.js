@@ -1,3 +1,4 @@
+import {hydrateProductFilterFacts,productFilterFactsValue} from '../utils/productFilterFacts.js';
 import prisma from "../db.server";
 import { completeProductCollections, verifyMembershipWrites } from "./productCollections.server.js";
 import { reconcileCollectionMembership } from "../utils/reconcileCollectionMembership.js";
@@ -33,6 +34,7 @@ export async function formatAndPushToMeili(products) {
     const formattedMetafields = {};
     if (p.metafields) {
       p.metafields.forEach((m) => {
+        if(m.namespace==='__cfp_internal')return;
         formattedMetafields[`metafield_${m.namespace}.${m.key}`] = m.value;
       });
     }
@@ -40,6 +42,7 @@ export async function formatAndPushToMeili(products) {
     return {
       id: p.id.split("/").pop(),
       shop: p.shop,
+      cfpFilterFacts:productFilterFactsValue(p),
       title: p.title || "",
       handle: p.handle || "",
       vendor: p.vendor || "",
@@ -430,6 +433,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
             }
           }
           variants(first: 250) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               id
               sku
@@ -446,6 +450,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
               }
             }
           }
+          ratingMetafield: metafield(namespace: "reviews", key: "rating") { id namespace key value type }
           plusSizeMetafield: metafield(namespace: "custom", key: "plus_size_collection_image") {
             id
             namespace
@@ -535,7 +540,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       const products = productsData.nodes.filter(isStorefrontProduct);
 
       // Complete membership reads before any DB/index writes for this batch.
-      for (const product of products) await completeProductCollections(admin, product);
+      for (const product of products) { await completeProductCollections(admin, product); await hydrateProductFilterFacts(product,admin,prisma,shop); }
 
       // Remove stale drafts, archived products, and products unpublished from the Online Store.
       const unpublishedProducts = productsData.nodes.filter((p) => !isStorefrontProduct(p));
@@ -573,6 +578,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
           if (p.weddingMetafield) p.metafields.nodes.push(p.weddingMetafield);
 
           p.metafields.nodes.forEach((m) => {
+        if(m.namespace==='__cfp_internal')return;
             if (m && m.value) {
               let val = m.value;
               if (m.reference && m.reference.image && m.reference.image.url) {
@@ -589,6 +595,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
         return {
           id: p.id.split("/").pop(),
           shop,
+          cfpFilterFacts:productFilterFactsValue(p),
           title: p.title || "",
           handle: p.handle || "",
           vendor: p.vendor || "",
@@ -945,6 +952,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
           }
         }
         variants(first: 250) {
+          pageInfo { hasNextPage endCursor }
           nodes {
             id
             sku
@@ -961,6 +969,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
             }
           }
         }
+        ratingMetafield: metafield(namespace: "reviews", key: "rating") { id namespace key value type }
         plusSizeMetafield: metafield(namespace: "custom", key: "plus_size_collection_image") {
           id
           namespace
@@ -1060,6 +1069,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
   // ✅ Run DB upsert and build Meilisearch doc in parallel from Shopify data
   // No need to re-read from Postgres — we have all the data from the API response
   await completeProductCollections(admin, product);
+  await hydrateProductFilterFacts(product,admin,prisma,shop);
 
   const available = product.variants.nodes.some((v) => v.availableForSale);
   const prices = product.variants.nodes.map((v) => parseFloat(v.price));
@@ -1084,6 +1094,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
       product.metafields.nodes.push(product.weddingMetafield);
 
     product.metafields.nodes.forEach((m) => {
+        if(m.namespace==='__cfp_internal')return;
       if (m && m.value) {
         let val = m.value;
         if (m.reference && m.reference.image && m.reference.image.url) {
@@ -1104,6 +1115,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     const meiliDoc = {
       id: product.id.split("/").pop(),
       shop,
+      cfpFilterFacts:productFilterFactsValue(product),
       title: product.title || "",
       handle: product.handle || "",
       vendor: product.vendor || "",

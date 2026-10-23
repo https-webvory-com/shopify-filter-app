@@ -20,7 +20,7 @@ export function configurationResponse(request, payload) {
 export function visibleCollectionFacets(facets, settings) {
   if (!facets || !Array.isArray(settings)) return facets;
   const result={}, consumers={tags:[],collections:[]};
-  const names={vendor:'vendors',product_type:'productTypes',collection:'collections',tag:'tags',tags:'tags',title:'titles',price:'priceRanges',availability:'availability',stock_status:'availability'};
+  const names={vendor:'vendors',product_type:'productTypes',collection:'collections',tag:'tags',tags:'tags',title:'titles',price:'priceRanges',percent_sale:'percentSale',weight:'extraFilters',review_rating:'extraFilters',inventory_locations:'extraFilters',availability:'availability',stock_status:'availability'};
   for (const setting of settings) {
     if (!setting.isEnabled) continue;
     const type=setting.filterType || setting.type, key=setting.filterKey || setting.key;
@@ -30,6 +30,7 @@ export function visibleCollectionFacets(facets, settings) {
       if (Object.hasOwn(facets[name] || {},key)) result[name]={...(result[name] || {}),[key]:facets[name][key]};
     } else {
       const name=Object.hasOwn(names,type)?names[type]:null;if (!name) return facets;
+      if(type==='stock_status'&&facets.extraFilters)result.extraFilters=facets.extraFilters;
       if (Object.hasOwn(facets,name)) result[name]=facets[name];
       if (name in consumers) {
         let config;

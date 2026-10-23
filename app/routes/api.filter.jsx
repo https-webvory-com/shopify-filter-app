@@ -1,3 +1,5 @@
+import {extraFilterTypes,extraSelections,readExtraProductFacts,extraIdsFilter,extraFilterChoices} from '../utils/extraProductFilters.js';
+import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,saleIdsFilter} from '../utils/percentSaleFilter.js';
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
@@ -91,6 +93,15 @@ export const loader = async ({ request, context }) => {
       url.searchParams.get("customer_tags") ||
       "";
     const currentCustomerTags = customerTagsStr.split(",").filter(Boolean);
+    let selectedExtra;
+    try { selectedExtra=extraSelections(url.searchParams); }
+    catch { return data({error:'Invalid filter value or range.'},{status:400}); }
+    let selectedPriceRanges;
+    try {selectedPriceRanges=url.searchParams.getAll('price[]').map(value=>{if(!/^\d+(?:\.\d+)?:(?:\d+(?:\.\d+)?|Infinity)$/.test(value))throw Error();const [min,max]=value.split(':').map(Number);if(min<0||min>max)throw Error();return {min,max};});if(selectedPriceRanges.length>100)throw Error();}
+    catch {return data({error:'Invalid price range.'},{status:400});}
+    let selectedSaleRanges;
+    try { selectedSaleRanges = parseSaleSelections(url.searchParams); }
+    catch { return data({error:'Invalid sale percentage range. Use bounds from 0 to 100.'},{status:400}); }
     const minPrice = parseFloat(url.searchParams.get("minPrice") || "0");
     const maxPrice = parseFloat(url.searchParams.get("maxPrice") || "9999999");
     const isSearch =
@@ -399,6 +410,9 @@ export const loader = async ({ request, context }) => {
 
     // ── 3. Determine if user has active filters ────────────────────────
     const userHasFilters =
+      Object.values(selectedExtra).some(values=>values.length>0) ||
+      selectedPriceRanges.length > 0 ||
+      selectedSaleRanges.length > 0 ||
       vendors.length > 0 ||
       types.length > 0 ||
       collections.length > 0 ||
@@ -530,7 +544,15 @@ export const loader = async ({ request, context }) => {
         () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
+    const saleRangesConfig = configuredSaleRanges(activeGroupFilters);
+    const saleRows = saleRangesConfig.length || selectedSaleRanges.length || activeGroupFilters?.some(f => f.isEnabled && f.filterType === 'percent_sale')
+      ? await getCached(`percentSale:${shop}`, () => readProductSalePercentages(prisma,shop),30) : [];
+    const needsExtraFacts=activeGroupFilters?.some(f=>f.isEnabled&&extraFilterTypes.has(f.filterType))||Object.entries(selectedExtra).some(([key,values])=>values.length&&(key!=='stock_status'||values.some(v=>v==='pre_order'||v==='stock_on_hand')));
+    const extraRows=needsExtraFacts?await getCached(`extraFilterFacts:${shop}`,()=>readExtraProductFacts(prisma,shop),30):[];
+    const extraChoices=extraFilterChoices(activeGroupFilters,extraRows);
     const categoryFilters = {};
+    for(const [type,values] of Object.entries(selectedExtra)) if(type!=='stock_status'&&values.length)categoryFilters['extra_'+type]=extraIdsFilter(extraRows,type,values);
+    if (selectedSaleRanges.length) categoryFilters.percentSale = saleIdsFilter(saleRows,selectedSaleRanges);
     if (minPrice > 0 || maxPrice < 9999999) {
       const bufferedMin = Math.max(0, minPrice - 0.5);
       const bufferedMax = maxPrice + 0.5;
@@ -544,8 +566,16 @@ export const loader = async ({ request, context }) => {
         categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
       }
     }
+    if(selectedPriceRanges.length){
+      if(hideUnavailable){
+        const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+        const ids=new Set();for(const range of selectedPriceRanges)for(const id of await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma}))ids.add(id);
+        categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_available_variant_price__"';
+      }else categoryFilters.priceMin='('+selectedPriceRanges.map(range=>`(priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''})`).join(' OR ')+')';
+    }
     variantEligibilityMs=Date.now()-eligibilityStarted;
-    if (availability.length > 0) {
+    if (availability.length > 0 && needsExtraFacts) categoryFilters.available=extraIdsFilter(extraRows,'stock_status',availability);
+    else if (availability.length > 0) {
       if (
         availability.includes("in_stock") &&
         !availability.includes("out_of_stock")
@@ -716,7 +746,7 @@ export const loader = async ({ request, context }) => {
           neededFacetKeys.push("vendor");
         } else if (f.filterType === "product_type") {
           neededFacetKeys.push("productType");
-        } else if (f.filterType === "tag") {
+        } else if ((f.filterType === "tag" || f.filterType === "tags")) {
           neededFacetKeys.push("tags");
         } else if (f.filterType === "title") {
           neededFacetKeys.push("title");
@@ -766,13 +796,41 @@ export const loader = async ({ request, context }) => {
         indexUid: "products",
         q: searchQuery,
         filter: filterForThisCat,
-        facets: [cat],
+        facets: cat === "percentSale" || cat.startsWith("extra_") ? [] : [cat],
         limit: 0,
         attributesToRetrieve: [],
       });
     }
 
     // ── 9. Execute Meilisearch multiSearch ─────────────────────────────
+    const saleCountQueryStart = queries.length;
+    const saleCountRanges = [...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
+    for (const range of saleCountRanges) {
+      queries.push({indexUid:'products',q:searchQuery,
+        filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
+          ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []),saleIdsFilter(saleRows,[range])],
+        facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+    }
+    const priceCountQueryStart=queries.length;
+    const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
+    let configuredPrices=[];try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
+    const priceCountRanges=configuredPrices.slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
+    for(const range of priceCountRanges){
+      let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
+      if(hideUnavailable){
+        const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+        const ids=await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma});priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
+      }
+      queries.push({indexUid:'products',q:searchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+    }
+    let exactPriceCounts=[];
+    const extraCountQueryStart=queries.length;
+    for(const choice of extraChoices){
+      const category=choice.type==='stock_status'?'available':'extra_'+choice.type;
+      queries.push({indexUid:'products',q:searchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+    }
+    let extraCounts={};
+    let saleCounts = {};
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
     if (useRankedCollectionPagination && !context?.rankingWarmup) {
@@ -910,6 +968,9 @@ export const loader = async ({ request, context }) => {
         const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
         queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
       }
+      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:multiSearchRes.results[priceCountQueryStart+i]?.totalHits??0}));
+      extraCounts=Object.fromEntries(extraChoices.map((choice,i)=>[`${choice.type}:${choice.value}`,multiSearchRes.results[extraCountQueryStart+i]?.totalHits??0]));
+      saleCounts = Object.fromEntries(saleCountRanges.map((range,i) => [range.value,multiSearchRes.results[saleCountQueryStart+i]?.totalHits ?? 0]));
       const tier1Res = multiSearchRes.results[0];
       facetRes = multiSearchRes.results[facetQueryIndex];
       facetDistribution = { ...(facetRes?.facetDistribution || {}) };
@@ -984,6 +1045,7 @@ export const loader = async ({ request, context }) => {
         }
       }
     } catch (e) {
+      if (saleCountRanges.length || selectedSaleRanges.length || priceCountRanges.length || extraChoices.length || needsExtraFacts) throw e;
       meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
       if (useRankedCollectionPagination) throw e;
@@ -1010,6 +1072,12 @@ export const loader = async ({ request, context }) => {
       facetRes = { ...(facetRes || {}), totalHits: result.total, facetDistribution, facetStats: result.facetStats };
       searchRankingApplied = true;
       searchRankingMode = result.rankingMode || 'compatible';
+    }
+    if (needsRankedSearch && (saleCountRanges.length || priceCountRanges.length || extraChoices.length)) {
+      const counts = await semanticMultiSearch(queries.slice(saleCountQueryStart));
+      saleCounts = Object.fromEntries(saleCountRanges.map((range,i) => [range.value,counts.results[i]?.totalHits ?? 0]));
+      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:counts.results[priceCountQueryStart-saleCountQueryStart+i]?.totalHits??0}));
+      extraCounts=Object.fromEntries(extraChoices.map((choice,i)=>[`${choice.type}:${choice.value}`,counts.results[extraCountQueryStart-saleCountQueryStart+i]?.totalHits??0]));
     }
     const meiliTime = Date.now() - meiliStart;
 
@@ -1653,8 +1721,11 @@ export const loader = async ({ request, context }) => {
           inStock: inStockCount,
           outOfStock: outOfStockCount,
         },
+        extraFilters: {version:1,choices:extraChoices.map(choice=>({...choice,max:choice.max===Infinity?null:choice.max,count:extraCounts[`${choice.type}:${choice.value}`]??0})),weightMax:extraRows.reduce((max,row)=>row.weights.reduce((value,weight)=>Math.max(value,weight),max),1)},
+        percentSale: {version:1,minLimit:0,maxLimit:100,ranges:saleRangesConfig.map(range => ({...range,count:saleCounts[range.value] ?? 0}))},
         priceRanges: {
-          ranges: priceRangeCounts,
+          version:2,
+          ranges: exactPriceCounts.length?exactPriceCounts:priceRangeCounts,
           minLimit: absoluteMinPrice === Infinity ? 0 : absoluteMinPrice,
           maxLimit: absoluteMaxPrice === -Infinity ? 100000 : absoluteMaxPrice,
         },

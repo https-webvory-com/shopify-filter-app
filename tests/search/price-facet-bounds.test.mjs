@@ -52,8 +52,8 @@ test('slider bounds remain identical across pages with different product prices'
 
 test('price bounds query excludes its own range while retaining other selections', () => {
   const start = source.indexOf('    const categoryQueryStartIndex =');
-  const end = source.indexOf('    const meiliStart =', start);
-  const context = { queries: [], baseFilters: ['shop = "fixture"'], searchQuery: '',
+  const end = source.indexOf('    const saleCountQueryStart =', start);
+  const context = { saleRangesConfig: [], queries: [], baseFilters: ['shop = "fixture"'], searchQuery: '',
     activeCategories: ['priceMin', 'option_Fabric'], categoryFilters: {
       priceMin: 'id IN ["price-qualified-variant"]', option_Fabric: 'option_Fabric = "Chiffon"',
     } };

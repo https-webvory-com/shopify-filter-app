@@ -23,7 +23,7 @@ const OPTION_TYPES = [
   { value: "percent_sale", label: "Percent sale" },
   { value: "stock_status", label: "Stock status" },
   { value: "inventory_locations", label: "Inventory locations" },
-  { value: "weight", label: "Weight" },
+  { value: "weight", label: "Weight (grams)" },
   { value: "review_rating", label: "Review rating" },
 ];
 

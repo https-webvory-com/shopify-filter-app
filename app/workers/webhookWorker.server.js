@@ -30,6 +30,24 @@ async function processWebhookJob(job) {
         await handleOrderCancelled(shop, payload);
         break;
 
+      case "INVENTORY_LEVELS_UPDATE":
+      case "INVENTORY_ITEMS_UPDATE": {
+        const {unauthenticated}=await import('../shopify.server.js');
+        const {admin}=await unauthenticated.admin(shop);
+        const itemId=payload.inventory_item_id || payload.id;
+        if(!itemId)throw Error('Inventory webhook is missing its inventory item ID');
+        const response=await(await admin.graphql(`query FilterInventoryProduct($id:ID!){inventoryItem(id:$id){variant{product{id}}}}`,{variables:{id:`gid://shopify/InventoryItem/${String(itemId).split('/').pop()}`}})).json();
+        if(response.errors||!response.data||!Object.hasOwn(response.data,'inventoryItem'))throw Error('Could not resolve inventory webhook product');
+        const id=response.data?.inventoryItem?.variant?.product?.id;
+        if(id)await handleProductUpdate(shop,{id:String(id).split('/').pop(),admin_graphql_api_id:id},job);
+        break;
+      }
+      case "METAFIELDS_CREATE":
+      case "METAFIELDS_UPDATE":
+      case "METAFIELDS_DELETE":
+        if(payload.owner_resource==='product'&&payload.owner_id)await handleProductUpdate(shop,{id:payload.owner_id},job);
+        break;
+
       case "PRODUCTS_CREATE":
       case "PRODUCTS_UPDATE":
         await handleProductUpdate(shop, payload, job);

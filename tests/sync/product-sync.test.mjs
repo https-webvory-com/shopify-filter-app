@@ -1,3 +1,4 @@
+import * as productFilterFacts from '../../app/utils/productFilterFacts.js';
 import { syncErrorMessage, productSyncJobWhere } from "../../app/utils/syncError.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -42,7 +43,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
   const source = (await fs.readFile("app/services/sync.server.js","utf8"))
     .replace('await import("./orders.server.js")','({syncHistoricalOrders: finishOrders})')
     .replace('await smartUpsertProduct(shop, product, prisma);','await pretendPersist(product);');
-  const context = {module:{exports:{}}, exports:{}, require:name=>mocks[name],
+  const context = {module:{exports:{}}, exports:{}, require:name=>name==='../utils/productFilterFacts.js'?productFilterFacts:mocks[name],
     process:{env:{}}, console:{log(){},error(){},warn(){}},
     setTimeout: callback=>callback(), setInterval: callback=>{heartbeat=callback;return {unref(){}};},
     clearInterval:()=>{cleared=true;}, finishOrders:async()=>{if(finalizationGate) await finalizationGate;},
@@ -50,6 +51,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
   };
   vm.runInNewContext((await transform(source,{format:"cjs"})).code,context);
   const admin = {graphql:async (query,{variables}={})=>({json:async()=>{
+    if(query.includes("FilterVariantMeasurements")) return {data:{nodes:variables.ids.map(id=>({id,inventoryItem:null}))}};
     if(query.includes("verifyProductSyncCount")) return {data:{productsCount:{count:total,precision:"EXACT"}}};
     if(query.includes("getPublishedCollections")) return {data:{collections:{nodes:[],pageInfo:{hasNextPage:false}}}};
     assert.equal(variables.cursor,"last-saved");
@@ -111,7 +113,7 @@ for (const status of ["FAILED", "COMPLETED"]) test("an unfinished " + status + "
   const source=(await fs.readFile("app/services/sync.server.js","utf8"))
     .replace('await import("./productSyncQueue.server.js")','({enqueueProductSync: enqueue})');
   const mocks={"../db.server":{__esModule:true,default:prisma},"../utils/syncError.js":{syncErrorMessage,productSyncJobWhere}};
-  const ctx={module:{exports:{}},exports:{},require:name=>mocks[name]||{},console:{log(){}},enqueue:async(id,shop)=>calls.push([id,shop])};
+  const ctx={module:{exports:{}},exports:{},require:name=>name==='../utils/productFilterFacts.js'?productFilterFacts:mocks[name]||{},console:{log(){}},enqueue:async(id,shop)=>calls.push([id,shop])};
   vm.runInNewContext((await transform(source,{format:"cjs"})).code,ctx);
   const result=await ctx.module.exports.syncProducts(saved.shop,{});
   assert.equal(result.jobId,"same-job");assert.match(result.message,/21800/);

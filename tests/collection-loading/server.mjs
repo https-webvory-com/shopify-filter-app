@@ -1,3 +1,5 @@
+import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
+import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import http from 'node:http';
 import {gunzipSync} from 'node:zlib';
 import fs from 'node:fs/promises';
@@ -47,6 +49,18 @@ export async function createLoadingServer({redisLayer}={}) {
   const select=options=>{
     let products=docs.filter(p=>p.status==='ACTIVE').map(p=>({...p}));
     for(const filter of [options.filter || []].flat(Infinity)){
+      if(typeof filter==='string'&&filter.startsWith('id IN ')) { const ids=JSON.parse(filter.slice(6));products=products.filter(p=>ids.includes(p.id)); }
+      if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"')products=[];
+      if(typeof filter==='string'){
+        const fieldMatch=filter.match(/^(vendor|productType|collection_titles|tags|option_[^ ]+|metafield_[^ ]+) IN (\[.*\])$/);
+        if(fieldMatch){const [,field,raw]=fieldMatch;const values=[...raw.matchAll(/'((?:\\.|[^'])*)'/g)].map(m=>m[1].replace(/\\'/g,"'").replace(/\\\\/g,'\\'));
+          products=products.filter(p=>{const value=field.startsWith('option_')?p.options.find(o=>o.name===field.slice(7))?.values:p[field];return (Array.isArray(value)?value:[value]).some(v=>values.includes(v));});}
+        if(filter.startsWith('priceMin >= ')||filter.startsWith('priceMin <= ')||filter.startsWith('((priceMin >= ')){
+          const ranges=[...filter.matchAll(/priceMin >= ([\d.]+)(?: AND priceMin <= ([\d.]+))?/g)].map(m=>[Number(m[1]),m[2]?Number(m[2]):Infinity]);
+          if(ranges.length)products=products.filter(p=>ranges.some(([min,max])=>p.priceMin>=min&&p.priceMin<=max));
+        }
+        if(filter==='available = true'||filter==='available = false')products=products.filter(p=>p.variantPrices.some(v=>v.available)===(filter==='available = true'));
+      }
       if(typeof filter==='string'&&filter.startsWith('title IN ')){
         const titles=JSON.parse(filter.slice('title IN '.length));products=products.filter(p=>titles.includes(p.title));
       }
@@ -56,6 +70,11 @@ export async function createLoadingServer({redisLayer}={}) {
     else if(sort==='priceMin:desc')products.sort((a,b)=>b.priceMin-a.priceMin);
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
     const facetDistribution=options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{};
+    for(const field of options.facets||[]){
+      if(['vendor','productType','tags','available'].includes(field)||field.startsWith('metafield_')||field.startsWith('option_')){
+        facetDistribution[field]={};for(const p of products){const raw=field.startsWith('option_')?p.options.find(o=>o.name===field.slice(7))?.values:field==='available'?p.variantPrices.some(v=>v.available):p[field];for(const value of new Set((Array.isArray(raw)?raw:[raw]).filter(v=>v!=null)))facetDistribution[field][value]=(facetDistribution[field][value]||0)+1;}
+      }
+    }
     if(options.facets?.includes('title')){
       facetDistribution.title={};for(const p of products)facetDistribution.title[p.title]=(facetDistribution.title[p.title]||0)+1;
     }
@@ -66,7 +85,7 @@ export async function createLoadingServer({redisLayer}={}) {
       facetDistribution.option_Color={};
       for(const p of products){const position=p.options.findIndex(o=>o.name==='Color');for(const value of new Set(p.variantPrices.map(v=>v['option'+(position+1)]).filter(Boolean)))facetDistribution.option_Color[value]=(facetDistribution.option_Color[value]||0)+1;}
     }
-    return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution,processingTimeMs:1};
+    return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution,processingTimeMs:1,...(options.facets?.includes('priceMin')&&products.length?{facetStats:{priceMin:{min:Math.min(...products.map(p=>p.priceMin)),max:Math.max(...products.map(p=>p.priceMin))}}}:{})};
   };
   const index={search:async(_q,options)=>select(options),
     getSettings:async()=>({distinctAttribute:null,pagination:{maxTotalHits:100000}}),
@@ -76,7 +95,11 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       const ids=JSON.parse(options.filter.slice(6));const results=ids.map(id=>byId.get(String(id))).filter(doc=>doc&&doc.status!=='DELETED').map(doc=>({...doc})).reverse();trace.hydrations+=results.length;return {results,offset:0,limit:options.limit,total:results.length};},
     getDocument:async id=>{trace.documentCalls++;trace.hydrations++;const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
-  const prisma={product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]},collection:{findMany:async({where})=>(state.collectionLinks||[{shop,title:'Fixture collection',handle:'fixture'}]).filter(row=>row.shop===where.shop&&where.title.in.includes(row.title))}};
+  const prisma={$queryRaw:async(strings,...values)=>{
+    if(strings.join('?').includes('AS preorder'))return docs.filter(p=>p.status==='ACTIVE').map(p=>({id:p.id,available:true,onhand:true,preorder:false,rating:null,facts:null,...(state.extraFacts?.[p.id]||{})}));
+    if (!strings.join('?').includes('AS percent') || values[0] !== shop) throw Error('Unexpected fixture SQL');
+    return docs.filter(p=>p.status==='ACTIVE').map(p=>({id:p.id,percent:(state.salePercentages || {})[p.id] ?? 0}));
+  },product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]},collection:{findMany:async({where})=>(state.collectionLinks||[{shop,title:'Fixture collection',handle:'fixture'}]).filter(row=>row.shop===where.shop&&where.title.in.includes(row.title))}};
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
   const merch=serviceCtx.module.exports;
@@ -143,6 +166,8 @@ export async function createLoadingServer({redisLayer}={}) {
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
     '../utils/productTitleFilter.js':productTitleFilter,
+    '../utils/extraProductFilters.js':extraProductFilters,
+    '../utils/percentSaleFilter.js':percentSaleFilter,
     '../utils/collectionNavigation.js':collectionNavigation,
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
@@ -168,6 +193,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
+        if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields))Object.assign(byId.get(id),fields);
         if(updates.productVariants)for(const [id,variants]of Object.entries(updates.productVariants)){
           const doc=byId.get(id);doc.variantPrices=variants;doc.options=[{name:'Color',values:[...new Set(variants.map(v=>v.option1))]}];
         }
@@ -237,7 +263,7 @@ export async function createLoadingServer({redisLayer}={}) {
   // Timing cases navigate away before reset. Close only this fixture's old
   // sockets so intentionally delayed images cannot occupy the next case's pool.
   server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
-  return {server,state,trace,facetRequests,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
+  return {server,state,trace,facetRequests,documents:docs,sessionCount:()=>sessions.size,load:(request,context={})=>routeCtx.module.exports.loader({request,context,params:{}}),
     prepareLast:()=>preparation.process({key:preparationKey(lastSpec),spec:lastSpec}),
     dispose(){for(const timer of timers)clearTimeout(timer);timers.clear();server.closeAllConnections();server.close();}};
 }

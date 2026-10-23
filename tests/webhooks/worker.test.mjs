@@ -6,7 +6,7 @@ import {productRankingFingerprint,productContentFingerprint} from '../../app/uti
 
 async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content') {
   const calls = [],invalidations=[];
-  const admin = {};
+  const admin = {graphql:async()=>({json:async()=>({data:{inventoryItem:{variant:{product:{id:'gid://shopify/Product/1'}}}}})})};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
   const source = (await fs.readFile("app/workers/webhookWorker.server.js", "utf8"))
     .replace(/^import .*;\r?\n/gm, "")
@@ -14,7 +14,7 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
     productRankingFingerprint,productContentFingerprint,
-    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
+    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
     prisma: {product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
@@ -124,4 +124,12 @@ test('product deletion retries retain affected collections after DB memberships 
   assert.equal(worker.calls.filter(([type])=>type==='invalidate').length,2);
   assert.deepEqual(Array.from(job.data.deletedCollectionIds),['gid://shopify/Collection/1']);
   assert.deepEqual(Array.from(worker.invalidations[1].externalProof.tags),['OldTag']);
+});
+
+for(const topic of ['INVENTORY_LEVELS_UPDATE','INVENTORY_ITEMS_UPDATE','METAFIELDS_UPDATE'])test(`${topic} refreshes filter facts and invalidates only after successful sync`,async()=>{
+ const worker=await loadWorker(undefined,false,false,'filterFacts');
+ const payload=topic==='METAFIELDS_UPDATE'?{owner_resource:'product',owner_id:1}:{id:2,inventory_item_id:2};
+ await worker.process({name:topic,data:{shop:'fixture.myshopify.com',payload}});
+ assert.ok(worker.calls.some(call=>call[0]==='sync'&&call[2]==='gid://shopify/Product/1'));assert.equal(worker.invalidations[0].kind,'products');
+ await assert.rejects((await loadWorker(Error('Sync failed'))).process({name:topic,data:{shop:'fixture.myshopify.com',payload}}),/Sync failed/);
 });

@@ -390,6 +390,7 @@ export const action = async ({ request, params }) => {
     const isDynamicOption = ![
       "collection",
       "title",
+      "metafield",
       "vendor",
       "product_type",
       "tag",
@@ -402,7 +403,9 @@ export const action = async ({ request, params }) => {
       "inventory_locations",
     ].includes(filterType);
     if (isDynamicOption) {
-      filterKey = label; // The user's label becomes the key (e.g., "Color")
+      filterKey = filterKey || filterType;
+      const names=await prisma.$queryRaw`SELECT DISTINCT el->>'name' AS name FROM "Product", jsonb_array_elements(CASE WHEN jsonb_typeof(options)='array' THEN options ELSE '[]'::jsonb END) el WHERE shop=${shop} AND LOWER(el->>'name')=LOWER(${filterKey})`;
+      filterKey=names[0]?.name || filterKey;
       filterType = "option";
     }
 
@@ -445,6 +448,7 @@ export const action = async ({ request, params }) => {
     const isDynamicOption = ![
       "collection",
       "title",
+      "metafield",
       "vendor",
       "product_type",
       "tag",
@@ -458,7 +462,9 @@ export const action = async ({ request, params }) => {
     ].includes(filterType);
 
     if (isDynamicOption && filterType) {
-      filterKey = filterType;
+      filterKey = filterKey || filterType;
+      const names=await prisma.$queryRaw`SELECT DISTINCT el->>'name' AS name FROM "Product", jsonb_array_elements(CASE WHEN jsonb_typeof(options)='array' THEN options ELSE '[]'::jsonb END) el WHERE shop=${shop} AND LOWER(el->>'name')=LOWER(${filterKey})`;
+      filterKey=names[0]?.name || filterKey;
       filterType = "option";
     }
 
