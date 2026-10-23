@@ -1016,6 +1016,18 @@ facet-filters-form,
   height: 100%;
 }
 
+/* Keep both gallery images below the sibling Quick View control, including
+   when theme styles add a stacking level to the product link or images. */
+.cfp-product-card__image-wrapper {
+  position: relative;
+  isolation: isolate;
+}
+
+.cfp-product-card__image-wrapper > .cfp-product-card__link {
+  position: relative;
+  z-index: 0;
+}
+
 .cfp-product-card__image-container {
     border-radius: 6px;
   position: relative;
