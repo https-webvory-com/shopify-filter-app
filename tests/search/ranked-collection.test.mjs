@@ -141,6 +141,15 @@ test('pins and boosts respect sort priority settings across the whole collection
   const pins = { products: [{ id: 'pin' }] };
   assert.deepEqual(Array.from(apply(docs.map(p => ({ ...p })), rule, 'price-ascending', pins, [], {}), p => p.id), ['pin', 'boost', 'cheap']);
   assert.deepEqual(Array.from(apply(docs.map(p => ({ ...p })), rule, 'price-ascending', pins, [], { prioritizeSortOverPinning: true, prioritizeSortOverMerchandising: true }), p => p.id), ['cheap', 'boost', 'pin']);
+  for(const [pinPriority,merchPriority,expected] of [
+    [false,true,['pin','cheap','boost']],
+    [true,false,['boost','cheap','pin']],
+  ]){
+    const settings={prioritizeSortOverPinning:pinPriority,prioritizeSortOverMerchandising:merchPriority};
+    assert.deepEqual(Array.from(apply(docs.map(p=>({...p})),rule,'price-ascending',pins,[],settings),p=>p.id),expected);
+    assert.deepEqual(Array.from(apply(docs.map(p=>({...p})),rule,'best-selling',pins,[],settings),p=>p.id),['pin','boost','cheap']);
+  }
+
 });
 
 test('a missing indexed product preserves its session slot for DB hydration', async () => {

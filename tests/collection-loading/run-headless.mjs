@@ -553,6 +553,72 @@ try{
     assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {initial:25,afterLoadMore:30,uniqueProducts:30,legacyLinkAccepted:true,expiredSessionRestarted:true,tokenInAddressBar:false};
   });
+  await test('settings audit mobile layouts, Quick View and presentation flags',async()=>{
+    await send('Emulation.setDeviceMetricsOverride',{width:375,height:667,deviceScaleFactor:1,mobile:true});
+    for(const [settings,expected] of [
+      [{mobileFilterLayout:'horizontal-scrolling',showQuickViewCollection:false},'cfp-mobile-horizontal-scrolling'],
+      [{desktopLikeOnMobile:true,showQuickViewCollection:true},'cfp-desktop-like-mobile'],
+      [{mobileFilterLayout:'off-canvas',desktopLikeOnMobile:false,showQuickViewCollection:false},null],
+    ]){
+      await control({reset:true,hold:false,globalSettings:settings});await navigate();
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-quick-view-btn').length"),settings.showQuickViewCollection?25:0);
+      if(expected){
+        assert.equal(await evaluate(`document.body.classList.contains('${expected}')`),true);
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).position"),'sticky');
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-drawer-trigger-btn')).display"),'none');
+        assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getAttribute('aria-hidden')"),'false');
+      }else{
+        assert.equal(await evaluate("document.body.classList.contains('cfp-mobile-horizontal-scrolling') || document.body.classList.contains('cfp-desktop-like-mobile')"),false);
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+        assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),true);
+      }
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    for(const enabled of [true,false]){
+      await control({reset:true,hold:false,globalSettings:{showQuickViewCollection:enabled,secondImageOnHover:enabled,isWholesale:!enabled,darkMode:enabled,showProductCount:enabled,desktopFilterLayout:'vertical'},productFields:{'1':{images:['/image/1.svg','/image/2.svg']}}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+      assert.equal(await evaluate("document.body.classList.contains('cfp-dark-mode')"),false,'legacy dark mode is ignored');
+
+      assert.equal(await evaluate("document.body.classList.contains('cfp-vertical-layout')"),true,'vertical layout');
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-quick-view-btn').length"),enabled?25:0);
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price-row').length"),enabled?25:0);
+      assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__image--secondary')"),enabled,'secondary image');
+    }
+  });
+  await test('settings audit filter counts, single-value visibility and breadcrumbs',async()=>{
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
+    for(const enabled of [true,false]){
+      await control({reset:true,hold:false,productCount:30,filterSettings,globalSettings:{desktopFilterLayout:'vertical',showProductCount:enabled,showFilterOptionsWithOneItem:enabled,showAttributeBasedBreadcrumb:enabled}});
+      await navigate('?vendors=Fixture');await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate("!!document.querySelector('#cfp-sidebar input[name=vendor]')"),enabled,'single-value filter visibility');
+      assert.equal(await evaluate("!!document.querySelector('#cfp-sidebar .cfp-checkbox__count')"),enabled,'filter product counts');
+      assert.equal(await evaluate("!!document.querySelector('.cfp-breadcrumb-chip')"),enabled,'active attribute breadcrumbs');
+    }
+  });
+  await test('settings audit desktop layouts, responsive transitions and vertical scrolling',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
+    for(const layout of ['horizontal','vertical','drawer']){
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+      await control({reset:true,hold:false,productCount:30,filterSettings,globalSettings:{desktopFilterLayout:layout,mobileFilterLayout:'horizontal-scrolling',showFilterOptionsWithOneItem:true,scrollUpOnFilterValuesChange:true}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate(`document.body.classList.contains('cfp-${layout}-layout')`),true);
+      await evaluate("window.scrollCalls=[];window.scrollTo=(...args)=>window.scrollCalls.push(args);const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+      await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      assert.equal(await evaluate('window.scrollCalls.length>0'),layout==='vertical','scroll only in vertical mode');
+      await send('Emulation.setDeviceMetricsOverride',{width:375,height:667,deviceScaleFactor:1,mobile:true});
+      await wait("document.body.classList.contains('cfp-mobile-horizontal-scrolling')");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getAttribute('aria-hidden')"),'false');
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+      await wait(`document.body.classList.contains('cfp-${layout}-layout') && !document.body.classList.contains('cfp-mobile-horizontal-scrolling')`);
+    }
+    await control({reset:true,hold:false,productCount:30,filterSettings,globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true,scrollUpOnFilterValuesChange:false}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate("window.scrollCalls=[];window.scrollTo=(...args)=>window.scrollCalls.push(args);const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.equal(await evaluate('window.scrollCalls.length'),0,'disabled scrolling');
+  });
   await fs.writeFile('scratch/collection-headless-results.json',JSON.stringify({browser:version.product,headless:true,queueBackend:redisLayer?'Real Redis/BullMQ in unique temporary namespace':'In-memory',environment:'Actual storefront assets/API/early Liquid script; fixture catalog/index/session data and injected delays; no live cache/queue keys/settings changed and no push',results},null,2));
   console.log(`HEADLESS COLLECTION CHECKS PASSED: ${results.length}`);
 }catch(error){

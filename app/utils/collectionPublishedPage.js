@@ -18,7 +18,7 @@ export function publishedCollectionKey(request){
 }
 // Published versions are deliberately independent of working ranking epochs.
 // Only a complete, verified replacement is published; visits never rebuild it.
-export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,now=Date.now,lifetime=86400}){
+export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,now=Date.now,lifetime=86400}){
  const valid=(entry,serving=false)=>entry?.version===1&&entry.cardPresentationVersion===collectionCardPresentationVersion&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
   Array.isArray(entry.ids)&&new Set(entry.ids).size===entry.ids.length&&entry.ids.every(id=>/^\d+$/.test(id))&&
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
@@ -34,12 +34,24 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'published',key});
    if(!raw||Buffer.byteLength(raw)>2*1024*1024)return null;
    const entry=decodePreparation(raw);if(entry.shop!==shop||!entry.aliases?.includes(key)||!valid(entry,true))return null;
+   // Presentation preferences must be fresh even while the last complete
+   // product publication is retained. Eligibility changes require a new order.
+   let globalSettings=entry.payload.globalSettings;
+   if(readGlobalSettings){
+    const current=await readGlobalSettings(shop);if(!current)return null;
+    const rankingFlags=['showOnlyInStock','prioritizeSortOverPinning','prioritizeSortOverMerchandising','hideUnavailableVariantsWhenSelected'];
+    if(rankingFlags.some(key=>(current[key]===true)!==(globalSettings?.[key]===true))){
+     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+     return null;
+    }
+    globalSettings=current;
+   }
    const session=await createSession(request,entry,{ids:entry.ids,metadata:entry.metadata});
    if(page===2&&session.token!==token)return null;
    // One immutable copy per shared ranking token keeps page two on the same
    // published version even if a replacement is published between clicks.
    if(page===1)await redis.setex(`collectionPublishedSession:${shop}:${session.token}`,3600,raw);
-   const response=await collectionCardsResponse({...entry.payload,products:entry.payload.products.slice((page-1)*25,page*25),rankingToken:session.token,
+   const response=await collectionCardsResponse({...entry.payload,globalSettings,products:entry.payload.products.slice((page-1)*25,page*25),rankingToken:session.token,
     cfpCards:{version:1,preview:false,published:true,publishedAt:entry.at,refreshDue:now()-entry.at>=lifetime*1000},
     debug:{...entry.payload.debug,collectionRankingStatus:'ready',collectionPublishedPage:true}},'published',request,{previewLimit:25});
    if(onHit&&page===1){

@@ -83,3 +83,71 @@ test('public Quick View configuration exposes only flags and never creates shops
   assert.equal((await load('fixture.myshopify.com')).status, 429);
   assert.equal(reads, 1);
 });
+
+
+test('each General toggle updates only its own field and rejects malformed submissions', async()=>{
+ let saved,calls=0;
+ const route=await moduleWithMocks('app/routes/app.settings.general.jsx',{
+  'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{},'@shopify/app-bridge-react':{},
+  '../shopify.server':{authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})}},
+  '../services/filterSettings.server':{updateFilterGlobalSettings:async(_shop,data)=>{saved=data;calls++;}},
+ });
+ const post=body=>route.action({request:new Request('https://fixture.test/settings',{method:'POST',body:new URLSearchParams(body)})});
+ for(const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']){
+  for(const value of ['true','false']){assert.equal((await post({[key]:value})).status,200);assert.deepEqual(Object.keys(saved),[key]);assert.equal(saved[key],value==='true');}
+ }
+ const before=calls;
+ for(const body of [{},{showOnlyInStock:'yes'},{showQuickViewCollection:''}])assert.equal((await post(body)).status,400);
+ assert.equal(calls,before);
+});
+
+
+test('every Filter setting saves independently with authenticated tenant and strict validation',async()=>{
+ let saved,calls=0;
+ const route=await moduleWithMocks('app/routes/app.filters.settings.jsx',{
+  'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{},'@shopify/app-bridge-react':{},
+  '../shopify.server':{authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})}},
+  '../services/filterSettings.server':{updateFilterGlobalSettings:async(shop,data)=>{assert.equal(shop,'fixture.myshopify.com');saved=data;calls++;}},
+ });
+ const post=body=>route.action({request:new Request('https://fixture.test/settings',{method:'POST',body:new URLSearchParams(body)})});
+ for(const key of ['horizontalFilters','showAttributeBasedBreadcrumb','showFilterOptionsWithOneItem','showProductCount','scrollUpOnFilterValuesChange','hideUnavailableVariantsWhenSelected','desktopLikeOnMobile','prioritizeSortOverPinning','prioritizeSortOverMerchandising']){
+  for(const value of ['true','false']){assert.equal((await post({[key]:value})).success,true);assert.deepEqual(Object.keys(saved),[key]);assert.equal(saved[key],value==='true');}
+ }
+ for(const [key,values]of Object.entries({desktopFilterLayout:['horizontal','vertical','drawer'],mobileFilterLayout:['off-canvas','horizontal-scrolling']})){
+  for(const value of values){assert.equal((await post({[key]:value})).success,true);assert.equal(saved[key],value);}
+ }
+ const before=calls;for(const body of [{},{desktopFilterLayout:'invalid'},{mobileFilterLayout:'invalid'},{darkMode:'yes'}])assert.equal((await post(body)).success,false);
+ assert.equal(calls,before);
+});
+
+test('Theme Setup detects only active current embeds and never exposes theme configuration',async()=>{
+ let content,failed=false;
+ const route=await moduleWithMocks('app/routes/app.settings.theme-setup.jsx',{
+  'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{},'@shopify/app-bridge-react':{},
+  '../graphql/queries':{GET_THEME:'themes',GET_THEME_SETTINGS:'settings'},
+  '../shopify.server': { authenticate: { admin: async () => ({
+    session: { shop: 'fixture.myshopify.com' },
+    admin: { graphql: async query => ({ json: async () => {
+      if (query === 'themes') return {data:{themes:{edges:[{node:{id:'gid://shopify/OnlineStoreTheme/123',name:'Draft',role:'UNPUBLISHED'}}]}}};
+      if (failed) return {errors:[{message:'denied'}]};
+      return {data:{theme:{files:{nodes:[{body:{content}}]}}}};
+    } }) },
+  }) } },
+ });
+ const read=async()=> (await route.loader({request:new Request('https://fixture.test/settings')})).themes[0];
+ content='/* Shopify generated */'+JSON.stringify({current:{blocks:{x:{type:'shopify://apps/ai-smart-search-filter/blocks/collection_loading/id',disabled:false}}},presets:{}});
+ let theme=await read();assert.equal(theme.canPreview,true);assert.equal(theme.settingsVerified,true);assert.equal(Object.hasOwn(theme,'rawAssetContent'),false);
+ content=JSON.stringify({current:{blocks:{x:{type:'shopify://apps/ai-smart-search-filter/blocks/instant_search/id',disabled:true}}},presets:{old:{type:'shopify://apps/ai-smart-search-filter/blocks/instant_search/id'}}});
+ assert.equal((await read()).canPreview,false);
+ failed=true;assert.equal((await read()).settingsVerified,false);
+});
+
+
+test('saving another filter preference retains the saved desktop layout in the response',async()=>{
+ const service=await moduleWithMocks('app/services/filterSettings.server.js',{
+  '../db.server':{__esModule:true,default:{filterGlobalSetting:{upsert:async args=>({horizontalFilters:false,integrations:{desktopFilterLayout:'vertical'},...args.update})}}},
+  './shopCache.server':{invalidateShop:async()=>{}},
+ });
+ const result=await service.updateFilterGlobalSettings('fixture.myshopify.com',{showProductCount:false});
+ assert.equal(result.desktopFilterLayout,'vertical');assert.equal(result.showProductCount,false);
+});

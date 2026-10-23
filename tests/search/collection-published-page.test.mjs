@@ -6,12 +6,12 @@ import {loadModule} from './helpers/search-ranking.mjs';
 import {encodePreparation,decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
 const sessions=await loadModule('app/services/collectionRankingSession.server.js',{'node:crypto':crypto,'./redis.server.js':{default:{setex:async()=>{}}}});
 
-function fixture(){
+function fixture(options={}){
  const shop='fixture.myshopify.com',values=new Map(),rows=new Map();let time=100000;
  const url='https://api.test/api/filter?shop='+shop+'&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-preview-v1';
  const headers={Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'};
  const request=(changes={})=>{const u=new URL(url);for(const[k,v]of Object.entries(changes))u.searchParams.set(k,v);return new Request(u,{headers});};
- const store=createPublishedCollectionPages({now:()=>time,redis:{get:async k=>values.get(k),setex:async(k,_ttl,v)=>values.set(k,v)},
+ const store=createPublishedCollectionPages({...options,now:()=>time,redis:{get:async k=>values.get(k),setex:async(k,_ttl,v)=>values.set(k,v)},
   saveDurable:async row=>{const old=rows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;rows.set(row.key,row);return true;},
   loadDurable:async({shop:tenant,key})=>[...rows.values()].find(r=>r.shop===tenant&&r.aliases.includes(key))?.payload,
   createSession:(req,entry)=>sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata),
@@ -70,4 +70,28 @@ test('incomplete, duplicate and delayed older replacements cannot overwrite the 
  assert.equal(await f.publish(),true);assert.equal(await f.publish({at:initial}),false);
  assert.equal((await(await f.store.get(f.request())).json()).products.length,25);
  assert.equal(publishedCollectionKey(f.request()),publishedCollectionKey(f.request({limit:'50'})));
+});
+
+
+test('published cards use current presentation settings without replacing canonical cards',async()=>{
+ let current={showQuickViewCollection:false,darkMode:true,showProductCount:false};
+ const f=fixture({readGlobalSettings:async shop=>{assert.equal(shop,'fixture.myshopify.com');return current;}});
+ f.payload.globalSettings={showQuickViewCollection:true};await f.publish();
+ const first=await(await f.store.get(f.request())).json();
+ assert.deepEqual(first.globalSettings,current);assert.deepEqual(first.products.map(p=>p.id),f.ids.slice(0,25));
+ current={...current,secondImageOnHover:false};
+ const second=await(await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).json();
+ assert.deepEqual(second.globalSettings,current);assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
+});
+
+for(const flag of ['showOnlyInStock','prioritizeSortOverPinning','prioritizeSortOverMerchandising','hideUnavailableVariantsWhenSelected']){
+ for(const enabled of [false,true]) test(`published ${flag} change from ${enabled} rejects stale eligibility on both pages`,async()=>{
+  let current={[flag]:enabled};const f=fixture({readGlobalSettings:async()=>current});
+  f.payload.globalSettings={...current};await f.publish();const first=await(await f.store.get(f.request())).json();
+  current={[flag]:!enabled};assert.equal(await f.store.get(f.request()),null);
+  assert.equal((await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).status,409);
+ });
+}
+test('published cards decline safely when current settings cannot be read',async()=>{
+ const f=fixture({readGlobalSettings:async()=>{throw Error('unavailable');}});await f.publish();assert.equal(await f.store.get(f.request()),null);
 });

@@ -67,6 +67,6 @@ export async function updateFilterGlobalSettings(shop, data) {
   await invalidateShop(shop);
   return {
     ...settings,
-    desktopFilterLayout: updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
+    desktopFilterLayout: settings.integrations?.desktopFilterLayout || updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
   };
 }

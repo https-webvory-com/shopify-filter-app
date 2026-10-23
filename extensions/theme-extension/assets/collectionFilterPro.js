@@ -495,7 +495,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     syncStateToURL(); // Sync URL
 
-    if (window._cfpInitialized && globalSettings && globalSettings.scrollUpOnFilterValuesChange && !globalSettings.horizontalFilters) {
+    if (!isLoadMore && window._cfpInitialized && globalSettings && globalSettings.scrollUpOnFilterValuesChange && getEffectiveLayout() === 'vertical') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -691,6 +691,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const prefix=cards.cfpCards?.prefix===true;
     if(prefix)request.searchParams.delete('rankingToken');else request.searchParams.set('rankingToken',cards.rankingToken);
     const signature=JSON.stringify(cards.products);
+    const presentationKeys=['showQuickViewCollection','secondImageOnHover','isWholesale'];
+    const presentation=JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]));
     try{
       const response=await fetchCollectionResponse(request.toString(),signal);
       if(signal.aborted)return;
@@ -709,7 +711,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
       }
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
-      if(JSON.stringify(full.products)!==signature)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      if(JSON.stringify(full.products)!==signature || JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]))!==presentation)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
       else if(prefix){
         // Identical complete cards keep their DOM and verified prices. Only
         // the now-known total and canonical pagination need to be activated.
@@ -737,12 +739,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.classList.toggle('cfp-horizontal-layout', layout === 'horizontal');
     container.classList.toggle('cfp-vertical-layout', layout === 'vertical');
     container.classList.toggle('cfp-drawer-layout', layout === 'drawer');
-    container.classList.toggle('cfp-dark-mode', !!settings.darkMode);
-    container.classList.toggle('cfp-mobile-horizontal-scrolling', false);
-    container.classList.toggle('cfp-desktop-like-mobile', false);
+    // Ignore legacy saved darkMode preferences after removal of the feature.
+    container.classList.remove('cfp-dark-mode');
+    container.classList.toggle('cfp-mobile-horizontal-scrolling', mobile && !settings.desktopLikeOnMobile && settings.mobileFilterLayout === 'horizontal-scrolling');
+    container.classList.toggle('cfp-desktop-like-mobile', mobile && settings.desktopLikeOnMobile === true);
 
     if (triggerBtn) {
-      if (layout === 'vertical') {
+      if (mobile && (settings.desktopLikeOnMobile || settings.mobileFilterLayout === 'horizontal-scrolling')) {
+        triggerBtn.classList.add('is-hidden');
+        triggerBtn.style.setProperty('display', 'none', 'important');
+        triggerBtn.setAttribute('aria-expanded', 'false');
+      } else if (layout === 'vertical') {
         triggerBtn.classList.add('is-hidden');
         triggerBtn.style.setProperty('display', 'none', 'important');
         triggerBtn.setAttribute('aria-expanded', 'false');
@@ -797,6 +804,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) {
       if (layout !== 'vertical') closeSidebar();
+    }
+    if (mobile && (settings.desktopLikeOnMobile || settings.mobileFilterLayout === 'horizontal-scrolling')) {
+      document.body.style.overflow = '';
+      overlay?.classList.remove('cfp-overlay--visible');
+      sidebar?.classList.remove('cfp-sidebar--open');
+      sidebar?.setAttribute('aria-hidden', 'false');
     }
     updateStickyFilterOffsets();
   }
@@ -2433,6 +2446,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     };
     window.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
+    window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
+      closeSidebar();
+      if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+      applyGlobalSettings(globalSettings || {});
+      renderBreadcrumbs();
+    });
     if (topBar && typeof ResizeObserver !== 'undefined') new ResizeObserver(scheduleStickyOffsets).observe(topBar);
     document.body.addEventListener('click', event => {
       if (!event.target.closest('.cfp-horizontal-pill')) {
@@ -2457,9 +2476,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           openToggle?.focus();
         }
       }
-    });
-    window.matchMedia('(min-width: 769px)').addEventListener('change', () => {
-      closeSidebar();
     });
     document.body.addEventListener('click', function(e) {
       if (e.target.closest('#cfp-drawer-trigger-btn')) {

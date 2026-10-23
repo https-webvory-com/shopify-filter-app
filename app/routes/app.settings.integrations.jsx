@@ -271,7 +271,7 @@ export default function Integrations() {
                   <h3 className="int-title">
                     {item.url ? (
                       <a href={item.url} target="_blank" rel="noreferrer" style={{color: "inherit", textDecoration: "underline"}}>
-                        {item.name} â†—
+                        {item.name}
                       </a>
                     ) : (
                       item.name

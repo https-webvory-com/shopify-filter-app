@@ -14,7 +14,13 @@ const recordCardEvent=createCollectionPreparationTelemetry(redis);
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
 
 const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);
-const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession});
+const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
+ readGlobalSettings:async shop=>{
+  const settings=await prisma.filterGlobalSetting.findUnique({where:{shop}});
+  if(!settings)return null;
+  return {...settings,desktopFilterLayout:settings.integrations?.desktopFilterLayout||(settings.horizontalFilters?'horizontal':'drawer')};
+ },
+});
 const store=createCollectionCardStore({redis,readState:createCardStateReader(redis),loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,publishedPages,
  observe:event=>recordCardEvent(event).catch(()=>{}),
  validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(meili.index('products'),entry,prepared,{...options,batchOwner:meili}),

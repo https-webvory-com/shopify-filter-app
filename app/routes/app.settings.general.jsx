@@ -23,26 +23,15 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
 
-  const payload = {
-    showOnlyInStock: formData.get("showOnlyInStock") === "true",
-    secondImageOnHover: formData.get("secondImageOnHover") === "true",
-    showQuickViewInstantSearch:
-      formData.get("showQuickViewInstantSearch") === "true",
-    showQuickViewCollection: formData.get("showQuickViewCollection") === "true",
-    ...(formData.has("quickViewStyle")
-      ? { quickViewStyle: formData.get("quickViewStyle") === "theme" ? "theme" : "app" }
-      : {}),
-    ...(formData.has("showQuickViewSizeChart")
-      ? { showQuickViewSizeChart: formData.get("showQuickViewSizeChart") === "true" }
-      : {}),
-    ...(formData.has("quickViewInstantSearchStyle")
-      ? { quickViewInstantSearchStyle: formData.get("quickViewInstantSearchStyle") === "theme" ? "theme" : "app" }
-      : {}),
-    ...(formData.has("showQuickViewInstantSearchSizeChart")
-      ? { showQuickViewInstantSearchSizeChart: formData.get("showQuickViewInstantSearchSizeChart") === "true" }
-      : {}),
-    isWholesale: formData.get("isWholesale") === "true",
-  };
+  const payload = {};
+  for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
+    if (!formData.has(key)) continue;
+    const value = formData.get(key);
+    if (value !== 'true' && value !== 'false') return Response.json({ success:false, error:'Invalid display setting.' },{status:400});
+    payload[key] = value === 'true';
+  }
+  for (const key of ['quickViewStyle','quickViewInstantSearchStyle']) if (formData.has(key)) payload[key] = formData.get(key) === 'theme' ? 'theme' : 'app';
+  if (!Object.keys(payload).length) return Response.json({success:false,error:'No display settings supplied.'},{status:400});
 
   await updateFilterGlobalSettings(session.shop, payload);
   return Response.json({ success: true });
@@ -53,22 +42,22 @@ export default function Settings() {
   const { settings } = useLoaderData();
   const fetcher = useFetcher();
 
-  const showOnlyInStock = fetcher.formData
+  const showOnlyInStock = fetcher.formData?.has("showOnlyInStock")
     ? fetcher.formData.get("showOnlyInStock") === "true"
     : (settings?.showOnlyInStock ?? false);
-  const secondImageOnHover = fetcher.formData
+  const secondImageOnHover = fetcher.formData?.has("secondImageOnHover")
     ? fetcher.formData.get("secondImageOnHover") === "true"
     : (settings?.secondImageOnHover ?? true);
-  const showQuickViewInstantSearch = fetcher.formData
+  const showQuickViewInstantSearch = fetcher.formData?.has("showQuickViewInstantSearch")
     ? fetcher.formData.get("showQuickViewInstantSearch") === "true"
     : (settings?.showQuickViewInstantSearch ?? true);
-  const showQuickViewCollection = fetcher.formData
+  const showQuickViewCollection = fetcher.formData?.has("showQuickViewCollection")
     ? fetcher.formData.get("showQuickViewCollection") === "true"
     : (settings?.showQuickViewCollection ?? true);
-  const isWholesale = fetcher.formData
+  const isWholesale = fetcher.formData?.has("isWholesale")
     ? fetcher.formData.get("isWholesale") === "true"
     : (settings?.isWholesale ?? false);
-  const showQuickViewSizeChart = fetcher.formData
+  const showQuickViewSizeChart = fetcher.formData?.has("showQuickViewSizeChart")
     ? fetcher.formData.get("showQuickViewSizeChart") === "true"
     : (settings?.showQuickViewSizeChart ?? false);
   const quickViewStyle = (fetcher.formData?.get("quickViewStyle") ?? settings?.quickViewStyle) === "theme" ? "theme" : "app";
@@ -76,47 +65,13 @@ export default function Settings() {
     fetcher.formData?.get("quickViewInstantSearchStyle") ??
     settings?.quickViewInstantSearchStyle ?? settings?.quickViewStyle
   ) === "theme" ? "theme" : "app";
-  const showQuickViewInstantSearchSizeChart = fetcher.formData
+  const showQuickViewInstantSearchSizeChart = fetcher.formData?.has("showQuickViewInstantSearchSizeChart")
     ? fetcher.formData.get("showQuickViewInstantSearchSizeChart") === "true"
     : (settings?.showQuickViewInstantSearchSizeChart ?? settings?.showQuickViewSizeChart ?? false);
 
   const toggleSetting = (key, currentValue) => {
-    fetcher.submit(
-      {
-        quickViewStyle: key === "quickViewStyle" ? currentValue : quickViewStyle,
-        quickViewInstantSearchStyle:
-          key === "quickViewInstantSearchStyle" ? currentValue : quickViewInstantSearchStyle,
-        showQuickViewInstantSearchSizeChart:
-          key === "showQuickViewInstantSearchSizeChart"
-            ? String(!currentValue)
-            : String(showQuickViewInstantSearchSizeChart),
-        showQuickViewSizeChart:
-          key === "showQuickViewSizeChart"
-            ? String(!currentValue)
-            : String(showQuickViewSizeChart),
-        showOnlyInStock:
-          key === "showOnlyInStock"
-            ? String(!currentValue)
-            : String(showOnlyInStock),
-        secondImageOnHover:
-          key === "secondImageOnHover"
-            ? String(!currentValue)
-            : String(secondImageOnHover),
-        showQuickViewInstantSearch:
-          key === "showQuickViewInstantSearch"
-            ? String(!currentValue)
-            : String(showQuickViewInstantSearch),
-        showQuickViewCollection:
-          key === "showQuickViewCollection"
-            ? String(!currentValue)
-            : String(showQuickViewCollection),
-        isWholesale:
-          key === "isWholesale"
-            ? String(!currentValue)
-            : String(isWholesale),
-      },
-      { method: "POST" },
-    );
+    if (fetcher.state !== "idle") return;
+    fetcher.submit({ [key]: key === 'quickViewStyle' || key === 'quickViewInstantSearchStyle' ? currentValue : String(!currentValue) }, { method:'POST' });
   };
 
   useEffect(() => {
@@ -185,6 +140,7 @@ export default function Settings() {
 
   return (
     <s-page heading="App Settings">
+      {fetcher.data?.error && <p role="alert" style={{color:'#b42318'}}>{fetcher.data.error}</p>}
       <ui-title-bar title="App Settings">
         <button variant="breadcrumb" onClick={() => navigate("/app/settings")}>
           Settings

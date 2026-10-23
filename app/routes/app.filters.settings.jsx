@@ -17,7 +17,7 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   
   const payload = {};
-  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'desktopLikeOnMobile', 'darkMode', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
+  const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'desktopLikeOnMobile', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
   for (const key of booleanSettings) {
     if (formData.has(key)) {
       const value = formData.get(key);
@@ -224,14 +224,29 @@ export default function FilterSettings() {
 
   const [hideUnavailableVariants, setHideUnavailableVariants] = useState(settings?.hideUnavailableVariantsWhenSelected || false);
   const [desktopLikeOnMobile, setDesktopLikeOnMobile] = useState(settings?.desktopLikeOnMobile || false);
-  const [darkMode, setDarkMode] = useState(settings?.darkMode || false);
 
   const [sortOverPinning, setSortOverPinning] = useState(settings?.prioritizeSortOverPinning ?? false);
   const [sortOverMerchandising, setSortOverMerchandising] = useState(settings?.prioritizeSortOverMerchandising ?? false);
 
   const isSaving = nav.state !== "idle";
+  useEffect(() => {
+    if (nav.state !== 'idle') return;
+    setHorizontalFilters(settings?.horizontalFilters ?? false);
+    setDesktopLayout(settings?.desktopFilterLayout || (settings?.horizontalFilters ? 'horizontal' : 'drawer'));
+    setMobileLayout(settings?.mobileFilterLayout || 'off-canvas');
+    setShowBreadcrumb(settings?.showAttributeBasedBreadcrumb ?? true);
+    setShowSingleItem(settings?.showFilterOptionsWithOneItem ?? false);
+    setShowProductCount(settings?.showProductCount ?? true);
+    setScrollOnChange(settings?.scrollUpOnFilterValuesChange ?? false);
+    setHideUnavailableVariants(settings?.hideUnavailableVariantsWhenSelected ?? false);
+    setDesktopLikeOnMobile(settings?.desktopLikeOnMobile ?? false);
+    setSortOverPinning(settings?.prioritizeSortOverPinning ?? false);
+    setSortOverMerchandising(settings?.prioritizeSortOverMerchandising ?? false);
+  }, [settings, nav.state]);
+
 
   const handleSettingChange = (key, value) => {
+    if (isSaving) return;
     if (key === "prioritizeSortOverPinning") setSortOverPinning(value);
     else if (key === "prioritizeSortOverMerchandising") setSortOverMerchandising(value);
     else if (key === "desktopFilterLayout") {
@@ -249,7 +264,6 @@ export default function FilterSettings() {
     else if (key === "scrollUpOnFilterValuesChange") setScrollOnChange(value);
     else if (key === "hideUnavailableVariantsWhenSelected") setHideUnavailableVariants(value);
     else if (key === "desktopLikeOnMobile") setDesktopLikeOnMobile(value);
-    else if (key === "darkMode") setDarkMode(value);
 
     const formData = new FormData();
     formData.set(key, String(value));
@@ -493,12 +507,6 @@ export default function FilterSettings() {
             description="When enabled, the desktop filter style is used on mobile."
             value={desktopLikeOnMobile}
             onChange={(val) => handleSettingChange("desktopLikeOnMobile", val)}
-          />
-          <SettingToggle disabled={isSaving}
-                        label="Dark mode"
-            description="When enabled, storefront UI uses the dark color scheme."
-            value={darkMode}
-            onChange={(val) => handleSettingChange("darkMode", val)}
           />
         </SettingsSection>
       </div>

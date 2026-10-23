@@ -10,7 +10,8 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const response = await admin.graphql(GET_THEME);
   const themeJson = await response.json();
-  const themeEdges = themeJson?.data?.themes?.edges || [];
+  if (themeJson.errors?.length || !themeJson?.data?.themes) throw new Response("Unable to load themes. Please retry.", { status: 502 });
+  const themeEdges = themeJson.data.themes.edges || [];
 
   const themes = await Promise.all(
     themeEdges.map(async ({ node }) => {
@@ -32,19 +33,20 @@ export const loader = async ({ request }) => {
       const assetContent =
         settingsJson?.data?.theme?.files?.nodes?.[0]?.body?.content || "";
       let canPreview = false;
+      let settingsVerified = false;
       const EXT_UID = "65b30aae-2fc0-9b48-3e28-e6bf3e801b92f9c75ad7";
 
       const findAppEmbeds = (obj) => {
         if (!obj || typeof obj !== "object") return false;
         
         if (obj.type && typeof obj.type === "string" && obj.type.includes("shopify://apps/")) {
-          console.log("FOUND APP EMBED:", obj.type, "DISABLED:", obj.disabled);
+
           
           const isOurBlock = obj.type.includes("collection_filter_pro") || 
                              obj.type.includes("collection-filter-pro") || 
                              obj.type.includes("instant_search") ||
                              obj.type.includes("instant-search") ||
-                             obj.type.includes("al-smart-search-filter") ||
+                             obj.type.includes("ai-smart-search-filter") ||
                              obj.type.includes(EXT_UID);
                              
           if (isOurBlock) {
@@ -65,9 +67,11 @@ export const loader = async ({ request }) => {
 
       try {
         if (assetContent) {
-          const cleanJson = assetContent.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+          const cleanJson = assetContent.replace(/^\s*\/\*[\s\S]*?\*\//, '').trim();
           const parsed = JSON.parse(cleanJson);
-          canPreview = findAppEmbeds(parsed);
+          if (settingsJson?.errors?.length) throw new Error("Theme settings unavailable");
+          canPreview = findAppEmbeds(parsed.current || parsed);
+          settingsVerified = true;
         }
       } catch (error) {
         console.error("Error parsing settings_data.json", error);
@@ -85,7 +89,7 @@ export const loader = async ({ request }) => {
         role: node.role,
         updatedAt: node.updatedAt,
         canPreview,
-        rawAssetContent: assetContent,
+        settingsVerified,
       };
     }),
   );
@@ -107,13 +111,13 @@ export default function ThemeSetup() {
     name: theme.name,
     role: theme.role,
     date: theme.updatedAt?.split("T")[0],
-    status: theme.canPreview ? "Installed" : "Not Installed",
+    status: !theme.settingsVerified ? "Unable to verify" : theme.canPreview ? "Installed" : "Not Installed",
     canPreview: theme.canPreview,
   }));
 
   const allThemes = mappedThemes;
 
-  const [themeState, setThemeState] = useState(allThemes);
+  const themeState = allThemes;
   const [selectedTheme, setSelectedTheme] = useState(
     allThemes[0]?.themeId != null ? String(allThemes[0].themeId) : "",
   );
@@ -138,30 +142,6 @@ export default function ThemeSetup() {
       : `${shop}.myshopify.com`;
     const customizationUrl = `https://${shopDomain}/admin/themes/${cleanedThemeId}/editor?context=apps`;
     window.open(customizationUrl, "_blank");
-  };
-
-  const handleInstall = (themeId) => {
-    setThemeState((prev) =>
-      prev.map((t) =>
-        t.themeId === themeId
-          ? {
-              ...t,
-              status: "Installed",
-              date: new Date().toISOString().split("T")[0],
-            }
-          : t,
-      ),
-    );
-  };
-
-  const handleRevert = (themeId) => {
-    setThemeState((prev) =>
-      prev.map((t) =>
-        t.themeId === themeId
-          ? { ...t, status: "Not Installed", date: "-" }
-          : t,
-      ),
-    );
   };
 
   return (
@@ -401,12 +381,12 @@ export default function ThemeSetup() {
                                 onMouseEnter={(e) => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.borderColor = "#fca5a5"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.background = "#ffffff"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
                               >
-                                Revert
+                                Manage in theme editor
                               </button>
                             </>
                           ) : (
                             <button
-                              onClick={() => handleInstall(theme.themeId)}
+                              onClick={() => openCustomization(theme.themeId)}
                               style={{
                                 background: "#5B21B6",
                                 border: "none",
