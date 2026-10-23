@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto';
 import {encodePreparation,decodePreparation} from './collectionPreparationPayload.js';
+import {hasUsableProductTitleFacets} from './productTitleFilter.js';
+import {hasUsableCollectionNavigation} from './collectionNavigation.js';
 import {isPublicCollectionCards,collectionCardsResponse,acceptsPublishedCollectionPage,collectionCardPresentationVersion} from './collectionCards.js';
 
 export function publishedCollectionKey(request){
@@ -20,7 +22,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
   entry.payload.products.every((p,i)=>String(p.id).split('/').pop()===entry.ids[i]&&p.title&&p.handle)&&
-  entry.payload.settings&&entry.payload.facets;
+  entry.payload.settings&&entry.payload.facets&&hasUsableProductTitleFacets(entry.payload)&&hasUsableCollectionNavigation(entry.payload);
  async function get(request,{onHit}={}){
   const key=publishedCollectionKey(request);if(!key||!acceptsPublishedCollectionPage(request))return null;
   const params=new URL(request.url).searchParams,shop=params.get('shop'),page=Number(params.get('page')),token=params.get('rankingToken');

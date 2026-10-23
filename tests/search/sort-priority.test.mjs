@@ -1,5 +1,7 @@
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
+import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
+import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
@@ -15,6 +17,8 @@ import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPri
 async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => testParsedQuery })');
   const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+    if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+    if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;

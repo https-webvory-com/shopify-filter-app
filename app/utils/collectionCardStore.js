@@ -3,6 +3,8 @@ import {decodePreparation,encodePreparation} from './collectionPreparationPayloa
 import {isPublicCollectionCards,collectionCardsResponse,acceptsCollectionPinnedPrefix,collectionCardPresentationVersion} from './collectionCards.js';
 import {preparationFreshnessMs} from './collectionPreparation.js';
 import {collectionHasExternalCandidates} from './collectionDependencies.js';
+import {hasUsableProductTitleFacets} from './productTitleFilter.js';
+import {hasUsableCollectionNavigation} from './collectionNavigation.js';
 
 const digest=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const clean=id=>String(id).split('/').pop();
@@ -92,6 +94,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    let entry;try{entry=decodePreparation(raw);}catch{return null;}
    controller.signal.throwIfAborted();
    if(entry?.version!==1||entry.policyVersion!==2||entry.cardPresentationVersion!==collectionCardPresentationVersion||entry.shop!==shop||!/^\d+$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
+   if(!hasUsableProductTitleFacets(entry.payload))return null;
+   if(!hasUsableCollectionNavigation(entry.payload))return null;
    stage='ranking-state';const before=await readState(entry),prepared=current(before,entry.external);
    controller.signal.throwIfAborted();
    if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;

@@ -6,9 +6,13 @@ import * as color from '../../../app/utils/searchColor.js';
 import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 import * as collectionCards from '../../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
+import * as productTitleFilter from '../../../app/utils/productTitleFilter.js';
+import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
+    if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+    if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if (!(name in mocks)) {
       if(name==='../utils/collectionCards.js')return collectionCards;
       if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;

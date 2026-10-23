@@ -194,23 +194,6 @@ export default function SearchSynonyms() {
           border-top-color: #fff;
           animation: spin 0.8s ease-in-out infinite;
         }
-        .loading-spinner.dark {
-          border: 2px solid rgba(91, 33, 182, 0.2);
-          border-top-color: #5B21B6;
-        }
-
-        /* Global Page Loader Overlay */
-        .global-loader-overlay {
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(255,255,255,0.7);
-          backdrop-filter: blur(2px);
-          z-index: 9999;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
         /* Custom styling for Synonyms Page based on global premium theme */
         .filter-groups-container {
           background: #ffffff !important;
@@ -514,13 +497,6 @@ export default function SearchSynonyms() {
           background-color: #be123c !important;
         }
       ` }} />
-
-      {/* Global Page Loader Overlay */}
-      {isGlobalLoading && (
-        <div className="global-loader-overlay">
-          <div className="loading-spinner dark" style={{ width: "32px", height: "32px", borderWidth: "3px" }}></div>
-        </div>
-      )}
 
       <div style={{ marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
         <a href="/app/search" onClick={(e) => { e.preventDefault(); navigate("/app/search"); }} className="back-link">

@@ -1,5 +1,7 @@
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
+import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
+import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import * as searchColor from "../../app/utils/searchColor.js";
@@ -90,6 +92,8 @@ test('available product IDs exclude products with only unavailable matching comb
 
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{
+   if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+   if(name==='../utils/collectionNavigation.js')return collectionNavigation;
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;

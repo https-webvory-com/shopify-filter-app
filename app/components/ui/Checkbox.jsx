@@ -1,9 +1,10 @@
 import React from "react";
 
-export function Checkbox({ checked, onChange, style = {} }) {
+export function Checkbox({ checked, onChange, style = {}, ...inputProps }) {
   return (
     <label style={{ display: "inline-flex", position: "relative", cursor: "pointer", ...style }}>
       <input
+        {...inputProps}
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}

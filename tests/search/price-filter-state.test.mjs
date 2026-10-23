@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js', 'utf8');
+const source = (await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js', 'utf8')).replace(/\r\n/g, '\n');
 const priceQuery = source.slice(source.indexOf('      // Price range\n'), source.indexOf('      // Basic arrays'));
 function request(activeFilters, maxPriceLimit) {
   const queryParams = new URLSearchParams();

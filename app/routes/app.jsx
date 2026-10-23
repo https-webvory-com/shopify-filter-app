@@ -1,8 +1,8 @@
-import { Outlet, useLoaderData, useRouteError, useNavigation } from "react-router";
+import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
+import AdminLoadingBoundary from "../components/ui/AdminLoadingBoundary";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -13,7 +13,6 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey } = useLoaderData();
-  const navigation = useNavigation();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -25,14 +24,9 @@ export default function App() {
         <s-link href="/app/settings">Settings</s-link>
         {/* <s-link href="/app/upgrade">Upgrade</s-link> */}
       </s-app-nav>
-      {navigation.state === "loading" ? (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255, 255, 255, 0.6)", zIndex: 9999 }}>
-          <LoadingSpinner text="Loading page..." size="50px" />
-        </div>
-      ) : null}
-      <div style={{ opacity: navigation.state === "loading" ? 0.3 : 1, transition: "opacity 0.2s" }}>
+      <AdminLoadingBoundary>
         <Outlet />
-      </div>
+      </AdminLoadingBoundary>
     </AppProvider>
   );
 }

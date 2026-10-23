@@ -14,6 +14,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { invalidateShop } from "../services/shopCache.server";
+import { normalizeProductTitleFilter } from "../utils/productTitleFilter.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { CreateFilterModal } from "../components/ui/CreateFilterModal";
 import { ExportFilterItemsModal } from "../components/ui/ExportFilterItemsModal";
@@ -254,7 +255,8 @@ export const action = async ({ request, params }) => {
     const filtersData = JSON.parse(formData.get("filters") || "[]");
     
     // Process imports
-    for (const filter of filtersData) {
+    for (const importedFilter of filtersData) {
+      const filter = normalizeProductTitleFilter(importedFilter);
       let existingFilter = null;
       if (filter.id) {
         existingFilter = await prisma.filterGroupItem.findFirst({
@@ -277,6 +279,8 @@ export const action = async ({ request, params }) => {
           where: { id: existingFilter.id },
           data: {
             label: filter.label,
+            filterType: filter.filterType,
+            filterKey: filter.filterKey,
             displayMode: filter.displayMode,
             isEnabled: filter.isEnabled,
             order: filter.order !== undefined ? filter.order : existingFilter.order,
@@ -374,6 +378,7 @@ export const action = async ({ request, params }) => {
   if (intent === "addFilter") {
     let filterType = formData.get("filterType");
     let filterKey = formData.get("filterKey") || null;
+    if (filterType?.toLowerCase() === "title") { filterType = "title"; filterKey = null; }
     const label = formData.get("label");
     const displayMode = formData.get("displayMode") || "list";
     const config = formData.get("config")
@@ -384,6 +389,7 @@ export const action = async ({ request, params }) => {
     // Storefront expects filterType="option" and filterKey="Color"
     const isDynamicOption = ![
       "collection",
+      "title",
       "vendor",
       "product_type",
       "tag",
@@ -429,6 +435,7 @@ export const action = async ({ request, params }) => {
     
     let filterType = formData.get("filterType");
     let filterKey = formData.get("filterKey") || null;
+    if (filterType?.toLowerCase() === "title") { filterType = "title"; filterKey = null; }
     
     const config = formData.get("config")
       ? JSON.parse(formData.get("config"))
@@ -437,6 +444,7 @@ export const action = async ({ request, params }) => {
     // Fix for option types
     const isDynamicOption = ![
       "collection",
+      "title",
       "vendor",
       "product_type",
       "tag",
@@ -786,6 +794,7 @@ export default function FilterGroupDetail() {
   }, [actionData, shopify]);
 
   const openConfigModal = (filter) => {
+    filter = normalizeProductTitleFilter(filter);
     let parsedConfig = {};
     try {
       if (filter.config)

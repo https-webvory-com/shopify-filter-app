@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
 import * as searchColor from '../../app/utils/searchColor.js';
+import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
+import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
@@ -44,11 +46,22 @@ export async function createLoadingServer({redisLayer}={}) {
   const byId=new Map(docs.map(p=>[p.id,p]));
   const select=options=>{
     let products=docs.filter(p=>p.status==='ACTIVE').map(p=>({...p}));
+    for(const filter of [options.filter || []].flat(Infinity)){
+      if(typeof filter==='string'&&filter.startsWith('title IN ')){
+        const titles=JSON.parse(filter.slice('title IN '.length));products=products.filter(p=>titles.includes(p.title));
+      }
+    }
     const sort=options.sort?.[0];
     if(sort==='priceMin:asc')products.sort((a,b)=>a.priceMin-b.priceMin);
     else if(sort==='priceMin:desc')products.sort((a,b)=>b.priceMin-a.priceMin);
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
     const facetDistribution=options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{};
+    if(options.facets?.includes('title')){
+      facetDistribution.title={};for(const p of products)facetDistribution.title[p.title]=(facetDistribution.title[p.title]||0)+1;
+    }
+    if(options.facets?.includes('collection_titles')){
+      facetDistribution.collection_titles={};for(const p of products)for(const title of p.collection_titles)facetDistribution.collection_titles[title]=(facetDistribution.collection_titles[title]||0)+1;
+    }
     if(options.facets?.includes('option_Color')){
       facetDistribution.option_Color={};
       for(const p of products){const position=p.options.findIndex(o=>o.name==='Color');for(const value of new Set(p.variantPrices.map(v=>v['option'+(position+1)]).filter(Boolean)))facetDistribution.option_Color[value]=(facetDistribution.option_Color[value]||0)+1;}
@@ -63,7 +76,7 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       const ids=JSON.parse(options.filter.slice(6));const results=ids.map(id=>byId.get(String(id))).filter(doc=>doc&&doc.status!=='DELETED').map(doc=>({...doc})).reverse();trace.hydrations+=results.length;return {results,offset:0,limit:options.limit,total:results.length};},
     getDocument:async id=>{trace.documentCalls++;trace.hydrations++;const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
-  const prisma={product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]}};
+  const prisma={product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]},collection:{findMany:async({where})=>(state.collectionLinks||[{shop,title:'Fixture collection',handle:'fixture'}]).filter(row=>row.shop===where.shop&&where.title.in.includes(row.title))}};
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
   const merch=serviceCtx.module.exports;
@@ -117,7 +130,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>state.noPins?null:({products:(state.pinList||[state.pin]).map(id=>({id:'gid://shopify/Product/'+id}))}),
       getActiveRuleForCollection:async()=>state.noMerchandising?null:({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
-    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{})}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:'gid://shopify/Collection/1',resolvedCollectionTitle:'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
+    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:'gid://shopify/Collection/1',resolvedCollectionTitle:'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>state.orderMissing?{ids:null,revision:null,status:'pending'}:({ids:state.orderVersion?docs.map(p=>p.id):docs.map(p=>p.id).reverse(),revision:'native-order-v'+(state.orderVersion||0),status:'ready',updatedAt:1+(state.orderVersion||0)})},
       '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,'../utils/collectionCards.js':collectionCards,'../utils/collectionPinnedPrefix.js':pinnedPrefix,
@@ -129,6 +142,8 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay)await new Promise(r=>setTimeout(r,state.facetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
+    '../utils/productTitleFilter.js':productTitleFilter,
+    '../utils/collectionNavigation.js':collectionNavigation,
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');

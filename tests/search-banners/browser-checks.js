@@ -12,7 +12,7 @@ window.runBannerChecks = async () => {
   const campaign={intent:'create',query:'summer dress',placement:'grid',position:'2',heading:'Summer offer',content:'A limited offer',targetUrl:'/collections/all',buttonLabel:'Shop now',isActive:'true'};
   const cards=()=>[...doc().querySelectorAll('[data-product]')].map(e=>e.dataset.product).join(',');
   const banners=()=>doc().querySelectorAll('[data-cfp-banner]');
-  const fill=async(name,value)=>{const el=doc().querySelector(`[name="${name}"]`);const proto=el.tagName==='SELECT'?win().HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?win().HTMLTextAreaElement.prototype:win().HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new (win().Event)(el.tagName==='SELECT'?'change':'input',{bubbles:true}));await delay(30);};
+  const fill=async(name,value)=>{const el=doc().querySelector(`[name="${name}"]`);if(el.type==='radio'){doc().querySelector(`[name="${name}"][value="${value}"]`).click();await delay(30);return;}const proto=el.tagName==='SELECT'?win().HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?win().HTMLTextAreaElement.prototype:win().HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,value);el.dispatchEvent(new (win().Event)(el.tagName==='SELECT'?'change':'input',{bubbles:true}));await delay(30);};
   const click=async text=>{await wait(()=>[...doc().querySelectorAll('button')].some(b=>b.textContent===text&&!b.disabled));[...doc().querySelectorAll('button')].find(b=>b.textContent===text).click();await delay(100);};
   try {
     await clear();

@@ -30,6 +30,8 @@ import { rankSearchResults } from "../services/searchRanking.server.js";
 import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprint,acceptsCollectionPinnedPrefix} from '../utils/collectionCards.js';
 import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../services/collectionCards.server.js';
 import {prepareCollectionPinnedPrefix} from '../utils/collectionPinnedPrefix.js';
+import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
+import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -147,7 +149,7 @@ export const loader = async ({ request, context }) => {
       ...url.searchParams.getAll("availability"),
     ].filter(Boolean);
 
-    const titles = [
+    let titles = [
       ...url.searchParams.getAll("title[]"),
       ...url.searchParams.getAll("title"),
       ...url.searchParams.getAll("titles[]"),
@@ -296,8 +298,10 @@ export const loader = async ({ request, context }) => {
       ),
     ]);
 
-    const { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters } =
+    const { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters: savedGroupFilters } =
       resolvedGroup;
+    const activeGroupFilters = await resolveCollectionNavigation(savedGroupFilters?.map(normalizeProductTitleFilter) || null,
+      titles => getCached(`collectionNavigation:${shop}:${JSON.stringify(titles)}`, () => prisma.collection.findMany({where:{shop,title:{in:titles}},select:{title:true,handle:true}})));
 
     // Stable bootstrap data has its own browser validator and never waits for
     // rankings, facets or product hydration. Updated clients request it in parallel.
@@ -372,6 +376,7 @@ export const loader = async ({ request, context }) => {
     vendors = expandFilterValues("vendor", vendors);
     types = expandFilterValues("product_type", types);
     tags = expandFilterValues("tags", tags);
+    titles = expandFilterValues("title", titles);
     for (const key of Object.keys(optionsFilters)) {
       optionsFilters[key] = expandFilterValues(key, optionsFilters[key]);
     }
@@ -567,6 +572,9 @@ export const loader = async ({ request, context }) => {
         .map((t) => `'${t.replace(/'/g, "\\'")}'`)
         .join(",")}]`;
     }
+    if (titles.length > 0) {
+      categoryFilters["title"] = `title IN ${JSON.stringify(titles)}`;
+    }
     if (tags.length > 0) {
       categoryFilters["tags"] = `tags IN [${tags
         .map((t) => `'${t.replace(/'/g, "\\'")}'`)
@@ -710,6 +718,10 @@ export const loader = async ({ request, context }) => {
           neededFacetKeys.push("productType");
         } else if (f.filterType === "tag") {
           neededFacetKeys.push("tags");
+        } else if (f.filterType === "title") {
+          neededFacetKeys.push("title");
+        } else if (f.filterType === "collection" && !f.config?.navCollections) {
+          neededFacetKeys.push("collection_titles");
         }
       }
     }
@@ -1431,6 +1443,12 @@ export const loader = async ({ request, context }) => {
       for (const [t, count] of Object.entries(facetDistribution.tags)) {
         const tv = getTargetValue("tags", t);
         tagCounts[tv] = (tagCounts[tv] || 0) + count;
+      }
+    }
+    if (facetDistribution.title) {
+      for (const [title, count] of Object.entries(facetDistribution.title)) {
+        const value = getTargetValue("title", title);
+        titleCounts[value] = (titleCounts[value] || 0) + count;
       }
     }
 

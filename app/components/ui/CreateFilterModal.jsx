@@ -3,6 +3,8 @@ import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
 
 import Tooltip from "./Tooltip";
+import { normalizeSwatchHex } from '../../utils/swatchColor.js';
+import { navigationCollectionsHelp } from '../../utils/collectionNavigation.js';
 
 const TooltipIcon = ({ content }) => (
   <Tooltip content={content}>
@@ -16,7 +18,7 @@ const OPTION_TYPES = [
   { value: "product_type", label: "Product type" },
   { value: "tag", label: "Tag" },
   { value: "color", label: "Color (product option)" },
-  { value: "title", label: "Title (product option)" },
+  { value: "title", label: "Title" },
   { value: "price", label: "Price" },
   { value: "percent_sale", label: "Percent sale" },
   { value: "stock_status", label: "Stock status" },
@@ -359,6 +361,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     layout: "Grid",
     colors: {}
   });
+  const invalidSwatchColors = Object.entries(swatchConfig.colors || {}).filter(([, color]) => color?.type === 'color' && color.value && !normalizeSwatchHex(color.value));
+  const savedSwatchConfig = { ...swatchConfig, colors: Object.fromEntries(Object.entries(swatchConfig.colors || {}).map(([label, color]) => [label, color?.type === 'color' && normalizeSwatchHex(color.value) ? { ...color, value: normalizeSwatchHex(color.value) } : color])) };
   const [swatchSearch, setSwatchSearch] = useState("");
   const [selectedSwatch, setSelectedSwatch] = useState(null);
   const [hoveredSwatch, setHoveredSwatch] = useState(null);
@@ -410,12 +414,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         if (initialData.stockStatusConfig) setStockStatusConfig(initialData.stockStatusConfig);
         if (initialData.ratingColor) setRatingColor(initialData.ratingColor);
         if (initialData.sliderConfig) setSliderConfig(initialData.sliderConfig);
-        if (initialData.swatchConfig) setSwatchConfig(initialData.swatchConfig);
+        setSwatchConfig({ circleSwatch: true, showLabel: false, layout: "Grid", colors: {}, ...initialData.swatchConfig });
 
         if (initialData.advanced) {
           setAdvanced(prev => ({ ...prev, ...initialData.advanced }));
         }
       } else {
+        setSwatchConfig({ circleSwatch: true, showLabel: false, layout: "Grid", colors: {} });
         setOptionType("collection");
         setFilterTitle("Collection");
         setPrefix("");
@@ -487,6 +492,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           valueFormula: ""
         });
       }
+      setSelectedSwatch(null);
+      setSwatchSearch("");
       setActiveTab("general");
       setPreviewCollapsed(false);
     }
@@ -585,6 +592,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     .filter(label => !prefix || label.toLowerCase().startsWith(prefix.toLowerCase()));
 
   const previewOptionsData = (() => {
+    if (navCollections && optionType?.toLowerCase() === 'collection') {
+      return mainCollections.filter(item => item.collection).map(item => ({label:item.collection,displayLabel:item.collection}));
+    }
     let filtered = currentOptionsData;
     if (prefix) {
       filtered = filtered.map((o, idx) => {
@@ -913,9 +923,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 {optionType?.toLowerCase() === "collection" && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Checkbox checked={navCollections} onChange={setNavCollections} />
+                      <Checkbox aria-label="Navigation collections" checked={navCollections} onChange={setNavCollections} />
                       <span style={{ fontSize: "14px", color: "#5B21B6", fontWeight: "500" }}>Navigation collections</span>
-                      <TooltipIcon content={"On a collection page, if this option is checked and user selects a collection, he/she is redirected to the corresponding collection page. Manual values must be used in this case."} />
+                      <TooltipIcon content={navigationCollectionsHelp} />
                     </div>
                     {navCollections && (
                       <SimpleDropdown 
@@ -931,7 +941,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginLeft: "28px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <label style={{ fontSize: "13px", fontWeight: "600", color: "#6d7175" }}>Main collection</label>
-                      <TooltipIcon content="Select the main collections to navigate from." />
+                      <TooltipIcon content="Choose the destination collections shown as links in the storefront filter. This does not assign the filter group to those pages; page assignment is set in Filter group information." />
                     </div>
                     
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -988,7 +998,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 )}
 
                 {/* Values Section */}
-                <div style={{ marginTop: "8px" }}>
+                {!(navCollections && optionType?.toLowerCase() === 'collection') && <div style={{ marginTop: "8px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                     <span style={{ fontSize: "14px", fontWeight: "600", color: "#202223" }}>Values</span>
                     <Tooltip content="To merge values, go to App settings / Merged values.">
@@ -1314,6 +1324,11 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                           return (
                             <div 
                               key={label}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Edit color ${label}`}
+                              title={label}
+                              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedSwatch(label); } }}
                               onClick={() => setSelectedSwatch(label)}
                               onMouseEnter={() => setHoveredSwatch(label)}
                               onMouseLeave={() => setHoveredSwatch(null)}
@@ -1328,7 +1343,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               <div style={{ 
                                 width: "32px", height: "32px", 
                                 borderRadius: swatchConfig.circleSwatch ? "50%" : "4px", 
-                                background: colorData?.type === "color" && colorData.value ? colorData.value : (colorData?.type === "image" && colorData.value ? `url(${colorData.value}) center/cover` : getColorHex(label)), 
+                                background: colorData?.type === "color" && colorData.value ? (normalizeSwatchHex(colorData.value) || getColorHex(label)) : (colorData?.type === "image" && colorData.value ? `url(${colorData.value}) center/cover` : getColorHex(label)),
                                 border: "1px solid #c9cccf",
                                 display: "flex", alignItems: "center", justifyContent: "center"
                               }}>
@@ -1373,6 +1388,8 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               <input 
                                 type="text"
                                 placeholder="HEX code"
+                                aria-label="HEX code"
+                                aria-invalid={!!(swatchConfig.colors[selectedSwatch]?.type === "color" && swatchConfig.colors[selectedSwatch]?.value && !normalizeSwatchHex(swatchConfig.colors[selectedSwatch].value))}
                                 value={swatchConfig.colors[selectedSwatch]?.type === "color" && swatchConfig.colors[selectedSwatch]?.value ? swatchConfig.colors[selectedSwatch].value : ""}
                                 onChange={(e) => setSwatchConfig({
                                   ...swatchConfig, 
@@ -1596,7 +1613,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       <TooltipIcon content="When checked, products must match all selected values instead of any selected value." />
                     </div>
                   )}
-                </div>
+                </div>}
 
               </div>
             )}
@@ -1798,7 +1815,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
 
               {/* Preview Box */}
               <div style={{ background: "#fff", border: "1px solid #e1e3e5", borderRadius: "8px", padding: "16px", overflowY: "auto" }}>
-                {device === "desktop" ? (
+                {navCollections && optionType?.toLowerCase() === 'collection' ? (
+                  <div><h3 style={{margin:'0 0 12px',fontSize:12,textTransform:'uppercase'}}>{filterTitle || 'Collection'}</h3>{previewOptionsData.length ? previewOptionsData.map(item => <div key={item.label} style={{display:'flex',justifyContent:'space-between',gap:12,padding:'10px 0',fontSize:13,borderBottom:'1px solid #eee'}}><span>{item.displayLabel}</span><span aria-hidden="true">→</span></div>) : <p style={{fontSize:13,color:'#6d7175'}}>Select a main collection to preview your navigation links.</p>}</div>
+                ) : device === "desktop" ? (
                   <>
                     <div 
                       style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", cursor: "pointer" }}
@@ -1871,7 +1890,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                     .slice(0, (advanced.showMoreType === "View more" || advanced.showMoreType === "View more with scrollbar") ? 6 : undefined)
                                     .map(item => {
                                       const cData = swatchConfig.colors[item.label];
-                                      const bg = cData?.type === "color" && cData.value ? cData.value : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
+                                      const bg = cData?.type === "color" && cData.value ? (normalizeSwatchHex(cData.value) || getColorHex(item.label)) : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
                                       const isList = swatchConfig.layout === "List";
                                       return (
                                         <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
@@ -1958,7 +1977,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               {previewOptionsData
                                 .map(item => {
                                   const cData = swatchConfig.colors[item.label];
-                                  const bg = cData?.type === "color" && cData.value ? cData.value : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
+                                  const bg = cData?.type === "color" && cData.value ? (normalizeSwatchHex(cData.value) || getColorHex(item.label)) : (cData?.type === "image" && cData.value ? `url(${cData.value}) center/cover` : getColorHex(item.label));
                                   const isList = swatchConfig.layout === "List";
                                   return (
                                     <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px", flexDirection: isList ? "row" : "column", justifyContent: "center" }}>
@@ -1993,6 +2012,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           )}
         </div>
 
+        {invalidSwatchColors.length > 0 && <p role="alert" style={{ padding: "0 24px", color: "#b42318" }}>Enter a valid HEX color for {invalidSwatchColors.map(([label]) => label).join(', ')} (for example #e91e63 or e91e63).</p>}
         {/* Footer */}
         <div style={{ padding: "16px 24px", display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #e1e3e5", background: "#fff" }}>
           <Button variant="default" onClick={onClose} style={{ borderRadius: "10px", padding: "8px 24px", color: "#8c9196", border: "1px solid #e1e3e5" }}>
@@ -2000,6 +2020,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           </Button>
           <Button 
             variant="primary" 
+            disabled={invalidSwatchColors.length > 0}
             onClick={() => onSave({ 
               filterId: initialData?.id,
               optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, 
@@ -2007,7 +2028,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
               excludedValues: useManualValues ? [] : excludedValues, 
               manualValues: useManualValues ? manualValues : [], 
               sortManualValues, advanced,
-              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig, swatchConfig
+              displayMode, priceRanges, saleRanges, weightRanges, reviewRanges, stockStatusConfig, ratingColor, sliderConfig, swatchConfig: savedSwatchConfig
             })}
             style={{ borderRadius: "10px", padding: "8px 24px", background: "#5B21B6", border: "1px solid rgba(30, 27, 75, 0.12)" }}
           >

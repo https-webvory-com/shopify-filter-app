@@ -105,6 +105,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (urlParams.has('sortBy')) activeFilters.sortBy = urlParams.get('sortBy');
     if (urlParams.has('minPrice')) activeFilters.minPrice = parseInt(urlParams.get('minPrice')) || 0;
     if (urlParams.has('maxPrice')) activeFilters.maxPrice = parseInt(urlParams.get('maxPrice')) || 999999;
+    // Repeated parameters preserve commas and punctuation in complete titles.
+    activeFilters.titles = ['title[]', 'title', 'titles[]', 'titles']
+      .flatMap(key => urlParams.getAll(key)).filter(Boolean);
 
     ['vendors', 'types', 'tags', 'collections'].forEach(key => {
       if (urlParams.has(key) && urlParams.get(key)) {
@@ -149,6 +152,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (activeFilters.maxPrice < 999999) params.set('maxPrice', activeFilters.maxPrice);
     else params.delete('maxPrice');
+    ['title[]', 'title', 'titles[]', 'titles'].forEach(key => params.delete(key));
+    (activeFilters.titles || []).forEach(title => params.append('title[]', title));
 
     ['vendors', 'types', 'tags', 'collections'].forEach(key => {
       if (activeFilters[key] && activeFilters[key].length > 0) params.set(key, activeFilters[key].join(','));
@@ -1615,6 +1620,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       const adv = config.advanced || {};
+      const navigation = type === 'collection' && config.navCollections === true;
       const prefix = config.prefix || "";
       const displayMode = setting.displayMode || "List";
 
@@ -1801,7 +1807,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
         else if (type === 'vendor') items = facets.vendors || [];
         else if (type === 'product_type') items = facets.productTypes || [];
-        else if (type === 'collection') items = facets.collections || [];
+        else if (type === 'collection') items = navigation
+          ? (Array.isArray(config.navigationLinks) ? config.navigationLinks : []).filter(item => typeof item.handle === 'string' && /^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u.test(item.handle)).map(item => ({...item,value:item.label}))
+          : facets.collections || [];
         else if (type === 'tag' || type === 'tags') {
           items = facets.tags || [];
           // console.log("CFP Debug: Resolving tags for group", setting.label, "initial items:", JSON.stringify(items));
@@ -1817,7 +1825,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!items || items.length === 0) return;
 
         // Apply prefix filtering for tags and collections
-        if (prefix && (type === 'tag' || type === 'tags' || type === 'collection')) {
+        if (!navigation && prefix && (type === 'tag' || type === 'tags' || type === 'collection')) {
           items = items.filter(i => {
             const valStr = i.value || "";
             return valStr.toLowerCase().startsWith(prefix.toLowerCase());
@@ -1825,10 +1833,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         // Apply advanced exclusions and manual sorts
-        if (config.excludedValues && config.excludedValues.length > 0) {
+        if (!navigation && config.excludedValues && config.excludedValues.length > 0) {
           items = items.filter(i => !config.excludedValues.includes(i.value));
         }
-        if (config.useManualValues && config.manualValues && config.manualValues.length > 0) {
+        if (!navigation && config.useManualValues && config.manualValues && config.manualValues.length > 0) {
           const manualLower = config.manualValues.map(v => v.toLowerCase().trim());
           const prefixLower = prefix ? prefix.toLowerCase().trim() : '';
 
@@ -1878,7 +1886,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         // Apply Advanced Sort
-        if (!config.useManualValues || !config.sortManualValues) {
+        if (!navigation && (!config.useManualValues || !config.sortManualValues)) {
           if (adv.sortType) {
             if (adv.sortType === "Label - AZ") items.sort((a,b) => (a.label || a.value).localeCompare(b.label || b.value));
             else if (adv.sortType === "Label - ZA") items.sort((a,b) => (b.label || b.value).localeCompare(a.label || a.value));
@@ -1926,7 +1934,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         };
 
         // Render based on displayMode
-        if (resolvedMode === "Dropdown") {
+        if (navigation) {
+          const configuredRoot = window.Shopify?.routes?.root || '/';
+          const root = /^\/(?:[a-z0-9_-]+\/)*$/i.test(configuredRoot) ? configuredRoot : '/';
+          groupContent = `<div class="cfp-collection-navigation">${items.map((item,index) => {
+            const href = root + 'collections/' + encodeURIComponent(item.handle);
+            const current = window.location.pathname.replace(/\/$/,'') === href.replace(/\/$/,'');
+            const hidden = isViewMore && index >= limit;
+            return `<a class="cfp-collection-nav-link${hidden ? ' cfp-view-more-hidden' : ''}" href="${escapeCardHtml(href)}" ${current ? 'aria-current="page"' : ''} style="${hidden ? 'display:none;' : 'display:flex;'}align-items:center;justify-content:space-between;gap:8px;padding:8px 0;color:inherit;text-decoration:none;font-size:14px;${current ? 'font-weight:600;' : ''}"><span>${escapeCardHtml(getDisplayLabel(item.label || item.value,''))}</span><span aria-hidden="true">→</span></a>`;
+          }).join('')}${renderViewMoreBtn()}</div>`;
+        } else if (resolvedMode === "Dropdown") {
           groupContent = `
             <select class="cfp-select" name="${inputName}">
               <option value="">Any ${setting.label}</option>
@@ -1972,7 +1989,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     }
 
                     if (matchedData) {
-                      if (matchedData.type === 'color' && matchedData.value) colorValue = matchedData.value;
+                      if (matchedData.type === 'color' && matchedData.value) {
+                        const hex = String(matchedData.value).trim();
+                        if (/^#?(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(hex)) {
+                          colorValue = '#' + hex.replace(/^#/, '');
+                        } else if (typeof CSS !== 'undefined' && CSS.supports('color', hex)) {
+                          colorValue = hex;
+                        }
+                      }
                       else if (matchedData.type === 'image' && matchedData.value) {
                         colorValue = matchedData.value;
                         isImageItem = true;
@@ -2095,6 +2119,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       const hasActiveSelections = (() => {
+        if (navigation) return false;
         if (type === 'price') {
           let minLimit = 0;
           if (facets && facets.priceRanges) {
@@ -2532,7 +2557,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         let visibleCount = 0;
 
         // 1. Local filter
-        wrapper.querySelectorAll('.cfp-checkbox, .cfp-button-chip, .cfp-color-swatch').forEach(label => {
+        wrapper.querySelectorAll('.cfp-checkbox, .cfp-button-chip, .cfp-color-swatch, .cfp-collection-nav-link').forEach(label => {
           let txtVal = '';
           if (label.classList.contains('cfp-checkbox')) {
             const txt = label.querySelector('.cfp-checkbox__label');
@@ -2544,6 +2569,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             const txt = label.querySelector('.cfp-swatch-label');
             const titleVal = label.getAttribute('title') || '';
             txtVal = (txt ? txt.textContent : '') + " " + titleVal;
+          } else if (label.classList.contains('cfp-collection-nav-link')) {
+            txtVal = label.textContent;
           }
 
           const matches = txtVal.toLowerCase().includes(q);
@@ -2577,6 +2604,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         // 2. API fetch for facet search
+        if (wrapper.querySelector('.cfp-collection-navigation')) return;
         const inputName = searchInput.dataset.inputName;
         if (!inputName || q.length < 2) return;
 
