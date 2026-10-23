@@ -66,6 +66,11 @@ jobs:
         run: |
           docker run --rm --network none shopify:latest node --test tests/sync/startup-cache.test.mjs
 
+      - name: Smoke-test built web and worker initialization
+        # Preserve the bundled ESM graph; stub external infrastructure only.
+        # Catch import cycles before publishing an image or replacing EC2 containers.
+        run: docker run --rm --network none shopify:latest node tests/sync/run-built-startup.mjs
+
       - name: Tag Docker Image
         run: |
           docker tag shopify:latest \
