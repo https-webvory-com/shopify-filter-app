@@ -20,6 +20,7 @@ window.runSettingsChecks = async () => {
     await post({ intent: 'reset' });
     await test('actual editor saves settings and reloads persisted values', async () => {
       await navigate('/admin-ui'); await wait(() => doc().querySelector('[name=productLimit]'));
+      assert(!doc().querySelector('[name=instantEnabled]'), 'Removed instant-search toggle is still shown');
       await fill('productLimit', '3'); await fill('pageSize', '4'); await fill('manualSuggestions', 'Blue Dress\nRed Dress\n<script>'); await click('Save settings');
       await wait(() => doc().body.textContent.includes('Search settings saved.'));
       assert((await read()).productLimit === 3, 'Product count not saved');
@@ -53,10 +54,14 @@ window.runSettingsChecks = async () => {
       await query('blue'); await wait(() => instantCards().length === 3);
       await query(''); await wait(() => doc().querySelector('#cfp-recent-searches-list').textContent.includes('Start here'));
     });
-    await test('disabling instant search preserves native input without creating modal', async () => {
-      await save({ instantEnabled: false }); await navigate('/'); await delay(100);
-      assert(!doc().querySelector('.cfp-search-modal'), 'Disabled modal initialized');
-      assert(doc().querySelector('input[name=q]'), 'Native search lost');
+    await test('legacy disable flags cannot turn off instant search', async () => {
+      await save({ instantEnabled: false });
+      assert(!Object.hasOwn(await read(),'instantEnabled'), 'Removed flag persisted');
+      await control({legacyInstantEnabled:false});
+      try {
+        await navigate('/');await open();await query('blue');await wait(() => instantCards().length === 3);
+        assert(win().cfpSearchSettings.instantEnabled===false, 'Legacy backend response was not exercised');
+      } finally {await control({legacyInstantEnabled:null});}
     });
     await test('search results page size, vendor/labels and inline input settings apply', async () => {
       await save({ showSearchInput: false, showVendor: false, showSale: false, showSoldOut: false });

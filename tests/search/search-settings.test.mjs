@@ -139,12 +139,15 @@ test('storefront bootstrap is shared, bounded, and fails open', async () => {
   }
 });
 
-test('disabled instant search does not install handlers or replace native search', async () => {
-  let listener;
-  const context = { window: { cfpSearchSettingsReady: Promise.resolve(), cfpSearchSettings: { instantEnabled: false }, location: { pathname: '/' } },
-    document: { addEventListener: (_name, callback) => { listener = callback; } } };
-  vm.runInNewContext(await fs.readFile('extensions/theme-extension/assets/instantSearch.js', 'utf8'), context);
-  await listener(); // Any attempt to touch native inputs or create UI would fail this minimal DOM.
+test('legacy instant-search disable flags are ignored on read and removed on save without resetting other settings', async () => {
+  const {rows,service}=await serviceFixture();
+  rows.set('legacy',{config:{...defaults,instantEnabled:false,productLimit:3,manualSuggestions:['Blue dress']}});
+  const loaded=await service.getSearchSettings('legacy');
+  assert.equal(Object.hasOwn(loaded,'instantEnabled'),false);assert.equal(loaded.productLimit,3);
+  assert.deepEqual(loaded.manualSuggestions,['Blue dress']);
+  await service.saveSearchSettings('legacy',{...loaded,instantEnabled:false,pageSize:12});
+  assert.equal(Object.hasOwn(rows.get('legacy').config,'instantEnabled'),false);
+  assert.equal(rows.get('legacy').config.productLimit,3);assert.equal(rows.get('legacy').config.pageSize,12);
 });
 
 const instant = await fs.readFile('extensions/theme-extension/assets/instantSearch.js', 'utf8');

@@ -66,7 +66,7 @@ export default function SearchSettings() {
         {fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
         <fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="instant-search-heading">
           <h2 id="instant-search-heading">Instant search</h2>
-          <div className="search-config-fields">{['instantEnabled', 'productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
+          <div className="search-config-fields">{['productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
           <p style={{ margin: 0 }}>A count of zero hides that suggestion section. Recent searches are stored in the customer’s browser.</p>
           <label style={{ display: 'grid', gap: 6 }}>Manual suggestions<textarea name="manualSuggestions" value={manual} onChange={e => setManual(e.target.value)} rows={5} maxLength={1100} style={fieldStyle} /></label>
           <p style={{ margin: 0 }}>Enter up to 10 search terms, one per line. They appear in this order when the search box is empty, replacing recent searches. Blacklisted terms stay hidden.</p>

@@ -20,6 +20,10 @@ export async function createSettingsServer() {
       } else if (url.pathname === '/api/search-settings') {
         if (state.slow) await new Promise(r => setTimeout(r, 2200));
         response = await api.loader({ request: new Request(url) });
+        if (state.legacyInstantEnabled === false && response.ok) {
+          const body=await response.json();
+          response=Response.json({...body,settings:{...body.settings,instantEnabled:false}});
+        }
       } else if (url.pathname === '/api/search-redirect') response = Response.json({ redirectUrl: null });
       else if (url.pathname === '/api/search' || url.pathname === '/api/filter') {
         const limit = Number(url.searchParams.get('limit') || 6), page = Number(url.searchParams.get('page') || 1);

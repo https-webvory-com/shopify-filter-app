@@ -369,8 +369,9 @@
 (function() {
   var isSyncing = false;
   function getCurrentLayout() {
-    // 1. Mobile (768px and down) is strictly drawer mode
-    if (window.innerWidth <= 768) return 'drawer';
+    if (window.innerWidth <= 768) {
+      return window.cfpGlobalSettings?.mobileFilterLayout === 'horizontal-scrolling' ? 'horizontal-scrolling' : 'drawer';
+    }
 
     // 2. If app JS runtime function is available, query it
     if (typeof window.cfpGetEffectiveLayout === 'function') {
@@ -404,7 +405,7 @@
     var triggerBtn = document.getElementById('cfp-drawer-trigger-btn');
     var currentLayout = getCurrentLayout();
 
-    if (currentLayout === 'vertical') {
+    if (currentLayout === 'vertical' || currentLayout === 'horizontal-scrolling') {
       if (hFilters) { hFilters.innerHTML = ''; hFilters.style.display = 'none'; }
       if (extra) { extra.innerHTML = ''; extra.style.display = 'none'; extra.classList.remove('is-expanded'); }
       if (triggerBtn) {
@@ -529,7 +530,7 @@
     if (!btn) return;
 
     var layout = getCurrentLayout();
-    if (layout === 'vertical') {
+    if (layout === 'vertical' || layout === 'horizontal-scrolling') {
       e.preventDefault();
       e.stopImmediatePropagation();
       return;

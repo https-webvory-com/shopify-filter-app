@@ -34,7 +34,6 @@ if (!window.cfpSearchRedirectPromise && /\/search\/?$/i.test(window.location.pat
 document.addEventListener("DOMContentLoaded", async function () {
   await window.cfpSearchSettingsReady;
   const searchSettings = window.cfpSearchSettings || {};
-  if (searchSettings.instantEnabled === false) return;
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {

@@ -1,5 +1,4 @@
 export const SEARCH_SETTING_FIELDS = {
-  instantEnabled: ['Enable instant search', true],
   productLimit: ['Instant search products', 6, 1, 20],
   suggestionLimit: ['Search suggestions', 6, 0, 10],
   collectionLimit: ['Collection suggestions', 5, 0, 10],

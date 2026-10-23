@@ -624,28 +624,45 @@ try{
     }
   });
   await test('mobile layout controls open usable filter options and preserve drawer behavior',async()=>{
-    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}},{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
+    const filterSettings=[{id:'price',isEnabled:true,filterType:'price',label:'Price',displayMode:'Range',config:{}},{id:'type',isEnabled:true,filterType:'product_type',label:'Product type',config:{}},{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}},{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
     const tap=async selector=>{
       const point=await evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'nearest',inline:'nearest'});const r=el.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
       await send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});await send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await delay(100);
     };
     for(const width of [320,390,768]){
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:true});
-      await control({reset:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'horizontal-scrolling',showFilterOptionsWithOneItem:true}});
-      await navigate();await wait("document.querySelectorAll('#cfp-sidebar .cfp-group').length===2 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      await control({reset:true,realToolbar:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'horizontal-scrolling',showFilterOptionsWithOneItem:true}});
+      await navigate();await wait("document.querySelectorAll('#cfp-sidebar .cfp-group').length===4 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')"),'false','mobile horizontal filters should start collapsed');
+      assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').checkVisibility()"),false,'horizontal mode must not show a duplicate Filters button');
+      await evaluate('window.cfpSyncPillsLayout()');
+      assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').checkVisibility()"),false,'Liquid toolbar must not restore the duplicate button');
+      const row=await evaluate("({sort:document.querySelector('#cfp-custom-sort-trigger').getBoundingClientRect().toJSON(),filter:document.querySelector('#cfp-sidebar .cfp-group__toggle').getBoundingClientRect().toJSON()})");
+      assert.ok(Math.abs(row.sort.top-row.filter.top)<8,'Sorting and horizontal filters must share one row: '+JSON.stringify(row));
+      assert.ok(row.sort.width>=132,'Sort control must not inherit the old half-width toolbar rule');
+      assert.equal(await evaluate("(()=>{const e=document.querySelector('#cfp-custom-sort-label');return e.scrollWidth<=e.clientWidth;})()"),true,'Sort label is clipped');
+      await tap('#cfp-custom-sort-trigger');
+      const sortMenu=await evaluate("(()=>{const e=document.querySelector('#cfp-custom-sort-dropdown'),r=e.getBoundingClientRect();return{visible:e.checkVisibility(),left:r.left,right:r.right,top:r.top,bottom:r.bottom};})()");
+      assert.ok(sortMenu.visible&&sortMenu.left>=0&&sortMenu.right<=width&&sortMenu.bottom<=844,JSON.stringify(sortMenu));
+      await tap('#cfp-custom-sort-trigger');
       await tap('#cfp-sidebar .cfp-group__toggle');
       const panel=await evaluate("(()=>{const el=document.querySelector('#cfp-sidebar .cfp-group__content'),r=el.getBoundingClientRect();return{visible:el.checkVisibility(),top:r.top,bottom:r.bottom,left:r.left,right:r.right};})()");
       assert.ok(panel.visible&&panel.top>=0&&panel.bottom<=844&&panel.left>=0&&panel.right<=width,JSON.stringify(panel));
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-group__content')).position"),'fixed');
+      if(width===390){const shot=await send('Page.captureScreenshot',{format:'png',fromSurface:true});await fs.writeFile('scratch/mobile-horizontal-price-390.png',Buffer.from(shot.data,'base64'));}
       await tap('#cfp-sidebar .cfp-group:nth-child(2) .cfp-group__toggle');
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')"),'false','opening another group must close the first');
       await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=true]').length"),0);
-      await tap('#cfp-sidebar .cfp-group__toggle');await tap('#cfp-sidebar input[name=vendor]');
+      await tap('#cfp-sidebar .cfp-group[data-group="vendor-vendor"] .cfp-group__toggle');await tap('#cfp-sidebar input[name=vendor]');
       await wait("document.querySelector('#cfp-sidebar input[name=vendor]')?.checked && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      const updated=await evaluate("(()=>{const e=document.querySelector('#cfp-sidebar .cfp-group[data-group=\"vendor-vendor\"] .cfp-group__content'),r=e.getBoundingClientRect();return{visible:e.checkVisibility(),top:r.top,bottom:r.bottom};})()");
+      assert.ok(updated.visible&&updated.top>=0&&updated.bottom<=844,'Dropdown lost its position after selecting a value: '+JSON.stringify(updated));
+      assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').checkVisibility()"),false,'Results refresh restored the duplicate Filters button');
+      const gridWidth=await evaluate("(()=>{const wrapper=document.querySelector('.cfp-layout-wrapper'),style=getComputedStyle(wrapper);return{products:document.querySelector('#cfp-products-container').getBoundingClientRect().width,available:wrapper.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};})()");
+      assert.ok(Math.abs(gridWidth.products-gridWidth.available)<2,'Products must retain the full row width: '+JSON.stringify(gridWidth));
       assert.equal(await evaluate("document.body.style.overflow"),'');assert.equal((await cards()).length,25);
-      await control({reset:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'off-canvas',showFilterOptionsWithOneItem:true}});await navigate();
+      await control({reset:true,realToolbar:true,hold:false,delay:20,productCount:30,filterSettings,globalSettings:{mobileFilterLayout:'off-canvas',showFilterOptionsWithOneItem:true}});await navigate();
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
       await tap('#cfp-drawer-trigger-btn');
       const drawer=await evaluate("({open:document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open'),hidden:document.querySelector('#cfp-sidebar').getAttribute('aria-hidden'),mobile:matchMedia('(max-width:768px)').matches,width:innerWidth,layout:window.cfpGlobalSettings?.mobileFilterLayout,classes:document.body.className,button:document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().toJSON()})");

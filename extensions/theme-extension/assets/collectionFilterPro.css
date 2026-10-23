@@ -2827,6 +2827,46 @@ facet-filters-form,
 
 /* Horizontal mobile filters use the same collapsed popovers as desktop. */
 @media (max-width: 768px) {
+  .cfp-mobile-horizontal-scrolling .cfp-layout-wrapper {
+    display: grid !important;
+    grid-template-columns: minmax(132px, 140px) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 10px !important;
+    row-gap: 8px !important;
+  }
+  .cfp-mobile-horizontal-scrolling .cfp-layout-wrapper #cfp-top-bar,
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-top-bar__main,
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-top-bar__left { display: contents !important; }
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-product-count { grid-column: 1 / -1; }
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-top-bar__right {
+    grid-column: 1;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    padding: 0;
+    position: sticky;
+    top: var(--cfp-sticky-top, 0px);
+    z-index: 3;
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar.cfp-sidebar {
+    grid-column: 2;
+    min-width: 0;
+    margin: 0 !important;
+  }
+  .cfp-mobile-horizontal-scrolling .cfp-layout-wrapper > .cfp-products-grid,
+  .cfp-mobile-horizontal-scrolling .cfp-layout-wrapper > .cfp-main-content { grid-column: 1 / -1; }
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-custom-sort { width: 100%; }
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-custom-sort__trigger {
+    min-height: 46px;
+    padding: 12px 10px !important;
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-top-bar .cfp-custom-sort__dropdown {
+    left: 0;
+    right: auto;
+    min-width: 180px;
+    max-width: calc(100vw - 32px);
+  }
+  .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body { padding: 0 !important; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-sidebar__body { overflow: visible !important; }
   .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups {
     flex-wrap: nowrap;

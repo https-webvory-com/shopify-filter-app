@@ -2406,7 +2406,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           extraContainer.classList.remove('is-expanded');
         }
         if (triggerBtn) {
-          if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
+          if (isMobileHorizontalFilterLayout() || (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches)) {
             triggerBtn.classList.add('is-hidden');
             triggerBtn.style.setProperty('display', 'none', 'important');
             triggerBtn.setAttribute('aria-expanded', 'false');
@@ -2458,10 +2458,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     let stickyFrame;
     const scheduleStickyOffsets = () => {
       if (stickyFrame) return;
-      stickyFrame = requestAnimationFrame(() => { stickyFrame = null; updateStickyFilterOffsets(); });
+      stickyFrame = requestAnimationFrame(() => { stickyFrame = null; updateStickyFilterOffsets(); positionOpenMobileFilterPanels(); });
     };
     window.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
+    window.visualViewport?.addEventListener('resize', scheduleStickyOffsets, { passive: true });
     window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
       closeSidebar();
       if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
@@ -2586,12 +2587,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           cfpGroupToggleState[contentId] = !expanded;
         if (content && !expanded && isHorizontalPopoverLayout()) {
           if (isMobileHorizontalFilterLayout()) {
-            const triggerRect = toggle.getBoundingClientRect();
-            content.style.top = `${triggerRect.bottom}px`;
-            const viewportWidth = document.documentElement.clientWidth;
-            const dropdownWidth = Math.min(300, viewportWidth - 32);
-            content.style.left = `${Math.max(16, Math.min(triggerRect.left, viewportWidth - 16 - dropdownWidth))}px`;
-            content.style.maxHeight = `${Math.max(0, Math.min(420, window.innerHeight - triggerRect.bottom - 16))}px`;
+            positionMobileFilterPanel(toggle, content);
             return;
           }
           content.style.left = '0px';
@@ -2602,6 +2598,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       });
     });
 
+    positionOpenMobileFilterPanels();
     const hContainers = [
       document.getElementById('cfp-horizontal-filters'),
       document.getElementById('cfp-horizontal-extra-filters')
@@ -3354,6 +3351,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function isHorizontalPopoverLayout() {
     return isHorizontalFilterLayout() || isMobileHorizontalFilterLayout();
+  }
+
+  function positionMobileFilterPanel(toggle, content) {
+    const rect=toggle.getBoundingClientRect();
+    const width=document.documentElement.clientWidth;
+    const height=window.visualViewport?.height || window.innerHeight;
+    const panelWidth=Math.min(300,width-32);
+    const desired=Math.min(420,content.scrollHeight);
+    const below=Math.max(0,height-rect.bottom-16),above=Math.max(0,rect.top-16);
+    const openAbove=below<Math.min(desired,180)&&above>below;
+    const available=Math.min(420,openAbove?above:below);
+    content.style.left=`${Math.max(16,Math.min(rect.left,width-16-panelWidth))}px`;
+    content.style.top=`${openAbove?Math.max(16,rect.top-Math.min(desired,available)):rect.bottom}px`;
+    content.style.maxHeight=`${available}px`;
+  }
+
+  function positionOpenMobileFilterPanels() {
+    if(!isMobileHorizontalFilterLayout()||!sidebar)return;
+    sidebar.querySelectorAll('.cfp-group__toggle[aria-expanded="true"]').forEach(toggle=>{
+      const content=document.getElementById(toggle.getAttribute('aria-controls'));
+      if(content)positionMobileFilterPanel(toggle,content);
+    });
   }
 
   function isVerticalFilterLayout() {
