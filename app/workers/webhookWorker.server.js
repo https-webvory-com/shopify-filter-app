@@ -39,16 +39,21 @@ async function processWebhookJob(job) {
         const response=await(await admin.graphql(`query FilterInventoryProduct($id:ID!){inventoryItem(id:$id){variant{product{id}}}}`,{variables:{id:`gid://shopify/InventoryItem/${String(itemId).split('/').pop()}`}})).json();
         if(response.errors||!response.data||!Object.hasOwn(response.data,'inventoryItem'))throw Error('Could not resolve inventory webhook product');
         const id=response.data?.inventoryItem?.variant?.product?.id;
-        if(id)await handleProductUpdate(shop,{id:String(id).split('/').pop(),admin_graphql_api_id:id},job);
+        if(id){
+          await handleProductUpdate(shop,{id:String(id).split('/').pop(),admin_graphql_api_id:id},job);
+          await (await import('../services/marketAvailability.server.js')).invalidateMarketAvailability(shop,id);
+        }
         break;
       }
       case "PRODUCTS_CREATE":
       case "PRODUCTS_UPDATE":
         await handleProductUpdate(shop, payload, job);
+        await (await import('../services/marketAvailability.server.js')).invalidateMarketAvailability(shop,payload.admin_graphql_api_id||payload.id);
         break;
 
       case "PRODUCTS_DELETE":
         await handleProductDelete(shop, payload, job);
+        await (await import('../services/marketAvailability.server.js')).invalidateMarketAvailability(shop,payload.admin_graphql_api_id||payload.id);
         break;
 
       case "COLLECTIONS_CREATE":
@@ -251,11 +256,22 @@ async function handleCollectionDelete(shop, payload) {
 }
 
 async function handleAppUninstalled(shop) {
+  await prisma.marketStorefrontConnection.deleteMany({where:{shop}});
+  await prisma.marketAvailabilitySnapshot.deleteMany({where:{shop}});
   await prisma.session.deleteMany({ where: { shop } });
   console.log(`CFP Worker: App uninstalled cleanup completed for ${shop}.`);
 }
 
 export function initWebhookWorker() {
+  if(!global.__marketAvailabilityWorker){
+    global.__marketAvailabilityWorker=new Worker('marketAvailabilityQueueV1',async job=>{
+      if(job.name==='COUNTRY_DISCOVERY')return (await import('../services/marketAvailability.server.js')).discoverMarketCountries(job.data);
+      if(job.name!=='COUNTRY_STOCK')throw Error('Unknown country availability job');
+      return (await import('../services/marketAvailability.server.js')).processMarketAvailability({...job.data,fullRefresh:job.data.fullRefresh&&job.attemptsMade===0});
+    },{connection:{...redisOptions,maxRetriesPerRequest:null},concurrency:2});
+    global.__marketAvailabilityWorker.on('error',()=>console.error('CFP: Country availability worker unavailable'));
+    global.__marketAvailabilityWorker.on('failed',()=>console.error('CFP: Country availability refresh failed; retrying'));
+  }
   global.__scheduleMembershipAudits = async () => {
     const {scheduleMembershipAudits} = await import('../services/collectionMembershipAudit.server.js');
     return scheduleMembershipAudits();

@@ -46,7 +46,10 @@ test('order worker runs without consuming webhook slots and retries failures', a
   });
   vm.runInContext(source, context);
   vm.runInContext('initWebhookWorker(); initWebhookWorker();', context);
-  assert.equal(workers.length, 4);
+  assert.equal(workers.length, 5);
+  const market = workers.find(worker => worker.name === 'marketAvailabilityQueueV1');
+  assert.equal(market.options.concurrency, 2);
+  assert.equal(market.options.connection.maxRetriesPerRequest, null);
   const order = workers.find(worker => worker.name === 'collectionOrderQueueV1');
   assert.equal(order.options.concurrency, 1);
   assert.equal(order.options.connection.maxRetriesPerRequest, null);

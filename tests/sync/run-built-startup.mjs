@@ -24,7 +24,7 @@ if (!process.argv.includes('--child')) {
   globalThis.__startupRedis.emit('connect');
   await new Promise(resolve => setImmediate(resolve));
   const names = ['__productSyncWorker','__webhookWorker','__collectionRankingWorker',
-    '__collectionOrderWorker','__collectionMembershipWorker'];
+    '__collectionOrderWorker','__collectionMembershipWorker','__marketAvailabilityWorker'];
   if (process.env.CFP_WORKER_MODE === 'worker') {
     await Promise.all(names.map(name => {
       assert.ok(globalThis[name], `${name} was not initialized`);

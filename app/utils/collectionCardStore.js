@@ -78,8 +78,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   if(current.length===10)current[9]=saved[9];
   return JSON.stringify(current)===entry.state;
  };
- async function get(request,{probe=false,onHit}={}){
-  if(!probe&&publishedPages){const published=await publishedPages.get(request,{onHit});if(published)return published;}
+ async function get(request,{probe=false,onHit,marketAvailabilityVersion=null}={}){
+  if(!probe&&publishedPages){const published=await publishedPages.get(request,{onHit,marketAvailabilityVersion});if(published)return published;}
   const key=collectionCardKey(request);if(!key)return null;
   const controller=new AbortController(),started=now();let timer,stage='snapshot',outcome;
   const work=async()=>{
@@ -94,6 +94,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    controller.signal.throwIfAborted();
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'cards',key});
    let entry;try{entry=decodePreparation(raw);}catch{return null;}
+   if((entry?.marketAvailabilityVersion??null)!==marketAvailabilityVersion)return null;
    controller.signal.throwIfAborted();
    if(entry?.version!==1||entry.policyVersion!==2||entry.cardPresentationVersion!==collectionCardPresentationVersion||entry.shop!==shop||!/^\d+$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
    if(!hasUsableExtraFacets(entry.payload))return null;
@@ -142,7 +143,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'cards',key:collectionCardKey(request)});
    retainedEntry=decodePreparation(raw);
    if(retainedEntry?.version!==1||retainedEntry.policyVersion!==2||retainedEntry.cardPresentationVersion!==collectionCardPresentationVersion||retainedEntry.shop!==shop)return null;
-   spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true};
+   spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true,marketAvailabilityVersion:retainedEntry.marketAvailabilityVersion};
    preparedKey=retainedEntry.preparedKey;
   }catch{return null;}
   const key=collectionCardKey(request),shop=spec?.shop,collectionId=clean(spec?.collectionId);
@@ -165,7 +166,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      if(facetsReady&&facets&&Array.isArray(cards.settings)){
       cards.facets=facets;cards.cfpCards={version:1,facetsReady:true};
      }
-     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
+     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);
@@ -179,7 +180,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      const finalState=await readState(identity),finalPrepared=current(finalState,external);
      if(!finalPrepared||stateSignature(finalState,external)!==state||sequenceSignature(finalPrepared)!==sequence)return;
      if(pageSize===50&&publishedPages){
-      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
+      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
      }
      if(pageSize===50)await saveCards();
      for(const alias of aliases)if(alias){

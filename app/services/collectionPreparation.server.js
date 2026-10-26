@@ -120,12 +120,19 @@ export async function scheduleMissingCollectionOrders(shop) {
 
 // Discover public markets from configuration and real public visits. Never turn
 // customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
-export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10) {
+export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10, countryContext=null) {
   const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
     try{return [JSON.parse(value)];}catch{return [];}
   })];
   const markets=new Map();
+  if(countryContext)for(const country of countryContext.countries){
+    if(!/^[A-Z]{2}$/.test(country))continue;
+    const url=new URL('https://ranking.internal/api/filter');
+    for(const [key,value]of Object.entries({shop,country,locale:countryContext.locale,sortBy:'best-selling',page:'1'}))url.searchParams.set(key,value);
+    markets.set(url.search,url);
+  }
   for(const record of records){
+    if(countryContext)break;
     const normalized=normalizeCollectionWarmup(shop,record.url,record.collectionId);
     if(!normalized)continue;
     const source=new URL(normalized.url),url=new URL('https://ranking.internal/api/filter');

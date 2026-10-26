@@ -5,7 +5,7 @@ import vm from "node:vm";
 import {productRankingFingerprint,productContentFingerprint} from '../../app/utils/shopCacheInvalidation.js';
 
 async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content') {
-  const calls = [],invalidations=[];
+  const calls = [],invalidations=[],marketChanges=[];
   const admin = {graphql:async()=>({json:async()=>({data:{inventoryItem:{variant:{product:{id:'gid://shopify/Product/1'}}}}})})};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
   const source = (await fs.readFile("app/workers/webhookWorker.server.js", "utf8"))
@@ -16,8 +16,9 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     productRankingFingerprint,productContentFingerprint,
     meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
-    prisma: {product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
+    prisma: {marketStorefrontConnection:{deleteMany:async({where})=>marketChanges.push(['connection-deleted',where.shop])},marketAvailabilitySnapshot:{deleteMany:async({where})=>marketChanges.push(['snapshots-deleted',where.shop])},product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
+      if(path.includes('marketAvailability'))return {invalidateMarketAvailability:async(shop,id)=>marketChanges.push(['stock',shop,id])};
       if (path.includes("collectionBestSelling")) return { invalidateCollectionBestSelling: async (shop, collectionId) => calls.push(["collection-stale", shop, collectionId]), refreshCollectionBestSelling: async (shop, collectionId) => {
         calls.push(["collection-order", shop, collectionId]);
         if (syncError) throw syncError;
@@ -43,7 +44,7 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
   });
   vm.runInContext(source, context);
   const processor=vm.runInContext("processWebhookJob", context);
-  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls,invalidations };
+  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls,invalidations,marketChanges };
 }
 
 test("collection updates synchronize eligibility and refresh Shopify ordering", async () => {
@@ -87,6 +88,7 @@ test("uninstall cleanup deletes only the shop's sessions", async () => {
   const worker = await loadWorker();
   await worker.process({ name: "APP_UNINSTALLED", data: { shop: "fixture", payload: {} } });
   assert.deepEqual(worker.calls, [["uninstall", "fixture"]]);
+  assert.deepEqual(worker.marketChanges,[['connection-deleted','fixture'],['snapshots-deleted','fixture']]);
 });
 
 test('unchanged indexed product updates do not invalidate or rebuild collection rankings',async()=>{

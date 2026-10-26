@@ -25,7 +25,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
   entry.payload.products.every((p,i)=>String(p.id).split('/').pop()===entry.ids[i]&&p.title&&p.handle)&&
   entry.payload.settings&&entry.payload.facets&&hasUsableExtraFacets(entry.payload)&&hasUsableSaleFacets(entry.payload)&&hasUsableProductTitleFacets(entry.payload)&&hasUsableCollectionNavigation(entry.payload);
- async function get(request,{onHit}={}){
+ async function get(request,{onHit,marketAvailabilityVersion=null}={}){
   const key=publishedCollectionKey(request);if(!key||!acceptsPublishedCollectionPage(request))return null;
   const params=new URL(request.url).searchParams,shop=params.get('shop'),page=Number(params.get('page')),token=params.get('rankingToken');
   if(params.get('limit')!=='25'||page===2&&!/^[a-f0-9-]{36}$/.test(token||''))return null;
@@ -36,7 +36,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    const entry=decodePreparation(raw);if(entry.shop!==shop||!entry.aliases?.includes(key)||!valid(entry,true))return null;
    // Retire stock-restricted publications from the reverted release, as well
    // as publications with an obsolete pin or merchandising configuration.
-   if(entry.marketAvailabilityRevision!=null||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))){
+   if(entry.marketAvailabilityRevision!=null||(entry.marketAvailabilityVersion??null)!==marketAvailabilityVersion||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))){
     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});
@@ -70,14 +70,14 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    return response;
   }catch{return null;}
  }
- async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration}){
+ async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null}){
   const key=publishedCollectionKey(request);if(!key||new URL(request.url).searchParams.get('limit')!=='50')return false;
   const shop=new URL(request.url).searchParams.get('shop'),url=new URL(request.url);
   url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));
   const canonical=publishedCollectionKey(new Request(url)),aliases=new Set([key,canonical]);
   if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(publishedCollectionKey(new Request(url)));}
   const {rankingToken,...cards}=payload;
-  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.

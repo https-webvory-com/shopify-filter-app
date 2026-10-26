@@ -4,3 +4,8 @@ node_modules
 scratch
 .env
 .env.*
+.git
+.claude
+.codex
+.agents
+.aws

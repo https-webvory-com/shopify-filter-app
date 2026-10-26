@@ -11,6 +11,7 @@ import * as collectionCards from '../../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
+import * as marketAvailability from '../../../app/utils/marketAvailability.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
@@ -20,6 +21,8 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if (!(name in mocks)) {
+      if(name==='../utils/marketAvailability.js')return marketAvailability;
+      if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
       if(name==='../utils/collectionCards.js')return collectionCards;
       if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;
       if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};

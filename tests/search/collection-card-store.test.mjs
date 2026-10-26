@@ -29,6 +29,14 @@ test('old card presentation snapshots cannot keep serving merchandising-selected
  assert.equal(await f.store.get(f.request),null);assert.equal(await f.store.get(f.request,{probe:true}),null);
 });
 
+test('working saved cards require their exact country availability version',async()=>{
+ const f=fixture();f.spec.marketAvailabilityVersion='in-v1';await(await f.begin()).finish(f.payload,'fp');
+ assert.equal(await f.store.get(f.request),null);
+ assert.ok(await f.store.get(f.request,{marketAvailabilityVersion:'in-v1'}));
+ assert.equal(await f.store.get(f.request,{marketAvailabilityVersion:'us-v1'}),null);
+ assert.equal(await f.store.get(f.request,{marketAvailabilityVersion:'in-v2'}),null);
+});
+
 test('canonical facet follow-ups upgrade saved cards so the next visit receives collection-wide filters',async()=>{
  const f=fixture();await(await f.begin()).finish(f.payload,'fp','head');
  const url=new URL(f.request.url);url.searchParams.set('responseProfile','collection-v1');url.searchParams.set('rankingToken','validated-token');

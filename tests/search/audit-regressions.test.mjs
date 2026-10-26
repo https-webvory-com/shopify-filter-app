@@ -4,6 +4,7 @@ import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
+import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import * as searchColor from "../../app/utils/searchColor.js";
@@ -98,6 +99,8 @@ async function route(file,mocks){
    if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
+     if(name==='../utils/marketAvailability.js')return marketAvailability;
+     if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;

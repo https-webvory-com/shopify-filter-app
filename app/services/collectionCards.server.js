@@ -9,11 +9,12 @@ import {collectionRankingFingerprint,saveCollectionRankingSession} from './colle
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot,getCollectionLoadingGeneration} from './collectionLoadingSnapshots.server.js';
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {createPublishedCollectionPages} from '../utils/collectionPublishedPage.js';
+import {marketRankingFingerprint} from '../utils/marketAvailability.js';
 const recordCardEvent=createCollectionPreparationTelemetry(redis);
 
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
 
-const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);
+const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);
 const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
  readConfigurationRevision:async shop=>await redis.get(`collectionPreparationRevision:${shop}`)??'0',
  readGlobalSettings:async shop=>{

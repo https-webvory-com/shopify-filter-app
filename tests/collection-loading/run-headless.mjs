@@ -23,7 +23,7 @@ const results=[];let socket;
 const phases=data=>({...data,allRequests:data.requests,facetResponses:data.requests.filter(r=>r.profile==='collection-v1'&&r.page==='1'&&r.token),requests:data.requests.filter(r=>!(r.profile==='collection-v1'&&r.page==='1'&&r.token))});
 const getState=async()=>phases(await(await fetch(origin+'/__state')).json());
 let beforeReset=async()=>{};
-const control=async values=>{if(values.reset)await beforeReset();const response=await fetch(origin+'/__control',{method:'POST',body:JSON.stringify(values)});return phases(await response.json());};
+const control=async values=>{if(values.reset)await beforeReset();const response=await fetch(origin+'/__control',{method:'POST',body:JSON.stringify(values)});const body=await response.json();if(!response.ok)throw Error(body.error||'Fixture control failed');return phases(body);};
 try{
   let endpoint;
   for(let i=0;i<100;i++){endpoint=stderr.match(/DevTools listening on (ws:\/\/\S+)/)?.[1];if(endpoint)break;if(chrome.exitCode!==null)throw Error('Headless Chrome exited before connecting');await delay(100);}
@@ -46,6 +46,28 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('country stock publications preserve fast pages, market switches and inventory refresh',async()=>{
+    const all=Array.from({length:65},(_,i)=>String(i+1));
+    const stock={version:'v1',ids:{US:all,IN:all.filter(id=>!['1','3'].includes(id))}};
+    await control({reset:true,productCount:65,cardSnapshots:true,publishedPages:true,countryStock:stock,delay:0,priceDelay:0,imageDelay:0});
+    await control({publishFirst50:true,publishCountry:'US'});
+    await control({publishFirst50:true,publishCountry:'IN'});
+    const preparedBrowses=(await getState()).trace.candidateBrowses;
+    await navigate('?country=IN');await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.equal((await getState()).trace.candidateBrowses,preparedBrowses,'a prepared country page must not rerun the collection ranking scan');
+    const india=await cards();assert.ok(!india.includes('1')&&!india.includes('3'));
+    await evaluate("window.firstCard=document.querySelector('.cfp-product-card--reveal');document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+    assert.equal(new Set(await cards()).size,50);assert.equal(await evaluate("window.firstCard===document.querySelector('.cfp-product-card--reveal')"),true);
+    await navigate('?country=US');await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.equal((await cards())[0],'1');
+    stock.version='v2';stock.ids.IN=stock.ids.IN.filter(id=>id!=='2');
+    await control({countryStock:stock,publishFirst50:true,publishCountry:'IN'});
+    await navigate('?country=IN');await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.ok(!(await cards()).some(id=>['1','2','3'].includes(id)));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {indiaTotal:63,updatedIndiaTotal:62,usaTotal:65,initialCards:25,afterLoadMore:50,liveTiming:false};
+  });
   console.log('Headless browser connected: '+version.product);
 
   await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{

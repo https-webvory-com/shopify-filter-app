@@ -4,6 +4,7 @@ import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
+import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
@@ -147,10 +148,14 @@ test("the storefront loader returns the full count, pinned cards, and the final 
   documents.push({ ...documents[0], id: "23113", collections: ["gid://shopify/Collection/2"], collection_titles: ["Black Tie Dresses"], tags: ["TopFormal"] });
   const pins = [1, 3, 5, 7, 9, 11].map(id => ({ id: `gid://shopify/Product/${id}` }));
   const savedPins = [...pins, { id: "gid://shopify/Product/23111" }, { id: "gid://shopify/Product/23112" }, { id: "gid://shopify/Product/23113" }];
+  let countryMarket=null;
   const rule = { conditions: [{ action: "Boost", field: "Color (product option)", value: "Black", operator: "contains" }, { action: "Include", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const matching = filter => {
     const text = JSON.stringify(filter);
     let eligible = text.includes("status = 'ACTIVE'") ? documents.filter(p => p.status === "ACTIVE") : documents;
+    for(const condition of filter||[])if(typeof condition==='string'&&condition.startsWith('id IN ')){
+      const ids=new Set(JSON.parse(condition.slice(6)));eligible=eligible.filter(product=>ids.has(product.id));
+    }
     if (text.includes("collections = 'gid://shopify/Collection/1'")) {
       eligible = eligible.filter(p => p.collections.includes("gid://shopify/Collection/1") || (text.includes("OR tags IN") && p.tags.includes("TopFormal")) || (text.includes("collection_titles IN") && p.collection_titles?.includes("Black Tie Dresses")));
     }
@@ -204,7 +209,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     "../services/collectionPreparation.server.js": readyPreparation({index,prisma:{product:{findMany:async()=>pins}},arrange:merchandising.applyMerchandisingRules}),
     "../services/collectionRankingSession.server.js": {
       collectionRankingFingerprint: () => 'fixture',
-      getCollectionRankingSession: async (_shop, _fingerprint, token) => token ? sessions.get(token) : null,
+      getCollectionRankingSession: async (_shop, fingerprint, token) => token&&sessions.get(token)?.fingerprint===fingerprint ? sessions.get(token) : null,
       saveCollectionRankingSession: async (_shop, fingerprint, ids, updatedAt, metadata) => {
         const token = 'fixture-token-' + sessions.size;
         const session = { token, fingerprint, ids, updatedAt, metadata };
@@ -218,6 +223,8 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
+    if(name==='../utils/marketAvailability.js')return marketAvailability;
+    if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async(_shop,country)=>countryMarket?{status:countryMarket.pending?'pending':'ready',version:country+countryMarket.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>countryMarket.ids[country]};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;
@@ -282,6 +289,21 @@ if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='..
     assert.equal(sessionPage._status,200);assert.equal(sessionPage.products.length,25);
   }
   mocks['../services/collectionPreparation.server.js'].getPreparedCollectionRanking=normalPreparation;
+  countryMarket={version:'v1',ids:{US:Array.from({length:70},(_,i)=>String(i+1)),IN:Array.from({length:70},(_,i)=>String(i+1)).filter(id=>!['1','3'].includes(id))}};
+  const india=await load('country=IN&page=1');
+  assert.equal(india._status,200);assert.equal(india.totalCount,68);assert.equal(india.products.length,25);
+  assert.ok(india.products.every(p=>!['gid://shopify/Product/1','gid://shopify/Product/3'].includes(p.id)),'unavailable pins cannot bypass country eligibility with the global stock flag off');
+  const indiaNext=await load('country=IN&page=2&rankingToken='+india.rankingToken);
+  assert.equal(indiaNext.products.length,25);
+  assert.equal(new Set([...india.products,...indiaNext.products].map(p=>p.id)).size,50);
+  const usa=await load('country=US&page=1');assert.equal(usa.totalCount,70);assert.equal(usa.products[0].id,'gid://shopify/Product/1');
+  assert.equal((await load('country=US&page=2&rankingToken='+india.rankingToken))._status,409);
+  countryMarket.version='v2';countryMarket.ids.IN=countryMarket.ids.IN.filter(id=>id!=='5');
+  assert.equal((await load('country=IN&page=2&rankingToken='+india.rankingToken))._status,409);
+  const updated=await load('country=IN&page=1');assert.equal(updated.totalCount,67);assert.ok(updated.products.every(p=>p.id!=='gid://shopify/Product/5'));
+  countryMarket.version='v3';countryMarket.ids.IN=[];const empty=await load('country=IN&page=1');assert.equal(empty.totalCount,0);assert.equal(empty.products.length,0);
+  countryMarket.pending=true;const pending=await load('country=IN&page=1');assert.equal(pending._status,202);assert.equal(pending.products.length,0);
+  countryMarket=null;
   failSearch = true;
   cache.clear();
   const unavailable = await load('page=1');

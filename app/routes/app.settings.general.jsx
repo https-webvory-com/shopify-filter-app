@@ -140,6 +140,7 @@ export default function Settings() {
 
   return (
     <s-page heading="App Settings">
+      <button type="button" onClick={() => navigate('/app/settings/market-availability')}>Country availability</button>
       {fetcher.data?.error && <p role="alert" style={{color:'#b42318'}}>{fetcher.data.error}</p>}
       <ui-title-bar title="App Settings">
         <button variant="breadcrumb" onClick={() => navigate("/app/settings")}>

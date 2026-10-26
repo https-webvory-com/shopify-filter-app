@@ -49,6 +49,19 @@ test('published data serves two complete 25-card pages and preserves all canonic
  assert.equal(await f.store.get(f.request({page:'3',rankingToken:page.rankingToken})),null);
 });
 
+test('country publications retain fast 25/50-card serving and reject an obsolete stock version',async()=>{
+ const f=fixture();assert.equal(await f.publish({marketAvailabilityVersion:'india-v1'}),true);
+ assert.equal(await f.store.get(f.request()),null,'a country publication is never accepted without a matching proof');
+ const first=await(await f.store.get(f.request(),{marketAvailabilityVersion:'india-v1'})).json();
+ assert.equal(first.products.length,25);assert.equal(first.totalCount,70);
+ const second=await(await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}),{marketAvailabilityVersion:'india-v1'})).json();
+ assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
+ assert.equal(await f.store.get(f.request(),{marketAvailabilityVersion:'india-v2'}),null);
+ const stale=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}),{marketAvailabilityVersion:'india-v2'});
+ assert.equal(stale.status,409);
+ assert.equal(await f.store.get(f.request({country:'US'}),{marketAvailabilityVersion:'usa-v1'}),null);
+});
+
 test('page two retains its published version across replacement and rejects tokens from another context',async()=>{
  const f=fixture();await f.publish();const first=await(await f.store.get(f.request())).json();
  f.advance(1);f.payload.products=f.payload.products.map(p=>({...p,title:'Updated '+p.title}));await f.publish();

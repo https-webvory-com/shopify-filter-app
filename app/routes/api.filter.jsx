@@ -34,6 +34,8 @@ import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../servic
 import {prepareCollectionPinnedPrefix} from '../utils/collectionPinnedPrefix.js';
 import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
+import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
+import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -78,10 +80,15 @@ export const loader = async ({ request, context }) => {
         }
       });
     }
+    const marketCountry=url.searchParams.get('country');
+    const marketState=url.searchParams.get('responseProfile')==='collection-config-v1'
+      ? {status:'disabled',version:null} : await getMarketAvailabilityState(shop,marketCountry);
+    const marketVersion=marketState.version;
+    if(marketState.status==='pending')return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
     if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
       // Trusted background rendering can reuse validated cards, but must never
       // create a shopper's browsing session while probing readiness.
-      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit});
+      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion});
       if(ready)return ready;
     }
 
@@ -501,7 +508,11 @@ export const loader = async ({ request, context }) => {
     // ── 7. Build Meilisearch filters ───────────────────────────────────
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
-    if (globalSettings?.showOnlyInStock) {
+    const marketIds=marketVersion?await getMarketAvailableProductIds(shop,marketCountry,marketVersion):null;
+    if(marketVersion&&!marketIds)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+    const marketEligible=marketIds?new Set(marketIds):null;
+    if(marketIds)baseFilters.push(marketIdsFilter(marketIds));
+    if (globalSettings?.showOnlyInStock&&!marketEligible) {
       baseFilters.push(`available = true`);
     }
 
@@ -635,6 +646,7 @@ export const loader = async ({ request, context }) => {
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
+    if(marketEligible)activePinnedList=activePinnedList.filter(id=>marketEligible.has(String(id).split('/').pop()));
     if (activePinnedList.length) {
       let pinCollectionScope = {};
       // Imported collection pins position eligible products; they do not grant
@@ -650,7 +662,7 @@ export const loader = async ({ request, context }) => {
         }
       }
       const validPins = await prisma.product.findMany({
-        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...pinCollectionScope, ...(globalSettings?.showOnlyInStock ? { variants: { some: { available: true } } } : {}) },
+        where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...pinCollectionScope, ...(globalSettings?.showOnlyInStock&&!marketEligible ? { variants: { some: { available: true } } } : {}) },
         select: parsedQuery?.colorIntent?.requested.length ? { id: true, options: true, variants: true } : { id: true },
       });
       const validIds = new Set(validPins.filter(product => {
@@ -847,9 +859,10 @@ export const loader = async ({ request, context }) => {
     let collectionRankingApplied = false;
     let searchRankingApplied = false;
     let searchRankingMode = null;
-    const rankingFingerprint = collectionRankingFingerprint(request.url);
+    const rankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
+    if(marketVersion&&useRankedCollectionPagination&&url.searchParams.has('rankingToken')&&!rankingSession)return data({error:'Country availability changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     const needsShopifyOrder = useRankedCollectionPagination && resolvedCollectionId && ["best-selling", "bestselling"].includes(sortBy);
     const collectionBestSellingState = needsShopifyOrder && rankingSession
       ? { ids: rankingSession.ids, status: "ready", updatedAt: rankingSession.updatedAt }
@@ -878,6 +891,7 @@ export const loader = async ({ request, context }) => {
     if (useRankedCollectionPagination && !rankingSession) {
       preparedSpec = {
         pinEligibilityVersion: 2,
+        ...(marketVersion?{marketAvailabilityVersion:marketVersion}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
@@ -1744,6 +1758,7 @@ export const loader = async ({ request, context }) => {
     await cardSnapshot?.finish(responsePayload,responsePageFingerprint,responsePreviewFingerprint,{facetsReady:true});
     return collectionResponse ? await collectionResponse.finish(responsePayload, responsePageFingerprint) : data(responsePayload, { headers: responseHeaders });
   } catch (err) {
+    if(['Invalid shop','Invalid market context','Country is not enabled in Shopify Markets'].includes(err.message))return data({error:err.message},{status:400,headers:{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store'}});
     if (preparedSpec && /Collection ranking session expired/.test(err.message)) {
       try { await discardPreparedCollectionRanking(preparedSpec, preparedCacheKey); }
       catch (error) { console.error('CFP: Failed to discard obsolete preparation:',error.name); }

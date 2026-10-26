@@ -27,6 +27,27 @@ model CollectionLoadingSnapshot {
   @@index([expiresAt])
 }
 
+// Kept separate from public/global settings: tokens never enter storefront JSON.
+model MarketStorefrontConnection {
+  shop        String   @id
+  accessToken String
+  countries   String[]
+  locale      String   @default("en")
+  updatedAt   DateTime @updatedAt
+}
+
+model MarketAvailabilitySnapshot {
+  shop       String
+  country    String
+  connection String
+  epoch      Int
+  version    String
+  ids        String[]
+  updatedAt  DateTime @updatedAt
+
+  @@id([shop, country])
+}
+
 model Session {
   id                  String    @id
   shop                String

@@ -50,7 +50,7 @@ test('collection pin edits preserve source order for product-only changes and cl
 
 for(const id of ['new','existing'])test(`collection pin editor ${id} save invalidates its ranking`,async()=>{
   const f=await route('app/routes/app.collections.pinning.$id.jsx');
-  const form=new URLSearchParams({intent:'save',name:'Pins',products:'[]',collections:'["Collection"]'});
+  const form=new URLSearchParams({intent:'save',name:'Pins',products:'[{"id":"gid://shopify/Product/1"}]',collections:'["Collection"]'});
   await f.action({request:new Request('https://fixture/app/collections/pinning/'+id,{method:'POST',body:form}),params:{id}});
   assert.deepEqual(f.invalidations,['fixture.myshopify.com']);assert.equal(f.mutations.length,1);
 });

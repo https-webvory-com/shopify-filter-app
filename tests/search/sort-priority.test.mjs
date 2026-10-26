@@ -4,6 +4,7 @@ import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
+import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as searchColor from "../../app/utils/searchColor.js";
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
@@ -23,6 +24,8 @@ async function loadModule(file, mocks) {
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
+    if(name==='../utils/marketAvailability.js')return marketAvailability;
+    if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;

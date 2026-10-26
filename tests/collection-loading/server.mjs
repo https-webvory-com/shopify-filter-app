@@ -8,6 +8,7 @@ import {transform} from 'esbuild';
 import * as searchColor from '../../app/utils/searchColor.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
+import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
@@ -135,7 +136,7 @@ export async function createLoadingServer({redisLayer}={}) {
   redisLayer?.setHandler(async job=>{if(job.name==='COLLECTION_RANKING_PREPARE')await new Promise(resolve=>setTimeout(resolve,state.delay));const result=await dispatch(job);state.completed++;return result;});
   const invalidate=createShopCacheInvalidation({redis,warm:schedule});
   const publishedRows=new Map();
-  const createCardSession=async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);};
+  const createCardSession=async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,marketAvailability.marketRankingFingerprint(service.collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);};
   const published=createPublishedCollectionPages({redis,createSession:createCardSession,
     readConfigurationRevision:async()=>await redis.get(preparationRevisionKey(shop))||'0',
     saveDurable:async row=>{const old=publishedRows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;publishedRows.set(row.key,row);return true;},
@@ -170,6 +171,8 @@ export async function createLoadingServer({redisLayer}={}) {
     '../utils/extraProductFilters.js':extraProductFilters,
     '../utils/percentSaleFilter.js':percentSaleFilter,
     '../utils/collectionNavigation.js':collectionNavigation,
+    '../utils/marketAvailability.js':marketAvailability,
+    '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
@@ -199,7 +202,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.reset)state.realToolbar=false;
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
-        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;}
+        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
         if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields))Object.assign(byId.get(id),fields);
         if(updates.productVariants)for(const [id,variants]of Object.entries(updates.productVariants)){
@@ -217,7 +220,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.stopStorm&&state.stormTimer){clearInterval(state.stormTimer);timers.delete(state.stormTimer);delete state.stormTimer;}
         if(updates.precompute)await warm(shop,null,true);
         if(updates.publishFirst50){
-          const response=await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country=US&collectionHandle=fixture&sortBy=best-selling&page=1&limit=50&responseProfile=collection-cards-v1'),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
+          const response=await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country='+(updates.publishCountry||'US')+'&collectionHandle=fixture&sortBy=best-selling&page=1&limit=50&responseProfile=collection-cards-v1'),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true,rankingPrecompute:true}});
           if(response.status!==200||response.headers.get('X-CFP-Collection-Cards')!=='stored')throw Error('Published fixture preparation failed');
         }
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests}));return;
@@ -261,6 +264,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/collections/')){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body')
         .replace('class="cfp-v1-app-container"',`class="cfp-v1-app-container" style="--cfp-cols-desktop:${state.desktopColumns??4};--cfp-cols-mobile:${state.mobileColumns??2}"`)
         .replace('columns_desktop:4,columns_mobile:2',`columns_desktop:${state.desktopColumns??4},columns_mobile:${state.mobileColumns??2}`);
+        if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){
         body=body.replace('<link rel="stylesheet"','<meta name="cfp-collection-context" data-shop="'+shop+'" data-handle="fixture" data-country="US" data-locale="en">'+headAsyncScripts+'<script defer src="/slow-theme.js"></script><link rel="stylesheet"')
