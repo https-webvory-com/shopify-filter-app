@@ -166,7 +166,7 @@ export const action = async ({ request }) => {
     await prisma.mergedValue.create({
       data: { shop, filterType, filterKey, targetValue, sourceValues },
     });
-    invalidateShop(shop);
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -196,7 +196,7 @@ export const action = async ({ request }) => {
         }
       }
     }
-    invalidateShop(shop);
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -213,14 +213,14 @@ export const action = async ({ request }) => {
       where: { id },
       data: { targetValue, sourceValues },
     });
-    invalidateShop(shop);
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
   if (intent === "delete") {
     const id = formData.get("id");
     await prisma.mergedValue.delete({ where: { id } });
-    invalidateShop(shop);
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -231,7 +231,7 @@ export const action = async ({ request }) => {
       where: { id },
       data: { isActive },
     });
-    invalidateShop(shop);
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 

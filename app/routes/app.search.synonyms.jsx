@@ -76,7 +76,9 @@ export const action = async ({ request }) => {
       message = isActive ? "Synonym activated" : "Synonym deactivated";
     }
 
-    await syncSynonymsToMeilisearch(shop);
+    if (!await syncSynonymsToMeilisearch(shop)) {
+      return { error: 'Synonyms were saved but could not be applied to search. Please retry.', status: 500 };
+    }
 
     return { success: true, message };
   } catch (error) {

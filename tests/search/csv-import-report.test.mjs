@@ -109,6 +109,7 @@ test('both merchandising actions return partial reports instead of aborting the 
   for (const type of ['collections', 'search']) {
     const f = await merchandisingFixture();
     const route = await loadImportModule(`app/routes/app.${type}.merchandising.jsx`, {
+      '../services/shopCache.server': { invalidateShop: async () => {} },
       '../services/merchandisingImport.server.js': f.service, '../db.server': { __esModule: true, default: f.prisma },
       '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'owner' } }) } },
     });

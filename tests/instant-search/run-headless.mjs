@@ -3,10 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import assert from 'node:assert/strict';
+import {DEFAULT_SEARCH_SETTINGS} from '../../app/utils/searchSettings.js';
 
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const assets='extensions/theme-extension/assets/';
-const names=['instantSearch.js','instantSearch.css','quickView.css','collectionFilterPro.css'];
+const names=['instantSearch.js','searchSettings.js','instantSearch.css','quickView.css','collectionFilterPro.css'];
 const files=new Map(await Promise.all(names.map(async name=>[name,await fs.readFile(assets+name,'utf8')])));
 const base={title:'Dress "Blue" & Silk',priceMin:20,options:[],variants:[],images:[]};
 const products=[
@@ -18,10 +19,14 @@ const products=[
   {...base,id:'6',handle:'blue-only',searchColor:'Blue',selectedVariantId:'61',options:[{name:'Color'}],images:['/images/red.svg'],variants:[{id:'61',option1:'Blue',image:{src:'/images/blue.svg'}},{id:'62',option1:'Red',imageUrl:'/images/red.svg'}]},
 ];
 const imageRequests=[];
+let activeSettings={...DEFAULT_SEARCH_SETTINGS,collectionLimit:0};
 const server=http.createServer((request,response)=>{
   const url=new URL(request.url,'http://fixture');
+  if(url.pathname==='/api/search-settings'){
+    response.setHeader('Content-Type','application/json');response.setHeader('Cache-Control','no-store');response.end(JSON.stringify({settings:activeSettings}));return;
+  }
   if(url.pathname==='/api/search'){
-    response.setHeader('Content-Type','application/json');response.end(JSON.stringify({products,suggestions:[],globalSettings:{showQuickViewInstantSearch:true,secondImageOnHover:true}}));return;
+    response.setHeader('Content-Type','application/json');response.end(JSON.stringify({products:products.slice(0,Number(url.searchParams.get('limit')||6)),suggestions:[],globalSettings:{showQuickViewInstantSearch:true,secondImageOnHover:true}}));return;
   }
   if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json'){
     response.setHeader('Content-Type','application/json');response.end(JSON.stringify({collections:[],resources:{results:{collections:[]}}}));return;
@@ -42,7 +47,7 @@ const server=http.createServer((request,response)=>{
     addEventListener('error',e=>{if(e.message)browserErrors.push(e.message)});addEventListener('unhandledrejection',e=>browserErrors.push(String(e.reason)));
     window.cfpMarketPricing={apply:async(products,callback)=>{await new Promise(resolve=>setTimeout(resolve,50));products.forEach((product,i)=>callback({...product,priceMin:21},i));}};
     document.addEventListener('click',e=>{if(e.target.closest('.cfp-quick-view-btn')){e.preventDefault();quickViewClicks++;}});
-  </script><script src="/instantSearch.js"></script></head><body><header><button aria-label="Search" class="header__icon--search">Search</button></header></body></html>`);
+  </script><script src="/searchSettings.js"></script><script src="/instantSearch.js"></script></head><body><header><button aria-label="Search" class="header__icon--search">Search</button></header></body></html>`);
 });
 let chrome,socket;const results=[];
 try{
@@ -102,6 +107,15 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     if(!collectionLast){const shot=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('scratch/instant-search-hover.png',Buffer.from(shot.data,'base64'));}
   }
+  activeSettings={...DEFAULT_SEARCH_SETTINGS,collectionLimit:0,productLimit:3};
+  await evaluate("document.querySelector('#cfp-main-search-input').dispatchEvent(new Event('input',{bubbles:true}))");
+  await wait("!document.querySelector('.cfp-skeleton-card')&&document.querySelectorAll('#cfp-search-products .cfp-product-card').length===3");
+  check('saved product limit applies to the next search without reloading');
+  activeSettings=null;
+  await evaluate("document.querySelector('#cfp-main-search-input').dispatchEvent(new Event('input',{bubbles:true}))");
+  await wait("!document.querySelector('.cfp-skeleton-card')&&document.querySelectorAll('#cfp-search-products .cfp-product-card').length===6");
+  check('reset restores defaults on the next search without reloading');
+  assert.deepEqual(await evaluate('browserErrors'),[]);
   await send('Emulation.setDeviceMetricsOverride',{width:375,height:812,deviceScaleFactor:1,mobile:true});await move(1,800);await pause(400);
   check('mobile Quick View stays visible without hover',await evaluate("[...document.querySelectorAll('.cfp-quick-view-btn')].every(button=>getComputedStyle(button).opacity==='1')"));
   console.log('INSTANT SEARCH BROWSER CHECKS PASSED: '+results.length);

@@ -28,8 +28,14 @@ export const action = async ({ request }) => {
   if (data.integrations) {
     try {
       integrations = JSON.parse(data.integrations);
-    } catch(e) {}
+    } catch(e) { return { success: false, error: 'Invalid integration settings.' }; }
   }
+  if (!integrations || Array.isArray(integrations) || typeof integrations !== 'object' ||
+      Object.keys(integrations).some(key => key !== 'wishlist') || typeof integrations.wishlist !== 'boolean') {
+    return { success: false, error: 'Invalid integration settings.' };
+  }
+  const current = await prisma.filterGlobalSetting.findUnique({ where: { shop: session.shop }, select: { integrations: true } });
+  integrations = { ...(current?.integrations || {}), ...integrations };
 
   await prisma.filterGlobalSetting.upsert({
     where: { shop: session.shop },
@@ -37,7 +43,7 @@ export const action = async ({ request }) => {
     create: { shop: session.shop, integrations }
   });
   
-  invalidateShop(session.shop);
+  await invalidateShop(session.shop);
   
   return { success: true };
 };

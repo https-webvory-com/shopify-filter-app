@@ -12,6 +12,7 @@ async function fixture(initial = { id: 'existing', shop: 'fixture.myshopify.com'
     findMany: async ({ where }) => saved.shop === where.shop && saved.ruleType === where.ruleType && saved.status === where.status ? [saved] : [],
   } };
   const route = await loadModule('app/routes/app.search.pinning.$id.jsx', {
+    '../services/shopCache.server': { invalidateShop: async () => {} },
     '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
     '../db.server': { default: prisma }, '../utils/availablePins.server.js': { availablePins: async (_db, _shop, products) => products },
     '../utils/pinProductSearch.server': { pinProductSearchFilter: async () => ({}) }, '../services/searchPicker.server.js': {}, '../utils/reorderSearchPins.js': {},

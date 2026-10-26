@@ -1,3 +1,4 @@
+import { invalidateShop } from "../services/shopCache.server";
 import { useNavigate } from "react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
@@ -148,6 +149,7 @@ export const action = async ({ request, params }) => {
         data,
       });
     }
+    await invalidateShop(shop);
     return redirect("/app/search/pinning");
   }
 

@@ -10,6 +10,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { invalidateShop } from "../services/shopCache.server";
 import { searchPickerProducts } from "../services/searchPicker.server.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import FilterModal from "../components/merchandising/FilterModal";
@@ -78,6 +79,7 @@ export const action = async ({ request }) => {
         },
       },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "create", rule: newRule });
   }
 
@@ -130,6 +132,7 @@ export const action = async ({ request }) => {
         },
       },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "edit", rule: updatedRule });
   }
 
@@ -140,7 +143,6 @@ export const action = async ({ request }) => {
     const result = await prisma.merchandisingRule.deleteMany({
       where: { shop, ruleType: "search", id: { in: ids } },
     });
-    const { invalidateShop } = await import("../services/shopCache.server");
     await invalidateShop(shop);
     return Response.json({ success: true, intent: "bulkDelete", count: result.count });
   }
@@ -148,6 +150,7 @@ export const action = async ({ request }) => {
   if (actionType === "deleteRule") {
     const id = formData.get("id");
     await prisma.merchandisingRule.deleteMany({ where: { id, shop } });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "delete" });
   }
 
@@ -158,6 +161,7 @@ export const action = async ({ request }) => {
       where: { id, shop },
       data: { status },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "toggle" });
   }
 
@@ -194,6 +198,7 @@ export const action = async ({ request }) => {
         },
       },
     });
+    await invalidateShop(shop);
     return Response.json({ success: true, intent: "duplicate" });
   }
 

@@ -130,8 +130,8 @@ window.runTargetedAudit = async () => {
   }
   await test("Search merchandising exports the selected rule, with search scope", async () => {
     await window.auditMount("/app/search/merchandising");
-    await click(document.querySelector("tbody input[type=checkbox]"));
-    await click(findText("Export selected", "button"));
+    await click([...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Summer dresses')).querySelector('input[type=checkbox]'));
+    await click(findText("Export", "button"));
     let blob;
     const original = URL.createObjectURL;
     URL.createObjectURL = (value) => {
@@ -168,7 +168,7 @@ window.runTargetedAudit = async () => {
   });
   await test("Search-pin CSV export includes scope and every search query", async () => {
     await window.auditMount("/app/search/pinning");
-    await click(document.querySelector("tbody input[type=checkbox]"));
+    await click([...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes('dress') && !row.textContent.includes('coat')).querySelector('input[type=checkbox]'));
     await click(findText("Export", "button"));
     let blob;
     const original = URL.createObjectURL;

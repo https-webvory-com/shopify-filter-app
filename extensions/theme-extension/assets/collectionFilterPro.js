@@ -492,6 +492,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   async function fetchAndRenderData(isLoadMore = false, allowSessionRestart = true) {
+    if (templateName === 'search' && window.cfpRefreshSearchSettings) {
+      await window.cfpRefreshSearchSettings();
+      const settings = window.cfpSearchSettings || {};
+      const pageSize = Number.isInteger(settings.pageSize) && settings.pageSize >= 1 && settings.pageSize <= 40 ? settings.pageSize : 25;
+      if (PAGE_SIZE !== pageSize) { PAGE_SIZE = pageSize; activeFilters.page = 1; isLoadMore = false; }
+      const form = document.querySelector('.cfp-inline-search-form');
+      if (form) form.hidden = settings.showSearchInput === false;
+    }
     syncSortControls();
     if (activeFetchController) {
       activeFetchController.abort();

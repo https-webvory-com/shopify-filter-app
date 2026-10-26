@@ -9,6 +9,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { invalidateShop } from "../services/shopCache.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { ImportFilterGroupModal } from "../components/ui/ImportFilterGroupModal";
 import { ExportFilterGroupsModal } from "../components/ui/ExportFilterGroupsModal";
@@ -218,6 +219,7 @@ export const action = async ({ request }) => {
       },
     });
 
+    await invalidateShop(shop);
     return { success: true, groupId: group.id, intent };
   }
 
@@ -330,12 +332,14 @@ export const action = async ({ request }) => {
       }
     }
 
+    await invalidateShop(shop);
     return { success: true, importedCount: parsedGroups.length, intent };
   }
 
   if (intent === "delete") {
     const id = formData.get("id");
     await prisma.filterGroup.delete({ where: { id } });
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -349,6 +353,7 @@ export const action = async ({ request }) => {
       where: { id },
       data: { status: !current.status },
     });
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 
@@ -414,6 +419,7 @@ export const action = async ({ request }) => {
       },
     });
 
+    await invalidateShop(shop);
     return { success: true, intent };
   }
 

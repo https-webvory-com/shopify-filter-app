@@ -1,3 +1,4 @@
+import { invalidateShop } from "../services/shopCache.server";
 import { sortPinningRules } from "../utils/pinImportOrder.js";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -27,12 +28,14 @@ export const action = async ({ request }) => {
   if (actionType === "deleteRule") {
     const id = formData.get("id");
     await prisma.pinnedProductRule.deleteMany({ where: { id, shop } });
+    await invalidateShop(shop);
     return { success: true, action: "deleteRule" };
   }
 
   if (actionType === "bulkDeleteRules") {
     const ids = JSON.parse(formData.get("ids") || "[]");
     await prisma.pinnedProductRule.deleteMany({ where: { id: { in: ids }, shop } });
+    await invalidateShop(shop);
     return { success: true, action: "bulkDeleteRules", count: ids.length };
   }
 
@@ -52,6 +55,7 @@ export const action = async ({ request }) => {
           products: originalRule.products,
         }
       });
+      await invalidateShop(shop);
       return { success: true, action: "duplicateRule" };
     }
     return { success: false, message: "Rule not found" };
@@ -64,6 +68,7 @@ export const action = async ({ request }) => {
       where: { id },
       data: { status },
     });
+    await invalidateShop(shop);
     return { success: true, action: "toggleStatus", status };
   }
 

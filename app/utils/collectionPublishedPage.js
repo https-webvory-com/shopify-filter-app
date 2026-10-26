@@ -36,7 +36,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    const entry=decodePreparation(raw);if(entry.shop!==shop||!entry.aliases?.includes(key)||!valid(entry,true))return null;
    // Retire stock-restricted publications from the reverted release, as well
    // as publications with an obsolete pin or merchandising configuration.
-   if(page===1&&(entry.marketAvailabilityRevision!=null||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop))))){
+   if(entry.marketAvailabilityRevision!=null||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))){
+    if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});
     }

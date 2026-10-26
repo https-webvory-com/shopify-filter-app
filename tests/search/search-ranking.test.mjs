@@ -297,6 +297,7 @@ test('authenticated pin picker retains target-query scope when searching by titl
   const prisma = { product: { count: async args => { calls.push(args.where); return 1; },
     findMany: async () => [{ id: gid(1), title: 'Green Dress', images: ['green.jpg'] }] } };
   const route = await loadModule('app/routes/app.search.pinning.$id.jsx', {
+    '../services/shopCache.server': { invalidateShop: async () => {} },
     'react-router': {}, react: {}, '@shopify/app-bridge-react': {}, '@shopify/shopify-app-react-router/server': {},
     '../db.server': { default: prisma }, '../shopify.server': { authenticate: { admin: async () => ({ session: { shop } }) } },
     '../utils/availablePins.server.js': {}, '../components/merchandising/PinSearchField': {}, '../utils/reorderSearchPins.js': { reorderSearchPins },

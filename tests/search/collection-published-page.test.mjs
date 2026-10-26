@@ -112,8 +112,8 @@ test('new visits reject old pin and merchandising configurations and prioritize 
  const first=await(await f.store.get(f.request())).json();revision='two';const hits=[];
  assert.equal(await f.store.get(f.request(),{onHit:value=>hits.push(value)}),null);
  await Promise.resolve();assert.equal(hits.length,1);assert.equal(hits[0].refreshDue,true);
- const second=await(await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).json();
- assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
+ const second=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
+ assert.equal(second.status,409);
  f.advance(1);await f.publish({configuration:'two'});assert.equal((await f.store.get(f.request())).status,200);
 });
 

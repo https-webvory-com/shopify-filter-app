@@ -35,23 +35,24 @@ test('blocked storage still allows typed and default searches',async()=>{
  f.context.mainInput.value='';await f.context.fetchDefaultView();
  assert.equal(f.calls.filter(call=>call[0]==='products').length,2);
 });
-test('cache expires, bounds entries and size, and preserves unrelated storage',()=>{
+test('a repeated search never renders stored results from before a merchant save',async()=>{
  const f=fixture();f.store.setItem('cart','keep');f.store.setItem('cfp_recent_searches','keep');
- for(let i=0;i<20;i++)f.context.writeInstantCache('cfp_instant_search_fixture_'+i,{products:[{title:'Dress '+i}]},{});
- assert.ok(f.store.length<=14);
+ f.store.setItem('cfp_instant_search_fixture',JSON.stringify({timestamp:Date.now(),productsData:{products:[{title:'Old pin'}]}}));
+ const rendered=[],requests=[];
+ f.context.renderProducts=async data=>rendered.push(data.products[0].title);
+ f.context.fetch=async(url,options)=>{requests.push(options);return {ok:true,json:async()=>String(url).includes('/api/search')?{products:[{title:rendered.length?'New pin':'Original pin'}]}:{resources:{results:{collections:[]}}}};};
+ await f.context.performSearch('blue dress');await f.context.performSearch('blue dress');
+ assert.deepEqual(rendered,['Original pin','New pin']);
+ assert.ok(requests.every(options=>options.cache==='no-store'));
  assert.equal(f.store.getItem('cart'),'keep');assert.equal(f.store.getItem('cfp_recent_searches'),'keep');
- const key='cfp_instant_search_fixture_old';f.store.setItem(key,JSON.stringify({timestamp:Date.now()-200000,productsData:{products:[]}}));
- assert.equal(f.context.readInstantCache(key),null);assert.equal(f.store.getItem(key),null);
- for(let i=0;i<10;i++)f.context.writeInstantCache('cfp_instant_search_fixture_large_'+i,{products:[{title:'x'.repeat(130000)}]},{});
- const cached=[...f.store.values.entries()].filter(([key])=>key.startsWith('cfp_instant_'));
- assert.ok(cached.reduce((sum,[,value])=>sum+value.length,0)<=500000);
- f.context.writeInstantCache('cfp_instant_search_fixture_oversized',{products:[{title:'x'.repeat(160000)}]},{});
- assert.equal(f.store.getItem('cfp_instant_search_fixture_oversized'),null);
 });
 
-test('instant cache separates customer merchandising contexts',()=>{
- const f=fixture();f.context.window.cfpCustomerTags='vip';const vip=f.context.instantCacheMarket();
- f.context.window.cfpCustomerTags='';assert.notEqual(f.context.instantCacheMarket(),vip);
+test('the next search uses newly saved settings and reset restores defaults',async()=>{
+ const f=fixture();let settings={productLimit:3,collectionLimit:0};
+ f.context.window.cfpRefreshSearchSettings=async()=>{f.context.window.cfpSearchSettings=settings;};
+ await f.context.performSearch('blue dress');assert.equal(f.context.CONFIG.productLimit,3);assert.equal(f.context.CONFIG.collectionLimit,0);
+ settings=null;
+ await f.context.performSearch('blue dress');assert.equal(f.context.CONFIG.productLimit,6);assert.equal(f.context.CONFIG.collectionLimit,5);
 });
 
 test('typed searches send locale and customer context for merchandising',async()=>{

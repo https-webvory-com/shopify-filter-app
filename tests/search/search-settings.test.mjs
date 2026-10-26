@@ -139,6 +139,20 @@ test('storefront bootstrap is shared, bounded, and fails open', async () => {
   }
 });
 
+test('next-action settings refresh shares pending reads and clears prior values after reset',async()=>{
+  let saved=defaults,calls=0;
+  const context={window:{Shopify:{shop:'test.myshopify.com'}},AbortController,encodeURIComponent,setTimeout,clearTimeout,
+    fetch:async(_url,options)=>{calls++;assert.equal(options.cache,'no-store');return {ok:true,json:async()=>({settings:saved})};},
+  };
+  vm.createContext(context);vm.runInContext(asset,context);
+  await context.window.cfpSearchSettingsReady;
+  assert.deepEqual(plain(context.window.cfpSearchSettings),defaults);
+  saved=null;
+  const first=context.window.cfpRefreshSearchSettings(),second=context.window.cfpRefreshSearchSettings();
+  assert.equal(first,second);await first;
+  assert.equal(calls,2);assert.equal(context.window.cfpSearchSettings,null);
+});
+
 test('legacy instant-search disable flags are ignored on read and removed on save without resetting other settings', async () => {
   const {rows,service}=await serviceFixture();
   rows.set('legacy',{config:{...defaults,instantEnabled:false,productLimit:3,manualSuggestions:['Blue dress']}});

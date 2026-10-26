@@ -1,4 +1,46 @@
-# Admin click audit — 23 September 2026
+# Admin audit — 26 October 2026
+
+Checked local HEAD `a9e518b` and the deployed app on `collection-filter-pro.myshopify.com`. Wishlist was excluded at the user's request. Live checks used newly opened tabs and reversible app settings; existing user tabs, products, pinning rules, merchandising rules and theme files were preserved. No code was deployed.
+
+## Current validation
+
+- 828 regression tests passed, with no failures, skips or cancellations.
+- Production build passed.
+- Actual React admin fixtures passed 25 page renders, 227 click smoke checks and 10 targeted workflows. Fixtures use sample loaders/actions rather than Shopify persistence.
+- Search Settings passed isolated PostgreSQL checks and 12 browser workflows; Customization passed isolated PostgreSQL checks and 11 browser workflows.
+- Redirects passed isolated PostgreSQL and browser checks, including create, edit, enable/disable, duplicate rejection, unsafe URL rejection, storefront redirects and delete.
+- Updated stale audit fixtures to supply redirects and a selected customization theme. Export workflows now select their intended rule independently of sorting and use the current Export label. Redirect deletion asserts the current empty state. These are test changes, not production fixes.
+
+## Live settings changes and storefront verification
+
+| Setting | Temporary change and observed result |
+| --- | --- |
+| Search page size | 40 → 4 produced four complete cards and a 4-of-59 count. Restoring 40 produced 40 complete cards. Collection pages retained 25 cards. |
+| Search vendors | Disabling vendor names removed vendor labels; restoring enabled displayed 40 vendor labels on 40 search cards. |
+| Search input | Disabling set the results-page form to hidden; restoring made it visible. |
+| Instant-search product limit | 6 → 3 produced three instant-search product cards. |
+| Suggestions | A temporary manual suggestion appeared on the storefront and was removed afterward. Zero suggestion/collection/recent limits hid their sections after loading. |
+| Minimum search characters | With a minimum of three, the two-character query `dr` displayed no instant-search product results; `dress` displayed six. |
+| Sale/sold-out labels | Disabled settings reached the real storefront; sale badges were absent. No independent sold-out product comparison was performed. |
+| General display settings | In-stock, hover-image, instant Quick View and collection Quick View changes persisted into storefront global settings. Collection Quick View added 25 buttons and opened the product dialog; disabling hover removed secondary image elements. Stock eligibility was not independently compared product by product. |
+| Wholesale | Logged-out cards hid prices when enabled. Restored to disabled. |
+| Desktop layouts | Vertical Sidebar placed filters beside products; Horizontal Toolbar produced five filter pills. Restored Drawer. |
+| Product counts | Enabling displayed option counts, including Product Type counts. Restored disabled. |
+| Mobile layouts | At approximately 390px, Off-canvas showed a Filters button that opened the drawer. Horizontal scrolling displayed the filter headings in a row. Restored Horizontal scrolling. |
+| Custom CSS | A temporary three-pixel green outline appeared on real product cards. Restored the original empty stylesheet; final reload had no temporary CSS. Original swatches were retained. |
+
+Final public API reads and a real storefront reload confirmed restoration of all changed values, including the empty manual-suggestions list and CSS. Database updated-at timestamps changed as expected. Evidence: `scratch/admin-live-settings-audit-20261026.json`, `scratch/admin-audit-browser-20261026.json` and `scratch/admin-audit-*-20261026.log`.
+
+Live navigation also loaded Filter Groups, the existing default-group editor, Merged Values, Synonyms, Redirects, Blacklist, Banners, both pinning lists, the new search-pin editor and both merchandising lists. The direct `/filters/groups/new` URL returned 404; actual group creation uses the list dialog, and the existing default-group editor opened successfully.
+
+## Outstanding limits and findings
+
+- Upgrade buttons remain alert placeholders rather than a Shopify billing flow. Filter-group Favorites remains unimplemented in source.
+- Theme Setup reports Unable to verify for several themes. No theme installation, reversion or theme-file changes were performed.
+- This is not exhaustive live CRUD certification of every rule, CSV batch, scheduling combination, filter type or external integration. Sort priority, stock membership, unavailable-variant filtering and scrolling have regression coverage, but were not all proved with new independent live comparisons.
+- Search loading showed skeletons while requests completed. This audit did not establish a cold-load performance SLA.
+
+## Historical audit — 23 September 2026
 
 The admin interface was reviewed across Dashboard, Filters, Search, Collections, and Settings. This is a local code and browser audit, not a certification of the deployed Shopify app.
 

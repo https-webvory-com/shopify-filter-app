@@ -1,5 +1,6 @@
 import prisma from "../db.server";
 import meiliClient from "./meiliClient.server";
+import { invalidateShop } from "./shopCache.server";
 
 /**
  * Fetch all synonyms for a shop and sync them to Meilisearch.
@@ -37,7 +38,10 @@ export async function syncSynonymsToMeilisearch(shop) {
     console.log(`Syncing Synonyms for ${shop}:`, synonymDict);
     
     // Update Meilisearch
-    await meiliClient.index("products").updateSynonyms(synonymDict);
+    const task = await meiliClient.index("products").updateSynonyms(synonymDict);
+    const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 60000, interval: 100 });
+    if (completed.status !== 'succeeded') throw new Error('Synonym indexing failed');
+    await invalidateShop(shop);
     return true;
   } catch (error) {
     console.error("Error syncing synonyms to Meilisearch:", error);
