@@ -5,6 +5,7 @@ import {
   useSubmit,
   useNavigation,
   useFetcher,
+  useActionData,
   redirect,
 } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -103,20 +104,23 @@ export const action = async ({ request, params }) => {
       collections: JSON.parse(collectionsJSON),
       applyToAll,
       products: JSON.parse(productsJSON),
-      status: true,
     };
 
     let savedRule;
     if (ruleId === "new") {
+      if (!Array.isArray(data.products) || !data.products.length || (!applyToAll && (!Array.isArray(data.collections) || !data.collections.length))) {
+        return Response.json({ error: "Select at least one product and a collection, or All collections." }, { status: 400 });
+      }
       savedRule = await prisma.pinnedProductRule.create({ data });
     } else {
       const original = await prisma.pinnedProductRule.findFirst({ where: { id: ruleId, shop, ruleType: 'collection' } });
+      if (!original) return Response.json({ error: "Pinning rule not found." }, { status: 404 });
       if (original && (Boolean(original.applyToAll) !== applyToAll || JSON.stringify(original.collections || []) !== JSON.stringify(data.collections))) {
         data.collectionSortKey = null;
         data.collectionSortPosition = null;
       }
       savedRule = await prisma.pinnedProductRule.update({
-        where: { id: ruleId, shop },
+        where: { id: ruleId, shop, ruleType: 'collection' },
         data,
       });
     }
@@ -181,6 +185,10 @@ export default function PinningEditor() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const actionData = useActionData();
+  useEffect(() => {
+    if (actionData?.error) shopify.toast.show(actionData.error, { isError: true });
+  }, [actionData, shopify]);
 
   const initialCollections =
     rule?.collections || defaultParams?.collections || [];
@@ -511,6 +519,10 @@ export default function PinningEditor() {
   };
 
   const handleSave = () => {
+    if (!rule && (!products.length || (!applyToAll && !selectedCollections.length))) {
+      shopify.toast.show("Select at least one product and a collection, or All collections.", { isError: true });
+      return;
+    }
     const formData = new FormData();
     formData.append("intent", "save");
     formData.append("name", name);
@@ -521,7 +533,6 @@ export default function PinningEditor() {
     formData.append("products", JSON.stringify(products));
 
     submit(formData, { method: "POST" });
-    shopify.toast.show("Pinning saved successfully");
   };
 
   return (

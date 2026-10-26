@@ -3042,3 +3042,11 @@ facet-filters-form,
   color: #8a3b1e !important;
   font-weight: 500 !important;
 }
+/* Empty or disabled groups must not leave a drawer, trigger, or sidebar gap. */
+body.cfp-no-filters #cfp-drawer-trigger-btn,
+body.cfp-no-filters #cfp-sidebar,
+body.cfp-no-filters #cfp-horizontal-filters,
+body.cfp-no-filters #cfp-horizontal-extra-filters,
+body.cfp-no-filters #cfp-overlay {
+  display: none !important;
+}

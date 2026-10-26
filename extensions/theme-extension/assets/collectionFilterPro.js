@@ -1665,7 +1665,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     let html = '';
     let horizontalPills = [];
 
-    settings.forEach((setting, index) => {
+    (settings || []).forEach((setting, index) => {
       if (!setting.isEnabled) return;
 
       let type = setting.filterType || setting.type;
@@ -2240,6 +2240,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         );
       })();
 
+      if (!groupContent.trim()) return;
       const groupId = `cfp-group-${setting.id || index}-${type}-${key || ''}`;
       let isCollapsed = isHorizontalPopoverLayout() ? true : window.matchMedia('(max-width: 768px)').matches ? adv.mobileCollapsed : adv.desktopCollapsed;
       if (cfpGroupToggleState[groupId] !== undefined) {
@@ -2300,6 +2301,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     });
 
 
+    const hasFilters = horizontalPills.length > 0;
+    document.body.classList.toggle('cfp-no-filters', !hasFilters);
+    if (!hasFilters) closeSidebar();
     const groupsContainer = body.querySelector('#cfp-sidebar__filter-groups');
     if (groupsContainer) {
       groupsContainer.innerHTML = html;

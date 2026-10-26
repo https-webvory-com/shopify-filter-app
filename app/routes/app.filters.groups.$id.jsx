@@ -469,7 +469,7 @@ export const action = async ({ request, params }) => {
     }
 
     await prisma.filterGroupItem.update({
-      where: { id: filterId },
+      where: { id: filterId, filterGroupId },
       data: {
         ...(filterType ? { filterType } : {}),
         ...(filterKey !== undefined ? { filterKey } : {}),
@@ -485,7 +485,7 @@ export const action = async ({ request, params }) => {
   if (intent === "toggleFilter") {
     const filterId = formData.get("filterId");
     const current = await prisma.filterGroupItem.findUnique({
-      where: { id: filterId },
+      where: { id: filterId, filterGroupId },
       select: { isEnabled: true, label: true },
     });
     if (!current)
@@ -496,7 +496,7 @@ export const action = async ({ request, params }) => {
 
     const newStatus = !current.isEnabled;
     await prisma.filterGroupItem.update({
-      where: { id: filterId },
+      where: { id: filterId, filterGroupId },
       data: { isEnabled: newStatus },
     });
 
@@ -511,7 +511,7 @@ export const action = async ({ request, params }) => {
 
   if (intent === "deleteFilter") {
     const filterId = formData.get("filterId");
-    await prisma.filterGroupItem.delete({ where: { id: filterId } });
+    await prisma.filterGroupItem.delete({ where: { id: filterId, filterGroupId } });
     await invalidateShop(shop);
     return { success: true, intent };
   }
@@ -519,7 +519,7 @@ export const action = async ({ request, params }) => {
   if (intent === "duplicateFilter") {
     const filterId = formData.get("filterId");
     const source = await prisma.filterGroupItem.findUnique({
-      where: { id: filterId },
+      where: { id: filterId, filterGroupId },
     });
     if (!source) return { success: false };
 
@@ -548,7 +548,7 @@ export const action = async ({ request, params }) => {
     await prisma.$transaction(
       orderedIds.map((filterId, index) =>
         prisma.filterGroupItem.update({
-          where: { id: filterId },
+          where: { id: filterId, filterGroupId },
           data: { order: index },
         }),
       ),

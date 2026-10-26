@@ -151,7 +151,7 @@ export const loader = async ({ request }) => {
     orderBy: { title: "asc" },
   });
 
-  return { groups, collections };
+  return { groups, collections, shop };
 };
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Action Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -338,7 +338,7 @@ export const action = async ({ request }) => {
 
   if (intent === "delete") {
     const id = formData.get("id");
-    await prisma.filterGroup.delete({ where: { id } });
+    await prisma.filterGroup.delete({ where: { id, shop } });
     await invalidateShop(shop);
     return { success: true, intent };
   }
@@ -346,11 +346,12 @@ export const action = async ({ request }) => {
   if (intent === "toggle") {
     const id = formData.get("id");
     const current = await prisma.filterGroup.findUnique({
-      where: { id },
+      where: { id, shop },
       select: { status: true },
     });
+    if (!current) return { success: false, error: "Filter group not found", intent };
     await prisma.filterGroup.update({
-      where: { id },
+      where: { id, shop },
       data: { status: !current.status },
     });
     await invalidateShop(shop);
@@ -360,7 +361,7 @@ export const action = async ({ request }) => {
   if (intent === "duplicate") {
     const id = formData.get("id");
     const source = await prisma.filterGroup.findUnique({
-      where: { id },
+      where: { id, shop },
       include: { collections: true, filters: true },
     });
     if (!source) return { success: false };
@@ -441,7 +442,20 @@ const INITIAL_COLUMNS = [
 ];
 
 export default function FilterGroups() {
-  const { groups, collections } = useLoaderData();
+  const { groups, collections, shop } = useLoaderData();
+  const [favoriteGroups, setFavoriteGroups] = useState([]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`cfp:favorite-filter-groups:${shop}`) || '[]');
+      setFavoriteGroups(Array.isArray(saved) ? saved.filter(id => typeof id === 'string') : []);
+    } catch { setFavoriteGroups([]); }
+  }, [shop]);
+  const toggleFavorite = id => {
+    const next = favoriteGroups.includes(id) ? favoriteGroups.filter(value => value !== id) : [...favoriteGroups, id];
+    try { localStorage.setItem(`cfp:favorite-filter-groups:${shop}`, JSON.stringify(next)); }
+    catch { shopify.toast.show("Unable to save favorites in this browser.", { isError: true }); return; }
+    setFavoriteGroups(next);
+  };
   const submit = useSubmit();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -563,7 +577,7 @@ export default function FilterGroups() {
     let matchesView = true;
     if (activeView === "active") matchesView = g.status === true;
     if (activeView === "inactive") matchesView = g.status === false;
-    if (activeView === "favorites") matchesView = false; // not implemented yet
+    if (activeView === "favorites") matchesView = favoriteGroups.includes(g.id);
     return matchesSearch && matchesView;
   });
 
@@ -1512,6 +1526,9 @@ export default function FilterGroups() {
                         if (col.id === "name") {
                           return (
                             <td key="name" style={{ padding: "18px 20px" }}>
+                              <button type="button" aria-label={`${favoriteGroups.includes(group.id) ? 'Remove' : 'Add'} ${group.name} ${favoriteGroups.includes(group.id) ? 'from' : 'to'} favorites`} aria-pressed={favoriteGroups.includes(group.id)} onClick={() => toggleFavorite(group.id)} style={{ background: 'none', border: 0, cursor: 'pointer', padding: '4px 8px', color: '#5B21B6' }}>
+                                {favoriteGroups.includes(group.id) ? '★' : '☆'}
+                              </button>
                               <button
                                 onClick={() =>
                                   navigate(`/app/filters/groups/${group.id}`)

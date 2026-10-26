@@ -210,7 +210,7 @@ export const action = async ({ request }) => {
       .filter(Boolean);
 
     await prisma.mergedValue.update({
-      where: { id },
+      where: { id, shop },
       data: { targetValue, sourceValues },
     });
     await invalidateShop(shop);
@@ -219,7 +219,7 @@ export const action = async ({ request }) => {
 
   if (intent === "delete") {
     const id = formData.get("id");
-    await prisma.mergedValue.delete({ where: { id } });
+    await prisma.mergedValue.delete({ where: { id, shop } });
     await invalidateShop(shop);
     return { success: true, intent };
   }
@@ -228,7 +228,7 @@ export const action = async ({ request }) => {
     const id = formData.get("id");
     const isActive = formData.get("isActive") === "true";
     await prisma.mergedValue.update({
-      where: { id },
+      where: { id, shop },
       data: { isActive },
     });
     await invalidateShop(shop);
