@@ -1,5 +1,8 @@
 import { useNavigate } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import prisma from "../db.server.js";
+import { connectMarketAvailability } from "../services/marketAvailability.server.js";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useFetcher, useRouteError } from "react-router";
@@ -12,7 +15,8 @@ export const loader = async ({ request }) => {
   try {
     const { session } = await authenticate.admin(request);
     const settings = await getFilterGlobalSettings(session.shop);
-    return Response.json({ settings });
+    const countryConnection = await prisma.marketStorefrontConnection.findUnique({where:{shop:session.shop},select:{countries:true}});
+    return Response.json({ settings, countryConnection });
   } catch (error) {
     console.error("LOADER ERROR:", error);
     throw error;
@@ -20,8 +24,15 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
+  if (formData.get('intent') === 'connect-country') {
+    try { return {success:true,...await connectMarketAvailability(session.shop,admin)}; }
+    catch (error) {
+      const safe=/^(Approve the Storefront|Unable to create the Storefront|Unable to verify enabled|The Storefront connection cannot see|Shopify country availability)/.test(error.message);
+      return Response.json({error:safe?error.message:'Unable to connect country availability. Please retry.'},{status:400});
+    }
+  }
 
   const payload = {};
   for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
@@ -39,8 +50,34 @@ export const action = async ({ request }) => {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { settings } = useLoaderData();
+  const { settings, countryConnection } = useLoaderData();
   const fetcher = useFetcher();
+  const countryFetcher = useFetcher();
+  const countryProgress = useFetcher();
+  const appBridge = useAppBridge();
+  const [countryBusy,setCountryBusy] = useState(false);
+  const [countryError,setCountryError] = useState('');
+  const connectingCountry = countryBusy || countryFetcher.state !== 'idle';
+  useEffect(()=>{
+    if(countryConnection)countryProgress.load('/app/api/country-availability');
+  },[countryConnection]);
+  useEffect(()=>{
+    if(!countryConnection)return;
+    const timer=setInterval(()=>{
+      if(document.visibilityState==='visible'&&countryProgress.state==='idle')countryProgress.load('/app/api/country-availability');
+    },10000);
+    return ()=>clearInterval(timer);
+  },[countryConnection,countryProgress.state]);
+  const connectCountry = async () => {
+    if (connectingCountry) return;
+    setCountryBusy(true);setCountryError('');
+    try {
+      const result = await appBridge.scopes.request(['unauthenticated_read_product_listings']);
+      if(result.result!=='granted-all'||!result.detail?.granted?.includes('unauthenticated_read_product_listings')) throw Error('Approve read-only product listings access to enable country stock.');
+      countryFetcher.submit({intent:'connect-country'},{method:'POST'});
+    } catch(error) { setCountryError(error.message); }
+    finally { setCountryBusy(false); }
+  };
 
   const showOnlyInStock = fetcher.formData?.has("showOnlyInStock")
     ? fetcher.formData.get("showOnlyInStock") === "true"
@@ -140,7 +177,6 @@ export default function Settings() {
 
   return (
     <s-page heading="App Settings">
-      <button type="button" onClick={() => navigate('/app/settings/market-availability')}>Country availability</button>
       {fetcher.data?.error && <p role="alert" style={{color:'#b42318'}}>{fetcher.data.error}</p>}
       <ui-title-bar title="App Settings">
         <button variant="breadcrumb" onClick={() => navigate("/app/settings")}>
@@ -208,6 +244,10 @@ export default function Settings() {
             color: #4338ca;
             background: #e0e7ff;
           }
+          .country-progress-list {display:grid;gap:10px;max-height:300px;overflow:auto;margin:0;padding:0;list-style:none}
+          .country-progress-row {display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #ede9fe;font-size:13px}
+          .country-progress-row span {color:#6b7280}
+          .country-progress-row small {display:block;flex-basis:100%;color:#6d28d9}
           .int-toggle {
             position: relative;
             display: inline-block;
@@ -505,7 +545,33 @@ export default function Settings() {
               </div>
               {showQuickViewCollection && renderQuickViewOptions(false)}
             </div>
-            {/* Card 5: Wholesale Mode */}
+            {/* Card 5: Country availability */}
+            <div className="int-card">
+              <div className="int-header">
+                <span className="int-tag int-tag-inventory">MARKETS</span>
+                <span className="int-tag" style={{background:countryConnection?'#dcfce7':'#f3f4f6',color:countryConnection?'#166534':'#6b7280'}}>{countryConnection?'Connected':'Not connected'}</span>
+              </div>
+              <div>
+                <h3 className="int-title">Country availability</h3>
+                <p className="int-desc">Hide products unavailable in the shopper’s Shopify country, even when “Show only in-stock products” is off.</p>
+              </div>
+              <button className="quick-view-select" type="button" style={{width:'auto',alignSelf:'flex-start',padding:'10px 16px',color:'#6d28d9',fontWeight:600}} disabled={connectingCountry} aria-busy={connectingCountry} onClick={connectCountry}>{connectingCountry?'Connecting…':countryConnection?'Refresh connection and countries':'Connect country availability'}</button>
+              <p className="int-desc">{countryConnection?`Connected for ${countryConnection.countries.length} countries: ${countryConnection.countries.join(', ')}.`:'Approve read-only product listings access in Shopify. No API key needed.'} Stock and collection pages refresh in the background; completed updates appear on reload or the next action.</p>
+              {countryConnection&&<div className="quick-view-options">
+                <h4 className="int-title">Country preparation</h4>
+                {countryProgress.data?.error?<p className="int-desc" role="status">{countryProgress.data.error}</p>:!countryProgress.data?<p className="int-desc" role="status">Loading preparation status…</p>:<ul className="country-progress-list" aria-label="Country preparation status">
+                  {countryProgress.data.countries?.map(row=><li className="country-progress-row" key={row.country}>
+                    <strong>{new Intl.DisplayNames(['en'],{type:'region'}).of(row.country)} ({row.country})</strong>
+                    <span>{row.stockStatus==='checked'?'Stock checked':row.stockStatus==='checking'?'Checking stock…':'Stock check pending'}</span>
+                    {row.preparingCollections.map(collection=><small key={collection.id}>Preparing: {collection.title}</small>)}
+                  </li>)}
+                </ul>}
+                <p className="int-desc">Updates every 10 seconds while this page is visible. “Stock checked” confirms country availability only. Collection names appear while the worker prepares them; other collections may still be waiting.</p>
+              </div>}
+              {(countryError||countryFetcher.data?.error)&&<p className="int-desc" style={{color:'#b42318'}} role="alert">{countryError||countryFetcher.data.error}</p>}
+              {!countryError&&!countryFetcher.data?.error&&countryFetcher.data?.success&&<p className="int-desc" style={{color:'#166534'}} role="status">Connected. Preparing availability for {countryFetcher.data.countries} countries.</p>}
+            </div>
+            {/* Card 6: Wholesale Mode */}
             <div className="int-card">
               <div className="int-header">
                 <span

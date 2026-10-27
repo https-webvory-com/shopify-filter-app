@@ -22,6 +22,19 @@ function fixture(options={}){
  return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time};
 }
 
+test('All products publishes 50 cards and serves two country-isolated 25-card pages',async()=>{
+ const f=fixture();
+ assert.equal(await f.publish({request:f.request({collectionHandle:'all',limit:'50',responseProfile:'collection-cards-v1'}),collectionId:'all',collectionHandle:'all',marketAvailabilityVersion:'in-v1'}),true);
+ const request=f.request({collectionHandle:'all'});
+ const response=await f.store.get(request,{marketAvailabilityVersion:'in-v1'});
+ assert.equal(response.headers.get('X-CFP-Collection-Cards'),'published');
+ const first=await response.json();assert.equal(first.products.length,25);assert.equal(first.totalCount,70);
+ const second=await(await f.store.get(f.request({collectionHandle:'all',page:'2',rankingToken:first.rankingToken}),{marketAvailabilityVersion:'in-v1'})).json();
+ assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
+ assert.equal(await f.store.get(f.request({collectionHandle:'all',country:'US'}),{marketAvailabilityVersion:'us-v1'}),null);
+ assert.equal(await f.store.get(request,{marketAvailabilityVersion:'in-v2'}),null);
+});
+
 test('published pages from an older card presentation rebuild instead of retaining the old pinned variant',async()=>{
  const f=fixture();await f.publish();f.values.clear();
  const row=[...f.rows.values()][0],entry=decodePreparation(row.payload);delete entry.cardPresentationVersion;row.payload=encodePreparation(entry);

@@ -73,7 +73,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
  async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null}){
   const key=publishedCollectionKey(request);if(!key||new URL(request.url).searchParams.get('limit')!=='50')return false;
   const shop=new URL(request.url).searchParams.get('shop'),url=new URL(request.url);
-  url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));
+  if(collectionId!=='all'){url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));}
   const canonical=publishedCollectionKey(new Request(url)),aliases=new Set([key,canonical]);
   if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(publishedCollectionKey(new Request(url)));}
   const {rankingToken,...cards}=payload;

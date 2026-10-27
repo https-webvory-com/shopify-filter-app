@@ -7,7 +7,7 @@ import * as crypto from 'node:crypto';
 import * as utils from '../../app/utils/marketAvailability.js';
 
 async function fixture(){
-  const shop='fixture.myshopify.com',values=new Map(),changes=new Map(),jobs=new Map(),snapshots=new Map(),scans=[],scheduled=[],connectionWrites=[];
+  const shop='fixture.myshopify.com',values=new Map(),changes=new Map(),jobs=new Map(),snapshots=new Map(),scans=[],scheduled=[],connectionWrites=[],activeJobs=[];
   let connected=true,ids=['1','2'],duringScan=null,listReads=0,enabledCountries=['IN','US','GB'],failWarm=false;
   const record={shop,accessToken:'private-test-token',countries:['IN','US','GB'],locale:'en',updatedAt:new Date(1000)};
   const redis={
@@ -29,25 +29,46 @@ async function fixture(){
     async removeJobScheduler(){}
   }
   const database={
+    collection:{findMany:async({where})=>{assert.equal(where.shop,shop);return [{id:'gid://shopify/Collection/123',title:'Evening dresses'}];}},
     marketStorefrontConnection:{findUnique:async()=>connected?{...record,countries:[...record.countries]}:null,upsert:async value=>connectionWrites.push(value),updateMany:async({data})=>Object.assign(record,data)},
     marketAvailabilitySnapshot:{
+      findMany:async({where,select})=>{assert.equal(where.shop,shop);assert.equal(select.ids,undefined);return [...snapshots.values()].map(row=>Object.fromEntries(Object.keys(select).map(key=>[key,row[key]])));},
       findUnique:async({where,select})=>{if(!select)listReads++;const value=snapshots.get(where.shop_country.country);return !value?null:select?Object.fromEntries(Object.keys(select).map(k=>[k,value[k]])):value;},
       upsert:async({where,create})=>snapshots.set(where.shop_country.country,{...create,updatedAt:new Date()}),
     },
   };
   const mocks={
     'node:crypto':crypto,'bullmq':{Queue},'../db.server.js':{default:database},'./redis.server.js':{default:redis},
-    './queue.server.js':{redisOptions:{}},'./shopCache.server.js':{getCached:async(_key,read)=>read()},
+    './queue.server.js':{redisOptions:{},collectionRankingQueue:{getJobs:async()=>activeJobs}},'./shopCache.server.js':{getCached:async(_key,read)=>read()},
     '../utils/marketAvailability.js':{...utils,storefrontQuery:async()=>({localization:{availableCountries:enabledCountries.map(isoCode=>({isoCode})),language:{isoCode:'EN'}},products:{nodes:[{id:'gid://shopify/Product/1'}]}}),readMarketAvailability:async input=>{scans.push(input);if(duringScan)await duringScan();return [...ids];}},
   };
   const source=(await fs.readFile('app/services/marketAvailability.server.js','utf8')).replace("const {scheduleCatalogCollectionWarmups}=await import('./collectionPreparation.server.js');",'').replace("const {invalidateShop}=await import('./shopCache.server.js');",'');
-  const context={module:{exports:{}},exports:{},global:{},console,Date,invalidateShop:async()=>{},scheduleCatalogCollectionWarmups:async(...args)=>{scheduled.push(args);if(failWarm){failWarm=false;throw Error('warm queue unavailable');}},require:name=>{
+  const context={module:{exports:{}},exports:{},global:{},console,Date,URL,invalidateShop:async()=>{},scheduleCatalogCollectionWarmups:async(...args)=>{scheduled.push(args);if(failWarm){failWarm=false;throw Error('warm queue unavailable');}},require:name=>{
     if(!mocks[name])throw Error('Unexpected import '+name);
     const value=mocks[name];return value.default?{__esModule:true,...value}:value;
   }};
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,context);
-  return {service:context.module.exports,shop,values,changes,jobs,scans,scheduled,snapshots,record,connectionWrites,failWarmOnce:()=>failWarm=true,setCountries:value=>enabledCountries=value,setIds:value=>ids=value,onScan:fn=>duringScan=fn,disable:()=>connected=false,listReads:()=>listReads};
+  return {service:context.module.exports,shop,values,changes,jobs,scans,scheduled,snapshots,record,connectionWrites,activeJobs,failWarmOnce:()=>failWarm=true,setCountries:value=>enabledCountries=value,setIds:value=>ids=value,onScan:fn=>duringScan=fn,disable:()=>connected=false,listReads:()=>listReads};
 }
+
+test('admin progress separates stock checks from active collections without scans, scheduling or tenant leaks',async()=>{
+  const f=await fixture();
+  await f.service.processMarketAvailability({shop:f.shop,country:'IN'});
+  f.values.set(`marketStockLock:${f.shop}:US`,'worker');
+  f.activeJobs.push({data:{shop:f.shop,record:{collectionId:'123',url:`https://ranking.internal/api/filter?shop=${f.shop}&country=IN`}}},
+    {data:{shop:'other.myshopify.com',record:{collectionId:'123',url:'https://ranking.internal/api/filter?shop=other.myshopify.com&country=GB'}}});
+  const scans=f.scans.length,reads=f.listReads(),jobs=f.jobs.size;
+  const result=await f.service.getMarketAvailabilityProgress(f.shop);
+  assert.equal(result.countries.find(row=>row.country==='IN').stockStatus,'checked');
+  assert.equal(result.countries.find(row=>row.country==='IN').preparingCollections[0].title,'Evening dresses');
+  assert.equal(result.countries.find(row=>row.country==='US').stockStatus,'checking');
+  assert.equal(result.countries.find(row=>row.country==='GB').stockStatus,'pending');
+  assert.equal(result.countries.find(row=>row.country==='GB').preparingCollections.length,0);
+  assert.equal(f.scans.length,scans);assert.equal(f.listReads(),reads);assert.equal(f.jobs.size,jobs);
+  assert.ok(!JSON.stringify(result).includes('private-test-token'));
+  await f.service.invalidateMarketAvailability(f.shop,'1');
+  assert.equal((await f.service.getMarketAvailabilityProgress(f.shop)).countries.find(row=>row.country==='IN').stockStatus,'pending');
+});
 test('prepared country reads use lightweight proofs and do not call Shopify or load catalog ID lists',async()=>{
   const f=await fixture();assert.equal((await f.service.getMarketAvailabilityState(f.shop,'IN')).status,'pending');
   await f.service.processMarketAvailability({shop:f.shop,country:'IN'});

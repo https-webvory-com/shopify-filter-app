@@ -48,7 +48,7 @@ export function createCollectionLoadingSnapshots({database,redis,now=Date.now,ma
   }catch(error){report(error);return null;}
  }
  async function save({shop,kind,key,collectionId,aliases=[key],scopeKey,payload,expiresAt,validatedAt=now()}){
-  if(!validShop(shop)||!validKey(shop,kind,key)||!/^\d+$/.test(String(collectionId))||typeof payload!=='string'||!Number.isFinite(expiresAt)||expiresAt<=now()||!Number.isFinite(validatedAt)||validatedAt>now())return false;
+  if(!validShop(shop)||!validKey(shop,kind,key)||!/^(?:\d+|all)$/.test(String(collectionId))||typeof payload!=='string'||!Number.isFinite(expiresAt)||expiresAt<=now()||!Number.isFinite(validatedAt)||validatedAt>now())return false;
   if(scopeKey!==undefined&&(kind!=='ranking'||!validKey(shop,kind,scopeKey)||scopeKey===key))return false;
   aliases=[...new Set([key,...aliases,...(scopeKey?[scopeKey]:[])])];
   if(aliases.length>4||aliases.some(alias=>!validKey(shop,kind,alias)))return false;

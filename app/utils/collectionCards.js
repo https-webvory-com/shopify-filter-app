@@ -16,7 +16,7 @@ export function isPublicCollectionCards(request){
   /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(p.get('shop')||'')&&
   !!p.get('country')&&!!(p.get('locale')||p.get('language'))&&
   !!(p.get('collectionId')||p.get('collectionHandle'))&&
-  !['search','all'].includes(p.get('collectionHandle'))&&p.get('page')==='1'&&['25','50'].includes(p.get('limit'))&&
+  p.get('collectionHandle')!=='search'&&!(p.get('collectionHandle')==='all'&&p.has('collectionId'))&&p.get('page')==='1'&&['25','50'].includes(p.get('limit'))&&
   ['best-selling','bestselling'].includes(p.get('sortBy')||'best-selling')&&
   new Set(keys).size===keys.length&&keys.every(key=>publicKeys.has(key));
 }

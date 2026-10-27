@@ -146,6 +146,22 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   }
   if(!markets.size)return;
   const scopes=collectionIds?.map(id=>String(id).split('/').pop()).filter(id=>/^\d+$/.test(id));
+  // The virtual All products page has no Shopify Collection row to discover.
+  if(!collectionIds||collectionIds.includes('all'))for(const market of markets.values()){
+    const url=new URL(market);url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle','all');
+    const record=normalizeCollectionWarmup(shop,url);if(!record)continue;
+    const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
+    const job=await collectionRankingQueue.getJob(jobId);
+    if(job){const state=await job.getState();
+      if(['waiting','active','prioritized','delayed'].includes(state)){
+        if(state!=='active'&&(job.priority??job.opts?.priority??20)>priority)await job.changePriority({priority});
+        continue;
+      }
+      if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
+      await job.remove();
+    }
+    await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority,attempts:5,backoff:{type:'exponential',delay:10000}});
+  }
   let cursor;
   for(;;){
     const rows=await prisma.collection.findMany({where:{shop,...(scopes?.length?{id:{in:scopes.map(id=>'gid://shopify/Collection/'+id)}}:{})},select:{id:true},orderBy:{id:'asc'},take:100,

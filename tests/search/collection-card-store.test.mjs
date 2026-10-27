@@ -21,6 +21,17 @@ function fixture(options={}){
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
 
+test('All products reuses country-scoped cards without an invented Shopify collection ID',async()=>{
+ const f=fixture();f.spec.collectionId=null;
+ const request=new Request(f.request.url.replace('collectionHandle=one','collectionHandle=all'));
+ assert.equal(isPublicCollectionCards(request),true);
+ const snapshot=await f.store.begin({request,spec:f.spec,preparedKey:`collectionPreparedSequence:${f.spec.shop}:background-v2:`+'a'.repeat(64),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id','shop','status'],collectionHandle:'all'});
+ assert.ok(snapshot);await snapshot.finish(f.payload,'fp');
+ assert.equal((await(await f.store.get(request)).json()).products.length,2);
+ assert.equal(await f.store.get(new Request(request.url.replace('country=IN','country=US'))),null);
+ for(const extra of ['customer_tags=VIP','option_Color=Black','collectionId=1'])assert.equal(isPublicCollectionCards(new Request(request.url+'&'+extra)),false);
+});
+
 test('old card presentation snapshots cannot keep serving merchandising-selected pinned variants',async()=>{
  const f=fixture();await(await f.begin()).finish(f.payload,'fp');
  let key=collectionCardKey(f.request);if(f.values.get(key).startsWith('p1:'))key=f.values.get(key).slice(3);

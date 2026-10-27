@@ -323,7 +323,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       }else if(saveDurable){
         // Adopt already-ready Redis rankings on release without rebuilding or
         // extending their source freshness/expiry windows.
-        try{await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId).split('/').pop(),payload:raw,
+        try{await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId||'all').split('/').pop(),payload:raw,
           validatedAt:cached.preparedAt,expiresAt:now()+preparationLifetime*1000});}
         catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
       }
@@ -451,7 +451,7 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
       await redis.setex(preparationOrderFallbackKey(spec), preparationLifetime, key);
     }
     if(spec.retainForIdle===true&&saveDurable&&persist)try{
-      await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId).split('/').pop(),payload,
+      await saveDurable({shop:spec.shop,kind:'ranking',key,scopeKey:preparationSnapshotScopeKey(spec),collectionId:String(spec.collectionId||'all').split('/').pop(),payload,
         validatedAt:sourcePreparedAt??now(),expiresAt:now()+preparationLifetime*1000});
     }catch(error){report({event:'durable-write-unavailable',shop:spec.shop,error:error.name});}
     return { products: value.ids.length, refreshRequired: await productRevision(spec.shop,spec.collectionId,spec.retainForIdle===true) !== startedRevision ||

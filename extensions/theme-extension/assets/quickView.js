@@ -559,6 +559,23 @@ if (typeof window.CfpQuickView === 'undefined') {
       return url.href;
     }
 
+    displaySku(product, variant) {
+      const original = String(variant.sku || '').trim();
+      let value = original;
+      const suffixes = (product.options || []).filter(option => /^(color|colour|size)$/i.test(option.name || ''))
+        .map(option => String(variant.options?.[option.position - 1] || '').trim())
+        .filter(Boolean).sort((a, b) => b.length - a.length);
+      // Strip only suffixes proven by this variant's selected options. Keep
+      // hyphens belonging to the style number and leave unrelated SKUs intact.
+      while (suffixes.length) {
+        const index = suffixes.findIndex(suffix => value.toLowerCase().endsWith('-' + suffix.toLowerCase()));
+        if (index < 0) break;
+        const suffix = suffixes.splice(index, 1)[0];
+        value = value.slice(0, -suffix.length - 1);
+      }
+      return value || original;
+    }
+
     updateVariantDetails(product, goToSlide) {
       if (!product.variants || product.variants.length === 0) return;
       
@@ -597,8 +614,7 @@ if (typeof window.CfpQuickView === 'undefined') {
         // Update SKU
         const skuEl = this.modal.querySelector('.cfp-qv-sku');
         if (skuEl) {
-          const fullSku = matchingVariant.sku || '';
-          skuEl.textContent = fullSku;
+          skuEl.textContent = this.displaySku(product, matchingVariant);
         }
 
         // Update Image — search within the CAPPED carousel images, not the full product.images array

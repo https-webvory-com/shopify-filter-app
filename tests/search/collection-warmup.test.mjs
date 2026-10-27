@@ -154,7 +154,7 @@ test('configured public priorities warm before any visitor registry and reserve 
  const f=await fixture();f.seeds.push({shop:'new.myshopify.com',collectionHandle:'petite',country:'IN',locale:'en',sortBy:'best-selling'});
  await f.scheduleRegisteredCollectionWarmups();assert.equal(f.writes.find(w=>w[0]==='queue')[2].shop,'new.myshopify.com');
  await f.processCollectionWarmups('new.myshopify.com');
- const dispatched=f.writes.find(w=>w[0]==='queue'&&w[1]==='COLLECTION_RANKING_CATALOG');assert.ok(dispatched);const url=new URL(dispatched[2].record.url);assert.equal(url.searchParams.get('country'),'IN');assert.equal(url.searchParams.get('locale'),'en');assert.equal(url.searchParams.get('collectionHandle'),'petite');
+ const dispatched=f.writes.find(w=>w[0]==='queue'&&w[1]==='COLLECTION_RANKING_CATALOG'&&new URL(w[2].record.url).searchParams.get('collectionHandle')==='petite');assert.ok(dispatched);const url=new URL(dispatched[2].record.url);assert.equal(url.searchParams.get('country'),'IN');assert.equal(url.searchParams.get('locale'),'en');assert.equal(url.searchParams.get('collectionHandle'),'petite');
  assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
  await f.registerCollectionWarmup('new.myshopify.com','https://app/api/filter?shop=new.myshopify.com&collectionHandle=other&page=1');assert.equal(f.writes.find(w=>w[0]==='trim')[3],-40);
 });
@@ -168,7 +168,7 @@ test('handle, ID, page-size and transport aliases share a warmup context without
 test('legacy duplicate warmup records replay only one canonical preparation',async()=>{
  const f=await fixture(),base='https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionHandle=petite&country=IN&locale=en&page=1';
  for(const version of ['collection-v1','collection-v2'])f.records.push(JSON.stringify({url:base+'&responseProfile='+version,collectionId:'123'}));
- await f.processCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
+ await f.processCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue'&&new URL(w[2].record.url).searchParams.get('collectionHandle')!=='all').length,1);assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
 });
 
 test('catalog preparation covers unseen collections in public markets, with individual low priority deduplicated jobs',async()=>{
@@ -178,8 +178,9 @@ test('catalog preparation covers unseen collections in public markets, with indi
  f.records.push(JSON.stringify({url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=US&locale=en&page=1',collectionId:'1'}));
  f.records.push(JSON.stringify({url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=2&country=CA&page=1&customerTags=VIP',collectionId:'2'}));
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
- const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,410);
- assert.equal(new Set(jobs.map(w=>w[3].jobId)).size,410);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,412);
+ assert.equal(new Set(jobs.map(w=>w[3].jobId)).size,412);
+ assert.equal(jobs.filter(w=>new URL(w[2].record.url).searchParams.get('collectionHandle')==='all').length,2);
  for(const job of jobs){assert.equal(job[1],'COLLECTION_RANKING_CATALOG');assert.equal(job[3].priority,10);
   const url=new URL(job[2].record.url);assert.equal(url.origin,'https://ranking.internal');assert.equal(url.searchParams.get('shop'),'fixture.myshopify.com');
   assert.ok(['IN','US'].includes(url.searchParams.get('country')));assert.equal(url.searchParams.get('sortBy'),'best-selling');}
@@ -191,7 +192,7 @@ test('catalog preparation caps markets and never invents a public context withou
  const f=await fixture();f.catalog.push({shop:'fixture.myshopify.com',id:'123'});
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.length,0);
  for(const country of ['IN','US','CA','AU','GB','FR'])f.records.push(JSON.stringify({url:`https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=${country}&locale=en&page=1`,collectionId:'1'}));
- await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,4);
+ await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,8);
 });
 
 test('catalog jobs dispatch exactly their public context through the existing ranking worker lane',async()=>{
@@ -214,7 +215,7 @@ test('existing catalog jobs are promoted into the fair background lane without d
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
  const job=[...f.jobs.values()][0];job.opts.priority=20;
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
- assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,1);
+ assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,2);
 });
 
 test('a validated complete card probe yields without ranking setup, sessions or requeueing',async()=>{
@@ -241,7 +242,7 @@ test('recurring recent-page sweeps cannot jump ahead of unseen catalog work or d
  for(const id of ['1','2'])f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
  f.records.push(JSON.stringify({url:'https://ranking.internal/api/filter?shop='+shop+'&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'}));
  await f.scheduleCatalogCollectionWarmups(shop);
- const catalog=[...f.jobs.values()];assert.equal(catalog.length,2);
+ const catalog=[...f.jobs.values()];assert.equal(catalog.length,3);
  await f.processCollectionWarmups(shop);await f.processCollectionWarmups(shop);
  assert.ok([...f.jobs.values()].every(job=>job.opts.priority===10));
  assert.equal(f.writes.filter(w=>w[0]==='priority').length,0);
@@ -262,8 +263,9 @@ test('product updates precompute affected collections without any prior visitor 
  const f=await fixture();f.seeds.push({shop:'fixture.myshopify.com',collectionHandle:'seed',country:'IN',locale:'en'});
  for(const id of ['123','456'])f.catalog.push({shop:'fixture.myshopify.com',id:'gid://shopify/Collection/'+id});
  await f.processCollectionWarmups('fixture.myshopify.com',['123','all']);
- const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,2);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,3);
  const catalog=jobs.find(w=>w[2].record.collectionId==='123');assert.ok(catalog);assert.equal(catalog[3].priority,10);
+ assert.ok(jobs.some(w=>new URL(w[2].record.url).searchParams.get('collectionHandle')==='all'));
  assert.equal(jobs.some(w=>w[2].record.collectionId==='456'),false);
 });
 
@@ -299,7 +301,7 @@ test('catalog jobs use bounded exponential retries while recent warmups still fi
  f.setResponse((_request,context)=>context.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'miss'}}):Response.json({warmup:true}));
  await f.processCollectionWarmups('fixture.myshopify.com');
  assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
- const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,2);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,3);
  assert.equal(jobs[0][3].attempts,5);assert.equal(jobs[0][3].backoff.type,'exponential');assert.equal(jobs[0][3].backoff.delay,10000);
- await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,2);
+ await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,3);
 });

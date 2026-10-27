@@ -67,6 +67,15 @@ test('missing-input population runs only in the worker while visitors keep a bou
  assert.deepEqual(f.rankingCalls.at(-1).spec.query,filtered.query);
 });
 
+test('All products filtered ranking can use direct facts without requiring a nonexistent native collection order',async()=>{
+ const f=await fixture();
+ const spec={shop:'owned.myshopify.com',collectionId:null,retainForIdle:false,directFiltered:true,sortBy:'best-selling',needsShopifyOrder:false,orderedIds:null,query:{q:'',filter:["shop = 'owned.myshopify.com'","option_Color = 'Red'"]},rule:{conditions:[]},mergedValues:[]};
+ assert.deepEqual(await f.service.prepareCollectionFromFacts(spec),{ids:['1'],metadata:{}});
+ assert.deepEqual(f.rankingCalls[0].spec.query,spec.query);
+ assert.equal(f.jobs.length,0);assert.equal(f.writes.length,0);
+ assert.equal(await f.service.prepareCollectionFromFacts({...spec,needsShopifyOrder:true}),null,'real collections still require a native order');
+});
+
 test('existing prerequisite jobs are promoted without duplicating the job',async()=>{
  const f=await fixture(),promotions=[];
  f.setExisting({opts:{priority:10},getState:async()=>'prioritized',changePriority:async options=>promotions.push(options.priority)});

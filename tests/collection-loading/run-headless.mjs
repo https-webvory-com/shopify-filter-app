@@ -492,6 +492,16 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
+  await test('short four-card collections do not reserve blank space above the footer',async()=>{
+    for(const count of [4]){
+      await control({reset:true,productCount:count,precompute:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      const result=await evaluate(`(()=>{const app=document.querySelector('.cfp-v1-app-container'),grid=document.getElementById('cfp-products-container');return {minimum:getComputedStyle(app).minHeight,height:app.getBoundingClientRect().height,gap:app.getBoundingClientRect().bottom-grid.getBoundingClientRect().bottom,cards:document.querySelectorAll('.cfp-product-card:not(.cfp-skeleton-card)').length};})()`);
+      assert.equal(result.minimum,'0px');assert.equal(result.cards,count);
+      assert.ok(result.gap<150,'Short collections should follow content height: '+JSON.stringify(result));
+    }
+    return {fourCards:true};
+  });
   await test('two filter selections finish with the ranking worker paused using exact direct preparation',async()=>{
     const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}},{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
     await control({reset:true,productCount:30,precompute:true,hold:true,directFacts:true,early:true,filterSettings,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});

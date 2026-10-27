@@ -96,7 +96,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    let entry;try{entry=decodePreparation(raw);}catch{return null;}
    if((entry?.marketAvailabilityVersion??null)!==marketAvailabilityVersion)return null;
    controller.signal.throwIfAborted();
-   if(entry?.version!==1||entry.policyVersion!==2||entry.cardPresentationVersion!==collectionCardPresentationVersion||entry.shop!==shop||!/^\d+$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
+   if(entry?.version!==1||entry.policyVersion!==2||entry.cardPresentationVersion!==collectionCardPresentationVersion||entry.shop!==shop||! /^(?:\d+|all)$/.test(entry.collectionId)||!sourceValid(shop,entry.preparedKey)||!Array.isArray(entry.attributes)||!entry.validationFingerprint||!entry.payload?.products||!Number.isFinite(entry.at)||now()-entry.at>=lifetime*1000)return null;
    if(!hasUsableExtraFacets(entry.payload))return null;
    if(!hasUsableSaleFacets(entry.payload))return null;
    if(!hasUsableProductTitleFacets(entry.payload))return null;
@@ -146,8 +146,9 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true,marketAvailabilityVersion:retainedEntry.marketAvailabilityVersion};
    preparedKey=retainedEntry.preparedKey;
   }catch{return null;}
-  const key=collectionCardKey(request),shop=spec?.shop,collectionId=clean(spec?.collectionId);
-  if(!key||spec?.retainForIdle!==true||!/^\d+$/.test(collectionId)||!sourceValid(shop,preparedKey))return null;
+  const key=collectionCardKey(request),shop=spec?.shop,collectionId=clean(spec?.collectionId|| (collectionHandle==='all'?'all':''));
+  if(!key||spec?.retainForIdle!==true||!/^(?:\d+|all)$/.test(collectionId)||!sourceValid(shop,preparedKey))return null;
+  if(collectionId==='all'&&new URL(request.url).searchParams.get('collectionHandle')!=='all')return null;
   try{
    const external=retainedEntry?.external??collectionHasExternalCandidates(spec);
    const identity={shop,collectionId,preparedKey,external};
@@ -170,7 +171,9 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);
-     const url=new URL(request.url);url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',collectionId);aliases.add(collectionCardKey(new Request(url)));
+     const url=new URL(request.url);
+     if(collectionId!=='all'){url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',collectionId);}
+     aliases.add(collectionCardKey(new Request(url)));
      const canonical=collectionCardKey(new Request(url));
      if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(collectionCardKey(new Request(url)));}
      // Persist one payload per collection/market. Handle aliases are small

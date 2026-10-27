@@ -2284,7 +2284,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}" data-multiple="true" ${!navigation && !config.multipleSelection ? 'data-single-select="true"' : ''}>
           <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
             <span>${setting.label}</span>
-            ${hasActivePillSelections ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
             <svg class="cfp-pill-chevron" viewBox="0 0 20 20" width="12" height="12"><path d="M5 8l5 5 5-5z"/></svg>
           </button>
           <div class="cfp-horizontal-pill__popover" id="${hPopoverId}">

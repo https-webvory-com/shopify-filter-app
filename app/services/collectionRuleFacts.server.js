@@ -62,7 +62,7 @@ export async function withCollectionRuleFacts(documents){
 export async function prepareCollectionFromFacts(spec,{populate=false}={}){
  if(!collectionFactsEnabled(spec.shop)||(spec.retainForIdle!==true&&spec.directFiltered!==true)||
   !['best-selling','bestselling','price-ascending','price-descending','title-ascending','title-descending','created-ascending','created-descending'].includes(spec.sortBy))return null;
- if(['best-selling','bestselling'].includes(spec.sortBy)&&(!spec.needsShopifyOrder||!Array.isArray(spec.orderedIds)))return null;
+ if(spec.needsShopifyOrder&&!Array.isArray(spec.orderedIds))return null;
  const conditions=[...(spec.rule?.conditions||[]),...(spec.rule?.ruleGroups||[]).flatMap(g=>g.conditions||[])];
  const scalar=new Set(['Tags','Id','ID','id','Vendor','Product type','Product','Price','Available','Date','Rating']);
  if(conditions.some(c=>!scalar.has(c.field)&&!isVariantCondition(c)))return null;

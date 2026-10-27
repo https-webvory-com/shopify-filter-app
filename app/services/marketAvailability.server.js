@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {Queue} from 'bullmq';
 import prisma from '../db.server.js';
 import redis from './redis.server.js';
-import {redisOptions} from './queue.server.js';
+import {redisOptions,collectionRankingQueue} from './queue.server.js';
 import {getCached} from './shopCache.server.js';
 import {readMarketAvailability,storefrontQuery,stockEpochKey,stockChangesKey,availabilityVersion,validateMarketContext} from '../utils/marketAvailability.js';
 
@@ -25,6 +25,33 @@ async function context(shop){
   return {record,epoch,identity:hash(record.accessToken+':'+generation)};
 }
 const stateKey=(shop,country,identity,epoch)=>`marketStockState:${shop}:${country}:${identity}:${epoch}`;
+// Admin-only observation: do not enqueue work or read product ID lists.
+export async function getMarketAvailabilityProgress(shop){
+  const current=await context(shop);
+  if(!current)return {countries:[]};
+  const [snapshots,activeJobs]=await Promise.all([
+    prisma.marketAvailabilitySnapshot.findMany({where:{shop},select:{country:true,connection:true,epoch:true,updatedAt:true}}),
+    collectionRankingQueue.getJobs(['active'],0,49),
+  ]);
+  const active=activeJobs.flatMap(job=>{
+    if(job.data?.shop!==shop||!job.data?.record?.url)return [];
+    try{
+      const url=new URL(job.data.record.url);
+      if(url.searchParams.get('shop')!==shop)return [];
+      const country=url.searchParams.get('country'),id=String(job.data.record.collectionId||'').split('/').pop();
+      return /^[A-Z]{2}$/.test(country||'')&&/^\d+$/.test(id)?[{country,id}]:[];
+    }catch{return [];}
+  });
+  const collections=active.length?await prisma.collection.findMany({where:{shop,id:{in:active.map(row=>'gid://shopify/Collection/'+row.id)}},select:{id:true,title:true}}):[];
+  const countries=await Promise.all(current.record.countries.map(async country=>{
+    const saved=snapshots.find(row=>row.country===country);
+    const ready=saved?.connection===current.identity&&saved.epoch===current.epoch&&Date.now()-new Date(saved.updatedAt).getTime()<900000;
+    const preparing=Boolean(await redis.get(`marketStockLock:${shop}:${country}`));
+    return {country,stockStatus:ready?'checked':preparing?'checking':'pending',lastCheckedAt:saved?.updatedAt||null,
+      preparingCollections:active.filter(row=>row.country===country).map(row=>({id:row.id,title:collections.find(value=>value.id==='gid://shopify/Collection/'+row.id)?.title||'Collection '+row.id}))};
+  }));
+  return {countries};
+}
 export async function scheduleMarketAvailability(shop,country){
   validateMarketContext(shop,country);
   const epoch=await redis.get(stockEpochKey(shop))||'0';

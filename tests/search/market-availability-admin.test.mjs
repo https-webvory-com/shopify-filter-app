@@ -27,3 +27,22 @@ test('country setup does not expose database errors containing credentials',asyn
   const response=await r.action({request:new Request('https://fixture/app',{method:'POST'})});
   assert.equal(response.status,400);assert.ok(!(await response.text()).includes('private-test-token'));
 });
+
+test('progress endpoint uses the authenticated tenant and prevents shared caching',async()=>{
+  const r=await loadModule('app/routes/app.api.country-availability.jsx',{
+    '../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},
+    '../services/marketAvailability.server.js':{getMarketAvailabilityProgress:async tenant=>{assert.equal(tenant,shop);return {countries:[{country:'IN',stockStatus:'pending',preparingCollections:[]}]};}},
+  });
+  const response=await r.loader({request:new Request('https://fixture/app/api/country-availability?shop=foreign.myshopify.com')});
+  assert.equal(response.headers.get('Cache-Control'),'no-store');
+  assert.equal((await response.json()).countries[0].country,'IN');
+});
+
+test('progress failures return safe feedback instead of infrastructure details',async()=>{
+  const r=await loadModule('app/routes/app.api.country-availability.jsx',{
+    '../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},
+    '../services/marketAvailability.server.js':{getMarketAvailabilityProgress:async()=>{throw Error('private credentials');}},
+  });
+  const response=await r.loader({request:new Request('https://fixture/app/api/country-availability')});
+  assert.equal(response.status,503);assert.ok(!(await response.text()).includes('private credentials'));
+});

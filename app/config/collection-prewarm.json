@@ -1,5 +1,12 @@
 [
   {
+    "shop": "collection-filter-pro.myshopify.com",
+    "collectionHandle": "all",
+    "country": "US",
+    "locale": "en",
+    "sortBy": "best-selling"
+  },
+  {
     "shop": "thedressoutlet.myshopify.com",
     "collectionHandle": "petite-mother-of-the-bride-dresses",
     "country": "IN",
