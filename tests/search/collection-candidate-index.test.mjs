@@ -56,6 +56,21 @@ test('a filtered collection can browse its bounded matching candidates before ra
  assert.deepEqual(f.calls.find(call=>call.type==='browse').filter,spec.query.filter);
 });
 
+test('country stock is intersected after a bounded collection browse without changing exact IDs',async()=>{
+ const m=await loadModule('app/services/merchandising.server.js',{'../db.server.js':{default:{}}});
+ const f=fixture(1200),eligible=['2','4','6','1000'];
+ const marketClause='id IN '+JSON.stringify(eligible);
+ const spec={...f.spec,retainForIdle:false,directFiltered:true,marketAvailabilityVersion:'proof',
+  marketFilterIndex:f.spec.query.filter.length,
+  query:{...f.spec.query,filter:[...f.spec.query.filter,marketClause]}};
+ const deps={prisma:{},arrange:m.applyMerchandisingRules,comparator:m.createMerchandisingComparator};
+ const baseline=await prepareCollectionRanking(spec,{...deps,index:f.index});f.calls.length=0;
+ const actual=await prepareCollectionRanking(spec,{...deps,index:createCollectionCandidateIndex(f.index,spec,{browseConcurrency:4})});
+ assert.deepEqual(actual,baseline);
+ assert.ok(f.calls.filter(call=>call.type==='browse').every(call=>!call.filter.includes(marketClause)));
+ assert.equal(f.calls.filter(call=>call.type==='search').length,0);
+});
+
 test('distinct settings, unavailable browse, oversized proofs and unstable scans fall back to canonical search',async()=>{
  for(const scenario of ['distinct','displayed','error','bytes','count','duplicates','truncated','outside']){
   const f=fixture(scenario==='outside'?0:30);const options={...f.spec.query,attributesToRetrieve:['id'],limit:10000,offset:0};

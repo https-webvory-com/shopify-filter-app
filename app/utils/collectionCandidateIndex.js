@@ -14,9 +14,25 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
   // Search distinctness cannot be reproduced with a filtered document browse.
   if(settings.distinctAttribute||Array.isArray(settings.displayedAttributes)&&!settings.displayedAttributes.includes('*'))throw Error('Collection search settings require canonical search');
   const native=new Set(spec.orderedIds.map(clean)),documents=[],seen=new Set(),outside=[];
+  // Country stock is already a versioned, verified ID set. Sending the whole
+  // storewide list into every Meili candidate browse makes a collection filter
+  // expensive. Apply that one predicate after the collection/filter browse;
+  // the canonical search fallback retains its original complete filter.
+  let browseFilter=options.filter,countryEligible=null;
+  const marketIndex=spec.marketFilterIndex;
+  if(spec.directFiltered&&spec.marketAvailabilityVersion&&Number.isInteger(marketIndex)&&
+     Array.isArray(options.filter)&&options.filter[marketIndex]===spec.query.filter?.[marketIndex]){
+   const clause=options.filter[marketIndex];
+   if(typeof clause==='string'&&clause.startsWith('id IN ['))try{
+    const ids=JSON.parse(clause.slice(6));
+    if(Array.isArray(ids)&&ids.every(id=>typeof id==='string'&&/^\d+$/.test(id))){
+     countryEligible=new Set(ids);browseFilter=options.filter.filter((_,i)=>i!==marketIndex);
+    }
+   }catch{/* Keep the canonical query when the clause is not a proven ID list. */}
+  }
   let total,bytes=0;
   const width=Number.isInteger(browseConcurrency)?Math.max(1,Math.min(4,browseConcurrency)):1;
-  const read=offset=>index.getDocuments({filter:options.filter,fields:options.attributesToRetrieve,limit:1000,offset});
+  const read=offset=>index.getDocuments({filter:browseFilter,fields:options.attributesToRetrieve,limit:1000,offset});
   function accept(page,offset){
    signal?.throwIfAborted();
    if(!Array.isArray(page.results)||!Number.isSafeInteger(page.total)||page.total<0||
@@ -27,7 +43,9 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
    for(const product of page.results){
     const id=clean(product.id);
     if(!id||id==='undefined'||seen.has(id))throw Error('Invalid collection candidate browse');
-    seen.add(id);documents.push(product);if(!native.has(id))outside.push(id);
+    seen.add(id);
+    if(countryEligible&&!countryEligible.has(id))continue;
+    documents.push(product);if(!native.has(id))outside.push(id);
     // This path cannot prove a larger outside order. Stop immediately rather
     // than browsing every remaining page and then repeating a canonical scan.
     if(outside.length>1000)throw Error('Collection candidate browse needs canonical search');
@@ -46,7 +64,7 @@ export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*10
     accept(pages[i].value,offsets[i]);
    }
   }
-  if(documents.length!==total||total>(settings.pagination?.maxTotalHits??1000)||outside.length>1000)throw Error('Collection candidate browse needs canonical search');
+  if(seen.size!==total||total>(settings.pagination?.maxTotalHits??1000)||outside.length>1000)throw Error('Collection candidate browse needs canonical search');
   if(outside.length){
    const filters=[...(Array.isArray(options.filter)?options.filter:options.filter?[options.filter]:[]),`id IN ${JSON.stringify(outside)}`];
    const result=await index.search('',{...options,filter:filters,offset:0,limit:outside.length,attributesToRetrieve:['id']},{signal:signal||AbortSignal.timeout(30000)});

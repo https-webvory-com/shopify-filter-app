@@ -517,6 +517,7 @@ export const loader = async ({ request, context }) => {
     const marketIds=marketVersion?await getMarketAvailableProductIds(shop,marketCountry,marketVersion):null;
     if(marketVersion&&!marketIds)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
     const marketEligible=marketIds?new Set(marketIds):null;
+    const marketFilterIndex=marketIds?baseFilters.length:null;
     if(marketIds)baseFilters.push(marketIdsFilter(marketIds));
     if (globalSettings?.showOnlyInStock&&!marketEligible) {
       baseFilters.push(`available = true`);
@@ -902,6 +903,7 @@ export const loader = async ({ request, context }) => {
       preparedSpec = {
         pinEligibilityVersion: 2,
         ...(marketVersion?{marketAvailabilityVersion:marketVersion}:{}),
+        ...(userHasFilters&&marketIds?{marketFilterIndex}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
