@@ -202,6 +202,22 @@ window.runTargetedAudit = async () => {
       "Add merge value did not open its dialog",
     );
   });
+  await test("rule saves and deletes keep a visible loader until the server responds", async () => {
+    await window.auditMount("/app/search/synonyms");
+    await click(findText("Add New Synonym", "button"));
+    const inputs = document.querySelectorAll(".modal-content input.form-input");
+    await fill(inputs[0], "gown");
+    await fill(inputs[1], "dress");
+    await click(findText("Save Synonym", ".modal-content button"));
+    assert(document.querySelector('[role="status"]')?.textContent.includes("Saving changes"), "Save loader disappeared before completion");
+    await wait(500);
+    assert(!document.querySelector('[role="status"]'), "Save loader remained after completion");
+    await click(document.querySelector('button[title="Delete Synonym"]'));
+    await click(findText("Delete", ".modal-content button"));
+    assert(document.querySelector('[role="status"]')?.textContent.includes("Deleting rule"), "Delete loader disappeared before completion");
+    await wait(500);
+    assert(!document.querySelector('[role="status"]'), "Delete loader remained after completion");
+  });
   window.auditTargetedResults = results;
   return results;
 };
