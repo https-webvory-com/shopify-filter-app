@@ -216,7 +216,10 @@ export const loader = async ({ request, context }) => {
     }
     
     const textSearchQuery=parsedQuery?.skuProductIds?.length?'':searchQuery;
-    let tier1SearchQuery = parsedQuery && parsedQuery.hasFilters ? parsedQuery.remainingQuery : textSearchQuery;
+    // Search results describe every product matching the shopper's words.
+    // Parsing "cocktail dress" as a product type must not hide products whose
+    // title matches but whose Shopify product type differs.
+    let tier1SearchQuery = isSearch ? textSearchQuery : parsedQuery && parsedQuery.hasFilters ? parsedQuery.remainingQuery : textSearchQuery;
 
     // ── 1. Parallel fetch: stable shop config (all cached) ─────────────
     // These 3 change only when admin saves settings → safe to cache 60s
@@ -691,13 +694,13 @@ export const loader = async ({ request, context }) => {
     const ruleMeiliFilters = !sortOverMerchandising && !userHasFilters ? buildMeiliRuleFilter(activeRule?.conditions) : [];
     
     // We activate Tier 1 strict filtering if we have Merchandising Rules OR Query Parser Filters
-    const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || queryParserMeiliFilters.length > 0;
+    const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || (!isSearch && queryParserMeiliFilters.length > 0);
 
     const queries = [];
 
     // Query A1: Tier 1 Boosted Rule Products OR Strict Parsed Query Products
     const tier1Filter = hasTier1StrictFilters 
-      ? [...allFiltersList, ...ruleMeiliFilters, ...queryParserMeiliFilters]
+      ? [...allFiltersList, ...ruleMeiliFilters, ...(!isSearch ? queryParserMeiliFilters : [])]
       : allFiltersList;
 
     const mainQuery = {
