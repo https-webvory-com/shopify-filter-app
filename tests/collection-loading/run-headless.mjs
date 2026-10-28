@@ -741,6 +741,16 @@ try{
       assert.equal(await evaluate("!!document.querySelector('.cfp-breadcrumb-chip')"),enabled,'active attribute breadcrumbs');
     }
   });
+  await test('selected color breadcrumb shows only the bold color name',async()=>{
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
+    await control({reset:true,hold:false,productCount:30,filterSettings,globalSettings:{desktopFilterLayout:'vertical',showAttributeBasedBreadcrumb:true}});
+    await navigate('?option_Color=Blue');
+    await wait("document.querySelector('.cfp-breadcrumb-chip--color .cfp-breadcrumb-color')?.textContent==='Blue'");
+    assert.equal(await evaluate("document.querySelector('.cfp-breadcrumb-chip--color').textContent.replace('×','').trim()"),'Blue');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-breadcrumb-color')).fontWeight"),'700');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('settings audit desktop layouts, responsive transitions and vertical scrolling',async()=>{
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}];
     for(const layout of ['horizontal','vertical','drawer']){

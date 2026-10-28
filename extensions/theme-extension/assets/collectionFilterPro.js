@@ -3208,9 +3208,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     let chipsHTML = '';
     let hasFilters = false;
 
-    const addChip = (label, type, val) => {
+    const escapeBreadcrumb = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const addChip = (label, type, val, isColor = false) => {
       hasFilters = true;
-      chipsHTML += `<span class="cfp-breadcrumb-chip" data-type="${type}" data-val="${val}">${label} <button class="cfp-breadcrumb-remove">&times;</button></span>`;
+      const chipLabel = isColor ? `<strong class="cfp-breadcrumb-color">${escapeBreadcrumb(label)}</strong>` : escapeBreadcrumb(label);
+      chipsHTML += `<span class="cfp-breadcrumb-chip${isColor ? ' cfp-breadcrumb-chip--color' : ''}" data-type="${escapeBreadcrumb(type)}" data-val="${escapeBreadcrumb(val)}">${chipLabel} <button type="button" class="cfp-breadcrumb-remove" aria-label="Remove ${escapeBreadcrumb(label)} filter">&times;</button></span>`;
     };
 
     const getCleanLabel = (type, val) => {
@@ -3245,7 +3247,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     activeFilters.tags.forEach(v => {
       const { label, cleanVal } = getCleanLabel('tag', v);
-      addChip(cleanVal, 'tag', v);
+      addChip(cleanVal, 'tag', v, /^colou?rs?$/i.test(label));
     });
 
     (activeFilters.titles || []).forEach(v => addChip(v, 'title', v));
@@ -3255,8 +3257,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     Object.keys(activeFilters.options).forEach(k => {
       activeFilters.options[k].forEach(v => {
         const { label, cleanVal } = getCleanLabel(`option-${k}`, v);
-        const displayLabel = label ? `${label}: ${cleanVal}` : cleanVal;
-        addChip(displayLabel, `option-${k}`, v);
+        const isColor = /^colou?rs?$/i.test(k) || /^colou?rs?$/i.test(label);
+        const displayLabel = isColor ? cleanVal : (label ? `${label}: ${cleanVal}` : cleanVal);
+        addChip(displayLabel, `option-${k}`, v, isColor);
       });
     });
 
