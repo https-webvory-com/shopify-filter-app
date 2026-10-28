@@ -503,6 +503,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   let lastFilterValues;
+  let lastMembershipResult = null;
   let pendingFilterScroll = false;
   let initialSearchSettingsRead = false;
   function scrollAfterFilterChange() {
@@ -604,16 +605,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
+      const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
       if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
-        const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
         queryParams.set('responseProfile',hasSelectedFilters&&!isLoadMore&&activeFilters.page===1?'fast-cards-v1':'collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
+      if(templateName==='search'&&hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
+        queryParams.set('responseProfile','search-fast-cards-v1');
+      if (templateName!=='search'&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
+        queryParams.set('membershipParentToken', lastMembershipResult.token);
+        queryParams.set('membershipParentQuery', lastMembershipResult.query);
+      }
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
       rankingKeyParams.delete('responseProfile');
+      rankingKeyParams.delete('membershipParentToken');
+      rankingKeyParams.delete('membershipParentQuery');
       rankingKeyParams.sort();
       rankingKey = rankingKeyParams.toString();
       const rankedCollection = templateName !== 'search' && activeFilters.sortBy !== 'manual';
@@ -664,6 +673,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (fetchSignal.aborted) return;
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
+        if (hasSelectedFilters && !isLoadMore && activeFilters.page===1) {
+          const source=new URLSearchParams(queryParams);
+          source.delete('rankingToken');source.delete('membershipParentToken');source.delete('membershipParentQuery');
+          lastMembershipResult={token:data.rankingToken,query:source.toString()};
+        }
       }
       console.log('[CFP] API response:', { products: data.products?.length, totalCount: data.totalCount });
 
@@ -708,7 +722,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       let facetsPromise;
       if((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2){
         sidebar.classList.add('cfp-loading');
-        facetsPromise=completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
+        facetsPromise=data.cfpCards?.search
+          ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal)
+          :completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
       if (data.products) {
         await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2);
@@ -748,6 +764,33 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (retainedResults && container.parentElement) container.parentElement.insertBefore(error, container);
       else container.appendChild(error);
     }
+  }
+
+  async function completeSearchFacets(cards,requestUrl,signal){
+    if(signal.aborted)return;
+    const request=new URL(requestUrl);request.searchParams.delete('responseProfile');
+    const signature=JSON.stringify(cards.products);
+    try{
+      const response=await fetchCollectionResponse(request.toString(),signal);
+      if(signal.aborted)return;
+      const full=await response.json();
+      if(response.status!==200||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Search filters unavailable');
+      if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
+      cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
+      renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
+      if(JSON.stringify(full.products)!==signature)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      else{
+        updateProductCount(full.totalCount);renderPagination(getProductContainer(),full.totalCount);
+        getProductContainer().querySelectorAll('.cfp-product-card--preview').forEach(card=>card.classList.remove('cfp-product-card--preview'));
+      }
+    }catch(error){
+      if(signal.aborted)return;
+      const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
+      const message=document.createElement('p');message.textContent='Search filters are temporarily unavailable.';
+      const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
+      retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeSearchFacets(cards,requestUrl,signal);});
+      notice.append(message,retry);(sidebar.querySelector('.cfp-sidebar__body')||sidebar).prepend(notice);
+    }finally{if(!signal.aborted)sidebar.classList.remove('cfp-loading');}
   }
 
   async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){

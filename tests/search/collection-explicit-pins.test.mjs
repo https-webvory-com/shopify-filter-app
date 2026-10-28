@@ -49,6 +49,7 @@ for(const mode of ['legacy','imported-include','imported-no-include']) for(const
     '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,
     '../services/collectionPreparation.server.js':{...preparation,getPreparedCollectionRanking:async spec=>{specs.push(spec);return preparation.getPreparedCollectionRanking(spec);}},
     '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:()=>sortBy,getCollectionRankingSession:async(_s,_f,token)=>sessions.get(token),saveCollectionRankingSession:async(_s,_f,ids,_u,metadata)=>{const s={token:'test-token',ids,metadata};sessions.set(s.token,s);return s;}},
+    '../utils/collectionFilterMembership.js':{},'../services/collectionFilterMembership.server.js':{collectionMembershipProof:async()=>null},
   };
   const {loader}=await loadModule('app/routes/api.filter.jsx',mocks);
   const output=[];let token;

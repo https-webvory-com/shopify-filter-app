@@ -9,6 +9,7 @@ import * as searchColor from '../../app/utils/searchColor.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
+import * as collectionFilterMembership from '../../app/utils/collectionFilterMembership.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
@@ -40,7 +41,7 @@ export async function createLoadingServer({redisLayer}={}) {
   const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
   const headEvents=[];
-  const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0};
+  const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0,membershipBrowses:0};
   const makeDoc=(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
     bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,inventoryTotal:5,
@@ -92,6 +93,13 @@ export async function createLoadingServer({redisLayer}={}) {
   const index={search:async(_q,options)=>select(options),
     getSettings:async()=>({distinctAttribute:null,pagination:{maxTotalHits:100000}}),
     getDocuments:async options=>{trace.documentBatches++;
+      if(Array.isArray(options.filter)){
+        trace.membershipBrowses++;
+        const selected=select({filter:options.filter,limit:docs.length}).hits;
+        const results=selected.slice(options.offset||0,(options.offset||0)+options.limit)
+          .map(p=>Object.fromEntries(options.fields.filter(k=>k in p).map(k=>[k,p[k]])));
+        return {results,total:selected.length};
+      }
       if(typeof options.filter!=='string'||!options.filter.startsWith('id IN ')){
         trace.candidateBrowses++;const rows=docs.filter(p=>p.status==='ACTIVE');return {results:rows.slice(options.offset||0,(options.offset||0)+options.limit).map(p=>Object.fromEntries(options.fields.filter(k=>k in p).map(k=>[k,p[k]]))),total:rows.length};
       }
@@ -153,19 +161,22 @@ export async function createLoadingServer({redisLayer}={}) {
   const mocks={
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
-    '../services/merchandising.server':{...merch,getActivePinningRuleForCollection:async()=>state.noPins?null:({products:(state.pinList||[state.pin]).map(id=>({id:'gid://shopify/Product/'+id}))}),
+    '../services/merchandising.server':{...merch,getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null,
+      getActivePinningRuleForCollection:async()=>state.noPins?null:({products:(state.pinList||[state.pin]).map(id=>({id:'gid://shopify/Product/'+id}))}),
       getActiveRuleForCollection:async()=>state.noMerchandising?null:({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
-    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:'gid://shopify/Collection/1',resolvedCollectionTitle:'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
+    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:key.endsWith(':search')?null:'gid://shopify/Collection/1',resolvedCollectionTitle:key.endsWith(':search')?'':'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>state.orderMissing?{ids:null,revision:null,status:'pending'}:({ids:state.orderVersion?docs.map(p=>p.id):docs.map(p=>p.id).reverse(),revision:'native-order-v'+(state.orderVersion||0),status:'ready',updatedAt:1+(state.orderVersion||0)})},
       '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,'../utils/collectionCards.js':collectionCards,'../utils/collectionPinnedPrefix.js':pinnedPrefix,
-    '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.delete('responseProfile');u.searchParams.sort();return u.search;},
+    '../services/collectionRankingSession.server.js':{collectionRankingFingerprint:url=>{const u=new URL(url);u.searchParams.delete('page');u.searchParams.delete('rankingToken');u.searchParams.delete('responseProfile');u.searchParams.delete('membershipParentToken');u.searchParams.delete('membershipParentQuery');u.searchParams.sort();return u.search;},
       getCollectionRankingSession:async(_shop,fingerprint,token)=>{if(!token)return null;const value=sessions.get(token);if(!value||value.fingerprint!==fingerprint)throw Error('Collection ranking session expired');return value;},
-      saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata})===identity)return value;const hash=createHash('sha256').update(identity).digest('hex');const token=state.publishedPages?hash.slice(0,8)+'-'+hash.slice(8,12)+'-'+hash.slice(12,16)+'-'+hash.slice(16,20)+'-'+hash.slice(20,32):'fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata};sessions.set(token,value);return value;}},
+      saveCollectionRankingSession:async(_shop,fingerprint,ids,updatedAt,metadata,membershipProof)=>{const identity=JSON.stringify({fingerprint,ids,updatedAt,metadata,membershipProof});for(const value of sessions.values())if(JSON.stringify({fingerprint:value.fingerprint,ids:value.ids,updatedAt:value.updatedAt,metadata:value.metadata,membershipProof:value.membershipProof})===identity)return value;const hash=createHash('sha256').update(identity).digest('hex');const token=state.publishedPages?hash.slice(0,8)+'-'+hash.slice(8,12)+'-'+hash.slice(12,16)+'-'+hash.slice(16,20)+'-'+hash.slice(20,32):'fixture-token-'+sessions.size;const value={token,fingerprint,ids,updatedAt,metadata,membershipProof};sessions.set(token,value);return value;}},
+    '../utils/collectionFilterMembership.js':collectionFilterMembership,
+    '../services/collectionFilterMembership.server.js':{collectionMembershipProof:async()=>state.membershipProof||'fixture-membership-proof'},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;if(state.rankingFailure==='throw')throw Error('Queue unavailable');if(state.rankingFailure==='failed')return {status:'failed'};return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{},getCollectionHeadVersion:headVersion,reportCollectionHead:(spec,path,reason)=>headEvents.push({event:'head-'+path,reason,collectionId:spec.collectionId}),rememberCollectionHead:headProofs.remember,compareCollectionHead:headProofs.compare},
       '../services/collectionCards.server.js':{getPreparedCollectionCards:(request,options)=>state.cardSnapshots?cardStore.get(request,options):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||(options.spec?preparationKey(options.spec):undefined)}):null},
-    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay)await new Promise(r=>setTimeout(r,state.facetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
+    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay||state.searchFacetDelay&&queries.some(query=>query.facets?.length))await new Promise(r=>setTimeout(r,state.facetDelay||state.searchFacetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
     '../utils/productTitleFilter.js':productTitleFilter,
@@ -201,7 +212,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
         if(updates.reset)state.realToolbar=false;
-        if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
+        if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
@@ -257,7 +268,7 @@ export async function createLoadingServer({redisLayer}={}) {
         let data;
         if(streaming){const records=text.trim().split('\n').map(line=>JSON.parse(line));data={...records[0].payload,products:records.filter(r=>r.type==='product').map(r=>r.product)};}else data=text?JSON.parse(text):{};
         const target=url.searchParams.get('responseProfile')==='collection-config-v1'?configurationRequests:requests;
-        target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,source:response.headers.get('X-CFP-Collection-Cards'),products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
+        target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),query:url.searchParams.get('q'),token:url.searchParams.get('rankingToken'),membershipParent:!!url.searchParams.get('membershipParentToken'),status:response.status,source:response.headers.get('X-CFP-Collection-Cards'),products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
         return;
       }
       if(url.pathname.startsWith('/products/')){
@@ -267,9 +278,10 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;
       }
-      if(url.pathname.startsWith('/collections/')){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body')
+      if(url.pathname.startsWith('/collections/')||url.pathname==='/search'){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body')
         .replace('class="cfp-v1-app-container"',`class="cfp-v1-app-container" style="--cfp-cols-desktop:${state.desktopColumns??4};--cfp-cols-mobile:${state.mobileColumns??2}"`)
         .replace('columns_desktop:4,columns_mobile:2',`columns_desktop:${state.desktopColumns??4},columns_mobile:${state.mobileColumns??2}`);
+        if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
         if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){

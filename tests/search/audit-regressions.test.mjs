@@ -101,6 +101,8 @@ async function route(file,mocks){
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
      if(name==='../utils/marketAvailability.js')return marketAvailability;
      if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
+     if(name==='../utils/collectionFilterMembership.js')return {};
+     if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;

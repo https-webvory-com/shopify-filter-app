@@ -574,6 +574,58 @@ try{
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};
   });
+  await test('Blue then Size L narrows saved product IDs and keeps the collection order',async()=>{
+    const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{}}];
+    const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>{
+      const id=String(i+1),size=i%2===0?'L':'M';
+      return [id,{options:[{name:'Color',values:['Blue']},{name:'Size',values:[size]}],
+        variantPrices:[{id:String((i+1)*100),price:i+1,available:true,option1:'Blue',option2:size,imageUrl:`/image/${id}.svg`}]}];
+    }));
+    await control({reset:true,productCount:30,precompute:true,hold:true,directFacts:true,early:true,
+      noPins:true,filterSettings,productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const blue=await getState();
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const after=await getState(),sizeCards=await cards();
+    assert.equal(after.trace.membershipBrowses-blue.trace.membershipBrowses,1,'Size L should query only the Blue ID set');
+    assert.equal(after.trace.candidateBrowses,blue.trace.candidateBrowses,'Size L should skip a full candidate browse');
+    assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
+    assert.deepEqual(sizeCards,[...Array.from({length:13},(_,i)=>String(29-i*2)),'1','3']);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {blueResults:30,sizeResults:15,visible:15,membershipBrowses:1,workerPaused:true};
+  });
+  await test('purple prom dress search shows Size L cards before full filter counts',async()=>{
+    const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>{
+      const id=String(i+1),size=i%2===0?'L':'M';
+      return [id,{options:[{name:'Color',values:['Purple']},{name:'Size',values:[size]}],
+        variantPrices:[{id:String((i+1)*100),price:i+1,available:true,option1:'Purple',option2:size,imageUrl:`/image/${id}.svg`}]}];
+    }));
+    const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{}}];
+    await control({reset:true,productCount:30,productFields,filterSettings,searchFacetDelay:800,
+      apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await send('Page.navigate',{url:origin+'/search?q=purple%20prom%20dress'});
+    await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.equal((await cards()).length,25);
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const earlyCards=await cards();
+    const early=await getState();
+    assert.ok(early.allRequests.some(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===15));
+    const firstSearch=fixture.facetRequests.at(-1);
+    assert.equal(firstSearch.q,'purple prom dress');
+    assert.ok(firstSearch.filter.some(value=>value.includes("option_Size IN ['L']")));
+    assert.equal(firstSearch.facets,undefined,'the first search-card request should skip count and facet queries');
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.deepEqual(await cards(),earlyCards,'full facets should retain the same search cards and order');
+    assert.deepEqual(earlyCards,Array.from({length:15},(_,i)=>String(29-i*2)));
+    assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {query:'purple prom dress',sizeResults:15,cardsBeforeFacets:true};
+  });
   await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
     const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};
     await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,colorRule:true,pinList:['1'],productVariants,assetDelay:1600,apiDelay:0,imageDelay:0,priceDelay:0});

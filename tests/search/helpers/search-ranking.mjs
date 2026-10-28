@@ -12,6 +12,7 @@ import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../../app/utils/marketAvailability.js';
+import * as collectionFilterMembership from '../../../app/utils/collectionFilterMembership.js';
 import * as skuSearch from '../../../app/utils/skuSearch.js';
 
 export async function loadModule(file, mocks) {
@@ -25,6 +26,8 @@ export async function loadModule(file, mocks) {
     if (!(name in mocks)) {
       if(name==='../utils/marketAvailability.js')return marketAvailability;
       if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
+      if(name==='../utils/collectionFilterMembership.js')return collectionFilterMembership;
+      if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
       if(name==='../utils/collectionCards.js')return collectionCards;
       if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;
       if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};

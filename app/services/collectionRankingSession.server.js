@@ -7,6 +7,8 @@ export function collectionRankingFingerprint(requestUrl) {
   url.searchParams.delete('page');
   url.searchParams.delete('rankingToken');
   url.searchParams.delete('responseProfile');
+  url.searchParams.delete('membershipParentToken');
+  url.searchParams.delete('membershipParentQuery');
   url.searchParams.sort();
   return createHash('sha256').update(url.pathname + '?' + url.searchParams.toString()).digest('hex');
 }
@@ -23,8 +25,8 @@ export async function getCollectionRankingSession(shop, fingerprint, token) {
   return { ...session, token };
 }
 
-export async function saveCollectionRankingSession(shop, fingerprint, ids, updatedAt, metadata = {}) {
-  const session = { fingerprint, ids, updatedAt, metadata };
+export async function saveCollectionRankingSession(shop, fingerprint, ids, updatedAt, metadata = {}, membershipProof = null) {
+  const session = { fingerprint, ids, updatedAt, metadata, ...(membershipProof?{membershipProof}:{}) };
   // Identical sequences share one immutable record rather than duplicating a
   // large collection for every visitor. Changed sequences get a new token.
   const digest = createHash('sha256').update(JSON.stringify(session)).digest('hex').slice(0, 32);

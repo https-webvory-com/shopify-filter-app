@@ -26,6 +26,8 @@ async function loadModule(file, mocks) {
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if(name==='../utils/marketAvailability.js')return marketAvailability;
     if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
+    if(name==='../utils/collectionFilterMembership.js')return {};
+    if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;

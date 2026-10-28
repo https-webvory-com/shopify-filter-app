@@ -36,6 +36,8 @@ import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
+import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
+import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -60,6 +62,7 @@ export const loader = async ({ request, context }) => {
   let pinnedPrefixVersion;
   let variantEligibilityMs=0;
   let rankingPreparationMs=0;
+  let membershipProof=null;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -435,6 +438,7 @@ export const loader = async ({ request, context }) => {
       minPrice > 0 ||
       maxPrice < 9999999;
     const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
+    const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&userHasFilters&&page===1&&limit<=40;
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
@@ -564,13 +568,13 @@ export const loader = async ({ request, context }) => {
     }
     // The cards response does not render facet choices or counts. Only load
     // catalog-wide facts when a selected filter actually needs them.
-    const saleRangesConfig = fastCards ? [] : configuredSaleRanges(activeGroupFilters);
-    const saleRows = selectedSaleRanges.length || (!fastCards && (saleRangesConfig.length || activeGroupFilters?.some(f => f.isEnabled && f.filterType === 'percent_sale')))
+    const saleRangesConfig = fastCards||fastSearchCards ? [] : configuredSaleRanges(activeGroupFilters);
+    const saleRows = selectedSaleRanges.length || (!(fastCards||fastSearchCards) && (saleRangesConfig.length || activeGroupFilters?.some(f => f.isEnabled && f.filterType === 'percent_sale')))
       ? await getCached(`percentSale:${shop}`, () => readProductSalePercentages(prisma,shop),30) : [];
     const hasExtraGroup=activeGroupFilters?.some(f=>f.isEnabled&&extraFilterTypes.has(f.filterType));
-    const needsExtraFacts=(hasExtraGroup&&(!fastCards||availability.length>0))||Object.entries(selectedExtra).some(([key,values])=>values.length&&(key!=='stock_status'||values.some(v=>v==='pre_order'||v==='stock_on_hand')));
+    const needsExtraFacts=(hasExtraGroup&&(!(fastCards||fastSearchCards)||availability.length>0))||Object.entries(selectedExtra).some(([key,values])=>values.length&&(key!=='stock_status'||values.some(v=>v==='pre_order'||v==='stock_on_hand')));
     const extraRows=needsExtraFacts?await getCached(`extraFilterFacts:${shop}`,()=>readExtraProductFacts(prisma,shop),30):[];
-    const extraChoices=fastCards?[]:extraFilterChoices(activeGroupFilters,extraRows);
+    const extraChoices=fastCards||fastSearchCards?[]:extraFilterChoices(activeGroupFilters,extraRows);
     const categoryFilters = {};
     for(const [type,values] of Object.entries(selectedExtra)) if(type!=='stock_status'&&values.length)categoryFilters['extra_'+type]=extraIdsFilter(extraRows,type,values);
     if (selectedSaleRanges.length) categoryFilters.percentSale = saleIdsFilter(saleRows,selectedSaleRanges);
@@ -827,7 +831,7 @@ export const loader = async ({ request, context }) => {
 
     // ── 9. Execute Meilisearch multiSearch ─────────────────────────────
     const saleCountQueryStart = queries.length;
-    const saleCountRanges = fastCards?[]:[...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
+    const saleCountRanges = fastCards||fastSearchCards?[]:[...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
     for (const range of saleCountRanges) {
       queries.push({indexUid:'products',q:textSearchQuery,
         filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
@@ -837,7 +841,7 @@ export const loader = async ({ request, context }) => {
     const priceCountQueryStart=queries.length;
     const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
     let configuredPrices=[];try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
-    const priceCountRanges=(fastCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
+    const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     for(const range of priceCountRanges){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
       if(hideUnavailable){
@@ -848,7 +852,7 @@ export const loader = async ({ request, context }) => {
     }
     let exactPriceCounts=[];
     const extraCountQueryStart=queries.length;
-    for(const choice of fastCards?[]:extraChoices){
+    for(const choice of fastCards||fastSearchCards?[]:extraChoices){
       const category=choice.type==='stock_status'?'available':'extra_'+choice.type;
       queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
@@ -895,6 +899,32 @@ export const loader = async ({ request, context }) => {
         collectionBestSellingPending: orderStatus === "pending",
       } }, { status: orderStatus === "failed" ? 503 : 202,
         headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
+    }
+
+    if(fastCards&&resolvedCollectionId&&!customerTagsStr){
+      membershipProof=await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
+        marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
+        orderRevision:collectionBestSellingState.revision});
+      const parentToken=url.searchParams.get('membershipParentToken');
+      const parentQuery=url.searchParams.get('membershipParentQuery');
+      if(!rankingSession&&membershipProof&&parentToken&&parentQuery&&parentQuery.length<=4096)try{
+        const parentUrl=new URL(request.url);parentUrl.search=parentQuery;
+        if(narrowerCollectionFilters(parentUrl,request.url)){
+          const parentFingerprint=marketRankingFingerprint(collectionRankingFingerprint(parentUrl),marketVersion);
+          const parent=await getCollectionRankingSession(shop,parentFingerprint,parentToken);
+          if(parent.membershipProof===membershipProof){
+            const filter=allFiltersList.filter((_,index)=>index!==marketFilterIndex);
+            const ids=await readNarrowerCollectionMembership(meiliClient.index('products'),{filter,parentIds:parent.ids,shop});
+            const currentProof=ids?await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
+              marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
+              orderRevision:collectionBestSellingState.revision}):null;
+            if(ids&&currentProof===membershipProof){
+              const metadata=Object.fromEntries(ids.filter(id=>parent.metadata?.[id]).map(id=>[id,parent.metadata[id]]));
+              rankingSession=await saveCollectionRankingSession(shop,rankingFingerprint,ids,parent.updatedAt,metadata,membershipProof);
+            }
+          }
+        }
+      }catch(error){console.info('CFP: Narrowed membership unavailable:',error.name);}
     }
 
     // A warmup only needs to schedule/refresh the complete ranking. Pending
@@ -948,7 +978,7 @@ export const loader = async ({ request, context }) => {
       const updatedAt=prepared.cacheKey?prepared.orderUpdatedAt:collectionBestSellingState.updatedAt??null;
       rankingSession = pinnedPrefix?{ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:null}:context?.rankingCardsPrecompute?
         {ids:prepared.ids,metadata:prepared.metadata,updatedAt,token:'background-cards'}:
-        await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata);
+        await saveCollectionRankingSession(shop, rankingFingerprint, prepared.ids, updatedAt, prepared.metadata, membershipProof);
     }
     if(rankingSession&&!pinnedPrefix&&(cardsOnly||['collection-v1','collection-v2'].includes(url.searchParams.get('responseProfile')))&&(limit!==50||context?.rankingCardsPrecompute===true))cardSnapshot=await beginPreparedCollectionCards({request,spec:preparedSpec,preparedKey:preparedCacheKey,rankingSession,attributes:mainQuery.attributesToRetrieve,collectionHandle:resolvedGroup.resolvedCollectionHandle||collectionHandle,startedAt:startTime});
 
@@ -985,7 +1015,7 @@ export const loader = async ({ request, context }) => {
       // not force exhaustive hit-count ranking merely to obtain facets.
       const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
       const [multiSearchRes,rankedPage] = await Promise.all([
-        semanticMultiSearch(queryIndexes.map(i=>queries[i]),{preferKeyword:!!searchQuery}),
+        semanticMultiSearch(fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]),{preferKeyword:!!searchQuery}),
         useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
           ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
         }):null,
@@ -1447,6 +1477,9 @@ export const loader = async ({ request, context }) => {
 
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
     const didYouMean = spellingCorrection(searchQuery, meiliRes.hits, meiliRes.semanticHitCount);
+    if(fastSearchCards)return data({products,totalCount,mergedValues,globalSettings,didYouMean,
+      cfpCards:{version:2,preview:true,search:true}},
+      {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
       mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});

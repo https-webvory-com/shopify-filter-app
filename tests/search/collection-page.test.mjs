@@ -225,6 +225,8 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;
     if(name==='../utils/marketAvailability.js')return marketAvailability;
     if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async(_shop,country)=>countryMarket?{status:countryMarket.pending?'pending':'ready',version:country+countryMarket.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>countryMarket.ids[country]};
+    if(name==='../utils/collectionFilterMembership.js')return {};
+    if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;

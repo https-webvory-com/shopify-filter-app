@@ -22,10 +22,10 @@ test('pending first loads and worker warmups do not fetch facets or hydrate card
  const f=await createLoadingServer();f.state.hold=true;
  try{
   const pending=await f.load(new Request(url));assert.equal(pending.status,202);
-  assert.deepEqual(f.trace,{facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0});
+  assert.deepEqual(f.trace,{facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0,membershipBrowses:0});
   await f.prepareLast();
   const warm=await f.load(new Request(url),{rankingWarmup:true});
-  assert.deepEqual(await warm.json(),{warmup:true});assert.deepEqual(f.trace,{facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0});
+  assert.deepEqual(await warm.json(),{warmup:true});assert.deepEqual(f.trace,{facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0,membershipBrowses:0});
   const ready=await f.load(new Request(url));assert.equal(ready.status,200);
   const body=await ready.json();assert.equal(body.products.length,25);assert.equal(body.totalCount,30);
   assert.ok(f.trace.facetQueries>0);assert.equal(f.trace.hydrations,25);
