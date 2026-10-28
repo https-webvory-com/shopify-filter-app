@@ -588,7 +588,11 @@ try{
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const blue=await getState();
+    await control({apiDelay:350});
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    const loading=await evaluate("(()=>{const grid=document.querySelector('#cfp-products-container'),card=grid.querySelector('.cfp-skeleton-card'),more=grid.querySelector('.cfp-load-more-container');return {skeletons:grid.querySelectorAll('.cfp-skeleton-card').length,offset:card?.getBoundingClientRect().top-grid.getBoundingClientRect().top,moreDisplay:more?getComputedStyle(more).display:null};})()");
+    assert.equal(loading.skeletons,25);assert.ok(loading.offset<25,'skeleton should start in the first grid row: '+JSON.stringify(loading));
+    assert.equal(loading.moreDisplay,'none');
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const after=await getState(),sizeCards=await cards();
     assert.equal(after.trace.membershipBrowses-blue.trace.membershipBrowses,1,'Size L should query only the Blue ID set');

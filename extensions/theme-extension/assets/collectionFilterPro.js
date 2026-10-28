@@ -971,10 +971,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const previousCards = productContainer.querySelectorAll('.cfp-product-card:not(.cfp-skeleton-card)').length;
     const retaining = previousCards > 0;
     productContainer.querySelectorAll(':scope > .cfp-skeleton-card').forEach(card => card.remove());
-    if (!retaining) {
-      const oldPagination = document.querySelector('.cfp-load-more-container');
-      if (oldPagination) oldPagination.style.display = 'none';
-    }
+    const oldPagination = productContainer.querySelector('.cfp-load-more-container');
+    if (oldPagination) oldPagination.style.setProperty('display', 'none', 'important');
 
     // Inject skeleton cards inside the exact container where products will load
     let skeletonHtml = '';
