@@ -372,7 +372,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
   const browserResultPrefix = 'cfp:collection-result:v1:';
   const browserResultLifetimeMs = 10 * 60 * 1000;
-  let browserCacheRendering = false;
   function browserResultKey(parameters) {
     if (templateName !== 'collection' || window.cfpCustomerLoggedIn || window.cfpCustomerTags || activeFilters.page !== 1 || PAGE_SIZE !== 25) return null;
     const params = new URLSearchParams(parameters);
@@ -389,6 +388,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (!raw) return null;
       const entry = JSON.parse(raw);
       if (!Number.isFinite(entry.at) || entry.at > Date.now() || Date.now() - entry.at >= browserResultLifetimeMs ||
+          !/^[a-f0-9-]{36}$/.test(entry.rankingToken || '') ||
           !Array.isArray(entry.products) || entry.products.length !== Math.min(25, entry.totalCount) ||
           !entry.products.every(product => product && product.id && product.handle && product.title)) {
         sessionStorage.removeItem(key);
@@ -397,13 +397,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       return entry;
     } catch { return null; }
   }
+  function discardBrowserResult(parameters) {
+    const pageOne = new URLSearchParams(parameters);
+    pageOne.set('page','1');
+    const key = browserResultKey(pageOne);
+    if (key) try { sessionStorage.removeItem(key); } catch {}
+  }
   function saveBrowserResult(parameters, result) {
     const key = browserResultKey(parameters);
-    if (!key || !result?.rankingToken || !result.settings || !result.facets || !Number.isSafeInteger(result.totalCount) ||
+    if (!key || !/^[a-f0-9-]{36}$/.test(result?.rankingToken || '') || !result.settings || !result.facets || !Number.isSafeInteger(result.totalCount) ||
         result.totalCount <= 0 || !Array.isArray(result.products) || result.products.length !== Math.min(25, result.totalCount) ||
         result.cfpCards?.preview || result.cfpCards?.prefix) return;
     try {
-      const entry = JSON.stringify({at:Date.now(),products:result.products,totalCount:result.totalCount,
+      const entry = JSON.stringify({at:Date.now(),rankingToken:result.rankingToken,products:result.products,totalCount:result.totalCount,
         mergedValues:result.mergedValues,globalSettings:result.globalSettings,contextualPricingApplied:result.contextualPricingApplied});
       if (entry.length > 750000) return;
       sessionStorage.setItem(key, entry);
@@ -731,17 +737,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           if (cachedBrowserResult) {
             const previousSettings = globalSettings;
             try {
+              collectionRankingTokens.set(rankingKey, cachedBrowserResult.rankingToken);
               globalSettings = cachedBrowserResult.globalSettings || {};
-              browserCacheRendering = true;
               await renderProducts(cachedBrowserResult.products, cachedBrowserResult.totalCount, false,
                 cachedBrowserResult.mergedValues, cachedBrowserResult.contextualPricingApplied);
               renderBreadcrumbs();
             } catch {
               const key = browserResultKey(queryParams);
               if (key) try { sessionStorage.removeItem(key); } catch {}
+              collectionRankingTokens.delete(rankingKey);
               cachedBrowserResult = null;
               globalSettings = previousSettings;
-            } finally { browserCacheRendering = false; }
+            }
           }
         }
         let data = null;
@@ -777,6 +784,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           if (response.status === 409 && allowSessionRestart) {
             collectionRankingTokens.delete(rankingKey);
             activeFilters.page = 1;
+            discardBrowserResult(queryParams);
             return fetchAndRenderData(false, false);
           }
           data = await response.json();
@@ -863,6 +871,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (e.collectionSessionExpired && allowSessionRestart) {
         collectionRankingTokens.delete(rankingKey);
         activeFilters.page = 1;
+        discardBrowserResult(queryParams);
         return fetchAndRenderData(false, false);
       }
       console.error("CFP: API Query error", e);
@@ -929,7 +938,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const response=await fetchCollectionResponse(request.toString(),signal);
       if(signal.aborted)return;
       if(response.status===409){
-        if(allowSessionRestart){collectionRankingTokens.clear();activeFilters.page=1;return fetchAndRenderData(false,false);}
+        if(allowSessionRestart){collectionRankingTokens.clear();activeFilters.page=1;discardBrowserResult(request.searchParams);return fetchAndRenderData(false,false);}
         throw Error('Collection changed');
       }
       let full=await response.json();
@@ -1823,7 +1832,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function renderPagination(grid, totalCount) {
-    if (browserCacheRendering) return;
     const existing = document.querySelector('.cfp-load-more-container');
     if (existing) existing.remove();
 
