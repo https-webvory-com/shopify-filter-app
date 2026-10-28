@@ -1478,7 +1478,8 @@ export const loader = async ({ request, context }) => {
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
     const didYouMean = spellingCorrection(searchQuery, meiliRes.hits, meiliRes.semanticHitCount);
     if(fastSearchCards)return data({products,totalCount,mergedValues,globalSettings,didYouMean,
-      cfpCards:{version:2,preview:true,search:true}},
+      cfpCards:{version:2,preview:true,search:true},
+      debug:{variantEligibilityMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
       mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true}},
