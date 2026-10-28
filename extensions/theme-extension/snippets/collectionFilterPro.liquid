@@ -11,6 +11,19 @@
 {% # API connection hint, not a downloadable asset; retain the early backend handshake. %}
 <link rel="preconnect" href="https://aisearchfilter.webvory.com" crossorigin>
 {% # theme-check-enable RemoteAsset %}
+<style>
+  /* Keep the drawer out of page flow while the extension stylesheet loads. */
+  .cfp-sidebar { display: none !important; position: fixed !important; left: -100% !important; }
+  .cfp-sidebar.cfp-sidebar--open { display: flex !important; left: 0 !important; }
+  .cfp-overlay { display: none !important; }
+  .cfp-drawer-trigger-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 38px; padding: 7px 14px; box-sizing: border-box;
+    border: 1px solid #d1d5db; border-radius: 4px; background: #fff;
+    color: #111827; font-family: inherit; font-weight: 500;
+    font-size: 13.5px; line-height: 1.2; white-space: nowrap;
+  }
+</style>
 <script>
   window.cfpCustomerLoggedIn = {% if customer %}true{% else %}false{% endif %};
   window.cfpCustomerTags = "{{ customer.tags | join: ',' }}";
