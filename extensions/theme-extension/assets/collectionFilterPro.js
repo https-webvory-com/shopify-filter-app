@@ -626,9 +626,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
-        if (!isLoadMore && !getProductContainer().querySelector('.cfp-product-card:not(.cfp-skeleton-card)')) {
-          renderSkeleton();
-        }
+        if (!isLoadMore) renderSkeleton();
         let data = null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
@@ -730,6 +728,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
       const container = getProductContainer();
+      if (container.classList.contains('cfp-loading-retained')) {
+        container.querySelectorAll(':scope > .cfp-skeleton-card').forEach(card => card.remove());
+        container.classList.remove('cfp-loading-retained');
+      }
       const retainedResults = !isLoadMore && !!container.querySelector('.cfp-product-card:not(.cfp-skeleton-card)');
       if (!isLoadMore && !retainedResults) container.replaceChildren();
       else container.querySelector('.cfp-load-more-container')?.remove();
@@ -922,15 +924,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function renderSkeleton() {
-    // Hide pagination during loading
-    const oldPagination = document.querySelector('.cfp-load-more-container');
-    if (oldPagination) oldPagination.style.display = 'none';
-
     const productContainer = getProductContainer();
+    const previousCards = productContainer.querySelectorAll('.cfp-product-card:not(.cfp-skeleton-card)').length;
+    const retaining = previousCards > 0;
+    productContainer.querySelectorAll(':scope > .cfp-skeleton-card').forEach(card => card.remove());
+    if (!retaining) {
+      const oldPagination = document.querySelector('.cfp-load-more-container');
+      if (oldPagination) oldPagination.style.display = 'none';
+    }
 
     // Inject skeleton cards inside the exact container where products will load
     let skeletonHtml = '';
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < (retaining ? Math.min(previousCards, PAGE_SIZE) : 8); i++) {
       skeletonHtml += `
         <div class="cfp-product-card cfp-skeleton-card">
           <div class="cfp-skeleton-image cfp-skeleton">&nbsp;</div>
@@ -942,7 +947,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         </div>
       `;
     }
-    productContainer.innerHTML = skeletonHtml;
+    if (retaining) {
+      productContainer.classList.add('cfp-loading-retained');
+      productContainer.insertAdjacentHTML('beforeend', skeletonHtml);
+    } else {
+      productContainer.classList.remove('cfp-loading-retained');
+      productContainer.innerHTML = skeletonHtml;
+    }
     productContainer.style.setProperty('display', 'grid', 'important');
   }
 
@@ -1124,6 +1135,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         emptyMsg = `Products not found.`;
       }
 
+      grid.classList.remove('cfp-loading-retained');
       grid.innerHTML = `
         <div class="cfp-no-products" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
           ${emptyStateSvg}
@@ -1624,6 +1636,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       grid.insertAdjacentHTML('beforeend', productsHtml);
     } else {
+      grid.classList.remove('cfp-loading-retained');
       grid.innerHTML = productsHtml;
     }
 

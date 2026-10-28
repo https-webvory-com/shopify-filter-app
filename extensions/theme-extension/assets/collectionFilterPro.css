@@ -1825,6 +1825,9 @@ facet-filters-form,
 }
 
 /* Skeleton Loader */
+.cfp-products-grid.cfp-loading-retained > :not(.cfp-skeleton-card) {
+  display: none !important;
+}
 @keyframes cfpSkeletonGlassShimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
