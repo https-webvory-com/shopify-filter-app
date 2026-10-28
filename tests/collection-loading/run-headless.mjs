@@ -174,6 +174,30 @@ try{
     const start=Date.now();await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",8000);
     const data=await getState();assert.equal(data.state.builds,1);return {browserReadyMs:Date.now()-start,builds:data.state.builds};
   });
+  await test('same-tab browser result appears on reload before a delayed fresh collection response',async()=>{
+    await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:false,publishFirst50:true,early:false,apiDelay:0,assetDelay:0});
+    await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await wait("Object.keys(sessionStorage).some(key=>key.startsWith('cfp:collection-result:v1:'))");
+    const first=await cards();
+    await control({apiDelay:4000});
+    await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",2500);
+    assert.deepEqual(await cards(),first);
+    assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),false);
+    assert.equal(await evaluate("performance.getEntriesByType('resource').some(entry=>entry.name.includes('/api/filter')&&entry.responseEnd>0)"),false);
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",10000);
+    assert.deepEqual(await cards(),first);
+    assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),true);
+    await control({archive:'1',invalidate:true,hold:false,delay:0,apiDelay:1000});
+    await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",2500);
+    assert.equal((await cards()).includes('1'),true,'Recent cards should appear while the changed collection is checked');
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&![...document.querySelectorAll('.cfp-product-card--reveal')].some(card=>card.querySelector('a')?.href.includes('/dress-1'))",15000);
+    assert.equal((await cards()).includes('1'),false,'Fresh stock and membership must replace the browser copy');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {cachedCards:25,serverDelayMs:4000,loadMoreAfterValidation:true,changedProductRemoved:true};
+  });
   let oldToken,oldIds;
   await test('load more keeps token order without duplicate products and puts zero-price product last',async()=>{
     oldToken=fixture.latestRankingToken();

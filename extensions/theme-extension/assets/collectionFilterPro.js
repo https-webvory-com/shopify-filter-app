@@ -370,6 +370,56 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   // Resolve that order before rendering; otherwise the fallback stays on screen.
   const collectionRankingTokens = new Map();
   let initialRankingToken = activeFilters.page > 1 ? new URLSearchParams(window.location.search).get('rankingToken') : null;
+  const browserResultPrefix = 'cfp:collection-result:v1:';
+  const browserResultLifetimeMs = 10 * 60 * 1000;
+  let browserCacheRendering = false;
+  function browserResultKey(parameters) {
+    if (templateName !== 'collection' || window.cfpCustomerLoggedIn || window.cfpCustomerTags || activeFilters.page !== 1 || PAGE_SIZE !== 25) return null;
+    const params = new URLSearchParams(parameters);
+    if (!params.get('shop') || !params.get('country') || !(params.get('collectionId') || params.get('collectionHandle')) || params.get('page') !== '1' || params.get('limit') !== '25') return null;
+    for (const key of ['rankingToken', 'membershipParentToken', 'membershipParentQuery', 'responseProfile']) params.delete(key);
+    params.sort();
+    return browserResultPrefix + params.toString();
+  }
+  function readBrowserResult(parameters) {
+    const key = browserResultKey(parameters);
+    if (!key) return null;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const entry = JSON.parse(raw);
+      if (!Number.isFinite(entry.at) || entry.at > Date.now() || Date.now() - entry.at >= browserResultLifetimeMs ||
+          !Array.isArray(entry.products) || entry.products.length !== Math.min(25, entry.totalCount) ||
+          !entry.products.every(product => product && product.id && product.handle && product.title)) {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+      return entry;
+    } catch { return null; }
+  }
+  function saveBrowserResult(parameters, result) {
+    const key = browserResultKey(parameters);
+    if (!key || !result?.rankingToken || !result.settings || !result.facets || !Number.isSafeInteger(result.totalCount) ||
+        result.totalCount <= 0 || !Array.isArray(result.products) || result.products.length !== Math.min(25, result.totalCount) ||
+        result.cfpCards?.preview || result.cfpCards?.prefix) return;
+    try {
+      const entry = JSON.stringify({at:Date.now(),products:result.products,totalCount:result.totalCount,
+        mergedValues:result.mergedValues,globalSettings:result.globalSettings,contextualPricingApplied:result.contextualPricingApplied});
+      if (entry.length > 750000) return;
+      sessionStorage.setItem(key, entry);
+      const entries = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const current = sessionStorage.key(i);
+        if (current?.startsWith(browserResultPrefix)) {
+          let at = 0;
+          try { at = JSON.parse(sessionStorage.getItem(current)).at || 0; } catch {}
+          entries.push({key:current,at});
+        }
+      }
+      entries.sort((a,b) => b.at - a.at);
+      for (const old of entries.slice(5)) sessionStorage.removeItem(old.key);
+    } catch { /* Storage may be unavailable or full; the server path still works. */ }
+  }
   function decodeCollectionResponse(data) {
     if (!data?.cfpTransport) return data;
     if (data.cfpTransport.version !== 1) throw new Error('Unsupported collection response');
@@ -674,7 +724,26 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
-        if (!isLoadMore) renderSkeleton();
+        let cachedBrowserResult = null;
+        if (!isLoadMore) {
+          renderSkeleton();
+          cachedBrowserResult = readBrowserResult(queryParams);
+          if (cachedBrowserResult) {
+            const previousSettings = globalSettings;
+            try {
+              globalSettings = cachedBrowserResult.globalSettings || {};
+              browserCacheRendering = true;
+              await renderProducts(cachedBrowserResult.products, cachedBrowserResult.totalCount, false,
+                cachedBrowserResult.mergedValues, cachedBrowserResult.contextualPricingApplied);
+              renderBreadcrumbs();
+            } catch {
+              const key = browserResultKey(queryParams);
+              if (key) try { sessionStorage.removeItem(key); } catch {}
+              cachedBrowserResult = null;
+              globalSettings = previousSettings;
+            } finally { browserCacheRendering = false; }
+          }
+        }
         let data = null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
@@ -771,12 +840,23 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           :completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
       if (data.products) {
-        await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2);
+        const sameCachedCards = cachedBrowserResult && !isLoadMore &&
+          data.totalCount === cachedBrowserResult.totalCount &&
+          JSON.stringify(data.products) === JSON.stringify(cachedBrowserResult.products) &&
+          JSON.stringify(data.mergedValues) === JSON.stringify(cachedBrowserResult.mergedValues) &&
+          JSON.stringify(globalSettings) === JSON.stringify(cachedBrowserResult.globalSettings || {});
+        if (sameCachedCards) {
+          const container = getProductContainer();
+          container.classList.remove('cfp-loading-retained');
+          updateProductCount(data.totalCount);
+          if (!data.cfpCards?.preview && !data.cfpCards?.prefix) renderPagination(container, data.totalCount);
+        } else await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2);
       }
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
       if(facetsPromise)await facetsPromise;
+      else if (!isLoadMore) saveBrowserResult(queryParams, data);
 
     } catch (e) {
       if (fetchSignal.aborted) return;
@@ -875,6 +955,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           wishlistProducts.clear();full.products.forEach(product=>wishlistProducts.set(product.handle,product));syncWishlistProducts();
         }
       }
+      saveBrowserResult(request.searchParams, full);
     }catch(error){
       if(signal.aborted)return;
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
@@ -1742,6 +1823,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function renderPagination(grid, totalCount) {
+    if (browserCacheRendering) return;
     const existing = document.querySelector('.cfp-load-more-container');
     if (existing) existing.remove();
 
