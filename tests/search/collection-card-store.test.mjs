@@ -21,6 +21,40 @@ function fixture(options={}){
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
 
+test('saved first fifty supply the complete first 25 before a separate card copy or pin fallback',async()=>{
+ const f=fixture();
+ f.prepared.ids=Array.from({length:70},(_,i)=>String(i+1));f.setSource(encodePreparation(f.prepared));
+ f.payload.products=f.prepared.ids.slice(0,50).map(id=>({id,title:'Dress '+id,handle:'dress-'+id,isPinned:Number(id)<=13,variants:[{id:'v'+id,price:100}]}));
+ f.payload.totalCount=70;f.payload.debug={collectionRankingStatus:'ready'};
+ const saved=new Request(f.request.url.replace('limit=25','limit=50'));
+ const lease=await f.store.begin({request:saved,spec:f.spec,preparedKey:`collectionPreparedSequence:${f.spec.shop}:background-v2:`+'a'.repeat(64),rankingSession:{ids:f.prepared.ids,metadata:f.prepared.metadata,updatedAt:100},attributes:['id'],collectionHandle:'one'});
+ assert.equal(await lease.finish(f.payload,'fp','head',{facetsReady:true}),true);
+ const request=new Request(f.request.url.replace('collection-cards-v1','collection-preview-v1'),{headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3'}});
+ const validations=[];f.setValidation(async(entry,prepared,options)=>{validations.push({count:entry.payload.products.length,preview:options.preview});options.onValidated(50);return true;});
+ const response=await f.store.get(request),body=await response.json();
+ assert.equal(response.headers.get('X-CFP-Collection-Cards'),'hit');
+ assert.deepEqual(body.products.map(p=>p.id),f.prepared.ids.slice(0,25));
+ assert.equal(body.products.filter(p=>p.isPinned).length,13);
+ assert.equal(body.totalCount,70);assert.ok(body.rankingToken);
+ assert.equal(body.cfpCards.preview,false);assert.equal(body.cfpCards.prefix,undefined);assert.equal(body.cfpCards.facetsReady,true);
+ assert.deepEqual(body.facets,f.payload.facets);assert.deepEqual(validations,[{count:50,preview:false}]);
+ assert.deepEqual(f.sessions[0].value.ids,f.prepared.ids);assert.equal(new URL(f.sessions[0].url).searchParams.get('limit'),'25');
+ assert.equal(await f.store.get(new Request(request.url.replace('country=IN','country=US'),{headers:request.headers})),null);
+ assert.equal(await f.store.get(new Request(request.url+'&options[Color][]=Red',{headers:request.headers})),null);
+ // A saved fifty that no longer validates must not hide a valid 25-card copy.
+ const first25={...f.payload,products:f.payload.products.slice(0,25)};
+ await(await f.begin()).finish(first25,'fp','head',{facetsReady:true});
+ f.setValidation(async entry=>entry.payload.products.length===25);
+ const fallback=await(await f.store.get(request)).json();assert.equal(fallback.products.length,25);assert.equal(fallback.cfpCards.prefix,undefined);
+});
+
+test('published first fifty take priority without reading working cards',async()=>{
+ const published=Response.json({products:['published']});let calls=0;
+ const f=fixture({publishedPages:{get:async()=>{calls++;return published;}}});
+ f.redis.get=async()=>{throw Error('Working cards must not be read');};
+ assert.equal(await f.store.get(f.request),published);assert.equal(calls,1);
+});
+
 test('All products reuses country-scoped cards without an invented Shopify collection ID',async()=>{
  const f=fixture();f.spec.collectionId=null;
  const request=new Request(f.request.url.replace('collectionHandle=one','collectionHandle=all'));

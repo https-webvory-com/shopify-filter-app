@@ -2,7 +2,7 @@ import {hasUsableExtraFacets} from './extraProductFilters.js';
 import {hasUsableSaleFacets} from './percentSaleFilter.js';
 import {createHash} from 'node:crypto';
 import {decodePreparation,encodePreparation} from './collectionPreparationPayload.js';
-import {isPublicCollectionCards,collectionCardsResponse,acceptsCollectionPinnedPrefix,collectionCardPresentationVersion} from './collectionCards.js';
+import {isPublicCollectionCards,collectionCardsResponse,acceptsCollectionPinnedPrefix,acceptsPublishedCollectionPage,collectionCardPresentationVersion} from './collectionCards.js';
 import {preparationFreshnessMs} from './collectionPreparation.js';
 import {collectionHasExternalCandidates} from './collectionDependencies.js';
 import {hasUsableProductTitleFacets} from './productTitleFilter.js';
@@ -80,7 +80,21 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
  };
  async function get(request,{probe=false,onHit,marketAvailabilityVersion=null}={}){
   if(!probe&&publishedPages){const published=await publishedPages.get(request,{onHit,marketAvailabilityVersion});if(published)return published;}
-  const key=collectionCardKey(request);if(!key)return null;
+  if(!collectionCardKey(request))return null;
+  const options={probe,onHit,marketAvailabilityVersion,deadline:Date.now()+readBudgetMs};
+  // Background preparation saves fifty complete cards. Prefer that saved page
+  // before looking for a separate twenty-five-card copy or building a pin head.
+  // The shopper's request/session still uses its original twenty-five page size.
+  if(new URL(request.url).searchParams.get('limit')==='25'){
+   const saved=new URL(request.url);saved.searchParams.set('limit','50');
+   const ready=await getWorking(request,options,new Request(saved,{method:request.method,headers:request.headers}));
+   if(ready)return ready;
+  }
+  return getWorking(request,options,request);
+ }
+ async function getWorking(request,{probe,onHit,marketAvailabilityVersion,deadline},snapshotRequest){
+  const remaining=deadline-Date.now();if(remaining<=0)return null;
+  const key=collectionCardKey(snapshotRequest);if(!key)return null;
   const controller=new AbortController(),started=now();let timer,stage='snapshot',outcome;
   const work=async()=>{
   try{
@@ -104,8 +118,9 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    stage='ranking-state';const before=await readState(entry),prepared=current(before,entry.external);
    controller.signal.throwIfAborted();
    if(!prepared||before.configuration!==entry.configuration||!compatibleState(entry,before)||sequenceSignature(prepared)!==entry.sequence)return null;
+   if(new URL(snapshotRequest.url).searchParams.get('limit')==='50'&&entry.payload.products.length!==Math.min(50,prepared.ids.length))return null;
    let previewLimit=Number(new URL(request.url).searchParams.get('limit'));
-   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request),onValidated:count=>{previewLimit=count;}}))return null;
+   stage='current-documents';const readStarted=now();if(!await validateCards(entry,prepared,{preview:new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1'&&!acceptsCollectionPinnedPrefix(request)&&!acceptsPublishedCollectionPage(request),onValidated:count=>{previewLimit=Math.min(previewLimit,count);}}))return null;
    const readMs=now()-readStarted;controller.signal.throwIfAborted();
    stage='session';const session=probe?{}:await createSession(request,entry,prepared);
    stage='final-state';
@@ -121,10 +136,10 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(payload.cfpCards?.facetsReady&&entry.state!==stateSignature(after,entry.external)){
     const {facets,...cards}=payload;payload={...cards,cfpCards:{...cards.cfpCards,facetsReady:false}};
    }
-   return collectionCardsResponse({...payload,rankingToken:session.token,debug:{...payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
+   return collectionCardsResponse({...payload,products:payload.products.slice(0,previewLimit),rankingToken:session.token,debug:{...payload.debug,collectionCardSnapshot:true,timing:{meiliMs:readMs,totalMs:now()-started}}},'hit',request,{previewLimit});
   }catch{return null;}
   };
-  try{outcome=await Promise.race([work(),new Promise(resolve=>{timer=setTimeout(()=>{stage='timeout:'+stage;controller.abort();resolve(null);},readBudgetMs);})]);return outcome;}
+  try{outcome=await Promise.race([work(),new Promise(resolve=>{timer=setTimeout(()=>{stage='timeout:'+stage;controller.abort();resolve(null);},remaining);})]);return outcome;}
   finally{clearTimeout(timer);controller.abort();try{observe({event:outcome?'cards-ready':'cards-unavailable',reason:outcome?undefined:stage,shop:new URL(request.url).searchParams.get('shop'),readMs:now()-started});}catch{}}
  }
  async function begin({request,spec,preparedKey,rankingSession,attributes,collectionHandle,startedAt}){

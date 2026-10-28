@@ -23,8 +23,9 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
     product: {deleteMany: async () => {},findMany:async()=>[{id:'gid://shopify/Product/1',collections:[]}]},
     $queryRaw: async () => [],
   };
-  let indexed=[];
+  let indexed=[],searchable=[];
   const index = new Proxy({
+    updateSearchableAttributes: async fields => {searchable=fields;return {taskUid:1};},
     deleteDocument: async () => {},
     addDocuments: async docs => { if(failIndex) throw Error("index unavailable"); indexed=docs;return {taskUid:1}; },
     search:async()=>({hits:indexed}),
@@ -59,8 +60,14 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
     return {data:{products:{nodes:failMembership?[{id:'gid://shopify/Product/1',status:'ACTIVE',publishedAt:'2026-10-18',options:[],images:{nodes:[]},tags:[],variants:{nodes:[{id:'gid://shopify/ProductVariant/1',price:'100',availableForSale:true,inventoryQuantity:1,selectedOptions:[]}]},collections:{nodes:[{id:'gid://shopify/Collection/1'}],pageInfo:{hasNextPage:false}}}]:(failIndex || morePages)?[{id:"gid://shopify/Product/1",status:"DRAFT"}]:[],pageInfo:{hasNextPage:morePages,endCursor:"end"}}}};
   }})};
   return {run:options=>context.module.exports.runProductSync("job","fixture.myshopify.com",admin,options),updates,
+    searchable:()=>searchable,
     heartbeat:()=>heartbeat(),cleared:()=>cleared};
 }
+
+test('normal sync enables variant SKU lookup alongside product text search',async()=>{
+ const f=await fixture();await f.run();
+ for(const field of ['title','handle','productType','vendor','tags','variantPrices.sku'])assert.ok(f.searchable().includes(field),field);
+});
 
 test("setup failure marks job failed and stops the heartbeat",async()=>{
   const f=await fixture({failSetup:true});

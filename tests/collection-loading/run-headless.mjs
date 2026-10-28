@@ -566,6 +566,27 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {cards:25,facetCount:80,extraFacetRequests:0,liveTiming:false};
   });
+  await test('saved first fifty bypass the pin preview and show Load more with the complete first page',async()=>{
+    await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:false,publishFirst50:true,pinList:Array.from({length:13},(_,i)=>String(i+1)),headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await control({rankingFailure:'throw',facetFailure:true});
+    const baseline=await getState();
+    await send('Network.clearBrowserCache');await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!!document.querySelector('#cfp-load-more-btn')");
+    const first=await cards(),ready=await getState();
+    assert.equal(new Set(first).size,25);
+    assert.ok(ready.allRequests.some(r=>r.status===200&&r.source==='hit'));
+    assert.equal(ready.allRequests.some(r=>r.source==='prefix'),false);
+    assert.equal(ready.state.builds,baseline.state.builds);
+    assert.equal(ready.trace.facetQueries,baseline.trace.facetQueries);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
+    await control({rankingFailure:null,facetFailure:false});
+    await evaluate("window.retainedSavedCard=document.querySelector('.cfp-product-card');document.querySelector('#cfp-load-more-btn').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
+    assert.equal(new Set(await cards()).size,50);assert.deepEqual((await cards()).slice(0,25),first);
+    assert.equal(await evaluate("document.querySelector('.cfp-product-card')===window.retainedSavedCard"),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {initialCards:25,afterLoadMore:50,pinPreview:false,extraFacetQueries:0,firstCardRetained:true,liveTiming:false};
+  });
   await test('published first fifty serve two 25-card pages while ranking and facets are unavailable',async()=>{
     await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await control({unrelatedExternalUpdate:true,rankingFailure:'throw',facetFailure:true});

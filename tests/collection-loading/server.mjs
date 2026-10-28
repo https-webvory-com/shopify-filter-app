@@ -27,6 +27,7 @@ import {createCollectionResponseCache,collectionPageFingerprint} from '../../app
 import * as collectionBootstrap from '../../app/utils/collectionBootstrap.js';
 import * as collectionResponse from '../../app/utils/collectionResponse.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
+import {validateCollectionCardDocuments} from '../../app/utils/collectionCardValidation.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import {createCollectionCardStore} from '../../app/utils/collectionCardStore.js';
 import {createPublishedCollectionPages} from '../../app/utils/collectionPublishedPage.js';
@@ -143,7 +144,7 @@ export async function createLoadingServer({redisLayer}={}) {
     loadDurable:async({shop:tenant,key})=>[...publishedRows.values()].find(row=>row.shop===tenant&&row.aliases.includes(key))?.payload});
   const cardStore=createCollectionCardStore({redis,publishedPages:{get:(request,options)=>state.publishedPages?published.get(request,options):null,publish:options=>state.publishedPages?published.publish(options):true},
     readState:async({preparedKey})=>{const raw=await redis.get(preparedKey);let saved;try{saved=decodePreparation(raw);}catch{}return {configuration:await redis.get(preparationRevisionKey(shop))||'0',products:await redis.get(productRevisionKey(shop,'1'))||'0',globalProducts:await redis.get(productRevisionKey(shop,'all'))||'0',externalProducts:saved?.externalDependencies?await dependencies.revision(shop,saved.externalDependencies):undefined,hardAll:await redis.get('collectionRankingDataRevision:'+shop+':all')||'0',hardCollection:await redis.get('collectionRankingDataRevision:'+shop+':1')||'0',orderRevision:'native-order-v'+(state.orderVersion||0),preparedRaw:raw};},
-    validateCards:async(entry,prepared)=>{const result=await ranked.readRankedCollectionPage(index,{ids:prepared.ids,page:1,limit:25,shop,attributes:entry.attributes});return collectionPageFingerprint(result.hits)===entry.validationFingerprint;},
+    validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(index,entry,prepared,{...options,preview:false}),
     createSession:async(request,entry,prepared)=>{const service=mocks['../services/collectionRankingSession.server.js'];return service.saveCollectionRankingSession(shop,service.collectionRankingFingerprint(request.url),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);},
   });
   const responseCache=createCollectionResponseCache({readRevision:async()=>[
@@ -251,7 +252,7 @@ export async function createLoadingServer({redisLayer}={}) {
         let data;
         if(streaming){const records=text.trim().split('\n').map(line=>JSON.parse(line));data={...records[0].payload,products:records.filter(r=>r.type==='product').map(r=>r.product)};}else data=text?JSON.parse(text):{};
         const target=url.searchParams.get('responseProfile')==='collection-config-v1'?configurationRequests:requests;
-        target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
+        target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),token:url.searchParams.get('rankingToken'),status:response.status,source:response.headers.get('X-CFP-Collection-Cards'),products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
         return;
       }
       if(url.pathname.startsWith('/products/')){
