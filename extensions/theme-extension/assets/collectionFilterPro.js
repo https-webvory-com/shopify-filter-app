@@ -2471,11 +2471,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     let stickyFrame;
     const scheduleStickyOffsets = () => {
       if (stickyFrame) return;
-      stickyFrame = requestAnimationFrame(() => { stickyFrame = null; updateStickyFilterOffsets(); positionOpenMobileFilterPanels(); });
+      stickyFrame = requestAnimationFrame(() => { stickyFrame = null; updateStickyFilterOffsets(); positionOpenMobileFilterPanels(); syncDrawerViewport(); });
     };
     window.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleStickyOffsets, { passive: true });
+    window.visualViewport?.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
       closeSidebar();
       if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
@@ -3449,12 +3450,20 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     openSidebar();
   }
 
+  function syncDrawerViewport() {
+    if (!sidebar?.classList.contains('cfp-sidebar--open') || !window.matchMedia('(max-width: 991px)').matches) return;
+    const viewport = window.visualViewport;
+    sidebar.style.setProperty('--cfp-drawer-height', `${viewport?.height || window.innerHeight}px`);
+    sidebar.style.setProperty('--cfp-drawer-top', `${viewport?.offsetTop || 0}px`);
+  }
+
   function openSidebar() {
     if (!sidebar) return;
     if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
       return;
     }
     sidebar.classList.add('cfp-sidebar--open');
+    syncDrawerViewport();
     if (overlay) overlay.classList.add('cfp-overlay--visible');
     sidebar.removeAttribute('aria-hidden');
     if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
@@ -3474,6 +3483,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       return;
     }
     sidebar.classList.remove('cfp-sidebar--open');
+    sidebar.style.removeProperty('--cfp-drawer-height');
+    sidebar.style.removeProperty('--cfp-drawer-top');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
     sidebar.setAttribute('aria-hidden', 'true');
     closeHorizontalFilterGroups();

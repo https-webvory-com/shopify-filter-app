@@ -1588,6 +1588,21 @@ facet-filters-form,
   bottom: 0;
   z-index: 2;
 }
+@media (max-width: 991px) {
+  /* Keep the drawer within Safari's visible viewport as its browser bars move. */
+  #cfp-sidebar.cfp-sidebar {
+    top: var(--cfp-drawer-top, 0px) !important;
+    bottom: auto !important;
+    height: var(--cfp-drawer-height, 100dvh) !important;
+    max-height: var(--cfp-drawer-height, 100dvh) !important;
+  }
+  #cfp-sidebar.cfp-sidebar .cfp-sidebar__body {
+    min-height: 0;
+  }
+  #cfp-sidebar.cfp-sidebar .cfp-sidebar__footer {
+    padding: 0 20px max(16px, env(safe-area-inset-bottom)) !important;
+  }
+}
 .cfp-btn--apply-all {
   background: #000 !important;
   color: #fff !important;

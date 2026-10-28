@@ -217,6 +217,12 @@ try{
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+2'));
     await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),true);
+    const footer=await evaluate("(()=>{const button=document.querySelector('#cfp-apply-btn');const rect=button.getBoundingClientRect();return {top:rect.top,bottom:rect.bottom,height:rect.height,viewport:visualViewport.height,visible:getComputedStyle(button).visibility}})()");
+    assert.equal(footer.visible,'visible');assert.ok(footer.height>0,JSON.stringify(footer));assert.ok(footer.bottom<=footer.viewport-12,'View all results must clear the mobile viewport bottom');
+    await send('Emulation.setDeviceMetricsOverride',{width:375,height:744,deviceScaleFactor:1,mobile:true});
+    await wait("Math.abs(document.querySelector('#cfp-sidebar').getBoundingClientRect().height-visualViewport.height)<1");
+    const expanded=await evaluate("(()=>{const drawer=document.querySelector('#cfp-sidebar').getBoundingClientRect(),button=document.querySelector('#cfp-apply-btn').getBoundingClientRect();return {drawerBottom:drawer.bottom,buttonBottom:button.bottom,viewport:visualViewport.height}})()");
+    assert.ok(expanded.drawerBottom<=expanded.viewport+1 && expanded.buttonBottom<=expanded.viewport-12,JSON.stringify(expanded));
     await evaluate("document.querySelector('#cfp-close-btn').click()");assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),false);
     const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('scratch/collection-headless-mobile.png',Buffer.from(image.data,'base64'));
   });
