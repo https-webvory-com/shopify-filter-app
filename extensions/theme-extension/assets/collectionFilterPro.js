@@ -443,12 +443,49 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
       if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
           !['pending', 'failed'].includes(payload?.debug?.collectionRankingStatus)) {
-        throw new Error(payload?.error || 'Products are temporarily unavailable. Please retry.');
+        const error = new Error(payload?.error || 'Products are temporarily unavailable. Please retry.');
+        error.retryable = response.status === 429 || response.status >= 500;
+        throw error;
       }
       return { status: response.status, json: async () => payload };
     } finally {
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
+    }
+  }
+  async function fetchCollectionResponseWithRecovery(requestUrl, signal) {
+    // A deployment briefly closes the HTTP port while replacing the web container.
+    // Keep the skeleton visible and retry that temporary failure on the first page.
+    let lastError;
+    try { return await fetchCollectionResponse(requestUrl, signal); }
+    catch (error) {
+      if (signal.aborted || !(error.retryable || error.name === 'AbortError' || error instanceof TypeError)) throw error;
+      lastError = error;
+    }
+    const recovery = new AbortController();
+    const cancel = () => recovery.abort();
+    signal.addEventListener('abort', cancel, { once: true });
+    const timeout = setTimeout(cancel, 20000);
+    try {
+      for (let attempt = 0; attempt < 3 && !recovery.signal.aborted; attempt++) {
+        try {
+          await new Promise((resolve, reject) => {
+            const onAbort = () => { clearTimeout(timer); recovery.signal.removeEventListener('abort', onAbort); reject(new DOMException('Aborted', 'AbortError')); };
+            const timer = setTimeout(() => { recovery.signal.removeEventListener('abort', onAbort); resolve(); }, 1000 * (attempt + 1));
+            recovery.signal.addEventListener('abort', onAbort, { once: true });
+            if (recovery.signal.aborted) onAbort();
+          });
+          return await fetchCollectionResponse(requestUrl, recovery.signal);
+        } catch (error) {
+          if (signal.aborted) throw error;
+          if (!recovery.signal.aborted && !(error.retryable || error.name === 'AbortError' || error instanceof TypeError)) throw error;
+          lastError = error;
+        }
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', cancel);
     }
   }
   async function takeEarlyCollectionResponse(requestUrl, signal) {
@@ -660,9 +697,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               try { earlySearchResponse = await early.promise; if (!earlySearchResponse.ok) earlySearchResponse = null; } catch { /* Retry through the ordinary request. */ }
             } else early.controller.abort();
           }
-          const response = earlySearchResponse || (templateName !== 'search' && !isLoadMore && activeFilters.page === 1
-            ? await takeEarlyCollectionResponse(requestUrl, fetchSignal) || await fetchCollectionResponse(requestUrl, fetchSignal)
-            : await fetchCollectionResponse(requestUrl, fetchSignal));
+          let response = earlySearchResponse;
+          if (!response && templateName !== 'search' && !isLoadMore && activeFilters.page === 1) {
+            try { response = await takeEarlyCollectionResponse(requestUrl, fetchSignal); }
+            catch (error) { if (fetchSignal.aborted) throw error; }
+          }
+          if (!response) response = !isLoadMore && activeFilters.page === 1
+            ? await fetchCollectionResponseWithRecovery(requestUrl, fetchSignal)
+            : await fetchCollectionResponse(requestUrl, fetchSignal);
           if (response.status === 409 && allowSessionRestart) {
             collectionRankingTokens.delete(rankingKey);
             activeFilters.page = 1;

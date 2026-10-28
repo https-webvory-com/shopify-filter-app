@@ -77,3 +77,18 @@ test('search results allow a slow first response without changing collection tim
  await helpers.fetchCollectionResponse(url,signal);
  assert.equal(delays.at(-1),60000);
 });
+test('first-page request recovers after temporary deployment errors without changing the 30-second request timeout',async()=>{
+ let calls=0;
+ const helpers=browserHelpers(async()=>{
+  calls++;
+  return calls<3 ? {status:503,json:async()=>({error:'Service temporarily unavailable'})} : {status:200,json:async()=>payload};
+ });
+ const result=await helpers.fetchCollectionResponseWithRecovery('https://app/api/filter?responseProfile=collection-v1',new AbortController().signal);
+ assert.equal(result.status,200);assert.equal((await result.json()).products.length,1);assert.equal(calls,3);
+});
+test('first-page recovery does not retry permanent API errors',async()=>{
+ let calls=0;
+ const helpers=browserHelpers(async()=>{calls++;return {status:400,json:async()=>({error:'Invalid filter'})};});
+ await assert.rejects(helpers.fetchCollectionResponseWithRecovery('https://app/api/filter?responseProfile=collection-v1',new AbortController().signal),/Invalid filter/);
+ assert.equal(calls,1);
+});

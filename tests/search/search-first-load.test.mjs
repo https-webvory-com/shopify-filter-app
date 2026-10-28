@@ -18,6 +18,7 @@ async function load({ template = 'search', page = 1, limit = 4, sort = 'relevanc
     activeFilters: { page }, queryParams: params, API_DOMAIN: 'https://api.test', fetchSignal: new AbortController().signal,
     fetchCollectionResponse: async url => { calls.push(url); return { status: 200, json: async () => ({ products: expectedOrder.slice((page - 1) * limit, page * limit), source: 'scoped' }) }; },
   };
+  context.fetchCollectionResponseWithRecovery = context.fetchCollectionResponse;
   const data = await vm.runInNewContext(earlyHelper + '\n(async()=>{' + requestBlock + '\nreturn data;})()', context);
   return { data, calls, early, context };
 }
