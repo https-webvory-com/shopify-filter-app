@@ -5,7 +5,6 @@ import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
 import {
   useFetcher,
-  useNavigation,
   useLoaderData,
 } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -358,7 +357,6 @@ export default function MerchandisingIndex() {
     merchandisingRules,
   } = useLoaderData();
   const fetcher = useFetcher();
-  const navigation = useNavigation();
   const navigate = useNavigate();
   const shopify = useAppBridge();
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -1048,27 +1046,7 @@ export default function MerchandisingIndex() {
         <div
           style={{ maxWidth: "1200px", margin: "0 auto", textAlign: "left" }}
         >
-          {navigation.state !== "idle" || fetcher.state !== "idle" ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                padding: "100px",
-              }}
-            >
-              <div
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  border: "4px solid rgba(91, 33, 182, 0.2)",
-                  borderTop: "4px solid #5B21B6",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              ></div>
-              <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-            </div>
-          ) : filteredRules.length > 0 ||
+          {filteredRules.length > 0 ||
             (merchandisingRules.length > 0 &&
               (searchQuery || ruleFilters.length > 0)) ? (
             <div

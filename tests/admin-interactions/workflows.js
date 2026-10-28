@@ -202,6 +202,18 @@ window.runTargetedAudit = async () => {
       "Add merge value did not open its dialog",
     );
   });
+  for (const section of ["search", "collections"]) {
+    await test(`${section} merchandising status shows one loader and keeps the table`, async () => {
+      await window.auditMount(`/app/${section}/merchandising`);
+      const rowCount = document.querySelectorAll("tbody tr").length;
+      await click(document.querySelector("tbody tr")?.cells[2]?.firstElementChild);
+      assert(document.querySelectorAll('[role="status"]').length === 1, "Expected one mutation loader");
+      assert(document.querySelectorAll("tbody tr").length === rowCount, "Rule table disappeared while saving");
+      assert(!document.querySelector('[style*="animation: spin"]'), "A second page spinner appeared");
+      await wait(500);
+      assert(!document.querySelector('[role="status"]'), "Mutation loader remained after completion");
+    });
+  }
   await test("rule saves and deletes keep a visible loader until the server responds", async () => {
     await window.auditMount("/app/search/synonyms");
     await click(findText("Add New Synonym", "button"));
