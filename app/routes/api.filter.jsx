@@ -561,12 +561,15 @@ export const loader = async ({ request, context }) => {
         () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
-    const saleRangesConfig = configuredSaleRanges(activeGroupFilters);
-    const saleRows = saleRangesConfig.length || selectedSaleRanges.length || activeGroupFilters?.some(f => f.isEnabled && f.filterType === 'percent_sale')
+    // The cards response does not render facet choices or counts. Only load
+    // catalog-wide facts when a selected filter actually needs them.
+    const saleRangesConfig = fastCards ? [] : configuredSaleRanges(activeGroupFilters);
+    const saleRows = selectedSaleRanges.length || (!fastCards && (saleRangesConfig.length || activeGroupFilters?.some(f => f.isEnabled && f.filterType === 'percent_sale')))
       ? await getCached(`percentSale:${shop}`, () => readProductSalePercentages(prisma,shop),30) : [];
-    const needsExtraFacts=activeGroupFilters?.some(f=>f.isEnabled&&extraFilterTypes.has(f.filterType))||Object.entries(selectedExtra).some(([key,values])=>values.length&&(key!=='stock_status'||values.some(v=>v==='pre_order'||v==='stock_on_hand')));
+    const hasExtraGroup=activeGroupFilters?.some(f=>f.isEnabled&&extraFilterTypes.has(f.filterType));
+    const needsExtraFacts=(hasExtraGroup&&(!fastCards||availability.length>0))||Object.entries(selectedExtra).some(([key,values])=>values.length&&(key!=='stock_status'||values.some(v=>v==='pre_order'||v==='stock_on_hand')));
     const extraRows=needsExtraFacts?await getCached(`extraFilterFacts:${shop}`,()=>readExtraProductFacts(prisma,shop),30):[];
-    const extraChoices=extraFilterChoices(activeGroupFilters,extraRows);
+    const extraChoices=fastCards?[]:extraFilterChoices(activeGroupFilters,extraRows);
     const categoryFilters = {};
     for(const [type,values] of Object.entries(selectedExtra)) if(type!=='stock_status'&&values.length)categoryFilters['extra_'+type]=extraIdsFilter(extraRows,type,values);
     if (selectedSaleRanges.length) categoryFilters.percentSale = saleIdsFilter(saleRows,selectedSaleRanges);
