@@ -241,6 +241,11 @@ export async function createLoadingServer({redisLayer}={}) {
         if(url.searchParams.get('responseProfile')!=='collection-config-v1')requestStarts.push({sort:url.searchParams.get('sortBy'),startedAt:Date.now()});
         if(state.apiDelay)await new Promise(resolve=>setTimeout(resolve,state.apiDelay));
         if(res.destroyed)return;
+        if(state.apiFailure==='once'&&url.searchParams.get('responseProfile')!=='collection-config-v1'){
+          state.apiFailure=null;
+          res.writeHead(502,{'Content-Type':'application/json'}).end(JSON.stringify({error:'Temporary upstream failure'}));
+          return;
+        }
         if(state.apiFailure==='html'){res.writeHead(502,{'Content-Type':'text/html'}).end('<html>Proxy unavailable</html>');return;}
         if(state.apiFailure==='empty'){res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
         const response=await routeCtx.module.exports.loader({request:new Request('http://fixture'+req.url,{headers:req.headers}),params:{},context:{}});

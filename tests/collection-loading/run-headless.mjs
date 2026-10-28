@@ -270,11 +270,37 @@ try{
     await control({apiFailure:null});await evaluate("document.querySelector('.cfp-order-error button').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");assert.deepEqual(await evaluate('browserErrors'),[]);
   });
+  await test('one temporary upstream failure retries without blanking the collection',async()=>{
+    await control({reset:true,apiFailure:'once',delay:100});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
+    assert.equal((await getState()).state.apiFailure,null);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('network loss shows Retry and returns to the cached collection when restored',async()=>{
+    await control({reset:true,delay:100});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     await send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     await evaluate("document.querySelector('[data-value=\"price-ascending\"]').click()");await wait("!!document.querySelector('.cfp-order-error button')");
+    assert.equal(await evaluate("document.querySelector('.cfp-order-error p').textContent.includes('Previous results are still shown')"),true);
+    assert.equal((await cards()).length,25,'network failure removed the prior products');
     await send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     await evaluate("document.querySelector('.cfp-order-error button').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('failed filter request keeps prior products and Retry applies the filter',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Designer',config:{}}];
+    await control({reset:true,delay:100,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    const previous=await cards();
+    await control({apiFailure:'html'});
+    await evaluate("const input=document.querySelector('input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+    await wait("!!document.querySelector('.cfp-order-error button')");
+    assert.deepEqual(await cards(),previous);
+    assert.equal(await evaluate("document.querySelector('.cfp-order-error p').textContent.includes('Previous results are still shown')"),true);
+    await control({apiFailure:null});
+    await evaluate("document.querySelector('.cfp-order-error button').click()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('.cfp-order-error')");
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('variant-dependent merchandising preserves global order and selected images across small batches',async()=>{

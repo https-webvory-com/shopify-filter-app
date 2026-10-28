@@ -421,8 +421,24 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const timer = setTimeout(() => controller.abort(), typeof templateName !== 'undefined' && templateName === 'search' ? 60000 : 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
-      const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'} });
-      let payload = await response.json();
+      let response;
+      let payload;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'} });
+          payload = await response.json();
+          if (attempt === 0 && response.status >= 500) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+            continue;
+          }
+          break;
+        } catch (error) {
+          if (attempt > 0 || controller.signal.aborted) throw error;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        }
+      }
       if (payload?.cfpTransport) payload = decodeCollectionResponse(payload);
       payload = await completeCollectionResponse(payload,requestUrl,controller.signal,configurationPromise);
       if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
@@ -509,6 +525,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
     let rankingKey;
+    document.querySelectorAll('.cfp-order-error').forEach(error => error.remove());
 
     syncStateToURL(); // Sync URL
 
@@ -602,7 +619,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
       sidebar.classList.add('cfp-loading');
-        if (!isLoadMore) {
+        if (!isLoadMore && !getProductContainer().querySelector('.cfp-product-card:not(.cfp-skeleton-card)')) {
           renderSkeleton();
         }
         let data = null;
@@ -695,19 +712,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       console.error("CFP: API Query error", e);
       sidebar.classList.remove('cfp-loading');
       const container = getProductContainer();
-      if (!isLoadMore) container.replaceChildren();
+      const retainedResults = !isLoadMore && !!container.querySelector('.cfp-product-card:not(.cfp-skeleton-card)');
+      if (!isLoadMore && !retainedResults) container.replaceChildren();
       else container.querySelector('.cfp-load-more-container')?.remove();
       const error = document.createElement('div');
       error.className = 'cfp-order-error';
       error.setAttribute('role', 'status');
       const message = document.createElement('p');
-      message.textContent = 'Products are temporarily unavailable. Please retry.';
+      message.textContent = retainedResults ? 'Could not update products. Previous results are still shown.' : 'Products are temporarily unavailable. Please retry.';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = 'Retry';
       retry.addEventListener('click', () => { if(retry.disabled)return;retry.disabled=true;error.remove();fetchAndRenderData(isLoadMore); });
       error.append(message, retry);
-      container.appendChild(error);
+      if (retainedResults && container.parentElement) container.parentElement.insertBefore(error, container);
+      else container.appendChild(error);
     }
   }
 

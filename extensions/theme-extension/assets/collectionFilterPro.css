@@ -75,6 +75,28 @@ facet-filters-form,
 .cfp-breadcrumb-color {
   font-weight: 700;
 }
+.cfp-order-error {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e8c5bb;
+  border-radius: 6px;
+  background: #fff8f5;
+  color: #783626;
+  font-size: 14px;
+}
+.cfp-order-error p { margin: 0; }
+.cfp-order-error button {
+  padding: 6px 12px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
 .cfp-breadcrumb-remove {
   background: transparent;
   border: none;
