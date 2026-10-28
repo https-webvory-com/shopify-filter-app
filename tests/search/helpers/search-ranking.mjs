@@ -12,10 +12,12 @@ import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../../app/utils/marketAvailability.js';
+import * as skuSearch from '../../../app/utils/skuSearch.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
+    if(name==='../utils/skuSearch.js')return skuSearch;
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;

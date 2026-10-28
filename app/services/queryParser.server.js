@@ -3,6 +3,7 @@ import meiliClient from "./meiliClient.server.js";
 import { getCached } from "./shopCache.server.js";
 import prisma from "../db.server";
 import { resolveSearchColor, colorSearchFilter } from "../utils/searchColor.js";
+import {isProductCodeQuery,skuSearchWhere} from '../utils/skuSearch.js';
 
 export async function initializeParserCache(shop) {
   if (!shop) throw new Error("Query parser requires a shop");
@@ -24,6 +25,15 @@ export async function initializeParserCache(shop) {
 
 export async function parseQuery(query, shop) {
   if (!query || typeof query !== 'string') return null;
+
+  if(isProductCodeQuery(query)){
+    const ids=await getCached(`skuSearch:${shop}:${JSON.stringify(query.trim().toLowerCase())}`,async()=>{
+      const rows=await prisma.product.findMany({where:skuSearchWhere(shop,query),select:{id:true}});
+      return rows.map(row=>String(row.id).split('/').pop());
+    },15);
+    if(ids.length)return {originalQuery:query,remainingQuery:'',hasFilters:false,filters:{colors:[],vendors:[],types:[]},
+      queryColorWords:[],colorIntent:{requested:[],values:[]},colorFilter:null,skuProductIds:ids};
+  }
 
   const cache = await initializeParserCache(shop);
   const lowerQuery = query.toLowerCase().trim();

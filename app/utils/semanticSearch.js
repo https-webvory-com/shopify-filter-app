@@ -1,3 +1,5 @@
+import {isProductCodeQuery} from './skuSearch.js';
+
 export function geminiEmbedder(apiKey) {
   return {
     source: "rest",
@@ -28,6 +30,7 @@ export function semanticRelayEmbedder(url, token, provider = 'openai') {
 
 // Keep filters, pagination and explicit sorting intact in both modes.
 export function withSemanticSearch(query, enabled, provider = 'openai') {
+  if(isProductCodeQuery(query.q))return {...query,matchingStrategy:'all'};
   if (!enabled || !query.q?.trim()) return query;
   return { ...query, hybrid: { embedder: provider, semanticRatio: 0.5 } };
 }

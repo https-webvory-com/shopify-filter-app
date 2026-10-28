@@ -215,7 +215,8 @@ export const loader = async ({ request, context }) => {
       }
     }
     
-    let tier1SearchQuery = parsedQuery && parsedQuery.hasFilters ? parsedQuery.remainingQuery : searchQuery;
+    const textSearchQuery=parsedQuery?.skuProductIds?.length?'':searchQuery;
+    let tier1SearchQuery = parsedQuery && parsedQuery.hasFilters ? parsedQuery.remainingQuery : textSearchQuery;
 
     // ── 1. Parallel fetch: stable shop config (all cached) ─────────────
     // These 3 change only when admin saves settings → safe to cache 60s
@@ -508,6 +509,7 @@ export const loader = async ({ request, context }) => {
     // ── 7. Build Meilisearch filters ───────────────────────────────────
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
+    if(parsedQuery?.skuProductIds?.length)baseFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
     const marketIds=marketVersion?await getMarketAvailableProductIds(shop,marketCountry,marketVersion):null;
     if(marketVersion&&!marketIds)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
     const marketEligible=marketIds?new Set(marketIds):null;
@@ -646,6 +648,7 @@ export const loader = async ({ request, context }) => {
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
+    if(parsedQuery?.skuProductIds?.length){const eligible=new Set(parsedQuery.skuProductIds);activePinnedList=activePinnedList.filter(id=>eligible.has(String(id).split('/').pop()));}
     if(marketEligible)activePinnedList=activePinnedList.filter(id=>marketEligible.has(String(id).split('/').pop()));
     if (activePinnedList.length) {
       let pinCollectionScope = {};
@@ -731,7 +734,7 @@ export const loader = async ({ request, context }) => {
       tier2QueryIndex = queries.length;
       const tier2MainQuery = {
         ...mainQuery,
-        q: searchQuery, // fallback ALWAYS uses the full original search text
+        q: textSearchQuery, // SKU-scoped queries already identify their exact eligible IDs.
         filter: useCollectionPagination ? [...allFiltersList, `NOT (${[...ruleMeiliFilters, ...queryParserMeiliFilters].join(" AND ")})`] : allFiltersList,
       };
       if (meiliSort) {
@@ -773,7 +776,7 @@ export const loader = async ({ request, context }) => {
     const facetQueryIndex = queries.length;
     const facetQuery = {
       indexUid: "products",
-      q: searchQuery,
+      q: textSearchQuery,
       filter: tier1Filter,
       facets: targetFacets,
       ...(useRankedCollectionPagination ? {limit:0} : {hitsPerPage:1,page:1}),
@@ -787,7 +790,7 @@ export const loader = async ({ request, context }) => {
       tier2FacetQueryIndex = queries.length;
       queries.push({
         indexUid: "products",
-        q: searchQuery,
+        q: textSearchQuery,
         filter: useCollectionPagination ? queries[tier2QueryIndex].filter : allFiltersList,
         facets: targetFacets,
         ...(useRankedCollectionPagination ? {limit:0} : {hitsPerPage:1,page:1}),
@@ -806,7 +809,7 @@ export const loader = async ({ request, context }) => {
       ];
       queries.push({
         indexUid: "products",
-        q: searchQuery,
+        q: textSearchQuery,
         filter: filterForThisCat,
         facets: cat === "percentSale" || cat.startsWith("extra_") ? [] : [cat],
         limit: 0,
@@ -818,7 +821,7 @@ export const loader = async ({ request, context }) => {
     const saleCountQueryStart = queries.length;
     const saleCountRanges = [...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
     for (const range of saleCountRanges) {
-      queries.push({indexUid:'products',q:searchQuery,
+      queries.push({indexUid:'products',q:textSearchQuery,
         filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
           ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []),saleIdsFilter(saleRows,[range])],
         facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
@@ -833,13 +836,13 @@ export const loader = async ({ request, context }) => {
         const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
         const ids=await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma});priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
       }
-      queries.push({indexUid:'products',q:searchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+      queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
     let exactPriceCounts=[];
     const extraCountQueryStart=queries.length;
     for(const choice of extraChoices){
       const category=choice.type==='stock_status'?'available':'extra_'+choice.type;
-      queries.push({indexUid:'products',q:searchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+      queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
     let extraCounts={};
     let saleCounts = {};
@@ -1066,7 +1069,7 @@ export const loader = async ({ request, context }) => {
       if (useCollectionPagination) {
         // Keep cards available if the new page-query path is unsupported by
         // the deployed search server. Fetch only the old bounded page.
-        const fallbackQuery = { ...mainQuery, filter: allFiltersList, q: searchQuery, limit, offset: (page - 1) * limit };
+        const fallbackQuery = { ...mainQuery, filter: allFiltersList, q: textSearchQuery, limit, offset: (page - 1) * limit };
         if (meiliSort) fallbackQuery.sort = meiliSort;
         const { indexUid, q, ...options } = fallbackQuery;
         meiliRes = await meiliClient.index("products").search(q, options);
@@ -1077,7 +1080,7 @@ export const loader = async ({ request, context }) => {
 
     }
     if (needsRankedSearch) {
-      const result = await rankSearchResults({ shop, query: searchQuery,
+      const result = await rankSearchResults({ shop, query: textSearchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
         rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: targetFacets });
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };

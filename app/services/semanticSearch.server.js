@@ -26,14 +26,15 @@ export async function semanticSearch(query, options) {
 // Ranking scans must not page through a changing hybrid blend. Keep the
 // exhaustive lexical pass separate from the fixed semantic relevance window.
 export async function keywordSearch(query, options) {
-  return meiliClient.index("products").search(query, options);
+  const code=withSemanticSearch({q:query},false).matchingStrategy;
+  return meiliClient.index("products").search(query,code?{...options,matchingStrategy:code}:options);
 }
 
 // A ranked page may use several count/page queries. Never mix semantic counts
 // with keyword hits when an embedding request fails halfway through the plan.
 export async function searchPageBatch(queries, mode) {
   const provider = semanticProvider();
-  const semantic = mode !== false && queries.some(q => q.q?.trim()) && await isReady(provider);
+  const semantic = mode !== false && queries.some(q => withSemanticSearch(q,true,provider).hybrid) && await isReady(provider);
   if (mode === true && !semantic) throw Error('Semantic search mode changed during page retrieval');
   try {
     return { ...(await meiliClient.multiSearch({ queries: queries.map(q => withSemanticSearch(q, semantic, provider)) })), semantic };

@@ -17,7 +17,7 @@ function readBounds(facetRes, page) {
 }
 
 test('initial and fallback queries request full-result price stats without a selected price', () => {
-  const context = { activeGroupFilters: [], queries: [], searchQuery: '', tier1Filter: ['shop = "fixture"'],
+  const context = { activeGroupFilters: [], queries: [], searchQuery: '', textSearchQuery:'', tier1Filter: ['shop = "fixture"'],
     hasTier1StrictFilters: true, useCollectionPagination: false, useRankedCollectionPagination:false, allFiltersList: ['shop = "fixture"'] };
   vm.runInNewContext(facetQueries, context);
   for (const query of context.queries) {
@@ -31,7 +31,7 @@ test('initial and fallback queries request full-result price stats without a sel
 });
 
 test('ranked collection facets retain full-result price stats without an exhaustive hit-count query',()=>{
- const context={activeGroupFilters:[],queries:[],searchQuery:'',tier1Filter:['shop = "fixture"'],hasTier1StrictFilters:true,
+ const context={activeGroupFilters:[],queries:[],searchQuery:'',textSearchQuery:'',tier1Filter:['shop = "fixture"'],hasTier1StrictFilters:true,
   useCollectionPagination:true,useRankedCollectionPagination:true,allFiltersList:['shop = "fixture"'],tier2QueryIndex:0};
  context.queries.push({filter:context.allFiltersList});
  vm.runInNewContext(facetQueries,context);
@@ -53,7 +53,7 @@ test('slider bounds remain identical across pages with different product prices'
 test('price bounds query excludes its own range while retaining other selections', () => {
   const start = source.indexOf('    const categoryQueryStartIndex =');
   const end = source.indexOf('    const saleCountQueryStart =', start);
-  const context = { saleRangesConfig: [], queries: [], baseFilters: ['shop = "fixture"'], searchQuery: '',
+  const context = { saleRangesConfig: [], queries: [], baseFilters: ['shop = "fixture"'], searchQuery: '', textSearchQuery:'',
     activeCategories: ['priceMin', 'option_Fabric'], categoryFilters: {
       priceMin: 'id IN ["price-qualified-variant"]', option_Fabric: 'option_Fabric = "Chiffon"',
     } };

@@ -6,6 +6,7 @@ import net from 'node:net';
 import {spawnSync,spawn} from 'node:child_process';
 import {PrismaClient} from '@prisma/client';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
+import {skuSearchWhere} from '../../app/utils/skuSearch.js';
 const bin=process.env.POSTGRES_BIN||'C:/Program Files/PostgreSQL/18/bin';
 const directory=fs.mkdtempSync(path.resolve('scratch','eligibility-postgres-')),data=path.join(directory,'data');
 const probe=net.createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));
@@ -66,6 +67,16 @@ try{
  let fallback=0;const unknown={findMany:async()=>{fallback++;return [];}};
  await availableProductIds(unknown,{...where,vendor:'private-scope'},{},[],null,{database:wrapped});assert.equal(queries,0);assert.equal(fallback,1);
  console.log('PASS unknown predicates preserve the existing scoped path');
+ sql('ALTER TABLE "Variant" ADD COLUMN sku text;');
+ const skuRows=[['sku-1','1517-Fuchsia-4','fixture','ACTIVE'],['sku-2','15170-Fuchsia-4','fixture','ACTIVE'],['sku-3','11517-Fuchsia-4','fixture','ACTIVE'],['sku-4','1517-Fuchsia-4','other','ACTIVE'],['sku-5','1517-Fuchsia-4','fixture','ARCHIVED'],['sku-6','1517_Fuchsia_4','fixture','ACTIVE'],['sku-7','AB_1517-Fuchsia-4','fixture','ACTIVE'],['sku-8','ABX1517-Fuchsia-4','fixture','ACTIVE']];
+ for(const [id,sku,shop,status]of skuRows){
+  await database.$executeRaw`INSERT INTO "Product" (id,shop,status,options) VALUES (${id},${shop},${status},'[]'::jsonb)`;
+  await database.$executeRaw`INSERT INTO "Variant" (id,"productId",available,price,sku) VALUES (${id},${id},true,100,${sku})`;
+ }
+ for(const [query,expected]of [['1517',['sku-1','sku-6']],['1517-fuchsia-4',['sku-1']],['AB_1517',['sku-7']],['999999',[]]]){
+  const rows=await database.product.findMany({where:skuSearchWhere('fixture',query),select:{id:true},orderBy:{id:'asc'}});
+  assert.deepEqual(rows.map(row=>row.id),expected);console.log('PASS literal SKU/model prefix '+query);
+ }
  if(process.argv.includes('--benchmark')){
   sql(`INSERT INTO "Product" (id,shop,status,options) SELECT 'bulk-'||n,'fixture','ACTIVE','[{"name":"Color"},{"name":"Size"}]'::jsonb FROM generate_series(1,10000) n;
    INSERT INTO "ProductCollection" ("productId","collectionId") SELECT id,'bulk' FROM "Product" WHERE id LIKE 'bulk-%';

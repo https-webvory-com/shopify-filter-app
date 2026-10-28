@@ -51,9 +51,10 @@ export const loader = async ({ request }) => {
     // -- TIER 1: NLP Intent Extraction (DISABLED) --
     // const aiExtracted = await extractFiltersFromQuery(searchQuery);
     const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
-    const cleanSearchQuery = typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
+    const cleanSearchQuery = parsedQuery?.skuProductIds?.length ? '' : typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
+    if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
 
     if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
 

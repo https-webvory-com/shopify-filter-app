@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
 import * as color from '../../app/utils/searchColor.js';
+import * as skuSearch from '../../app/utils/skuSearch.js';
 import {buildSearchSuggestions} from '../../app/utils/searchSuggestions.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 
@@ -62,7 +63,8 @@ test('parser facets and color aliases are isolated by shop',async()=>{
     }})}},
     './shopCache.server.js':{getCached:async(_key,fetch)=>fetch()},
     '../db.server':{default:{mergedValue:{findMany:async({where})=>where.shop==='shop-a'?[{filterType:'Color',targetValue:'Blue',sourceValues:['Navy']}]:[]}}},
-    '../utils/searchColor.js':color
+    '../utils/searchColor.js':color,
+    '../utils/skuSearch.js':skuSearch
   };
   const context={module:{exports:{}},exports:{},console,require:name=>({__esModule:true,...mocks[name]})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/queryParser.server.js','utf8'),{format:'cjs'})).code,context);
