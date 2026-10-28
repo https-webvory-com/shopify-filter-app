@@ -7,8 +7,8 @@ import {readCollectionFactRecord} from '../../app/utils/collectionFactStore.js';
 import {maintainCollectionFacts} from '../../app/utils/maintainCollectionFacts.js';
 import {createCollectionCandidateIndex} from '../../app/utils/collectionCandidateIndex.js';
 
-async function fixture(){
- const writes=[],jobs=[],rankingCalls=[],loads=[],conditions=[{action:'Boost',field:'Color (product option)',value:'Red'}];
+async function fixture({ruleConditions=[{action:'Boost',field:'Color (product option)',value:'Red'}]}={}){
+ const writes=[],jobs=[],rankingCalls=[],loads=[],conditions=ruleConditions;
  let existing=null,docs=[],image='red.jpg',matcherError=false;
  const profile={...facts.createCollectionFactProfile(conditions),revision:'0'};
  const leases=new Map();
@@ -27,12 +27,22 @@ async function fixture(){
  });
  return {service,writes,jobs,profile,redis,rankingCalls,loads,setMatcherError:value=>matcherError=value,setImage:value=>image=value,setExisting:value=>existing=value,setDocs:value=>docs=value};
 }
-test('fact writes precede index publication and leave other shops unchanged',async()=>{
+test('fact writes precede index publication independently for every shop',async()=>{
  const f=await fixture(),p={id:'1',shop:'owned.myshopify.com',variantPrices:[{option1:'Red'}]},other={...p,shop:'other.myshopify.com'};
  const output=await f.service.withCollectionRuleFacts([p,other]);
- assert.equal(f.writes.length,1);assert.equal(output[0].cfpCollectionInputSource,facts.collectionInputSource(p));
- assert.equal(f.writes[0][3].cfpCollectionFactSource,output[0].cfpCollectionInputSource);assert.equal(output[1],other);
+ assert.equal(f.writes.length,2);assert.equal(output[0].cfpCollectionInputSource,facts.collectionInputSource(p));
+ assert.equal(f.writes[0][3].cfpCollectionFactSource,output[0].cfpCollectionInputSource);
+ assert.equal(f.writes[1][0],other.shop);assert.equal(f.writes[1][3].cfpCollectionFactSource,output[1].cfpCollectionInputSource);
  assert.equal(output[0].cfpCollectionFactProfile,f.profile.id);assert.ok(output[0].cfpCollectionFactMatches.length);
+});
+test('direct filtered preparation is available for every shop and shops without rules skip fact writes',async()=>{
+ const f=await fixture({ruleConditions:[]});
+ assert.equal(f.service.collectionFactsEnabled('another.myshopify.com'),true);
+ const spec={shop:'another.myshopify.com',collectionId:'1',retainForIdle:false,directFiltered:true,sortBy:'best-selling',needsShopifyOrder:true,orderedIds:['1'],query:{q:'',filter:["shop = 'another.myshopify.com'"]},rule:{conditions:[]},mergedValues:[]};
+ assert.deepEqual(await f.service.prepareCollectionFromFacts(spec),{ids:['1'],metadata:{}});
+ const product={id:'1',shop:'another.myshopify.com',variantPrices:[]};
+ assert.equal((await f.service.withCollectionRuleFacts([product]))[0],product);
+ assert.equal(f.writes.length,0);
 });
 test('fact sweep recovers a retained failed job and queues at lower priority',async()=>{
  const f=await fixture();let removed=false;

@@ -10,16 +10,13 @@ import {prepareCollectionRanking} from '../utils/prepareCollectionRanking.js';
 import {hydrateCollectionSkus,readRankedCollectionPage} from '../utils/rankedCollectionPage.js';
 import {createCollectionFactProfile,isVariantCondition,collectionInputSource,projectCollectionRuleFacts} from '../utils/collectionRuleFacts.js';
 import {createCollectionFactStore,readCollectionFactRecord} from '../utils/collectionFactStore.js';
-import configuredWarmups from '../config/collection-prewarm.json';
 import {maintainCollectionFacts} from '../utils/maintainCollectionFacts.js';
 import {createCollectionCandidateIndex} from '../utils/collectionCandidateIndex.js';
 
 const store=createCollectionFactStore(redis);
 const hash=value=>createHash('sha256').update(value).digest('hex');
 export function collectionFactsEnabled(shop){
- if(process.env.CFP_COLLECTION_DIRECT_RANKING==='false')return false;
- const shops=process.env.CFP_COLLECTION_DIRECT_SHOPS?.split(',').map(s=>s.trim())||configuredWarmups.map(r=>r.shop);
- return shops.includes(shop);
+ return Boolean(shop)&&process.env.CFP_COLLECTION_DIRECT_RANKING!=='false';
 }
 export async function getCollectionFactProfile(shop){
  return getCached(`collectionFactProfile:${shop}`,async()=>{
@@ -45,7 +42,9 @@ export async function withCollectionRuleFacts(documents){
  for(let offset=0;offset<documents.length;offset+=25){
   result.push(...await Promise.all(documents.slice(offset,offset+25).map(async p=>{
    if(!collectionFactsEnabled(p.shop))return p;
-   const source=collectionInputSource(p),profile=profiles.get(p.shop);
+   const profile=profiles.get(p.shop);
+   if(!profile?.conditions.length)return p;
+   const source=collectionInputSource(p);
    let facts;
    if(profile)try{facts=projectCollectionRuleFacts(p,profile,checkRuleMatch);await store.put(p.shop,profile,p,facts);}
    catch(error){console.error('CFP: Collection fact write unavailable:',error.name);}

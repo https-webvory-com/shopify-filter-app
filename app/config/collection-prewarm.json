@@ -12,12 +12,5 @@
     "country": "IN",
     "locale": "en",
     "sortBy": "best-selling"
-  },
-  {
-    "shop": "thedressoutletuk.myshopify.com",
-    "collectionHandle": "formal-dresses",
-    "country": "GB",
-    "locale": "en",
-    "sortBy": "best-selling"
   }
 ]
