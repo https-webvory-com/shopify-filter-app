@@ -92,7 +92,7 @@
       }
       if (/\/search\/?$/i.test(window.location.pathname)) {
         var searchTerms = params.get('q');
-        if (searchTerms && [...params.keys()].every(function(key) { return ['q','preview_theme_id','_ab','_fd','_sc','pb','gclid','fbclid'].includes(key) || key.startsWith('utm_'); })) {
+        if (searchTerms && [...params.keys()].every(function(key) { return ['q','sortBy','preview_theme_id','_ab','_fd','_sc','pb','gclid','fbclid'].includes(key) || key.startsWith('utm_'); })) {
           var searchParams = new URLSearchParams();
           searchParams.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
           searchParams.set('shop', shop);
@@ -103,7 +103,7 @@
           else if (collId) searchParams.set('collectionId', collId);
           searchParams.set('isSearch', 'true');
           searchParams.set('q', searchTerms);
-          searchParams.set('sortBy', 'relevance');
+          searchParams.set('sortBy', params.get('sortBy') || 'relevance');
           searchParams.set('page', '1');
           searchParams.set('limit', '25');
           var searchController = new AbortController();

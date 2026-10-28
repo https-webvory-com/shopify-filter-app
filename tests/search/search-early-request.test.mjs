@@ -38,3 +38,9 @@ test('search with shopper filters leaves its complete request to the renderer', 
   assert.equal(window._cfpEarlySearch, undefined);
   assert.equal(window._cfpEarlyFetch, undefined);
 });
+
+test('search reload with a sort parameter still starts its matching early request', () => {
+  const {requests} = run('?q=formal+dress&sortBy=relevance');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].searchParams.get('sortBy'), 'relevance');
+});
