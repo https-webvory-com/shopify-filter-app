@@ -77,6 +77,22 @@ test('prepared country reads use lightweight proofs and do not call Shopify or l
   assert.equal(f.scans.length,scans);assert.equal(f.listReads(),reads);
   assert.equal(f.scheduled[0][3].countries[0],'IN');
 });
+test('filtered country ID reads reuse one verified list and reject it after stock changes',async()=>{
+  const f=await fixture();await f.service.processMarketAvailability({shop:f.shop,country:'IN'});
+  const first=await f.service.getMarketAvailabilityState(f.shop,'IN'),reads=f.listReads();
+  assert.deepEqual([...await f.service.getMarketAvailableProductIds(f.shop,'IN',first.version)],['1','2']);
+  assert.equal(f.listReads(),reads+1);
+  assert.deepEqual([...await f.service.getMarketAvailableProductIds(f.shop,'IN',first.version)],['1','2']);
+  assert.equal(f.listReads(),reads+1);
+  await f.service.invalidateMarketAvailability(f.shop,'1');
+  assert.equal(await f.service.getMarketAvailableProductIds(f.shop,'IN',first.version),null);
+  f.setIds(['2']);await f.service.processMarketAvailability({shop:f.shop,country:'IN'});
+  const next=await f.service.getMarketAvailabilityState(f.shop,'IN');
+  assert.notEqual(next.version,first.version);
+  const beforeNewRead=f.listReads();
+  assert.deepEqual([...await f.service.getMarketAvailableProductIds(f.shop,'IN',next.version)],['2']);
+  assert.equal(f.listReads(),beforeNewRead+1);
+});
 test('inventory events invalidate saved eligibility even if global quantity is unchanged and queue every enabled country',async()=>{
   const f=await fixture();await f.service.processMarketAvailability({shop:f.shop,country:'IN'});
   const before=await f.service.getMarketAvailabilityState(f.shop,'IN');

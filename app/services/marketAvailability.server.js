@@ -25,6 +25,11 @@ async function context(shop){
   return {record,epoch,identity:hash(record.accessToken+':'+generation)};
 }
 const stateKey=(shop,country,identity,epoch)=>`marketStockState:${shop}:${country}:${identity}:${epoch}`;
+// Filtered requests need the complete country ID set. Reuse it by proof so
+// changing a filter does not download the same large DB row on every click.
+// Published collection pages still read metadata only.
+const availableIdsCache=new Map();
+const availableIdsCacheLimit=2;
 // Admin-only observation: do not enqueue work or read product ID lists.
 export async function getMarketAvailabilityProgress(shop){
   const current=await context(shop);
@@ -81,9 +86,18 @@ export async function getMarketAvailabilityState(shop,country){
   return state||{status:'pending',version:null};
 }
 export async function getMarketAvailableProductIds(shop,country,version){
-  const saved=await prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}}});
   const state=await getMarketAvailabilityState(shop,country);
-  if(state.status!=='ready'||state.version!==version||saved?.version!==version)return null;
+  if(state.status!=='ready'||state.version!==version)return null;
+  const key=`${shop}:${country}:${version}`;
+  if(availableIdsCache.has(key)){
+    const ids=availableIdsCache.get(key);
+    availableIdsCache.delete(key);availableIdsCache.set(key,ids);
+    return ids;
+  }
+  const saved=await prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}}});
+  if(saved?.version!==version)return null;
+  availableIdsCache.set(key,saved.ids);
+  while(availableIdsCache.size>availableIdsCacheLimit)availableIdsCache.delete(availableIdsCache.keys().next().value);
   return saved.ids;
 }
 export async function processMarketAvailability(input){
