@@ -51,6 +51,7 @@ try{
  const cases=[
   [{Color:['Black'],Size:['2XL']},[],null],
   [{Color:['Black'],Size:['2XL']},[],{min:400,max:600}],
+  [{Color:['Black'],Size:['2XL']},[],{min:10,max:Infinity}],
   [{Color:['Blue'],Size:['2XL']},[{optionName:'color',targetValue:'Blue',sourceValues:['Navy']}],null],
   [{Color:[''],Size:['2XL']},[],null],
   [{Color:["O'Reilly"],Size:['2XL']},[],null],

@@ -2,6 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
 
+test('open-ended prices omit the upper bound in SQL and Prisma fallback',async()=>{
+ const filters={Color:['Burgundy']},range={min:10,max:Infinity};
+ const product={id:'gid://shopify/Product/1',options:[{name:'Color'}],variants:[{available:true,option1:'Wine',price:20000}]};
+ const merged=[{optionName:'Color',targetValue:'Burgundy',sourceValues:['Wine']}];
+ const model={findMany:async query=>{
+  assert.deepEqual(query.where.variants.some.price,{gte:10});
+  assert.deepEqual(query.select.variants.where.price,{gte:10});
+  return [product];
+ }};
+ let queried=false;
+ const database={$queryRaw:async query=>{
+  queried=true;assert.equal(query.values.includes(Infinity),false);
+  assert.equal(query.text.includes('v."price" <='),false);
+  assert.ok(query.text.includes('v."price" >='));
+  return [{id:product.id}];
+ }};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},filters,merged,range,{database}),['1']);
+ assert.equal(queried,true);
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},filters,merged,range),['1']);
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},filters,merged,range,{database:{$queryRaw:async()=>{throw Error('fallback');}}}),['1']);
+});
+
 test('the exact database path binds filter values and returns IDs without hydrating variant documents',async()=>{
  const hostile="Black' OR 1=1 --",model={findMany:()=>{throw Error('Variant document transfer is forbidden');}};
  const database={$queryRaw:async query=>{assert.ok(query.values.includes(hostile.toLowerCase()));assert.equal(query.text.includes(hostile),false);assert.ok(query.text.includes('EXISTS'));return [{id:'gid://shopify/Product/1'}];}};

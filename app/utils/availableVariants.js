@@ -27,8 +27,9 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
  }
  const variants=[Prisma.sql`v."productId" = p."id"`,Prisma.sql`v."available" = true`];
  if(priceRange){
-  if(!Number.isFinite(priceRange.min)||!Number.isFinite(priceRange.max))return null;
-  variants.push(Prisma.sql`v."price" >= ${priceRange.min} AND v."price" <= ${priceRange.max}`);
+  if(!Number.isFinite(priceRange.min)||(priceRange.max!==Infinity&&!Number.isFinite(priceRange.max)))return null;
+  variants.push(Prisma.sql`v."price" >= ${priceRange.min}`);
+  if(Number.isFinite(priceRange.max))variants.push(Prisma.sql`v."price" <= ${priceRange.max}`);
  }
  for(const [name,values]of Object.entries(filters||{}))if(values.length){
   const expanded=selectedVariantValues(name,values,mergedValues),key=normalize(name);
@@ -91,7 +92,7 @@ export async function availableProductIds(productModel, where, filters, mergedVa
   // check below. This avoids transferring every available variant in a large
   // collection just to test a selected color/size in the web process.
   const variantWhere = { available: true };
-  if (priceRange) variantWhere.price = { gte: priceRange.min, lte: priceRange.max };
+  if (priceRange) variantWhere.price = { gte: priceRange.min, ...(priceRange.max===Infinity?{}:{lte:priceRange.max}) };
   if (selected.length) variantWhere.AND = selected.map(([name, values]) => {
     const expanded = selectedVariantValues(name,values,mergedValues);
     return { OR: [...expanded].flatMap(value => [1, 2, 3].flatMap(position => [
