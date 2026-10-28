@@ -517,7 +517,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         initialSearchSettingsRead = true;
         await window.cfpSearchSettingsReady;
       } else {
-        await window.cfpRefreshSearchSettings();
+        // Recheck merchant settings without holding the product request behind
+        // a separate settings network call. The next action uses the refresh.
+        void window.cfpRefreshSearchSettings();
       }
       const settings = window.cfpSearchSettings || {};
       const pageSize = Number.isInteger(settings.pageSize) && settings.pageSize >= 1 && settings.pageSize <= 40 ? settings.pageSize : 25;
@@ -2614,7 +2616,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     // Apply & Clear Buttons
     if (applyBtn) {
       applyBtn.addEventListener('click', () => {
-        fetchAndRenderData();
         closeSidebar();
       });
     }

@@ -615,10 +615,11 @@ try{
     await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     assert.equal((await cards()).length,25);
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await evaluate("document.querySelector('#cfp-apply-btn').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const earlyCards=await cards();
     const early=await getState();
-    assert.ok(early.allRequests.some(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===15));
+    assert.equal(early.allRequests.filter(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===15).length,1);
     const firstSearch=fixture.facetRequests.at(-1);
     assert.equal(firstSearch.q,'purple prom dress');
     assert.ok(firstSearch.filter.some(value=>value.includes("option_Size IN ['L']")));
