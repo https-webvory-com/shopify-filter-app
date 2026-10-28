@@ -7,7 +7,7 @@ const settings=[{isEnabled:true,filterType:'tags',config:{prefix:'Color:',manual
 const facets={tags:[{value:'Color:Blue',count:9},{value:'color:Red',count:4},{value:'Style:Long',count:5},{value:'Internal:Flag',count:10}],vendors:[{value:'Vendor',count:10}],options:{Size:[{value:'M',count:7}],Color:[{value:'Blue',count:9}]},priceRanges:{minLimit:1,maxLimit:100}};
 const payload={products:[{id:'1',variants:[{available:true}]}],totalCount:10,rankingToken:'same',settings,facets,mergedValues:[{targetValue:'Blue',values:['Navy']}],globalSettings:{showProductCount:true}};
 const source=await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js','utf8');
-function browserHelpers(fetch){const ctx={fetch,URL,AbortController,setTimeout,clearTimeout};vm.runInNewContext(source.slice(source.indexOf('  function decodeCollectionResponse('),source.indexOf('  async function takeEarlyCollectionResponse('))+'\nthis.decode=decodeCollectionResponse;this.complete=completeCollectionResponse;',ctx);return ctx;}
+function browserHelpers(fetch){const ctx={fetch,URL,AbortController,setTimeout,clearTimeout,templateName:'collection'};vm.runInNewContext(source.slice(source.indexOf('  function decodeCollectionResponse('),source.indexOf('  async function takeEarlyCollectionResponse('))+'\nthis.decode=decodeCollectionResponse;this.complete=completeCollectionResponse;',ctx);return ctx;}
 const json=value=>JSON.parse(JSON.stringify(value));
 
 test('only enabled facet consumers travel, preserving prefix unions, manual inputs, counts and ranges',()=>{
@@ -66,4 +66,14 @@ test('a stalled configuration response remains bounded by the request timeout an
  helpers.setTimeout=callback=>{timeout=callback;return 1;};helpers.clearTimeout=()=>{};
  const controller=new AbortController(),request=helpers.fetchCollectionResponse('https://app/api/filter?responseProfile=collection-v2',controller.signal);
  await new Promise(resolve=>setImmediate(resolve));timeout();await assert.rejects(request,{name:'AbortError'});assert.equal(controller.signal.aborted,false);
+});
+test('search results allow a slow first response without changing collection timeout',async()=>{
+ const delays=[],helpers=browserHelpers(async()=>Response.json(payload));
+ helpers.setTimeout=(_callback,delay)=>{delays.push(delay);return 1;};helpers.clearTimeout=()=>{};
+ const signal=new AbortController().signal,url='https://app/api/filter?shop=fixture.myshopify.com&q=cocktail+dress';
+ await helpers.fetchCollectionResponse(url,signal);
+ assert.equal(delays.at(-1),30000);
+ helpers.templateName='search';
+ await helpers.fetchCollectionResponse(url,signal);
+ assert.equal(delays.at(-1),60000);
 });

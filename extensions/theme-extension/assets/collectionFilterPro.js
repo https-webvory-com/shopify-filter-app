@@ -416,7 +416,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const abort = () => controller.abort();
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    // Complex first search pages can outlive the collection request budget.
+    // Keep their first response alive while the server prepares full facets.
+    const timer = setTimeout(() => controller.abort(), typeof templateName !== 'undefined' && templateName === 'search' ? 60000 : 30000);
     try {
       const configurationPromise = fetchCollectionConfiguration(requestUrl,controller.signal);
       const response = await fetch(requestUrl, { signal: controller.signal, cache: /responseProfile=collection-v[12]/.test(requestUrl) ? 'no-cache' : 'no-store',headers:{Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'} });

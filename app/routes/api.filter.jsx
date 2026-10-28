@@ -976,7 +976,7 @@ export const loader = async ({ request, context }) => {
       // not force exhaustive hit-count ranking merely to obtain facets.
       const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
       const [multiSearchRes,rankedPage] = await Promise.all([
-        semanticMultiSearch(queryIndexes.map(i=>queries[i])),
+        semanticMultiSearch(queryIndexes.map(i=>queries[i]),{preferKeyword:!!searchQuery}),
         useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
           ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
         }):null,

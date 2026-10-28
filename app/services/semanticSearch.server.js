@@ -44,7 +44,14 @@ export async function searchPageBatch(queries, mode) {
   }
 }
 
-export async function semanticMultiSearch(queries) {
+export async function semanticMultiSearch(queries,{preferKeyword=false}={}) {
+  // Search result counts and designer facets must describe the same complete
+  // lexical set as the visible cards. Hybrid search can report only its
+  // semantic window and omit matching vendors from a broad query.
+  if(preferKeyword){
+    const lexical=await meiliClient.multiSearch({queries});
+    if((lexical.results?.[0]?.totalHits??lexical.results?.[0]?.estimatedTotalHits??lexical.results?.[0]?.hits?.length??0)>0)return lexical;
+  }
   const provider = semanticProvider();
   const enabled = queries.some(query => query.q?.trim()) && await isReady(provider);
   return semanticFallback(prepared => meiliClient.multiSearch({ queries: prepared }), queries.map(query => withSemanticSearch(query, enabled, provider)));

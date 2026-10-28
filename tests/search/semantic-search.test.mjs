@@ -34,6 +34,21 @@ test('exhaustive keyword retrieval bypasses hybrid preparation and retains its c
   assert.deepEqual(calls, [{query:'red dress for wedding', options}]);
   assert.equal(calls[0].options.hybrid, undefined);
 });
+test('search pages use complete keyword facets and retain semantic fallback',async()=>{
+ const calls=[];let count=120;
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './meiliClient.server':{default:{index:()=>({getEmbedders:async()=>({openai:{source:'openAi'}})}),multiSearch:async({queries})=>{calls.push(queries);return {results:[{totalHits:queries[0].hybrid?86:count,facetDistribution:{vendor:queries[0].hybrid?{'Mac Duggal':26}:{'The Dress Outlet':56}}}]};}}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider:()=> 'openai'},
+ });
+ const queries=[{indexUid:'products',q:'cocktail dress',filter:["shop = 'fixture'"],facets:['vendor'],limit:25}];
+ const result=await service.semanticMultiSearch(queries,{preferKeyword:true});
+ assert.equal(result.results[0].facetDistribution.vendor['The Dress Outlet'],56);
+ assert.equal(calls.length,1);assert.equal(calls[0][0].hybrid,undefined);
+ count=0;calls.length=0;
+ await service.semanticMultiSearch(queries,{preferKeyword:true});
+ assert.equal(calls.length,2);assert.ok(calls[1][0].hybrid);
+});
 
 test("semantic requests retain tenant, filters, page and explicit sort", () => {
   const query = { q: "dress for beach wedding", filter: ["shop = 'fixture'", "available = true"], sort: ["priceMin:asc"], offset: 25, limit: 25 };
