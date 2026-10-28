@@ -605,9 +605,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
       if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
-        queryParams.set('responseProfile', 'collection-v1');
+        const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+        queryParams.set('responseProfile',hasSelectedFilters&&!isLoadMore&&activeFilters.page===1?'fast-cards-v1':'collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
-        if (String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
+        if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
       const rankingKeyParams = new URLSearchParams(queryParams);
@@ -707,12 +708,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       // network work can overlap card rendering instead of waiting behind it.
       const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
       let facetsPromise;
-      if(data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady){
+      if((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2){
         sidebar.classList.add('cfp-loading');
         facetsPromise=completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
       if (data.products) {
-        await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true);
+        await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2);
       }
       renderBreadcrumbs();
       updateActiveCountBadge();
@@ -776,10 +777,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
       if(JSON.stringify(full.products)!==signature || JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]))!==presentation)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
-      else if(prefix){
+      else if(prefix||cards.cfpCards?.version===2){
         // Identical complete cards keep their DOM and verified prices. Only
         // the now-known total and canonical pagination need to be activated.
         updateProductCount(full.totalCount);renderPagination(getProductContainer(),full.totalCount);
+        if(cards.cfpCards?.version===2){
+          getProductContainer().querySelectorAll('.cfp-product-card--preview').forEach(card=>card.classList.remove('cfp-product-card--preview'));
+          wishlistProducts.clear();full.products.forEach(product=>wishlistProducts.set(product.handle,product));syncWishlistProducts();
+        }
       }
     }catch(error){
       if(signal.aborted)return;
@@ -1074,7 +1079,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   const cardScriptString=value=>escapeCardHtml(JSON.stringify(String(value??'')));
 
-  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false) {
+  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
     // Render cards immediately, without displaying unverified market prices.
@@ -1627,7 +1632,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
       document.dispatchEvent(new Event('cfp:search-products-rendered'));
     }
-    if(previewOnly)return;
+    if(previewOnly&&!pricePreview)return;
     const applyPricing=()=>{
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);

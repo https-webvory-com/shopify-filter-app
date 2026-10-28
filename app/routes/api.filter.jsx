@@ -434,6 +434,7 @@ export const loader = async ({ request, context }) => {
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
       maxPrice < 9999999;
+    const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
@@ -822,7 +823,7 @@ export const loader = async ({ request, context }) => {
 
     // ── 9. Execute Meilisearch multiSearch ─────────────────────────────
     const saleCountQueryStart = queries.length;
-    const saleCountRanges = [...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
+    const saleCountRanges = fastCards?[]:[...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
     for (const range of saleCountRanges) {
       queries.push({indexUid:'products',q:textSearchQuery,
         filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
@@ -832,7 +833,7 @@ export const loader = async ({ request, context }) => {
     const priceCountQueryStart=queries.length;
     const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
     let configuredPrices=[];try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
-    const priceCountRanges=configuredPrices.slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
+    const priceCountRanges=(fastCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     for(const range of priceCountRanges){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
       if(hideUnavailable){
@@ -843,7 +844,7 @@ export const loader = async ({ request, context }) => {
     }
     let exactPriceCounts=[];
     const extraCountQueryStart=queries.length;
-    for(const choice of extraChoices){
+    for(const choice of fastCards?[]:extraChoices){
       const category=choice.type==='stock_status'?'available':'extra_'+choice.type;
       queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
@@ -962,7 +963,7 @@ export const loader = async ({ request, context }) => {
     // Ranked search owns its counts, facets and page retrieval. Do not run a
     // second ordinary search whose products would immediately be discarded.
     const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
-    if(cardsOnly){
+    if(cardsOnly||fastCards){
       const result=await readRankedCollectionPage(meiliClient.index('products'),{
         ids:rankingSession.ids,page,limit:pinnedPrefix?rankingSession.ids.length:limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
       });
@@ -972,7 +973,7 @@ export const loader = async ({ request, context }) => {
       collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
       collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
     }
-    if (!needsRankedSearch&&(!cardsOnly||context?.rankingCardsPrecompute===true&&limit===50)) {
+    if (!needsRankedSearch&&(!cardsOnly&&!fastCards||context?.rankingCardsPrecompute===true&&limit===50)) {
     try {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
@@ -1441,6 +1442,9 @@ export const loader = async ({ request, context }) => {
 
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
     const didYouMean = spellingCorrection(searchQuery, meiliRes.hits, meiliRes.semanticHitCount);
+    if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
+      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true}},
+      {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 
     // ── 15. Price range counts (from Meilisearch hits) ────────────────
     const priceFilter = activeGroupFilters

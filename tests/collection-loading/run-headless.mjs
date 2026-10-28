@@ -303,6 +303,21 @@ try{
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('.cfp-order-error')");
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
+  await test('filtered collection shows exact cards before slow facets without replacing their DOM',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Designer',config:{}}];
+    await control({reset:true,delay:100,facetDelay:1800,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    await evaluate("const input=document.querySelector('input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+    await wait("document.querySelectorAll('.cfp-product-card--preview').length===25");
+    const preview=await cards();
+    await evaluate("window._cfpFilteredFirstCard=document.querySelector('.cfp-product-card--preview')");
+    const pending=await getState();assert.ok(pending.requests.some(r=>r.profile==='fast-cards-v1'&&r.status===200));assert.equal(pending.facetResponses.length,0);
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar.cfp-loading')");
+    assert.deepEqual(await cards(),preview);
+    assert.equal(await evaluate('window._cfpFilteredFirstCard.isConnected'),true);
+    assert.ok((await getState()).facetResponses.some(r=>r.status===200));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('variant-dependent merchandising preserves global order and selected images across small batches',async()=>{
     await control({reset:true,colorRule:true,delay:100});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     assert.deepEqual((await cards()).slice(0,2),['1','30']);
@@ -544,7 +559,10 @@ try{
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     }
     const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
-    assert.equal(requests.length,2);assert.ok(requests.every(r=>r.status===200&&r.ranking==='ready'));assert.equal(after.state.builds,before.state.builds);
+    assert.equal(requests.length,4);assert.ok(requests.every(r=>r.status===200),JSON.stringify(requests));
+    assert.equal(requests.filter(r=>r.profile==='fast-cards-v1').length,2);
+    assert.equal(requests.filter(r=>r.profile==='collection-v1'&&r.token&&r.ranking==='ready').length,2);
+    assert.equal(after.state.builds,before.state.builds);
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};
   });
