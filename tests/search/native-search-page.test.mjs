@@ -95,6 +95,11 @@ test('a 50,000-result search returns only six documents with engine counts and f
   const r=await f.service.rankNativeSearchPage({...f.spec,facetKeys:['tags','priceMin']});
   assert.equal(r.total,50000);assert.equal(r.products.length,6);assert.equal(r.rankingMode,'native');assert.equal(calls.length,2);
   assert.equal(calls[1].mode,true);assert.equal(r.facetDistribution.tags.red,50000);
+  const preview=await f.service.rankNativeSearchPage({...f.spec,facetKeys:[]});
+  assert.deepEqual(preview.products.map(p=>p.id),r.products.map(p=>p.id));
+  assert.equal(preview.total,r.total);
+  assert.equal(Object.keys(preview.facetDistribution).length,0);
+  assert.equal(calls[2].queries[0].facets,undefined,'early cards must skip facet aggregation');
 });
 
 test('embedding failure between count and page restarts both stages as keyword search', async () => {

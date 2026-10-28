@@ -119,6 +119,7 @@
           searchParams.set('sortBy', params.get('sortBy') || 'relevance');
           searchParams.set('page', '1');
           searchParams.set('limit', '25');
+          searchParams.set('responseProfile', 'search-fast-cards-v1');
           var searchController = new AbortController();
           var searchTimeout = setTimeout(function() { searchController.abort(); }, 30000);
           var searchUrl = 'https://aisearchfilter.webvory.com/api/filter?' + searchParams.toString();

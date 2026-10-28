@@ -707,7 +707,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
-      if(templateName==='search'&&hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
+      if(templateName==='search'&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
       if (templateName!=='search'&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
         queryParams.set('membershipParentToken', lastMembershipResult.token);

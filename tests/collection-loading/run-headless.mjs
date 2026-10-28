@@ -636,12 +636,17 @@ try{
         variantPrices:[{id:String((i+1)*100),price:i+1,available:true,option1:'Purple',option2:size,imageUrl:`/image/${id}.svg`}]}];
     }));
     const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{}}];
-    await control({reset:true,productCount:30,productFields,filterSettings,searchFacetDelay:800,
+    await control({reset:true,productCount:30,productFields,filterSettings,searchFacetDelay:3000,
       globalSettings:{hideUnavailableVariantsWhenSelected:true},
       apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await send('Page.navigate',{url:origin+'/search?q=purple%20prom%20dress'});
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const initialCards=await cards(),initial=await getState();
+    const firstCardsMs=await evaluate('window.cardSnapshots[0]?.at');
+    assert.ok(firstCardsMs<2000,`first search cards took ${firstCardsMs}ms in the local delayed-facet fixture`);
+    assert.equal(initial.allRequests.filter(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===25).length,1);
     await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-    assert.equal((await cards()).length,25);
+    assert.deepEqual(await cards(),initialCards,'full search facets should preserve early card order');
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await evaluate("document.querySelector('#cfp-apply-btn').click()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
@@ -657,7 +662,7 @@ try{
     assert.deepEqual(earlyCards,Array.from({length:15},(_,i)=>String(29-i*2)));
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
     assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {query:'purple prom dress',sizeResults:15,cardsBeforeFacets:true};
+    return {query:'purple prom dress',firstCardsMs:Math.round(firstCardsMs),delayedFacetsMs:3000,sizeResults:15,cardsBeforeFacets:true};
   });
   await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
     const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};

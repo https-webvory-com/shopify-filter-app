@@ -438,7 +438,7 @@ export const loader = async ({ request, context }) => {
       minPrice > 0 ||
       maxPrice < 9999999;
     const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
-    const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&userHasFilters&&page===1&&limit<=40;
+    const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const variantEligibilityScope = resolvedCollectionId ? {collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}} : {};
     // Start the exact same-available-variant lookup while rule and market reads
@@ -1129,7 +1129,7 @@ export const loader = async ({ request, context }) => {
     if (needsRankedSearch) {
       const result = await rankSearchResults({ shop, query: textSearchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
-        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: targetFacets });
+        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: fastSearchCards?[]:targetFacets });
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
       collectionPageTotal = result.total;
       facetDistribution = result.facetDistribution;
