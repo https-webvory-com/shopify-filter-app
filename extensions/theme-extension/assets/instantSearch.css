@@ -170,13 +170,16 @@
 /* ── Layout columns ─────────────────────────────────────────────────────────── */
 .cfp-search-column-left {
   flex: 1;
+  min-width: 0;
   border-right: 1px solid #e2e8f0;
   padding-right: 20px;
 }
 
 .cfp-search-column-right {
-  flex: 0 0 250px;
-  padding-left: 20px;
+  flex: 0 0 clamp(260px, 22vw, 320px);
+  min-width: 0;
+  box-sizing: border-box;
+  padding-left: 24px;
 }
 
 .cfp-search-section-title {
@@ -325,6 +328,22 @@
   flex: 1;
 }
 
+#cfp-recent-searches-list .cfp-recent-search-link {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+#cfp-recent-searches-list .cfp-suggestion-text {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#cfp-recent-searches-list .cfp-history-icon {
+  flex: none;
+}
+
 .cfp-history-icon {
   width: 16px;
   height: 16px;
@@ -410,6 +429,11 @@
     border-bottom: 1px solid #e2e8f0;
     padding-right: 0;
     padding-bottom: 20px;
+  }
+  .cfp-search-column-right {
+    flex: none;
+    width: 100%;
+    padding-left: 0;
   }
   .cfp-search-product-grid {
     grid-template-columns: repeat(2, 1fr);

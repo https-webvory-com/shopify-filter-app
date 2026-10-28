@@ -31,6 +31,15 @@ test('selects an available matching Colour variant and borrows only a same-color
   assert.equal(color.selectSearchColorVariant({...product,variants:[product.variants[0],product.variants[2]]},['Slate Blue']).imageUrl,null);
 });
 
+test('a single-color product uses its gallery when its variants have no images', () => {
+  const product={options:[{name:'Color'},{name:'Size'}],images:['black-front.jpg','black-back.jpg'],variants:[
+    {id:'1',option1:'Black',option2:'2',available:true,imageUrl:null},
+    {id:'2',option1:'Black',option2:'4',available:true,imageUrl:null}
+  ]};
+  assert.equal(color.selectSearchColorVariant(product,['Black'],['black']).imageUrl,'black-front.jpg');
+  assert.equal(color.selectSearchColorVariant({...product,variants:[...product.variants,{id:'3',option1:'Red',available:true}]},['Black'],['black']).imageUrl,null);
+});
+
 test('blue cannot expand through unrelated merged groups or acquire green, champagne and gold', () => {
   const colors=['Slate Blue','Dusty Blue','Navy','Periwinkle','Deep Green','Champagne','Gold'];
   const aliases=[

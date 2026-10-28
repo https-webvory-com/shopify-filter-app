@@ -39,6 +39,7 @@ window.runSettingsChecks = async () => {
       await save({ suggestionLimit: 2, collectionLimit: 2 }); await navigate('/'); await open(); await query('blue');
       await wait(() => instantCards().length === 3);
       assert(doc().querySelectorAll('#cfp-recent-searches-list li').length === 2, 'Wrong suggestion count');
+      assert([...doc().querySelectorAll('#cfp-recent-searches-list .cfp-recent-search-link')].every(link => link.querySelector('.cfp-suggestion-text') && [...link.childNodes].every(node => node.nodeType !== Node.TEXT_NODE || !node.textContent.trim())), 'Suggestion text split into separate flex items');
       assert(doc().querySelectorAll('#cfp-search-collections li').length === 3, 'Expected query link plus two collections');
     });
     await test('zero suggestion, collection and recent counts hide sections', async () => {

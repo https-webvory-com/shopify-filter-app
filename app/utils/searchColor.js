@@ -52,6 +52,13 @@ export function selectSearchColorVariant(product, values, requested = []) {
     || preferred.find(v => v.available !== false) || preferred.find(v => v.imageUrl) || preferred[0];
   if (!variant) return null;
   // Reuse only an image from the same color, never the product's unrelated first image.
-  const imageUrl = variant.imageUrl || candidates.find(v => normalize(v[key]) === normalize(variant[key]) && v.imageUrl)?.imageUrl || null;
+  let imageUrl = variant.imageUrl || candidates.find(v => normalize(v[key]) === normalize(variant[key]) && v.imageUrl)?.imageUrl || null;
+  // A single-color product can safely use its product gallery when none of
+  // that color's variants has an image. Mixed-color galleries remain excluded.
+  const allVariants = product.variants || product.variantPrices || [];
+  if (!imageUrl && allVariants.length && allVariants.every(v => normalize(v[key]) === normalize(variant[key]))) {
+    const first = product.images?.[0];
+    imageUrl = typeof first === 'string' ? first : first?.url || first?.src || null;
+  }
   return { ...variant, imageUrl, searchColor: variant[key] };
 }
