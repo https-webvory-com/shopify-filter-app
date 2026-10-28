@@ -4,7 +4,7 @@ const allowed=new Set(['q','filter','sort','indexUid','limit','offset','attribut
 // compact inputs without asking search to sort the entire native collection.
 // Only outside Include candidates need the original engine tie order.
 export function createCollectionCandidateIndex(index,spec,{signal,maxBytes=16*1024*1024,maxDocuments=50000,browseConcurrency=1}={}){
- if(spec.retainForIdle!==true||spec.needsShopifyOrder!==true||!Array.isArray(spec.orderedIds)||
+ if((spec.retainForIdle!==true&&spec.directFiltered!==true)||spec.needsShopifyOrder!==true||!Array.isArray(spec.orderedIds)||
     !['best-selling','bestselling'].includes(spec.sortBy)||spec.query.q||
     Object.keys(spec.query).some(key=>!allowed.has(key))||typeof index.getDocuments!=='function'||typeof index.getSettings!=='function')return index;
  let snapshot,disabled=false;

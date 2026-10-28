@@ -639,9 +639,20 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
         if (!data) {
           const requestUrl = `${API_DOMAIN}/api/filter?${queryParams.toString()}`;
-          const response = templateName !== 'search' && !isLoadMore && activeFilters.page === 1
+          let earlySearchResponse = null;
+          if (templateName === 'search' && !isLoadMore && activeFilters.page === 1 && window._cfpEarlySearch) {
+            const early = window._cfpEarlySearch;
+            delete window._cfpEarlySearch;
+            const earlyUrl = new URL(early.url, window.location.href), currentUrl = new URL(requestUrl, window.location.href);
+            earlyUrl.searchParams.sort(); currentUrl.searchParams.sort();
+            if (earlyUrl.toString() === currentUrl.toString()) {
+              fetchSignal.addEventListener('abort', () => early.controller.abort(), { once: true });
+              try { earlySearchResponse = await early.promise; if (!earlySearchResponse.ok) earlySearchResponse = null; } catch { /* Retry through the ordinary request. */ }
+            } else early.controller.abort();
+          }
+          const response = earlySearchResponse || (templateName !== 'search' && !isLoadMore && activeFilters.page === 1
             ? await takeEarlyCollectionResponse(requestUrl, fetchSignal) || await fetchCollectionResponse(requestUrl, fetchSignal)
-            : await fetchCollectionResponse(requestUrl, fetchSignal);
+            : await fetchCollectionResponse(requestUrl, fetchSignal));
           if (response.status === 409 && allowSessionRestart) {
             collectionRankingTokens.delete(rankingKey);
             activeFilters.page = 1;

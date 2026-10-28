@@ -45,6 +45,17 @@ test('native-only collection avoids a search sort; explicit missing pins keep ca
  for(const spec of settingsCases)assert.equal(createCollectionCandidateIndex(f.index,spec),f.index);
 });
 
+test('a filtered collection can browse its bounded matching candidates before ranking',async()=>{
+ const f=fixture(20),spec={...f.spec,retainForIdle:false,directFiltered:true};
+ const index=createCollectionCandidateIndex(f.index,spec);
+ assert.notEqual(index,f.index);
+ const result=await index.search('',{...spec.query,attributesToRetrieve:['id'],limit:1000,offset:0});
+ assert.equal(result.hits.length,22);
+ assert.equal(f.calls.filter(call=>call.type==='browse').length,1);
+ assert.equal(f.calls.filter(call=>call.type==='search').length,1);
+ assert.deepEqual(f.calls.find(call=>call.type==='browse').filter,spec.query.filter);
+});
+
 test('distinct settings, unavailable browse, oversized proofs and unstable scans fall back to canonical search',async()=>{
  for(const scenario of ['distinct','displayed','error','bytes','count','duplicates','truncated','outside']){
   const f=fixture(scenario==='outside'?0:30);const options={...f.spec.query,attributesToRetrieve:['id'],limit:10000,offset:0};

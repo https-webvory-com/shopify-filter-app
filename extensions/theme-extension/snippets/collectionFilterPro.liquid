@@ -90,7 +90,30 @@
           .finally(function() { Promise.resolve(configurationPromise).finally(function() { clearTimeout(timeout); }); })};
         return;
       }
-      if (window.location.pathname.includes('/search')) return;
+      if (/\/search\/?$/i.test(window.location.pathname)) {
+        var searchTerms = params.get('q');
+        if (searchTerms && [...params.keys()].every(function(key) { return ['q','preview_theme_id','_ab','_fd','_sc','pb','gclid','fbclid'].includes(key) || key.startsWith('utm_'); })) {
+          var searchParams = new URLSearchParams();
+          searchParams.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
+          searchParams.set('shop', shop);
+          var searchCountry = window.Shopify?.country || window.cfpCollectionContext?.country;
+          if (searchCountry) searchParams.set('country', searchCountry);
+          if (window.cfpCustomerTags) searchParams.set('customer_tags', window.cfpCustomerTags);
+          if (collHandle) searchParams.set('collectionHandle', collHandle);
+          else if (collId) searchParams.set('collectionId', collId);
+          searchParams.set('isSearch', 'true');
+          searchParams.set('q', searchTerms);
+          searchParams.set('sortBy', 'relevance');
+          searchParams.set('page', '1');
+          searchParams.set('limit', '25');
+          var searchController = new AbortController();
+          var searchTimeout = setTimeout(function() { searchController.abort(); }, 30000);
+          var searchUrl = 'https://aisearchfilter.webvory.com/api/filter?' + searchParams.toString();
+          window._cfpEarlySearch = {url: searchUrl, controller: searchController,
+            promise: fetch(searchUrl, {signal: searchController.signal, cache: 'no-store', priority: 'high'}).catch(function() { return null; }).finally(function() { clearTimeout(searchTimeout); })};
+        }
+        return;
+      }
       params.set('shop', shop);
       params.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
       if (window.cfpCustomerTags) params.set('customer_tags', window.cfpCustomerTags);
