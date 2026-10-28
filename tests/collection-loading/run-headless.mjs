@@ -610,6 +610,7 @@ try{
     }));
     const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{}}];
     await control({reset:true,productCount:30,productFields,filterSettings,searchFacetDelay:800,
+      globalSettings:{hideUnavailableVariantsWhenSelected:true},
       apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await send('Page.navigate',{url:origin+'/search?q=purple%20prom%20dress'});
     await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");

@@ -439,6 +439,14 @@ export const loader = async ({ request, context }) => {
       maxPrice < 9999999;
     const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&userHasFilters&&page===1&&limit<=40;
+    const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
+    const variantEligibilityScope = resolvedCollectionId ? {collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}} : {};
+    // Start the exact same-available-variant lookup while rule and market reads
+    // proceed. A failure is carried to the original eligibility gate below.
+    const earlyVariantEligibility=hideUnavailable&&(fastCards||fastSearchCards)
+      ? getCached('availableVariants:' + shop + ':' + JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues]),
+          () => availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...variantEligibilityScope},optionsFilters,mergedValues,null,{database:prisma}),30)
+          .then(value=>({value}),error=>({error})) : null;
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
     // Fetch fresh rules directly from DB to prevent serving stale Redis rule objects
@@ -515,7 +523,6 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 7. Build Meilisearch filters ───────────────────────────────────
-    const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const baseFilters = [`shop = '${shop}'`, "status = 'ACTIVE'"];
     if(parsedQuery?.skuProductIds?.length)baseFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
     const marketIds=marketVersion?await getMarketAvailableProductIds(shop,marketCountry,marketVersion):null;
@@ -561,9 +568,10 @@ export const loader = async ({ request, context }) => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
         return true;
       }, 60);
-      const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
-      const eligible = await getCached('availableVariants:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues]),
-        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
+      const early=earlyVariantEligibility?await earlyVariantEligibility:null;
+      if(early?.error)throw early.error;
+      const eligible=early?early.value:await getCached('availableVariants:' + shop + ':' + JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues]),
+        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...variantEligibilityScope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
     // The cards response does not render facet choices or counts. Only load

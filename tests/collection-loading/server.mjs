@@ -91,6 +91,7 @@ export async function createLoadingServer({redisLayer}={}) {
     return {hits:products.slice(options.offset||0,(options.offset||0)+(options.limit??25)),totalHits:products.length,estimatedTotalHits:products.length,facetDistribution,processingTimeMs:1,...(options.facets?.includes('priceMin')&&products.length?{facetStats:{priceMin:{min:Math.min(...products.map(p=>p.priceMin)),max:Math.max(...products.map(p=>p.priceMin))}}}:{})};
   };
   const index={search:async(_q,options)=>select(options),
+    getFilterableAttributes:async()=>['id'],
     getSettings:async()=>({distinctAttribute:null,pagination:{maxTotalHits:100000}}),
     getDocuments:async options=>{trace.documentBatches++;
       if(Array.isArray(options.filter)){
