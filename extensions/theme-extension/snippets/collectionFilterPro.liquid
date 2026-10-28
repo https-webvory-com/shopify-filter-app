@@ -90,6 +90,7 @@
           .finally(function() { Promise.resolve(configurationPromise).finally(function() { clearTimeout(timeout); }); })};
         return;
       }
+      if (window.location.pathname.includes('/search')) return;
       params.set('shop', shop);
       params.set('locale', window.Shopify?.locale || document.documentElement.lang || '{{ request.locale.iso_code }}');
       if (window.cfpCustomerTags) params.set('customer_tags', window.cfpCustomerTags);

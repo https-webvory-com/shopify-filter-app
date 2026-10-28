@@ -67,11 +67,14 @@ window.runSettingsChecks = async () => {
     await test('search results page size, vendor/labels and inline input settings apply', async () => {
       await save({ showSearchInput: false, showVendor: false, showSale: false, showSoldOut: false });
       await navigate('/search?q=blue&grid=1'); await wait(() => gridCards().length === 4);
+      const settingsRequests = () => win().performance.getEntriesByType('resource').filter(entry => new URL(entry.name).pathname === '/api/search-settings').length;
+      assert(settingsRequests() === 1, 'Initial search loaded settings more than once');
       assert(doc().querySelector('.cfp-inline-search-form').hidden, 'Inline input not hidden');
       assert(!doc().querySelector('.cfp-product-card__vendor'), 'Vendor not hidden');
       assert(!doc().querySelector('.cfp-product-card__badge'), 'Labels not hidden');
       const more = doc().querySelector('#cfp-load-more-btn'); assert(more, 'Load more missing'); more.click();
       await wait(() => gridCards().length === 8);
+      assert(settingsRequests() === 2, 'Next search action did not refresh settings');
       assert(new Set([...gridCards()].map(c => c.querySelector('a').href)).size === 8, 'Page boundary duplicated products');
     });
     await test('search display controls can be reenabled without changing results', async () => {

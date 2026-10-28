@@ -504,6 +504,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   let lastFilterValues;
   let pendingFilterScroll = false;
+  let initialSearchSettingsRead = false;
   function scrollAfterFilterChange() {
     pendingFilterScroll = false;
     if (globalSettings?.scrollUpOnFilterValuesChange) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -511,7 +512,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   async function fetchAndRenderData(isLoadMore = false, allowSessionRestart = true) {
     if (templateName === 'search' && window.cfpRefreshSearchSettings) {
-      await window.cfpRefreshSearchSettings();
+      if (!initialSearchSettingsRead && window.cfpSearchSettingsReady) {
+        initialSearchSettingsRead = true;
+        await window.cfpSearchSettingsReady;
+      } else {
+        await window.cfpRefreshSearchSettings();
+      }
       const settings = window.cfpSearchSettings || {};
       const pageSize = Number.isInteger(settings.pageSize) && settings.pageSize >= 1 && settings.pageSize <= 40 ? settings.pageSize : 25;
       if (PAGE_SIZE !== pageSize) { PAGE_SIZE = pageSize; activeFilters.page = 1; isLoadMore = false; }
