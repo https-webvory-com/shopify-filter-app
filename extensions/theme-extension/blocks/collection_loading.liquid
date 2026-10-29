@@ -10,6 +10,7 @@
     data-handle="{{ collection.handle | escape }}"
     data-country="{{ localization.country.iso_code | escape }}"
     data-locale="{{ request.locale.iso_code | escape }}"
+    data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
   <script src="{{ 'collectionPreviewStream.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
   <script src="{{ 'collectionLoading.min.js' | asset_url }}" fetchpriority="high" async="async"></script>

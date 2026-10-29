@@ -286,7 +286,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){
-        body=body.replace('<link rel="stylesheet"','<meta name="cfp-collection-context" data-shop="'+shop+'" data-handle="fixture" data-country="US" data-locale="en">'+headAsyncScripts+'<script defer src="/slow-theme.js"></script><link rel="stylesheet"')
+        body=body.replace('<link rel="stylesheet"','<meta name="cfp-collection-context" data-shop="'+shop+'" data-handle="fixture" data-country="US" data-locale="en" data-customer-logged-in="false" data-customer-tags="">'+headAsyncScripts+'<script defer src="/slow-theme.js"></script><link rel="stylesheet"')
           .replace('<script src="/assets/marketPricing.js">','<span id="cfp-collection-ready" hidden></span><script defer src="/assets/marketPricing.js">')
           .replace('<script src="/assets/collectionWidget.js">','<script defer src="/assets/collectionWidget.js">');
         }if(state.early){const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+inline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}
