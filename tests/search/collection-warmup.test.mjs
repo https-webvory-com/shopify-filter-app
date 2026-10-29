@@ -230,6 +230,15 @@ test('an installed store without observed visits prepares every collection in it
  assert.ok(jobs.every(w=>new URL(w[2].record.url).searchParams.get('country')==='US'));
  assert.equal(f.snapshots.has(`collectionPrimaryMarket:${shop}`),true);
 });
+test('an observed secondary country does not hide an unconnected store primary country',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.setPrimary({shopAddress:{countryCodeV2:'US'}});
+ f.records.push(JSON.stringify({url:`https://ranking.internal/api/filter?shop=${shop}&collectionId=1&country=IN&locale=en&page=1`,collectionId:'1'}));
+ f.catalog.push({shop,id:'gid://shopify/Collection/1'});
+ await f.scheduleCatalogCollectionWarmups(shop);
+ const countries=new Set(f.writes.filter(w=>w[0]==='queue').map(w=>new URL(w[2].record.url).searchParams.get('country')));
+ assert.deepEqual([...countries].sort(),['IN','US']);
+});
 
 test('missing published collection pages run ahead of already published pages in the same market',async()=>{
  const f=await fixture(),shop='fixture.myshopify.com';

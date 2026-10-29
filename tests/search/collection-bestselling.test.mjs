@@ -13,6 +13,21 @@ test('Shopify order follows every collection page and explicitly requests BEST_S
 test('an incomplete Shopify snapshot is rejected instead of truncating collection access',async()=>{
  await assert.rejects(readCollectionBestSellingIds({graphql:async()=>({json:async()=>({data:{collection:{products:{nodes:[],pageInfo:{hasNextPage:true,endCursor:'same'}}}}})})},'collection'),/Incomplete/);
 });
+test('a throttled Shopify order page retries the same cursor without losing earlier IDs',async()=>{
+ const cursors=[],attempts=new Map();
+ const admin={graphql:async(_query,{variables})=>{
+  const key=variables.cursor||'first';cursors.push(key);attempts.set(key,(attempts.get(key)||0)+1);
+  if(key==='next'&&attempts.get(key)===1)return {status:200,ok:true,json:async()=>({errors:[{message:'Throttled',extensions:{code:'THROTTLED'}}]})};
+  return {status:200,ok:true,json:async()=>({data:{collection:{products:{nodes:[{id:'gid://shopify/Product/'+(key==='first'?'1':'2')}],pageInfo:{hasNextPage:key==='first',endCursor:key==='first'?'next':null}}}}})};
+ }};
+ assert.deepEqual(await readCollectionBestSellingIds(admin,'gid://shopify/Collection/1',{retryDelayMs:0}),['1','2']);
+ assert.deepEqual(cursors,['first','next','next']);
+});
+test('a missing Shopify collection fails without repeatedly querying',async()=>{
+ let calls=0;
+ await assert.rejects(readCollectionBestSellingIds({graphql:async()=>{calls++;return {status:200,ok:true,json:async()=>({data:{collection:null}})};}},'gid://shopify/Collection/1',{retryDelayMs:0}),/unavailable/);
+ assert.equal(calls,1);
+});
 const context={module:{exports:{}},exports:{},console,require:()=>({__esModule:true,default:{}})};
 vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,context);
 const apply=context.module.exports.applyMerchandisingRules;
@@ -57,8 +72,8 @@ async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
   '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
   '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
  };
- const ctx={module:{exports:{}},exports:{},Date,warmupHook:async(shop,collectionIds)=>calls.push({name:'COLLECTION_RANKING_WARM',data:{shop,collectionIds}}),console:{error(){}},require:name=>mocks[name]};
- const source=(await fs.readFile('app/services/collectionBestSelling.server.js','utf8')).replace("await import('./collectionPreparation.server.js')",'({scheduleCollectionWarmup:warmupHook})');
+ const ctx={module:{exports:{}},exports:{},Date,warmupHook:async(shop,collectionIds,priority,countryContext,forceMissing)=>calls.push({name:'COLLECTION_RANKING_CATALOG',data:{shop,collectionIds:Array.from(collectionIds),priority,countryContext,forceMissing}}),console:{error(){}},require:name=>mocks[name]};
+ const source=(await fs.readFile('app/services/collectionBestSelling.server.js','utf8')).replace("await import('./collectionPreparation.server.js')",'({scheduleCatalogCollectionWarmups:warmupHook})');
  vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
  return {...ctx.module.exports,calls,stored:()=>stored};
 }
@@ -121,6 +136,11 @@ test('unchanged Shopify refreshes retain the same ranking revision',async()=>{
  const after=await service.getCollectionBestSellingState('shop','collection');
  assert.equal(before.revision,after.revision);
  assert.equal(after.status,'ready');
+});
+test('a newly fetched collection order wakes catalog pages in every known market',async()=>{
+ const service=await loadOrderService();
+ await service.refreshCollectionBestSelling('shop','gid://shopify/Collection/123');
+ assert.deepEqual(service.calls,[{name:'COLLECTION_RANKING_CATALOG',data:{shop:'shop',collectionIds:['123'],priority:2,countryContext:null,forceMissing:true}}]);
 });
 test('stale snapshots remain usable while a durable retrying job refreshes them',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1}});

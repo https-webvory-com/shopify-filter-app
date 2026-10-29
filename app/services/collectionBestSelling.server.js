@@ -18,9 +18,12 @@ export async function refreshCollectionBestSelling(shop, collectionId) {
   const revision = createHash('sha256').update(JSON.stringify(ids)).digest('hex');
   await redis.set(snapshotKey(shop, collectionId), JSON.stringify({ ids, updatedAt: Date.now(), revision }));
   if (!previous || JSON.parse(previous).revision !== revision) {
-    // Rebuild registered first pages only when the actual Shopify sequence changed.
-    const {scheduleCollectionWarmup}=await import('./collectionPreparation.server.js');
-    await scheduleCollectionWarmup(shop,[String(collectionId).split('/').pop()]);
+    // Rebuild this collection's public first pages when Shopify's order changes.
+    // Wake every known public market for this collection as soon as its
+    // Shopify order exists. A broad periodic sweep can arrive too late for
+    // catalog jobs that already exhausted their retries while waiting.
+    const {scheduleCatalogCollectionWarmups}=await import('./collectionPreparation.server.js');
+    await scheduleCatalogCollectionWarmups(shop,[String(collectionId).split('/').pop()],2,null,true);
   }
   return ids;
 }
@@ -66,7 +69,8 @@ export async function getCollectionBestSellingState(shop, collectionId, { warmup
       job = null;
     }
     if (!job) {
-      job = await collectionOrderQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId }, { jobId: id, priority });
+      job = await collectionOrderQueue.add('COLLECTION_BEST_SELLING_REFRESH', { shop, collectionId },
+        { jobId: id, priority, attempts:5, backoff:{type:'exponential',delay:2000} });
       state = 'waiting';
     }
     return { ids: snapshot?.ids ?? null, status: snapshot ? 'stale' : 'pending', refreshState: state, updatedAt: snapshot?.updatedAt ?? null, revision: snapshot?.revision };

@@ -142,7 +142,7 @@ export async function scheduleMissingCollectionOrders(shop) {
 
 // Discover public markets from configuration and real public visits. Never turn
 // customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
-export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10, countryContext=null) {
+export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10, countryContext=null, forceMissing=false) {
   const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
     try{return [JSON.parse(value)];}catch{return [];}
   })];
@@ -177,12 +177,14 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     // market merely because another market was visited more recently.
     if(!markets.has(url.search))markets.set(url.search,url);
   }
-  if(!countryContext&&!markets.size){
+  // An observed secondary market must not suppress the store's primary market.
+  // Unconnected stores do not have an authoritative enabled-country list.
+  if(!countryContext&&!connectedCountries){
     const market=await primaryShopMarket(shop);
     if(market){
       const url=new URL('https://ranking.internal/api/filter');
       for(const [key,value]of Object.entries({shop,...market,sortBy:'best-selling',page:'1'}))url.searchParams.set(key,value);
-      markets.set(url.search,url);
+      if(!markets.has(url.search))markets.set(url.search,url);
     }
   }
   if(!markets.size)return;
@@ -190,11 +192,14 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   // uncovered contexts precedence over routine refreshes of ready pages.
   let publishedAliases=null;
   try{
-    const rows=await prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',expiresAt:{gt:new Date()}},select:{aliases:true}});
-    publishedAliases=new Set(rows.flatMap(row=>row.aliases||[]));
+    if(!forceMissing){
+      const rows=await prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',expiresAt:{gt:new Date()}},select:{aliases:true}});
+      publishedAliases=new Set(rows.flatMap(row=>row.aliases||[]));
+    }
   }catch(error){console.error('CFP: Collection publication coverage unavailable:',error.name);}
   let present=0,missing=0;
   const publicationPriority=url=>{
+    if(forceMissing)return priority;
     const page=new URL(url);page.searchParams.set('responseProfile','collection-preview-v1');page.searchParams.set('limit','25');
     const key=publishedCollectionKey(new Request(page));
     if(!publishedAliases||!key)return priority;
