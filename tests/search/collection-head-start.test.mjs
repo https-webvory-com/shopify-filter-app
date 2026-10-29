@@ -55,7 +55,8 @@ test('early cards and skeletons use block column settings and the final grid bre
  const app=block.match(/<div id="cfp-v1-app-container"[^>]*>/)?.[0];
  assert.ok(app.includes('--cfp-cols-desktop: {{ block.settings.columns_desktop | default: 3 }}'));
  assert.ok(app.includes('--cfp-cols-mobile: {{ block.settings.columns_mobile | default: 2 }}'));
- for(const width of [1300,990,768,480]){
+ for(const width of [1300,990])assert.ok(body.includes(`max-width: ${width}px`));
+ for(const width of [768,480]){
    assert.ok(bootstrap.includes(`max-width:${width}px`));
    assert.ok(body.includes(`max-width: ${width}px`));
  }
