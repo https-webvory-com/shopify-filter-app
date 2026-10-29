@@ -77,7 +77,7 @@ test('background card snapshots avoid sessions and facets until the first browse
   assert.equal(warmed.headers.get('X-CFP-Collection-Cards'),'stored');assert.equal(f.trace.facetQueries,0);assert.equal(f.sessionCount(),0);
   const builds=f.state.builds;
   const probe=await f.load(new Request(url+'&responseProfile=collection-cards-v1'),{rankingWarmup:true,rankingCardsPrecompute:true});
-  assert.equal(probe.headers.get('X-CFP-Collection-Cards'),'hit');assert.equal((await probe.json()).rankingToken,undefined);
+  assert.equal(probe.headers.get('X-CFP-Collection-Cards'),'stored','a working card copy must not finish a publication-only background job');assert.equal((await probe.json()).rankingToken,'background-cards');
   assert.equal(f.sessionCount(),0);assert.equal(f.trace.facetQueries,0);assert.equal(f.state.builds,builds);
   const before=f.trace.hydrations,response=await f.load(new Request(url+'&responseProfile=collection-cards-v1'));
   assert.equal(response.headers.get('X-CFP-Collection-Cards'),'hit');const cards=await response.json();assert.equal(cards.products.length,25);assert.notEqual(cards.rankingToken,'background-cards');

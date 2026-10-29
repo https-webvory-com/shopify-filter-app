@@ -77,6 +77,13 @@ test('prepared country reads use lightweight proofs and do not call Shopify or l
   assert.equal(f.scans.length,scans);assert.equal(f.listReads(),reads);
   assert.equal(f.scheduled[0][3].countries[0],'IN');
 });
+
+test('readiness probes report missing country stock without scheduling a scan',async()=>{
+ const f=await fixture();
+ assert.equal((await f.service.getMarketAvailabilityState(f.shop,'IN',{probe:true})).status,'pending');
+ assert.equal(f.jobs.size,0);
+ assert.equal(f.scans.length,0);
+});
 test('filtered country ID reads reuse one verified list and reject it after stock changes',async()=>{
   const f=await fixture();await f.service.processMarketAvailability({shop:f.shop,country:'IN'});
   const first=await f.service.getMarketAvailabilityState(f.shop,'IN'),reads=f.listReads();

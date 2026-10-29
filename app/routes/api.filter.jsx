@@ -89,9 +89,9 @@ export const loader = async ({ request, context }) => {
     const marketVersion=marketState.version;
     if(marketState.status==='pending')return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
     if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
-      // Trusted background rendering can reuse validated cards, but must never
-      // create a shopper's browsing session while probing readiness.
-      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion});
+      // Trusted background rendering reuses only completed publications. A
+      // working-card hit must not let a catalog job skip its durable publish.
+      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,publishedOnly:context?.rankingCardsPrecompute===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion});
       if(ready)return ready;
     }
 

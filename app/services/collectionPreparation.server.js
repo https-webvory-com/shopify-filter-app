@@ -99,6 +99,26 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
 // This only schedules deduplicated, low-priority jobs.
 let discoveredRegistries = false;
 const orderDiscoveryAt = new Map();
+async function primaryShopMarket(shop){
+  const key=`collectionPrimaryMarket:${shop}`;
+  try{
+    const cached=await redis.get(key);
+    if(cached)return JSON.parse(cached);
+  }catch{}
+  let market=null;
+  try{
+    const {unauthenticated}=await import('../shopify.server.js');
+    const {admin}=await unauthenticated.admin(shop);
+    const response=await admin.graphql('query CollectionPrimaryMarket { shop { shopAddress { countryCodeV2 } } }');
+    const body=await response.json();
+    if(response.ok&&!body.errors?.length){
+      const country=body.data?.shop?.shopAddress?.countryCodeV2;
+      if(/^[A-Z]{2}$/.test(country||''))market={country,locale:'en'};
+    }
+  }catch(error){console.error('CFP: Primary collection market unavailable:',error.name);}
+  try{await redis.setex(key,market?21600:1800,JSON.stringify(market));}catch{}
+  return market;
+}
 // Seed order snapshots for collections before their first storefront visit.
 // Existing snapshots are left alone; their normal refresh policy still applies.
 // Page discovery and queue submissions are bounded, and cold visitors promote
@@ -127,6 +147,17 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     try{return [JSON.parse(value)];}catch{return [];}
   })];
   const markets=new Map();
+  let connectedCountries=null;
+  if(!countryContext)try{
+    const connection=await prisma.marketStorefrontConnection.findUnique({where:{shop},select:{countries:true,locale:true}});
+    if(connection)connectedCountries=new Set(connection.countries||[]);
+    if(connection)for(const country of connection.countries||[]){
+      if(!/^[A-Z]{2}$/.test(country))continue;
+      const url=new URL('https://ranking.internal/api/filter');
+      for(const [key,value]of Object.entries({shop,country,locale:connection.locale||'en',sortBy:'best-selling',page:'1'}))url.searchParams.set(key,value);
+      markets.set(url.search,url);
+    }
+  }catch(error){console.error('CFP: Enabled collection markets unavailable:',error.name);}
   if(countryContext)for(const country of countryContext.countries){
     if(!/^[A-Z]{2}$/.test(country))continue;
     const url=new URL('https://ranking.internal/api/filter');
@@ -138,13 +169,21 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     const normalized=normalizeCollectionWarmup(shop,record.url,record.collectionId);
     if(!normalized)continue;
     const source=new URL(normalized.url),url=new URL('https://ranking.internal/api/filter');
+    if(connectedCountries&&!connectedCountries.has(source.searchParams.get('country')))continue;
     url.searchParams.set('shop',shop);
     for(const key of ['country','locale','language'])if(source.searchParams.has(key))url.searchParams.set(key,source.searchParams.get(key));
     url.searchParams.set('sortBy','best-selling');url.searchParams.set('page','1');
-    // Reserve storage and worker throughput for the observed markets, rather
-    // than generating every possible locale/country/sort combination.
+    // Replay only validated public contexts, but never discard an observed
+    // market merely because another market was visited more recently.
     if(!markets.has(url.search))markets.set(url.search,url);
-    if(markets.size===4)break;
+  }
+  if(!countryContext&&!markets.size){
+    const market=await primaryShopMarket(shop);
+    if(market){
+      const url=new URL('https://ranking.internal/api/filter');
+      for(const [key,value]of Object.entries({shop,...market,sortBy:'best-selling',page:'1'}))url.searchParams.set(key,value);
+      markets.set(url.search,url);
+    }
   }
   if(!markets.size)return;
   // A complete published first page is the actual visitor-ready unit. Give
@@ -293,8 +332,8 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     const readyUrl=new URL(normalized.url);readyUrl.searchParams.set('responseProfile','collection-cards-v1');readyUrl.searchParams.set('limit','50');
     try{
       const market=await getMarketAvailabilityState(shop,readyUrl.searchParams.get('country'));
-      const ready=market.status==='pending'?null:await getPreparedCollectionCards(new Request(readyUrl),{probe:true,marketAvailabilityVersion:market.version});
-      if(ready?.status===200&&['hit','published'].includes(ready.headers?.get('X-CFP-Collection-Cards'))){
+      const ready=market.status==='pending'?null:await getPreparedCollectionCards(new Request(readyUrl),{probe:true,publishedOnly:true,marketAvailabilityVersion:market.version});
+      if(ready?.status===200&&ready.headers?.get('X-CFP-Collection-Cards')==='published'){
         result.rankingContextsReady++;result.cardContextsReady++;continue;
       }
     }catch{/* Optional probes must not prevent canonical preparation. */}
@@ -317,7 +356,11 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
       let cardsReady=false;
       try{
         const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
-        cardsReady=cards.status===200&&['stored','hit','published'].includes(cards.headers?.get('X-CFP-Collection-Cards'));
+        if(cards.status===200&&['stored','published'].includes(cards.headers?.get('X-CFP-Collection-Cards'))){
+          const market=await getMarketAvailabilityState(shop,cardsUrl.searchParams.get('country'));
+          const verified=market.status==='pending'?null:await getPreparedCollectionCards(new Request(cardsUrl),{probe:true,publishedOnly:true,marketAvailabilityVersion:market.version});
+          cardsReady=verified?.status===200&&verified.headers?.get('X-CFP-Collection-Cards')==='published';
+        }
         if(cardsReady){
           result.cardContextsReady++;
           console.info('CFP: collection cards ready',JSON.stringify({shop,collectionId:normalized.collectionId}));

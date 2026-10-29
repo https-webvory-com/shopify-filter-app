@@ -70,7 +70,7 @@ export async function scheduleMarketAvailability(shop,country){
   await marketAvailabilityQueue.add('COUNTRY_STOCK',{shop,country},{jobId});
 }
 // Small metadata only. A published-page hit never downloads country ID lists.
-export async function getMarketAvailabilityState(shop,country){
+export async function getMarketAvailabilityState(shop,country,{probe=false}={}){
   if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop))throw Error('Invalid shop');
   const current=await context(shop);if(!current)return {status:'disabled',version:null};
   validateMarketContext(shop,country);
@@ -82,7 +82,7 @@ export async function getMarketAvailabilityState(shop,country){
     const saved=await prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}},select:{connection:true,epoch:true,version:true,updatedAt:true}});
     if(saved?.connection===current.identity&&saved.epoch===current.epoch&&/^[a-f0-9]{64}$/.test(saved.version)){state={status:'ready',version:saved.version,at:new Date(saved.updatedAt).getTime()};await redis.setex(key,900,JSON.stringify(state));}
   }
-  if(!state||Date.now()-state.at>=900000){await scheduleMarketAvailability(shop,country);return {status:'pending',version:null};}
+  if(!state||Date.now()-state.at>=900000){if(!probe)await scheduleMarketAvailability(shop,country);return {status:'pending',version:null};}
   return state||{status:'pending',version:null};
 }
 export async function getMarketAvailableProductIds(shop,country,version){

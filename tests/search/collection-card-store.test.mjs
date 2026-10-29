@@ -61,6 +61,12 @@ test('published first fifty take priority without reading working cards',async()
  assert.equal(await f.store.get(f.request),published);assert.equal(calls,1);
 });
 
+test('background publication checks cannot complete from working card copies',async()=>{
+ const f=fixture();await(await f.begin()).finish(f.payload,'fp');
+ assert.equal((await f.store.get(f.request))?.headers.get('X-CFP-Collection-Cards'),'hit');
+ assert.equal(await f.store.get(f.request,{probe:true,publishedOnly:true}),null);
+});
+
 test('All products reuses country-scoped cards without an invented Shopify collection ID',async()=>{
  const f=fixture();f.spec.collectionId=null;
  const request=new Request(f.request.url.replace('collectionHandle=one','collectionHandle=all'));

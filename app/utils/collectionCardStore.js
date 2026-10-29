@@ -78,8 +78,11 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   if(current.length===10)current[9]=saved[9];
   return JSON.stringify(current)===entry.state;
  };
- async function get(request,{probe=false,onHit,marketAvailabilityVersion=null}={}){
+ async function get(request,{probe=false,publishedOnly=false,onHit,marketAvailabilityVersion=null}={}){
   if(publishedPages){const published=await publishedPages.get(request,{probe,onHit,marketAvailabilityVersion});if(published)return published;}
+  // A catalog job is complete only when its durable 50-card publication can
+  // serve this market. A working card hit must not let the worker skip publish.
+  if(publishedOnly)return null;
   if(!collectionCardKey(request))return null;
   const options={probe,onHit,marketAvailabilityVersion,deadline:Date.now()+readBudgetMs};
   // Background preparation saves fifty complete cards. Prefer that saved page
