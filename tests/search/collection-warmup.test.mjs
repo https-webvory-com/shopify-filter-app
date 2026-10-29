@@ -13,6 +13,7 @@ import {createCollectionSalesDependencies} from '../../app/utils/collectionSales
 import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
 import {publishedCollectionKey} from '../../app/utils/collectionPublishedPage.js';
+import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey} from '../../app/utils/shopCacheInvalidation.js';
 
 async function fixture() {
   const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[],schedules=[],published=[],connections=new Map(),primaryMarket={value:null};let scans=0;
@@ -39,6 +40,7 @@ async function fixture() {
     if(name==='../utils/collectionHeadProofs.js')return {createCollectionHeadProofs};
     if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
     if(name==='../utils/collectionPublishedPage.js')return {publishedCollectionKey};
+    if(name==='../utils/shopCacheInvalidation.js')return {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
@@ -246,11 +248,41 @@ test('missing published collection pages run ahead of already published pages in
  for(const id of ['1','2'])f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
  const publishedUrl=new URL('https://ranking.internal/api/filter');
  for(const [key,value]of Object.entries({shop,collectionId:'1',country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))publishedUrl.searchParams.set(key,value);
- f.published.push({aliases:[publishedCollectionKey(new Request(publishedUrl))]});
+ f.published.push({aliases:[publishedCollectionKey(new Request(publishedUrl))],validatedAt:new Date(Date.now()-1000)});
  await f.scheduleCatalogCollectionWarmups(shop);
  const jobs=f.writes.filter(w=>w[0]==='queue');
  assert.equal(jobs.find(w=>w[2].record.collectionId==='1')[3].priority,10);
  assert.equal(jobs.find(w=>w[2].record.collectionId==='2')[3].priority,2);
+});
+test('coverage audit promotes a saved alias that fails the current published-page proof',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.seeds.push({shop,collectionHandle:'seed',country:'IN',locale:'en'});
+ f.catalog.push({shop,id:'gid://shopify/Collection/1'});
+ const url=new URL('https://ranking.internal/api/filter');
+ for(const [key,value]of Object.entries({shop,collectionId:'1',country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))url.searchParams.set(key,value);
+ f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-1000)});
+ f.setProbe(()=>null);
+ await f.scheduleCatalogCollectionWarmups(shop,null,10,null,false,true);
+ assert.ok(f.writes.some(row=>row[0]==='probe'));
+ assert.equal(f.writes.find(row=>row[0]==='queue'&&row[2].record.collectionId==='1')[3].priority,2);
+});
+test('a scoped catalog invalidation promotes only its own published collection',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.seeds.push({shop,collectionHandle:'seed',country:'IN',locale:'en'});
+ for(const id of ['1','2']){
+  f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
+  const url=new URL('https://ranking.internal/api/filter');
+  for(const [key,value]of Object.entries({shop,collectionId:id,country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))url.searchParams.set(key,value);
+  f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-1000)});
+ }
+ f.snapshots.set(catalogPublicationInvalidatedAtKey(shop,'1'),String(Date.now()));
+ await f.scheduleCatalogCollectionWarmups(shop);
+ const jobs=f.writes.filter(row=>row[0]==='queue'&&row[2].record.collectionId!=='all');
+ assert.equal(jobs.find(row=>row[2].record.collectionId==='1')[3].priority,2);
+ assert.equal(jobs.find(row=>row[2].record.collectionId==='2')[3].priority,10);
+ f.snapshots.set(configurationInvalidatedAtKey(shop),String(Date.now()));
+ await f.scheduleCatalogCollectionWarmups(shop);
+ assert.equal(jobs.find(row=>row[2].record.collectionId==='2')[3].priority,2);
 });
 
 test('catalog jobs dispatch exactly their public context through the existing ranking worker lane',async()=>{

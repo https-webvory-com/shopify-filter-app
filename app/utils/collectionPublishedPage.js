@@ -18,7 +18,7 @@ export function publishedCollectionKey(request){
 }
 // Published versions are deliberately independent of working ranking epochs.
 // Only a complete, verified replacement is published; visits never rebuild it.
-export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,now=Date.now,lifetime=86400}){
+export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,readCatalogInvalidatedAt,now=Date.now,lifetime=86400}){
  const valid=(entry,serving=false)=>entry?.version===1&&entry.cardPresentationVersion===collectionCardPresentationVersion&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
   Array.isArray(entry.ids)&&new Set(entry.ids).size===entry.ids.length&&entry.ids.every(id=>/^\d+$/.test(id))&&
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
@@ -36,7 +36,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    const entry=decodePreparation(raw);if(entry.shop!==shop||!entry.aliases?.includes(key)||!valid(entry,true))return null;
    // Retire stock-restricted publications from the reverted release, as well
    // as publications with an obsolete pin or merchandising configuration.
-   if(entry.marketAvailabilityRevision!=null||(entry.marketAvailabilityVersion??null)!==marketAvailabilityVersion||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))){
+   const catalogInvalidatedAt=readCatalogInvalidatedAt?Number(await readCatalogInvalidatedAt(shop,entry.collectionId)):0;
+   if(entry.marketAvailabilityRevision!=null||(entry.marketAvailabilityVersion??null)!==marketAvailabilityVersion||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))||(catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at)){
     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});

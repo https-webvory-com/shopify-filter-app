@@ -10,6 +10,7 @@ import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot,getCollectio
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {createPublishedCollectionPages} from '../utils/collectionPublishedPage.js';
 import {marketRankingFingerprint} from '../utils/marketAvailability.js';
+import {catalogPublicationInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
 const recordCardEvent=createCollectionPreparationTelemetry(redis);
 
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
@@ -17,6 +18,7 @@ export function createCardStateReader(redis,database=prisma,now=Date.now,loadDur
 const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);
 const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
  readConfigurationRevision:async shop=>await redis.get(`collectionPreparationRevision:${shop}`)??'0',
+ readCatalogInvalidatedAt:async(shop,id)=>await redis.get(catalogPublicationInvalidatedAtKey(shop,id)),
  readGlobalSettings:async shop=>{
   const settings=await prisma.filterGlobalSetting.findUnique({where:{shop}});
   if(!settings)return null;

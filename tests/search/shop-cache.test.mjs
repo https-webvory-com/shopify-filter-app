@@ -8,7 +8,7 @@ import * as invalidation from '../../app/utils/shopCacheInvalidation.js';
 async function fixture() {
  const values=new Map();
  const warmups=[];
- const redis={get:async key=>values.get(key),setex:async(key,ttl,value)=>values.set(key,value),
+ const redis={get:async key=>values.get(key),set:async(key,value)=>values.set(key,value),setex:async(key,ttl,value)=>values.set(key,value),
    incr:async key=>{const v=Number(values.get(key)||0)+1;values.set(key,String(v));return v;},
    scan:async()=>['0',[...values.keys()]],del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;}};
  const context={module:{exports:{}},exports:{},console,queue:{add:async(...args)=>warmups.push(args)},require:name=>name.includes('shopCacheInvalidation')?invalidation:({__esModule:true,default:redis})};

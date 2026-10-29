@@ -31,6 +31,18 @@ test('background coverage probe recognizes a complete published fifty without cr
  assert.equal(f.sessionCalls(),0);assert.equal(f.values.size,before);
  assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true,marketAvailabilityVersion:'in-v2'}),null);
 });
+test('a scoped catalog change retires only its collection publication until a complete replacement is saved',async()=>{
+ let invalidatedAt=0;
+ const f=fixture({readCatalogInvalidatedAt:async(_shop,id)=>id==='1'?invalidatedAt:0});
+ await f.publish();
+ const first=await(await f.store.get(f.request())).json();
+ invalidatedAt=f.now();
+ assert.equal(await f.store.get(f.request(),{probe:true}),null);
+ const stalePageTwo=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
+ assert.equal(stalePageTwo.status,409);
+ f.advance(1);await f.publish();
+ assert.equal((await f.store.get(f.request(),{probe:true}))?.headers.get('X-CFP-Collection-Cards'),'published');
+});
 
 test('All products publishes 50 cards and serves two country-isolated 25-card pages',async()=>{
  const f=fixture();

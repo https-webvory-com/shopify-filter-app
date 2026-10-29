@@ -5,6 +5,8 @@ export const configurationRevisionKey = shop => `collectionPreparationRevision:$
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
 export const productContentRevisionKey=(shop,collectionId)=>`collectionProductContentRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
+export const catalogPublicationInvalidatedAtKey=(shop,collectionId)=>`collectionPublicationInvalidatedAt:${shop}:${String(collectionId||'all').split('/').pop()}`;
+export const configurationInvalidatedAtKey=shop=>`collectionConfigurationInvalidatedAt:${shop}`;
 const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','percentSale','extraFilterFacts','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionFirstPage','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
 const productCaches = ['queryParserFacets','percentSale','extraFilterFacts','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
 export function isOwnedShopCache(key, shop, productOnly = false) {
@@ -36,7 +38,14 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
     // signature. Reject saved rankings for those scopes immediately.
     if(kind==='catalog')for(const id of scopes.length?scopes:['all'])await redis.incr(rankingDataRevisionKey(shop,id));
     if (products) {for (const id of [...scopes,'all']) await redis.incr(productRevisionKey(shop,id));}
-    else await redis.incr(configurationRevisionKey(shop));
+    else if(kind==='catalog'&&scopes.length){
+      // Collection webhooks already have a scoped ranking epoch. Do not make
+      // every other collection's complete published page obsolete as well.
+      for(const id of scopes)await redis.set(catalogPublicationInvalidatedAtKey(shop,id),String(Date.now()));
+    }else{
+      await redis.incr(configurationRevisionKey(shop));
+      await redis.set(configurationInvalidatedAtKey(shop),String(Date.now()));
+    }
     // Old copies continue to check globalProducts. New supported copies use
     // tag/pin dependencies, with a broad fallback for unproven/bulk writes.
     if(kind==='products')for(const id of [...scopes,'all'])await redis.incr(productContentRevisionKey(shop,id));

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {configurationRevisionKey,productRevisionKey,rankingDataRevisionKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
+import {configurationRevisionKey,productRevisionKey,rankingDataRevisionKey,catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
 
 const shop='fixture.myshopify.com';
 function fixture(){
   const values=new Map(),calls=[];
-  const redis={incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},scan:async()=>['0',[...values.keys()]],del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;}};
+  const redis={incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},set:async(key,value)=>values.set(key,value),scan:async()=>['0',[...values.keys()]],del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;}};
   return {values,calls,invalidate:createShopCacheInvalidation({redis,warm:async(...args)=>calls.push(args)})};
 }
 test('configuration invalidation only deletes owned cache namespaces and preserves BullMQ metadata',async()=>{
@@ -16,6 +16,7 @@ test('configuration invalidation only deletes owned cache namespaces and preserv
   for(const key of protectedKeys)assert.equal(f.values.get(key),'protected',key);
   assert.equal(f.values.has(`merch:${shop}:1`),false);assert.equal(f.values.get(`collectionPreparedSequence:${shop}:background-v2:hash`),'old');
   assert.equal(f.values.get(configurationRevisionKey(shop)),'1');assert.deepEqual(f.calls,[[shop,null]]);
+  assert.ok(Number(f.values.get(configurationInvalidatedAtKey(shop)))>0);
   assert.equal(isOwnedShopCache(`merch:${shop}.other:1`,shop),false);
 });
 
@@ -24,8 +25,10 @@ test('membership and bulk catalog invalidations retain records but invalidate on
  f.values.set(key,'saved');
  await f.invalidate(shop,{kind:'catalog',collectionIds:['gid://shopify/Collection/1','1']});
  assert.equal(f.values.get(rankingDataRevisionKey(shop,'1')),'1');assert.equal(f.values.has(rankingDataRevisionKey(shop,'2')),false);
+ assert.ok(Number(f.values.get(catalogPublicationInvalidatedAtKey(shop,'1')))>0);
+ assert.equal(f.values.has(configurationRevisionKey(shop)),false,'one collection cannot invalidate every published page');
  assert.equal(f.values.has(rankingDataRevisionKey(shop)),false);assert.equal(f.values.get(key),'saved');assert.deepEqual(f.calls[0],[shop,['1']]);
- await f.invalidate(shop,{kind:'catalog'});assert.equal(f.values.get(rankingDataRevisionKey(shop)),'1');assert.equal(f.values.get(key),'saved');
+ await f.invalidate(shop,{kind:'catalog'});assert.equal(f.values.get(rankingDataRevisionKey(shop)),'1');assert.equal(f.values.get(configurationRevisionKey(shop)),'1');assert.equal(f.values.get(key),'saved');
 });
 test('product invalidation advances only relevant data versions and keeps usable prepared sequences',async()=>{
   const f=fixture();const prepared=`collectionPreparedSequence:${shop}:background-v2:hash`;

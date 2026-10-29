@@ -21,6 +21,7 @@ import {getMarketAvailabilityState} from './marketAvailability.server.js';
 import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
 import {preparationKey} from '../utils/collectionPreparation.js';
 import {createCollectionHeadProofs} from '../utils/collectionHeadProofs.js';
+import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 async function readCollectionHeadVersion(spec){
   const shop=spec.shop,id=String(spec.collectionId).split('/').pop();
@@ -99,6 +100,8 @@ export async function registerCollectionWarmup(shop, requestUrl, collectionId) {
 // This only schedules deduplicated, low-priority jobs.
 let discoveredRegistries = false;
 const orderDiscoveryAt = new Map();
+const coverageAuditAt = new Map();
+const coverageAuditStartedAt=Date.now();
 async function primaryShopMarket(shop){
   const key=`collectionPrimaryMarket:${shop}`;
   try{
@@ -142,7 +145,7 @@ export async function scheduleMissingCollectionOrders(shop) {
 
 // Discover public markets from configuration and real public visits. Never turn
 // customer tags, filters, arbitrary URLs or transport versions into catalog jobs.
-export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10, countryContext=null, forceMissing=false) {
+export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null, priority=10, countryContext=null, forceMissing=false, validatePublished=false) {
   const records=[...seededWarmups(shop),...(await redis.zrange(warmupContextsKey(shop),-publicPreparationLimit,-1)).flatMap(value=>{
     try{return [JSON.parse(value)];}catch{return [];}
   })];
@@ -190,20 +193,40 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   if(!markets.size)return;
   // A complete published first page is the actual visitor-ready unit. Give
   // uncovered contexts precedence over routine refreshes of ready pages.
-  let publishedAliases=null;
+  let publishedAliases=null,configurationInvalidatedAt=0;
   try{
     if(!forceMissing){
-      const rows=await prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',expiresAt:{gt:new Date()}},select:{aliases:true}});
-      publishedAliases=new Set(rows.flatMap(row=>row.aliases||[]));
+      const [rows,invalidatedAt]=await Promise.all([
+        prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',expiresAt:{gt:new Date()}},select:{aliases:true,validatedAt:true}}),
+        redis.get(configurationInvalidatedAtKey(shop)),
+      ]);
+      configurationInvalidatedAt=Number(invalidatedAt)||0;
+      publishedAliases=new Map();
+      for(const row of rows)for(const alias of row.aliases||[]){
+        const at=row.validatedAt instanceof Date?row.validatedAt.getTime():0;
+        publishedAliases.set(alias,Math.max(publishedAliases.get(alias)||0,at));
+      }
     }
   }catch(error){console.error('CFP: Collection publication coverage unavailable:',error.name);}
   let present=0,missing=0;
-  const publicationPriority=url=>{
+  const marketVersions=new Map();
+  const publicationPriority=async(url,scopedInvalidatedAt=0)=>{
     if(forceMissing)return priority;
     const page=new URL(url);page.searchParams.set('responseProfile','collection-preview-v1');page.searchParams.set('limit','25');
     const key=publishedCollectionKey(new Request(page));
     if(!publishedAliases||!key)return priority;
-    if(publishedAliases.has(key)){present++;return priority;}
+    const at=publishedAliases.get(key)||0;
+    if(at&&at>configurationInvalidatedAt&&at>scopedInvalidatedAt){
+      if(!validatePublished){present++;return priority;}
+      try{
+        const country=page.searchParams.get('country');
+        if(!marketVersions.has(country))marketVersions.set(country,await getMarketAvailabilityState(shop,country));
+        const market=marketVersions.get(country);
+        const readyUrl=new URL(page);readyUrl.searchParams.set('responseProfile','collection-cards-v1');readyUrl.searchParams.set('limit','50');
+        const ready=market.status==='pending'?null:await getPreparedCollectionCards(new Request(readyUrl),{probe:true,publishedOnly:true,marketAvailabilityVersion:market.version});
+        if(ready?.status===200&&ready.headers?.get('X-CFP-Collection-Cards')==='published'){present++;return priority;}
+      }catch{/* A failed proof must be rebuilt, never counted as covered. */}
+    }
     missing++;return Math.min(priority,2);
   };
   const scopes=collectionIds?.map(id=>String(id).split('/').pop()).filter(id=>/^\d+$/.test(id));
@@ -211,7 +234,8 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   if(!collectionIds||collectionIds.includes('all'))for(const market of markets.values()){
     const url=new URL(market);url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle','all');
     const record=normalizeCollectionWarmup(shop,url);if(!record)continue;
-    const jobPriority=publicationPriority(record.url);
+    const marker=Number(await redis.get(catalogPublicationInvalidatedAtKey(shop,'all')))||0;
+    const jobPriority=await publicationPriority(record.url,marker);
     const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
     const job=await collectionRankingQueue.getJob(jobId);
     if(job){const state=await job.getState();
@@ -228,10 +252,12 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   for(;;){
     const rows=await prisma.collection.findMany({where:{shop,...(scopes?.length?{id:{in:scopes.map(id=>'gid://shopify/Collection/'+id)}}:{})},select:{id:true},orderBy:{id:'asc'},take:100,
       ...(cursor?{cursor:{id:cursor},skip:1}:{})});
-    for(const row of rows)for(const market of markets.values()){
+    const markers=rows.length?await redis.mget(...rows.map(row=>catalogPublicationInvalidatedAtKey(shop,row.id))):[];
+    for(let index=0;index<rows.length;index++)for(const market of markets.values()){
+      const row=rows[index];
       const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
       const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
-      const jobPriority=publicationPriority(record.url);
+      const jobPriority=await publicationPriority(record.url,Number(markers[index])||0);
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){
@@ -285,7 +311,10 @@ export async function scheduleRegisteredCollectionWarmups() {
       // keeps its existing four-minute cadence and single worker lane.
       if (Date.now() - (orderDiscoveryAt.get(shop) ?? -Infinity) >= 240000) {
         await scheduleMissingCollectionOrders(shop);
-        await scheduleCatalogCollectionWarmups(shop);
+        const previousAudit=coverageAuditAt.get(shop);
+        const auditDue=Date.now()-(previousAudit??coverageAuditStartedAt)>=(previousAudit==null?300000:1800000);
+        await scheduleCatalogCollectionWarmups(shop,null,10,null,false,auditDue);
+        if(auditDue)coverageAuditAt.set(shop,Date.now());
         orderDiscoveryAt.set(shop, Date.now());
       }
     }
