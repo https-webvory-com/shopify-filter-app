@@ -39,6 +39,12 @@ test('saved first fifty supply the complete first 25 before a separate card copy
  assert.equal(body.cfpCards.preview,false);assert.equal(body.cfpCards.prefix,undefined);assert.equal(body.cfpCards.facetsReady,true);
  assert.deepEqual(body.facets,f.payload.facets);assert.deepEqual(validations,[{count:50,preview:false}]);
  assert.deepEqual(f.sessions[0].value.ids,f.prepared.ids);assert.equal(new URL(f.sessions[0].url).searchParams.get('limit'),'25');
+ const originalGet=f.redis.get;
+ f.redis.get=async key=>{if(key===collectionCardKey(saved))await new Promise(resolve=>setTimeout(resolve,700));return originalGet(key);};
+ const delayed=await f.store.get(request);
+ assert.equal(delayed?.headers.get('X-CFP-Collection-Cards'),'hit','a slow saved fifty should still beat the pin-only fallback');
+ assert.equal((await delayed.json()).products.length,25);
+ f.redis.get=originalGet;
  assert.equal(await f.store.get(new Request(request.url.replace('country=IN','country=US'),{headers:request.headers})),null);
  assert.equal(await f.store.get(new Request(request.url+'&options[Color][]=Red',{headers:request.headers})),null);
  // A saved fifty that no longer validates must not hide a valid 25-card copy.
