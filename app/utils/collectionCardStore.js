@@ -46,7 +46,7 @@ return 1`;
 
 // Working card snapshots verify documents and ranking epochs. Published serving
 // versions are checked first and deliberately bypass this preparation work.
-export function createCollectionCardStore({redis,readState,validateCards,createSession,loadDurable,saveDurable,publishedPages,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=256*1024,lifetime=86400,readBudgetMs=500}){
+export function createCollectionCardStore({redis,readState,validateCards,createSession,loadDurable,saveDurable,publishedPages,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=256*1024,lifetime=86400,readBudgetMs=1200}){
  const sourceValid=(shop,key)=>typeof key==='string'&&key.startsWith(`collectionPreparedSequence:${shop}:background-v2:`)&&/^[a-f0-9]{64}$/.test(key.split(':').at(-1));
  const stateSignature=(state,external)=>JSON.stringify([state.configuration,state.products,external?(state.externalProducts??state.globalProducts):null,state.hardAll,state.hardCollection,state.orderRevision,state.scheduleEpoch,state.runtimeGeneration,state.epochsPresent,...(state.salesProducts!==undefined?[state.salesProducts]:[])]);
  const sequenceSignature=value=>digest([value.ids,value.metadata]);
