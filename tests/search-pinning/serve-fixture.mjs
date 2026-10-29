@@ -3,11 +3,13 @@ import http from 'node:http';
 import { build } from 'esbuild';
 import { loadModule, loadRanking } from '../search/helpers/search-ranking.mjs';
 import { availablePins } from '../../app/utils/availablePins.server.js';
+import { pinProductImageFallbacks } from '../../app/utils/pinProductImageFallbacks.server.js';
+import { catalogImageUrls } from '../../app/utils/pinProductImages.js';
 import { pinProductSearchFilter } from '../../app/utils/pinProductSearch.server.js';
 import { reorderSearchPins } from '../../app/utils/reorderSearchPins.js';
 const shop = 'pin-fixture.myshopify.com', gid = id => 'gid://shopify/Product/' + id;
 const docs = Array.from({length:15}, (_,i) => ({id:String(i+1),shop,title:(i<12?'Green':'Red')+' Dress '+(i+1),handle:'dress-'+(i+1),status:'ACTIVE',
-  images:[],options:[{name:'Color',values:[i<12?'Green':'Red']}],variantPrices:[{id:String(i+1),option1:i<12?'Green':'Red',available:true,price:10}]}));
+  images:i===0?['/images/fallback.svg']:[],options:[{name:'Color',values:[i<12?'Green':'Red']}],variantPrices:[{id:String(i+1),option1:i<12?'Green':'Red',available:true,price:10}]}));
 let rule = {id:'fixture',name:'Green dresses',searchQueries:['green dresses'],ruleType:'search',status:true,createdAt:new Date().toISOString(),applyToAll:false,applyToSearchType:'both',products:[]};
 const rows = docs.map(p=>({...p,id:gid(p.id),status:'active',variants:p.variantPrices}));
 function eligible(where) {
@@ -21,8 +23,10 @@ const ranking=await loadRanking(prisma,async(q,options)=>{const matches=docs.fil
   return {hits:matches.slice(options.offset||0,(options.offset||0)+options.limit),estimatedTotalHits:matches.length};});
 const picker=await loadModule('app/services/searchPicker.server.js',{'./queryParser.server.js':{parseQuery:async()=>null},'./searchRanking.server.js':ranking});
 const admin=await loadModule('app/routes/app.search.pinning.$id.jsx',{'react-router':{redirect:()=>({redirect:true})},react:{},'@shopify/app-bridge-react':{},'@shopify/shopify-app-react-router/server':{},
+  '../services/shopCache.server':{invalidateShop:async()=>{}},
   '../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},'../db.server':{default:prisma},'../utils/availablePins.server.js':{availablePins},
-  '../utils/pinProductSearch.server':{pinProductSearchFilter},'../utils/reorderSearchPins.js':{reorderSearchPins},'../services/searchPicker.server.js':picker,'../components/merchandising/PinSearchField':{}});
+  '../utils/pinProductImageFallbacks.server.js':{pinProductImageFallbacks},'../utils/pinProductImages.js':{catalogImageUrls},
+  '../utils/pinProductSearch.server':{pinProductSearchFilter},'../utils/reorderSearchPins.js':{reorderSearchPins},'../services/searchPicker.server.js':picker,'../components/merchandising/PinSearchField':{},'../components/merchandising/PinProductImage':{}});
 await fs.mkdir('scratch',{recursive:true});
 await fs.writeFile('scratch/pinning-admin-entry.jsx',`import React from 'react';import{createRoot}from'react-dom/client';import{createBrowserRouter,RouterProvider,redirect}from'react-router';import Component from '../app/routes/app.search.pinning.$id.jsx';import Index from '../app/routes/app.search.pinning._index.jsx';import CollectionIndex from '../app/routes/app.collections.pinning._index.jsx';
 function endpoint(request){const u=new URL(request.url),out=new URL('/admin',u);out.search=u.search;out.searchParams.set('ruleId',u.pathname.endsWith('/new')?'new':'fixture');return out.pathname+out.search;}
@@ -38,6 +42,8 @@ const server=http.createServer(async(req,res)=>{try{
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result instanceof Response ? await result.json() : result));return;}
   if(url.pathname==='/list-state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rule.listRules||[rule]));return;}
   if(url.pathname==='/state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rule));return;}
+  if(url.pathname==='/images/fallback.svg'){res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="green"/></svg>');return;}
+  if(url.pathname==='/broken.svg'){res.writeHead(404).end();return;}
   if(url.pathname==='/__control'&&req.method==='POST'){const chunks=[];for await(const chunk of req)chunks.push(chunk);Object.assign(rule,JSON.parse(Buffer.concat(chunks).toString()));res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rule));return;}
   if(url.pathname==='/pinning-admin.js'){res.setHeader('Content-Type','application/javascript');res.end(await fs.readFile('scratch/pinning-admin.js'));return;}
   res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial} s-page{display:block}</style></head><body><div id="root"></div><script>window.browserErrors=[];addEventListener("error",e=>browserErrors.push(e.message));addEventListener("unhandledrejection",e=>browserErrors.push(String(e.reason)));</script><script src="/pinning-admin.js"></script></body></html>');

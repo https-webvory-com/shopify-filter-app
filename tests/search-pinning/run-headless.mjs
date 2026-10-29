@@ -37,6 +37,11 @@ try {
   for (const result of existing.checks) check(result.name, result.pass);
 
   const original = { id: 'gid://shopify/Product/1', title: 'Green Dress 1', handle: 'dress-1', image: null };
+  await control({ searchQueries: ['green dresses'], products: [{...original,image:'/broken.svg'}], applyToAll: false, applyToSearchType: 'both' });
+  await navigate('/admin-ui');
+  await wait("(()=>{const image=document.querySelector('img[alt=\"Green Dress 1\"]');return image?.src.endsWith('/images/fallback.svg')&&image.complete&&image.naturalWidth>0})()");
+  check('a broken saved pin image falls back to the current catalog image');
+  check('search pin editor has one Back link', await evaluate("[...document.querySelectorAll('a,button')].filter(node=>/^Back(?: to Search Pinning Rules)?$/.test(node.textContent.trim())).length===1"));
   await control({ searchQueries: ['green dresses'], products: [original], applyToAll: false, applyToSearchType: 'both' });
   await navigate('/admin-ui'); await wait("document.querySelectorAll('.product-search-card').length===9");
   check('editor has one editable search term and no Add control', await evaluate("document.querySelectorAll('#search-pin-term').length===1&&![...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Add')"));

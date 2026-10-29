@@ -301,6 +301,7 @@ test('authenticated pin picker retains target-query scope when searching by titl
     'react-router': {}, react: {}, '@shopify/app-bridge-react': {}, '@shopify/shopify-app-react-router/server': {},
     '../db.server': { default: prisma }, '../shopify.server': { authenticate: { admin: async () => ({ session: { shop } }) } },
     '../utils/availablePins.server.js': {}, '../components/merchandising/PinSearchField': {}, '../utils/reorderSearchPins.js': { reorderSearchPins },
+    '../utils/pinProductImageFallbacks.server.js': {}, '../utils/pinProductImages.js': { catalogImageUrls: images => images || [] }, '../components/merchandising/PinProductImage': {},
     '../utils/pinProductSearch.server': { pinProductSearchFilter: async () => ({ title: { contains: 'Green' } }) },
     '../services/searchPicker.server.js': { searchPickerProducts: async (tenant, queries) => { assert.equal(tenant, shop); assert.deepEqual(Array.from(queries), ['green dresses']); return [{ id: gid(1) }]; } },
   });

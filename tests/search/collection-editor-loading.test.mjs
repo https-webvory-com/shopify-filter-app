@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loadModule} from './helpers/search-ranking.mjs';
 import {pinProductSearchFilter, pinProductTagSuggestions} from '../../app/utils/pinProductSearch.server.js';
+import {catalogImageUrls} from '../../app/utils/pinProductImages.js';
 
 const shop = 'fixture.myshopify.com';
 const normalize = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -9,8 +10,9 @@ const common = prisma => ({
   '../utils/merchandisingSelection.js': {},
   '../shopify.server': {authenticate: {admin: async () => ({session: {shop}})}},
   '../db.server': {default: prisma}, 'react-router': {}, react: {},
-  '../utils/availablePins.server.js': {}, '../utils/pinProductSearch.server': {pinProductSearchFilter, pinProductTagSuggestions},
-  '../components/merchandising/PinSearchField': {}, '@shopify/app-bridge-react': {},
+  '../utils/availablePins.server.js': {}, '../utils/pinProductImageFallbacks.server.js': {},
+  '../utils/pinProductImages.js': {catalogImageUrls}, '../utils/pinProductSearch.server': {pinProductSearchFilter, pinProductTagSuggestions},
+  '../components/merchandising/PinSearchField': {}, '../components/merchandising/PinProductImage': {}, '@shopify/app-bridge-react': {},
 });
 
 for (const failedLaterPage of [false,true]) test(`collection rule choices retain distinct IDs beyond the first page (fallback=${failedLaterPage})`,async()=>{

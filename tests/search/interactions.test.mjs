@@ -8,6 +8,7 @@ import { transform } from "esbuild";
 import { availablePins } from "../../app/utils/availablePins.server.js";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../../app/utils/pinProductSearch.server.js";
+import { catalogImageUrls } from "../../app/utils/pinProductImages.js";
 import {
   searchPinScopeFromCsv,
   searchPinScopeToCsv,
@@ -67,6 +68,8 @@ async function mockedModule(file, mocks) {
       if (name in mocks) return mocks[name];
       if (name === '../services/shopCache.server.js' || name === '../services/shopCache.server') return { invalidateShop: async () => {} };
       if (name === "../utils/availablePins.server.js") return { availablePins };
+      if (name === "../utils/pinProductImageFallbacks.server.js") return { pinProductImageFallbacks: async () => ({}) };
+      if (name === "../utils/pinProductImages.js") return { catalogImageUrls };
       if (name === "../utils/pinProductSearch.server") return { pinProductSearchFilter, pinProductTagSuggestions };
       if (name.startsWith("../components/")) return {};
       if (

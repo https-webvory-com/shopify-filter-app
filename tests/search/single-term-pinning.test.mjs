@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule } from './helpers/search-ranking.mjs';
+import { catalogImageUrls } from '../../app/utils/pinProductImages.js';
 
 async function fixture(initial = { id: 'existing', shop: 'fixture.myshopify.com', ruleType: 'search', searchQueries: ['blue'], status: false }) {
   const writes = [];
@@ -16,7 +17,9 @@ async function fixture(initial = { id: 'existing', shop: 'fixture.myshopify.com'
     '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
     '../db.server': { default: prisma }, '../utils/availablePins.server.js': { availablePins: async (_db, _shop, products) => products },
     '../utils/pinProductSearch.server': { pinProductSearchFilter: async () => ({}) }, '../services/searchPicker.server.js': {}, '../utils/reorderSearchPins.js': {},
+    '../utils/pinProductImageFallbacks.server.js': { pinProductImageFallbacks: async () => ({}) }, '../utils/pinProductImages.js': { catalogImageUrls },
     '../components/merchandising/PinSearchField': {}, react: {}, '@shopify/app-bridge-react': {}, '@shopify/shopify-app-react-router/server': {},
+    '../components/merchandising/PinProductImage': {},
     'react-router': { redirect: path => new Response(null, { status: 302, headers: { Location: path } }) },
   });
   const service = await loadModule('app/services/merchandising.server.js', { '../db.server.js': { default: prisma } });

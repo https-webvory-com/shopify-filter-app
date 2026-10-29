@@ -13,8 +13,11 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { availablePins } from "../utils/availablePins.server.js";
+import { pinProductImageFallbacks } from "../utils/pinProductImageFallbacks.server.js";
+import { catalogImageUrls } from "../utils/pinProductImages.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinProductSearch.server";
 import PinSearchField from "../components/merchandising/PinSearchField";
+import PinProductImage from "../components/merchandising/PinProductImage";
 import { searchPickerProducts } from "../services/searchPicker.server.js";
 import { reorderSearchPins } from "../utils/reorderSearchPins.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -95,19 +98,11 @@ export const action = async ({ request, params }) => {
     });
 
     const products = productsResult.map((p) => {
-      let image = null;
-      if (p.images) {
-        const parsedImages =
-          typeof p.images === "string" ? JSON.parse(p.images) : p.images;
-        if (Array.isArray(parsedImages) && parsedImages.length > 0) {
-          image = parsedImages[0];
-        }
-      }
       return {
         id: p.id,
         title: p.title,
         handle: p.handle,
-        image,
+        image: catalogImageUrls(p.images)[0] || null,
       };
     });
 
@@ -183,15 +178,20 @@ export const loader = async ({ request, params }) => {
     });
   }
 
-  if (rule) rule = { ...rule, products: await availablePins(prisma, shop, rule.products) };
+  let pinImageFallbacks = {};
+  if (rule) {
+    const products = await availablePins(prisma, shop, rule.products);
+    pinImageFallbacks = await pinProductImageFallbacks(prisma, shop, products);
+    rule = { ...rule, products };
+  }
 
-  return { rule, defaultParams };
+  return { rule, defaultParams, pinImageFallbacks };
 };
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);
 
 export default function PinningEditor() {
-  const { rule, defaultParams } = useLoaderData();
+  const { rule, defaultParams, pinImageFallbacks } = useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -668,33 +668,6 @@ export default function PinningEditor() {
           }}
         >
           <div>
-            <button
-              onClick={() => navigate("/app/search/pinning")}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "#64748b",
-                display: "flex",
-                alignItems: "center",
-                marginBottom: "8px",
-              }}
-            >
-              <svg
-                style={{ width: "16px", height: "16px", marginRight: "4px" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                ></path>
-              </svg>
-              Back
-            </button>
             <input
               type="text"
               value={name}
@@ -912,11 +885,7 @@ export default function PinningEditor() {
                         onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
                       >
                         <div style={{ width: "100%", height: "200px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
-                          {prod.image ? (
-                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#fff" }} />
-                          ) : (
-                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
-                          )}
+                          <PinProductImage image={prod.image} alt={prod.title} />
                           
                           {/* Pin Button overlay */}
                           <div className="pin-btn-overlay" style={{ position: "absolute", top: "8px", right: "8px" }}>
@@ -1297,11 +1266,7 @@ export default function PinningEditor() {
                         </div>
                         
                         <div style={{ width: "100%", height: "200px", background: "#f1f5f9", position: "relative", flexShrink: 0, overflow: "hidden" }}>
-                          {prod.image ? (
-                            <img src={prod.image} alt={prod.title} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#fff" }} />
-                          ) : (
-                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "12px" }}>No Img</div>
-                          )}
+                          <PinProductImage image={prod.image} fallbackImages={pinImageFallbacks[prod.id]} alt={prod.title} />
                           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.5)", color: "#fff", padding: "4px 8px", fontSize: "11px", fontWeight: "600", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span>Pos: {index + 1}</span>
                             <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16"></path></svg>
