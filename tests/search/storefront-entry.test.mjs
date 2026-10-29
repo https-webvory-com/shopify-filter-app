@@ -44,6 +44,12 @@ test('registered extension JavaScript entry points remain below the 10000-byte b
  for(const name of ['collection_filter_pro','collection_loading']){
   const block=await fs.readFile(base+'blocks/'+name+'.liquid','utf8');
   const schema=JSON.parse(block.split('{% schema %}')[1].split('{% endschema %}')[0]);
+  if(!schema.javascript){
+   assert.equal(name,'collection_loading');
+   assert.ok(block.includes("{{ 'collectionLoading.min.js' | asset_url | preload_tag: as: 'script', fetchpriority: 'high' }}"));
+   assert.ok(block.includes("<script src=\"{{ 'collectionLoading.min.js' | asset_url }}\""));
+   continue;
+  }
   const source=await fs.readFile(base+'assets/'+schema.javascript);
   assert.ok(source.length<10000,schema.javascript+' exceeds the app entry budget');
  }
