@@ -26,6 +26,8 @@ test('head uses the complete scoped browser page before a fresh collection reque
 });
 test('head runs the bootstrap inline before deferred asset loading, using the same guarded source',async()=>{
  assert.ok(head.includes("{% render 'collection_loading_start' %}"));
+ assert.ok(head.includes("<script src=\"{{ 'collectionLoading.min.js' | asset_url }}\""));
+ assert.equal(JSON.parse(head.split('{% schema %}')[1].split('{% endschema %}')[0]).javascript,undefined,'the explicit head loader should not also be injected as an automatic block script');
  assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),'<script>'+await fs.readFile('extensions/theme-extension/assets/collectionLoading.min.js','utf8')+'</script>\n');
 });
 function fixture(search='',tags='',delayed=false,options={}){
