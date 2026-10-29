@@ -13,8 +13,16 @@ const jobId = (shop, collectionId) => `collection-order-${encodeURIComponent(sho
 // Publish only complete snapshots. A failed refresh leaves the last good order intact.
 export async function refreshCollectionBestSelling(shop, collectionId) {
   const previous = await redis.get(snapshotKey(shop, collectionId));
-  const { admin } = await unauthenticated.admin(shop);
-  const ids = await readCollectionBestSellingIds(admin, collectionId);
+  const { session } = await unauthenticated.admin(shop);
+  if(session.shop!==shop||!session.accessToken||!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop))throw Error('Shopify collection session unavailable');
+  // Shopify's 2025-10 endpoint returns collection:null for some existing
+  // collections. Use the app's configured 2026-07 Admin API for this order
+  // read without changing unrelated Admin API callers.
+  const orderAdmin={graphql:(query,{variables})=>fetch(`https://${shop}/admin/api/2026-07/graphql.json`,{
+    method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':session.accessToken},
+    body:JSON.stringify({query,variables}),signal:AbortSignal.timeout(30000),
+  })};
+  const ids = await readCollectionBestSellingIds(orderAdmin, collectionId);
   const revision = createHash('sha256').update(JSON.stringify(ids)).digest('hex');
   await redis.set(snapshotKey(shop, collectionId), JSON.stringify({ ids, updatedAt: Date.now(), revision }));
   if (!previous || JSON.parse(previous).revision !== revision) {

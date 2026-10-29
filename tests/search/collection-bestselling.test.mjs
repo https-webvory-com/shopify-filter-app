@@ -54,7 +54,6 @@ test('Shopify ranking does not admit products outside the filtered collection or
  const result=await fetchCollectionPage(index,{page:1,limit:25,pinnedIds:[],tiers:[{query:{q:'',filter:[]},total:3}],attributes:['id'],orderedIds:['99','1','2']});
  assert.deepEqual(result.hits.map(p=>p.id),['1','2','3']);assert.equal(result.total,3);
 });
-
 test('Dynamic Set replaces the preceding score and collection order breaks ties',()=>{
  const conditions=[{action:'Dynamic',field:'Tags',value:'TopFormal',operator:'Set',operand:'99'},{action:'Dynamic',field:'Tags',value:'BestFormal',operator:'Set',operand:'1000'}];
  const products=[{id:'1',tags:['TopFormal','BestFormal'],_originalIndex:0,bestSellingScore:1},{id:'2',tags:['BestFormal'],_originalIndex:1,bestSellingScore:9999},{id:'3',tags:['TopFormal'],_originalIndex:2}];
@@ -63,16 +62,16 @@ test('Dynamic Set replaces the preceding score and collection order breaks ties'
  assert.deepEqual(Array.from(result,p=>p.merchandisingScore),[1000,1000,99]);
 });
 
-async function loadOrderService({snapshot=null,fail=false,job=null}={}) {
+async function loadOrderService({snapshot=null,fail=false,job=null,inspectAdmin=null}={}) {
  const calls=[];let stored=snapshot;
  const mocks={
   'node:crypto':crypto,
   './redis.server.js':{__esModule:true,default:{get:async()=>stored&&JSON.stringify(stored),set:async(_key,value)=>{stored=JSON.parse(value);}}},
   './queue.server.js':{collectionRankingQueue:{add:async(name,data)=>{calls.push({name,data});return {};}},webhookQueue:{getJob:()=>{throw Error('Must not wait on the webhook backlog');},add:()=>{throw Error('Must not enqueue behind webhooks');}},collectionOrderQueue:{getJob:async()=>job,add:async(name,data,opts)=>{calls.push({name,data,opts});if(fail)throw Error('queue unavailable');return {};}}},
-  '../shopify.server.js':{unauthenticated:{admin:async()=>({admin:{}})}},
-  '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async()=>{if(fail)throw Error('Shopify unavailable');return ['2','1'];}},
+  '../shopify.server.js':{unauthenticated:{admin:async shop=>({session:{shop,accessToken:'test-token'}})}},
+  '../utils/collectionBestSelling.js':{readCollectionBestSellingIds:async admin=>{if(fail)throw Error('Shopify unavailable');if(inspectAdmin)await inspectAdmin(admin);return ['2','1'];}},
  };
- const ctx={module:{exports:{}},exports:{},Date,warmupHook:async(shop,collectionIds,priority,countryContext,forceMissing)=>calls.push({name:'COLLECTION_RANKING_CATALOG',data:{shop,collectionIds:Array.from(collectionIds),priority,countryContext,forceMissing}}),console:{error(){}},require:name=>mocks[name]};
+ const ctx={module:{exports:{}},exports:{},Date,AbortSignal,fetch:async(url,options)=>{calls.push({name:'SHOPIFY_FETCH',url,options});return {json:async()=>({})};},warmupHook:async(shop,collectionIds,priority,countryContext,forceMissing)=>calls.push({name:'COLLECTION_RANKING_CATALOG',data:{shop,collectionIds:Array.from(collectionIds),priority,countryContext,forceMissing}}),console:{error(){}},require:name=>mocks[name]};
  const source=(await fs.readFile('app/services/collectionBestSelling.server.js','utf8')).replace("await import('./collectionPreparation.server.js')",'({scheduleCatalogCollectionWarmups:warmupHook})');
  vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
  return {...ctx.module.exports,calls,stored:()=>stored};
@@ -82,81 +81,90 @@ test('failed worker jobs can recover after their cooldown without losing old ord
  let removed=0;
  const job={finishedOn:Date.now()-60000,getState:async()=> 'failed',remove:async()=>{removed++;}};
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1},job});
- const state=await service.getCollectionBestSellingState('shop','collection');
+ const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(removed,1);assert.equal(service.calls.length,1);assert.equal(state.refreshState,'waiting');
  assert.deepEqual(Array.from(state.ids),['1']);
 });
 test('failed worker jobs respect cooldown instead of repeatedly enqueuing',async()=>{
  const service=await loadOrderService({job:{finishedOn:Date.now(),getState:async()=> 'failed'}});
- assert.equal((await service.getCollectionBestSellingState('shop','collection')).status,'failed');
+ assert.equal((await service.getCollectionBestSellingState('shop.myshopify.com','collection')).status,'failed');
  assert.equal(service.calls.length,0);
 });
 test('collection updates mark snapshots stale without discarding their IDs',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
- await service.invalidateCollectionBestSelling('shop','collection');
+ await service.invalidateCollectionBestSelling('shop.myshopify.com','collection');
  assert.equal(service.stored().updatedAt,0);assert.deepEqual(Array.from(service.stored().ids),['1']);
 });
 test('fresh snapshots serve immediately without scheduling Shopify reads',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:Date.now()}});
- const state=await service.getCollectionBestSellingState('shop','collection');
+ const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(state.status,'ready');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls.length,0);
 });
 
 test('pending order jobs deduplicate in the dedicated queue without touching webhooks',async()=>{
  for(const queueState of ['waiting','active','delayed','prioritized']) {
   const service=await loadOrderService({job:{opts:{priority:1},getState:async()=>queueState}});
-  const state=await service.getCollectionBestSellingState('shop','collection');
+  const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
   assert.equal(state.status,'pending');assert.equal(state.refreshState,queueState);
   assert.equal(service.calls.length,0);
  }
  const service=await loadOrderService();
- await service.getCollectionBestSellingState('shop','collection');
- assert.equal(service.calls[0].opts.jobId,'collection-order-shop-collection');
- assert.equal(service.calls[0].data.shop,'shop');
+ await service.getCollectionBestSellingState('shop.myshopify.com','collection');
+ assert.equal(service.calls[0].opts.jobId,'collection-order-shop.myshopify.com-collection');
+ assert.equal(service.calls[0].data.shop,'shop.myshopify.com');
  assert.equal(service.calls[0].data.collectionId,'collection');
 });
 
 test('background order refreshes yield to cold visitors and are promoted without duplicate jobs',async()=>{
- const cold=await loadOrderService();await cold.getCollectionBestSellingState('shop','collection');
+ const cold=await loadOrderService();await cold.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(cold.calls[0].opts.priority,1);
  for(const options of [{snapshot:{ids:['1'],updatedAt:1}},{}]){
-  const service=await loadOrderService(options);await service.getCollectionBestSellingState('shop','collection',{warmup:true});
+  const service=await loadOrderService(options);await service.getCollectionBestSellingState('shop.myshopify.com','collection',{warmup:true});
   assert.equal(service.calls[0].opts.priority,10);
  }
  const promotions=[];
  const service=await loadOrderService({job:{opts:{priority:10},getState:async()=> 'prioritized',changePriority:async value=>promotions.push(value.priority)}});
- const state=await service.getCollectionBestSellingState('shop','collection');
+ const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(state.status,'pending');assert.deepEqual(promotions,[1]);assert.equal(service.calls.length,0);
 });
 
 test('unchanged Shopify refreshes retain the same ranking revision',async()=>{
  const service=await loadOrderService({snapshot:{ids:['2','1'],updatedAt:1}});
- const before=await service.getCollectionBestSellingState('shop','collection');
- await service.refreshCollectionBestSelling('shop','collection');
- const after=await service.getCollectionBestSellingState('shop','collection');
+ const before=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
+ await service.refreshCollectionBestSelling('shop.myshopify.com','collection');
+ const after=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(before.revision,after.revision);
  assert.equal(after.status,'ready');
 });
 test('a newly fetched collection order wakes catalog pages in every known market',async()=>{
  const service=await loadOrderService();
- await service.refreshCollectionBestSelling('shop','gid://shopify/Collection/123');
- assert.deepEqual(service.calls,[{name:'COLLECTION_RANKING_CATALOG',data:{shop:'shop',collectionIds:['123'],priority:2,countryContext:null,forceMissing:true}}]);
+ await service.refreshCollectionBestSelling('shop.myshopify.com','gid://shopify/Collection/123');
+ assert.deepEqual(service.calls,[{name:'COLLECTION_RANKING_CATALOG',data:{shop:'shop.myshopify.com',collectionIds:['123'],priority:2,countryContext:null,forceMissing:true}}]);
+});
+test('collection order reads use the configured Shopify API version and offline shop session',async()=>{
+ const service=await loadOrderService({inspectAdmin:admin=>admin.graphql('query Order { shop { id } }',{variables:{id:'1'}})});
+ await service.refreshCollectionBestSelling('shop.myshopify.com','gid://shopify/Collection/123');
+ const request=service.calls.find(call=>call.name==='SHOPIFY_FETCH');
+ assert.equal(request.url,'https://shop.myshopify.com/admin/api/2026-07/graphql.json');
+ assert.equal(request.options.method,'POST');
+ assert.equal(request.options.headers['X-Shopify-Access-Token'],'test-token');
+ assert.deepEqual(JSON.parse(request.options.body).variables,{id:'1'});
 });
 test('stale snapshots remain usable while a durable retrying job refreshes them',async()=>{
  const service=await loadOrderService({snapshot:{ids:['1'],updatedAt:1}});
- const state=await service.getCollectionBestSellingState('shop','collection');
+ const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');
  assert.equal(state.status,'stale');assert.deepEqual(Array.from(state.ids),['1']);assert.equal(service.calls[0].name,'COLLECTION_BEST_SELLING_REFRESH');
- await service.refreshCollectionBestSelling('shop','collection');assert.deepEqual(Array.from(service.stored().ids),['2','1']);
+ await service.refreshCollectionBestSelling('shop.myshopify.com','collection');assert.deepEqual(Array.from(service.stored().ids),['2','1']);
 });
 test('refresh failures preserve the last successful collection order',async()=>{
  const snapshot={ids:['1'],updatedAt:1};const service=await loadOrderService({snapshot,fail:true});
- await assert.rejects(service.refreshCollectionBestSelling('shop','collection'),/Shopify/);
+ await assert.rejects(service.refreshCollectionBestSelling('shop.myshopify.com','collection'),/Shopify/);
  assert.deepEqual(service.stored(),snapshot);
- const state=await service.getCollectionBestSellingState('shop','collection');assert.equal(state.status,'stale');assert.equal(state.refreshState,'failed');
+ const state=await service.getCollectionBestSellingState('shop.myshopify.com','collection');assert.equal(state.status,'stale');assert.equal(state.refreshState,'failed');
 });
 test('cold collections report pending separately from queue failures',async()=>{
- assert.equal((await (await loadOrderService()).getCollectionBestSellingState('shop','collection')).status,'pending');
- assert.equal((await (await loadOrderService({fail:true})).getCollectionBestSellingState('shop','collection')).status,'failed');
+ assert.equal((await (await loadOrderService()).getCollectionBestSellingState('shop.myshopify.com','collection')).status,'pending');
+ assert.equal((await (await loadOrderService({fail:true})).getCollectionBestSellingState('shop.myshopify.com','collection')).status,'failed');
 });
 test('SoBooster imports retain Dynamic Set operands including zero',async()=>{
  const source=await fs.readFile('app/components/merchandising/ImportMerchandisingRulesModal.jsx','utf8');
