@@ -79,7 +79,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   return JSON.stringify(current)===entry.state;
  };
  async function get(request,{probe=false,onHit,marketAvailabilityVersion=null}={}){
-  if(!probe&&publishedPages){const published=await publishedPages.get(request,{onHit,marketAvailabilityVersion});if(published)return published;}
+  if(publishedPages){const published=await publishedPages.get(request,{probe,onHit,marketAvailabilityVersion});if(published)return published;}
   if(!collectionCardKey(request))return null;
   const options={probe,onHit,marketAvailabilityVersion,deadline:Date.now()+readBudgetMs};
   // Background preparation saves fifty complete cards. Prefer that saved page

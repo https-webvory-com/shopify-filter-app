@@ -16,6 +16,8 @@ import {createCollectionWarmupScheduler} from '../utils/collectionWarmupSchedule
 import {createCollectionDependencies} from '../utils/collectionDependencies.js';
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {getPreparedCollectionCards} from './collectionCards.server.js';
+import {publishedCollectionKey} from '../utils/collectionPublishedPage.js';
+import {getMarketAvailabilityState} from './marketAvailability.server.js';
 import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
 import {preparationKey} from '../utils/collectionPreparation.js';
 import {createCollectionHeadProofs} from '../utils/collectionHeadProofs.js';
@@ -145,22 +147,38 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     if(markets.size===4)break;
   }
   if(!markets.size)return;
+  // A complete published first page is the actual visitor-ready unit. Give
+  // uncovered contexts precedence over routine refreshes of ready pages.
+  let publishedAliases=null;
+  try{
+    const rows=await prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',expiresAt:{gt:new Date()}},select:{aliases:true}});
+    publishedAliases=new Set(rows.flatMap(row=>row.aliases||[]));
+  }catch(error){console.error('CFP: Collection publication coverage unavailable:',error.name);}
+  let present=0,missing=0;
+  const publicationPriority=url=>{
+    const page=new URL(url);page.searchParams.set('responseProfile','collection-preview-v1');page.searchParams.set('limit','25');
+    const key=publishedCollectionKey(new Request(page));
+    if(!publishedAliases||!key)return priority;
+    if(publishedAliases.has(key)){present++;return priority;}
+    missing++;return Math.min(priority,2);
+  };
   const scopes=collectionIds?.map(id=>String(id).split('/').pop()).filter(id=>/^\d+$/.test(id));
   // The virtual All products page has no Shopify Collection row to discover.
   if(!collectionIds||collectionIds.includes('all'))for(const market of markets.values()){
     const url=new URL(market);url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle','all');
     const record=normalizeCollectionWarmup(shop,url);if(!record)continue;
+    const jobPriority=publicationPriority(record.url);
     const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
     const job=await collectionRankingQueue.getJob(jobId);
     if(job){const state=await job.getState();
       if(['waiting','active','prioritized','delayed'].includes(state)){
-        if(state!=='active'&&(job.priority??job.opts?.priority??20)>priority)await job.changePriority({priority});
+        if(state!=='active'&&(job.priority??job.opts?.priority??20)>jobPriority)await job.changePriority({priority:jobPriority});
         continue;
       }
       if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
       await job.remove();
     }
-    await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority,attempts:5,backoff:{type:'exponential',delay:10000}});
+    await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:jobPriority,attempts:5,backoff:{type:'exponential',delay:10000}});
   }
   let cursor;
   for(;;){
@@ -169,10 +187,11 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     for(const row of rows)for(const market of markets.values()){
       const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
       const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
+      const jobPriority=publicationPriority(record.url);
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){
-        if(state!=='active'&&(job.priority??job.opts?.priority??20)>priority)await job.changePriority({priority});
+        if(state!=='active'&&(job.priority??job.opts?.priority??20)>jobPriority)await job.changePriority({priority:jobPriority});
         continue;
       }
         if(state==='failed'&&Date.now()-(job.finishedOn??0)<60000)continue;
@@ -181,10 +200,10 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
       // background catalog between jobs. Ranking concurrency stays at one.
       // FIFO among catalog/recent builds preserves progress through unseen
       // collections; bounded prerequisite sweeps run ahead at priority 5.
-      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority,
+      await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:jobPriority,
         attempts:5,backoff:{type:'exponential',delay:10000}});
     }
-    if(rows.length<100)return;cursor=rows.at(-1).id;
+    if(rows.length<100){console.info('CFP: collection publication aliases',JSON.stringify({shop,markets:markets.size,present,missing}));return;}cursor=rows.at(-1).id;
   }
 }
 
@@ -273,8 +292,9 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
     // session or follow-up warmup. Ready pages yield worker time to cold pages.
     const readyUrl=new URL(normalized.url);readyUrl.searchParams.set('responseProfile','collection-cards-v1');readyUrl.searchParams.set('limit','50');
     try{
-      const ready=await getPreparedCollectionCards(new Request(readyUrl),{probe:true});
-      if(ready?.status===200&&ready.headers?.get('X-CFP-Collection-Cards')==='hit'){
+      const market=await getMarketAvailabilityState(shop,readyUrl.searchParams.get('country'));
+      const ready=market.status==='pending'?null:await getPreparedCollectionCards(new Request(readyUrl),{probe:true,marketAvailabilityVersion:market.version});
+      if(ready?.status===200&&['hit','published'].includes(ready.headers?.get('X-CFP-Collection-Cards'))){
         result.rankingContextsReady++;result.cardContextsReady++;continue;
       }
     }catch{/* Optional probes must not prevent canonical preparation. */}
@@ -297,7 +317,7 @@ export async function processCollectionWarmups(shop,collectionIds=null,catalogRe
       let cardsReady=false;
       try{
         const cards=await loader({request:new Request(cardsUrl),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true}});
-        cardsReady=cards.status===200&&['stored','hit'].includes(cards.headers?.get('X-CFP-Collection-Cards'));
+        cardsReady=cards.status===200&&['stored','hit','published'].includes(cards.headers?.get('X-CFP-Collection-Cards'));
         if(cardsReady){
           result.cardContextsReady++;
           console.info('CFP: collection cards ready',JSON.stringify({shop,collectionId:normalized.collectionId}));

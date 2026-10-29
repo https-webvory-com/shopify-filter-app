@@ -12,22 +12,23 @@ import {createCollectionDependencies} from '../../app/utils/collectionDependenci
 import {createCollectionSalesDependencies} from '../../app/utils/collectionSalesDependencies.js';
 import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
+import {publishedCollectionKey} from '../../app/utils/collectionPublishedPage.js';
 
 async function fixture() {
-  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[],schedules=[];let scans=0;
+  const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[],schedules=[],published=[];let scans=0;
   const queue={getJob:async id=>jobs.get(id),add:async(name,data,options)=>{writes.push(['queue',name,data,options]);const job={opts:options,getState:async()=> 'waiting',changePriority:async({priority})=>{job.opts.priority=priority;writes.push(['priority',options.jobId,priority]);}};jobs.set(options.jobId,job);return job;}};
   const redis={zrange:async()=>records,zrangebyscore:async()=>shops,zadd:async(...args)=>writes.push(['add',...args]),zremrangebyrank:async(...args)=>writes.push(['trim',...args]),zremrangebyscore:async(...args)=>writes.push(['prune',...args]),expire:async(...args)=>writes.push(['expire',...args])};
   redis.scan=async()=>{scans++;return ['0',registries];};redis.ttl=async()=>3600;
   redis.get=async key=>snapshots.get(key)||null;
   redis.mget=async(...keys)=>keys.map(key=>snapshots.get(key)||null);
   const offline=new Set();
-  const database={merchandisingRule:{findMany:async()=>schedules},session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
+  const database={collectionLoadingSnapshot:{findMany:async()=>published},merchandisingRule:{findMany:async()=>schedules},session:{findFirst:async({where})=>offline.has(where.shop)?null:{id:'offline_'+where.shop}},collection:{findMany:async options=>{
     if(options.distinct)return [...new Set(catalog.map(row=>row.shop))].map(shop=>({shop}));
     const rows=catalog.filter(row=>row.shop===options.where.shop&&(!options.where.id?.in||options.where.id.in.includes(row.id))).sort((a,b)=>a.id.localeCompare(b.id));
     const offset=options.cursor?rows.findIndex(row=>row.id===options.cursor.id)+1:0;
     return rows.slice(offset,offset+options.take).map(({id})=>({id}));
   }}};
-  let cardProbe=()=>null,loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
+  let cardProbe=()=>null,marketState={status:'disabled',version:null},loadingResponse=(_request,context)=>context?.rankingCardsPrecompute?Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':'stored'}}):Response.json({warmup:true});
   const ctx={module:{exports:{}},exports:{},URL,Date,Request,Response,console,warmupLoader:async({request,context})=>{writes.push(['load',request.url,context]);return loadingResponse(request,context);},require:name=>{
     if(name==='../utils/collectionPreparation.js')return lifecycle;
     if(name==='../utils/collectionVisitorRefresh.js')return {createCollectionVisitorRefresh};
@@ -36,12 +37,14 @@ async function fixture() {
     if(name==='../utils/collectionSalesDependencies.js')return {createCollectionSalesDependencies};
     if(name==='../utils/collectionHeadProofs.js')return {createCollectionHeadProofs};
     if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
+    if(name==='../utils/collectionPublishedPage.js')return {publishedCollectionKey};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
     if(name==='./redis.server.js')return {__esModule:true,default:redis};
     if(name==='./queue.server.js')return {collectionRankingQueue:queue};
     if(name==='./collectionCards.server.js')return {getPreparedCollectionCards:async(request,options)=>{writes.push(['probe',request.url,options]);return cardProbe(request,options);}};
+    if(name==='./marketAvailability.server.js')return {getMarketAvailabilityState:async()=>marketState};
     if(name==='../db.server.js')return {__esModule:true,default:database};
     if(name==='./collectionBestSelling.server.js')return {
       collectionOrderSnapshotKey:(shop,id)=>`collectionOrderSnapshot:${shop}:${id}`,
@@ -52,7 +55,7 @@ async function fixture() {
   }};
   const source=(await fs.readFile('app/services/collectionPreparation.server.js','utf8')).replace("await import('../routes/api.filter.jsx')",'({loader:warmupLoader})');
   vm.runInNewContext((await transform(source,{format:'cjs'})).code,ctx);
-  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,schedules,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn,setProbe:fn=>cardProbe=fn};
+  return {...ctx.module.exports,writes,records,shops,jobs,registries,catalog,snapshots,seeds,schedules,published,offline,scans:()=>scans,setResponse:fn=>loadingResponse=fn,setProbe:fn=>cardProbe=fn,setMarket:value=>marketState=value};
 }
 
 test('head versions cover rules, pins, market, stock revisions, schedules and native order without reading a full ranking',async()=>{
@@ -181,7 +184,7 @@ test('catalog preparation covers unseen collections in public markets, with indi
  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,412);
  assert.equal(new Set(jobs.map(w=>w[3].jobId)).size,412);
  assert.equal(jobs.filter(w=>new URL(w[2].record.url).searchParams.get('collectionHandle')==='all').length,2);
- for(const job of jobs){assert.equal(job[1],'COLLECTION_RANKING_CATALOG');assert.equal(job[3].priority,10);
+ for(const job of jobs){assert.equal(job[1],'COLLECTION_RANKING_CATALOG');assert.equal(job[3].priority,2);
   const url=new URL(job[2].record.url);assert.equal(url.origin,'https://ranking.internal');assert.equal(url.searchParams.get('shop'),'fixture.myshopify.com');
   assert.ok(['IN','US'].includes(url.searchParams.get('country')));assert.equal(url.searchParams.get('sortBy'),'best-selling');}
  await f.processCollectionWarmups('fixture.myshopify.com',null,jobs[0][2].record);
@@ -193,6 +196,19 @@ test('catalog preparation caps markets and never invents a public context withou
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.length,0);
  for(const country of ['IN','US','CA','AU','GB','FR'])f.records.push(JSON.stringify({url:`https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=${country}&locale=en&page=1`,collectionId:'1'}));
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');assert.equal(f.writes.filter(w=>w[0]==='queue').length,8);
+});
+
+test('missing published collection pages run ahead of already published pages in the same market',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.seeds.push({shop,collectionHandle:'seed',country:'IN',locale:'en'});
+ for(const id of ['1','2'])f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
+ const publishedUrl=new URL('https://ranking.internal/api/filter');
+ for(const [key,value]of Object.entries({shop,collectionId:'1',country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))publishedUrl.searchParams.set(key,value);
+ f.published.push({aliases:[publishedCollectionKey(new Request(publishedUrl))]});
+ await f.scheduleCatalogCollectionWarmups(shop);
+ const jobs=f.writes.filter(w=>w[0]==='queue');
+ assert.equal(jobs.find(w=>w[2].record.collectionId==='1')[3].priority,10);
+ assert.equal(jobs.find(w=>w[2].record.collectionId==='2')[3].priority,2);
 });
 
 test('catalog jobs dispatch exactly their public context through the existing ranking worker lane',async()=>{
@@ -215,7 +231,7 @@ test('existing catalog jobs are promoted into the fair background lane without d
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
  const job=[...f.jobs.values()][0];job.opts.priority=20;
  await f.scheduleCatalogCollectionWarmups('fixture.myshopify.com');
- assert.equal(job.opts.priority,10);assert.equal(f.writes.filter(w=>w[0]==='queue').length,2);
+ assert.equal(job.opts.priority,2);assert.equal(f.writes.filter(w=>w[0]==='queue').length,2);
 });
 
 test('a validated complete card probe yields without ranking setup, sessions or requeueing',async()=>{
@@ -228,6 +244,13 @@ test('a validated complete card probe yields without ranking setup, sessions or 
  assert.equal(new URL(probes[0][1]).searchParams.get('responseProfile'),'collection-cards-v1');
 });
 
+test('catalog publication probe uses the exact country stock proof',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';f.setMarket({status:'ready',version:'in-stock-v2'});
+ f.setProbe((_request,options)=>options.marketAvailabilityVersion==='in-stock-v2'?new Response(null,{headers:{'X-CFP-Collection-Cards':'published'}}):null);
+ const result=await f.processCollectionWarmups(shop,null,{url:'https://ranking.internal/api/filter?shop='+shop+'&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
+ assert.equal(result.cardContextsReady,1);assert.equal(f.writes.filter(w=>w[0]==='load').length,0);
+});
+
 test('failed or unproven ready-card probes retain canonical preparation and card checks',async()=>{
  for(const probe of [()=>{throw Error('Unavailable');},()=>Response.json({products:[]}),()=>new Response(null,{status:202,headers:{'X-CFP-Collection-Cards':'hit'}})]){
   const f=await fixture(),shop='fixture.myshopify.com';f.setProbe(probe);
@@ -236,7 +259,7 @@ test('failed or unproven ready-card probes retain canonical preparation and card
  }
 });
 
-test('recurring recent-page sweeps cannot jump ahead of unseen catalog work or demote genuine changed-card refreshes',async()=>{
+test('recurring recent-page sweeps cannot delay uncovered catalog pages',async()=>{
  const f=await fixture(),shop='fixture.myshopify.com';
  f.seeds.push({shop,collectionHandle:'recent',country:'IN',locale:'en'});
  for(const id of ['1','2'])f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
@@ -244,11 +267,11 @@ test('recurring recent-page sweeps cannot jump ahead of unseen catalog work or d
  await f.scheduleCatalogCollectionWarmups(shop);
  const catalog=[...f.jobs.values()];assert.equal(catalog.length,3);
  await f.processCollectionWarmups(shop);await f.processCollectionWarmups(shop);
- assert.ok([...f.jobs.values()].every(job=>job.opts.priority===10));
+ assert.ok(catalog.every(job=>job.opts.priority===2));
  assert.equal(f.writes.filter(w=>w[0]==='priority').length,0);
- assert.ok(f.writes.filter(w=>w[0]==='queue'&&w[1]==='COLLECTION_RANKING_CATALOG').every(w=>w[3].priority===10));
+ assert.ok(f.writes.filter(w=>w[0]==='queue'&&w[1]==='COLLECTION_RANKING_CATALOG').slice(0,3).every(w=>w[3].priority===2));
  catalog[0].opts.priority=5;await f.processCollectionWarmups(shop);
- assert.equal(catalog[0].opts.priority,5);
+ assert.equal(catalog[0].opts.priority,2);
 });
 
 test('catalog replay requires a completed ranking and trusted worker precompute context',async()=>{
@@ -264,14 +287,14 @@ test('product updates precompute affected collections without any prior visitor 
  for(const id of ['123','456'])f.catalog.push({shop:'fixture.myshopify.com',id:'gid://shopify/Collection/'+id});
  await f.processCollectionWarmups('fixture.myshopify.com',['123','all']);
  const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,3);
- const catalog=jobs.find(w=>w[2].record.collectionId==='123');assert.ok(catalog);assert.equal(catalog[3].priority,10);
+ const catalog=jobs.find(w=>w[2].record.collectionId==='123');assert.ok(catalog);assert.equal(catalog[3].priority,2);
  assert.ok(jobs.some(w=>new URL(w[2].record.url).searchParams.get('collectionHandle')==='all'));
  assert.equal(jobs.some(w=>w[2].record.collectionId==='456'),false);
 });
 
 
 test('catalog completion requires stored or validated existing cards',async()=>{
- for(const state of ['stored','hit']){
+ for(const state of ['stored','hit','published']){
   const f=await fixture();let calls=0;f.setResponse(()=>++calls===1?Response.json({warmup:true}):Response.json({products:[]},{headers:{'X-CFP-Collection-Cards':state}}));
   const result=await f.processCollectionWarmups('fixture.myshopify.com',null,{url:'https://ranking.internal/api/filter?shop=fixture.myshopify.com&collectionId=1&country=IN&locale=en&page=1',collectionId:'1'});
   assert.equal(result.rankingContextsReady,1);assert.equal(result.cardContextsReady,1);assert.equal(result.cardContextsUnavailable,0);

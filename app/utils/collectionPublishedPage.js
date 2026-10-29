@@ -25,10 +25,10 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
   entry.payload.products.every((p,i)=>String(p.id).split('/').pop()===entry.ids[i]&&p.title&&p.handle)&&
   entry.payload.settings&&entry.payload.facets&&hasUsableExtraFacets(entry.payload)&&hasUsableSaleFacets(entry.payload)&&hasUsableProductTitleFacets(entry.payload)&&hasUsableCollectionNavigation(entry.payload);
- async function get(request,{onHit,marketAvailabilityVersion=null}={}){
-  const key=publishedCollectionKey(request);if(!key||!acceptsPublishedCollectionPage(request))return null;
+ async function get(request,{onHit,marketAvailabilityVersion=null,probe=false}={}){
+  const key=publishedCollectionKey(request);if(!key||!probe&&!acceptsPublishedCollectionPage(request))return null;
   const params=new URL(request.url).searchParams,shop=params.get('shop'),page=Number(params.get('page')),token=params.get('rankingToken');
-  if(params.get('limit')!=='25'||page===2&&!/^[a-f0-9-]{36}$/.test(token||''))return null;
+  if(!probe&&params.get('limit')!=='25'||probe&&!['25','50'].includes(params.get('limit'))||page===2&&!/^[a-f0-9-]{36}$/.test(token||''))return null;
   try{
    let raw;try{raw=await redis.get(page===2?`collectionPublishedSession:${shop}:${token}`:key);}catch{}
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'published',key});
@@ -55,6 +55,9 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     }
     globalSettings=current;
    }
+   // Background coverage checks need the same proof as a shopper, without
+   // creating a browsing session or rewriting the saved publication.
+   if(probe)return new Response(null,{status:200,headers:{'X-CFP-Collection-Cards':'published'}});
    const session=await createSession(request,entry,{ids:entry.ids,metadata:entry.metadata});
    if(page===2&&session.token!==token)return null;
    // One immutable copy per shared ranking token keeps page two on the same

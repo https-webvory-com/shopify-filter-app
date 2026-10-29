@@ -7,20 +7,30 @@ import {encodePreparation,decodePreparation} from '../../app/utils/collectionPre
 const sessions=await loadModule('app/services/collectionRankingSession.server.js',{'node:crypto':crypto,'./redis.server.js':{default:{setex:async()=>{}}}});
 
 function fixture(options={}){
- const shop='fixture.myshopify.com',values=new Map(),rows=new Map();let time=100000;
+ const shop='fixture.myshopify.com',values=new Map(),rows=new Map();let time=100000,sessionCalls=0;
  const url='https://api.test/api/filter?shop='+shop+'&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-preview-v1';
  const headers={Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'};
  const request=(changes={})=>{const u=new URL(url);for(const[k,v]of Object.entries(changes))u.searchParams.set(k,v);return new Request(u,{headers});};
  const store=createPublishedCollectionPages({...options,now:()=>time,redis:{get:async k=>values.get(k),setex:async(k,_ttl,v)=>values.set(k,v)},
   saveDurable:async row=>{const old=rows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;rows.set(row.key,row);return true;},
   loadDurable:async({shop:tenant,key})=>[...rows.values()].find(r=>r.shop===tenant&&r.aliases.includes(key))?.payload,
-  createSession:(req,entry)=>sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata),
+  createSession:(req,entry)=>{sessionCalls++;return sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata);},
  });
  const ids=Array.from({length:70},(_,i)=>String(i+1));
  const payload={totalCount:70,products:ids.slice(0,50).map(id=>({id,title:'Dress '+id,handle:'dress-'+id,variants:[{id:'v'+id,price:100}]})),settings:[{field:'Color'}],facets:{options:{Color:[{value:'Black',count:70}]}},globalSettings:{},debug:{collectionRankingStatus:'ready'}};
  const publish=(options={})=>store.publish({request:request({limit:'50',responseProfile:'collection-cards-v1'}),collectionId:'1',collectionHandle:'one',prepared:{ids,metadata:{}},payload,sessionUpdatedAt:time,...options});
- return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time};
+ return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time,sessionCalls:()=>sessionCalls};
 }
+
+test('background coverage probe recognizes a complete published fifty without creating a shopper session',async()=>{
+ const f=fixture();await f.publish({marketAvailabilityVersion:'in-v1'});
+ const before=f.values.size;
+ const probeUrl=f.request({limit:'50',responseProfile:'collection-cards-v1'}).url;
+ const ready=await f.store.get(new Request(probeUrl),{probe:true,marketAvailabilityVersion:'in-v1'});
+ assert.equal(ready?.headers.get('X-CFP-Collection-Cards'),'published');
+ assert.equal(f.sessionCalls(),0);assert.equal(f.values.size,before);
+ assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true,marketAvailabilityVersion:'in-v2'}),null);
+});
 
 test('All products publishes 50 cards and serves two country-isolated 25-card pages',async()=>{
  const f=fixture();
