@@ -323,7 +323,7 @@ revision, backing full sequence/metadata, and current first-page product documen
 are validated before reuse. Include/pin contexts also validate the global product
 version. Facets are never stored in this snapshot. Background rendering creates
 no shopper sessions; actual visits get immutable, URL-specific browsing tokens.
-A failed/slow optional lookup falls back within its 1.2-second budget. There are no
+A failed/slow optional lookup falls back within its 500 ms budget. There are no
 application timeout increases or ranking formula changes. The durable loading
 increment below adds an additive database table and migration.
 
