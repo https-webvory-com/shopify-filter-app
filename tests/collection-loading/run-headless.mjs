@@ -746,21 +746,6 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {initialCards:25,afterLoadMore:50,pinPreview:false,extraFacetQueries:0,firstCardRetained:true,liveTiming:false};
   });
-  await test('reload shows the complete saved browser row before the fresh API and widget finish',async()=>{
-    await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
-    await navigate();
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    assert.equal(await evaluate("[...Object.keys(sessionStorage)].some(key=>key.startsWith('cfp:collection-result:v1:'))"),true);
-    await control({apiDelay:1500,assetDelay:2000});
-    await send('Network.clearBrowserCache');
-    await send('Page.navigate',{url:origin+'/collections/fixture'});
-    await wait("document.querySelectorAll('#cfp-first-row .cfp-initial-product').length===25");
-    const early=await evaluate("({at:Math.round(performance.now()),count:document.querySelectorAll('#cfp-first-row .cfp-initial-product').length,widget:!!window._cfpInitStarted})");
-    assert.equal(early.widget,false,'saved cards should appear before the full widget executes');
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-first-row')");
-    assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {baselineCardsMs:early.at,earlyCards:early.count,widgetPending:true,liveTiming:false};
-  });
   await test('published first fifty serve two 25-card pages while ranking and facets are unavailable',async()=>{
     await control({reset:true,productCount:80,precompute:true,hold:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,headRenderer:true,early:true,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await control({unrelatedExternalUpdate:true,rankingFailure:'throw',facetFailure:true});

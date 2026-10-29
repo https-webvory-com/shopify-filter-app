@@ -6,24 +6,6 @@ import vm from 'node:vm';
 const head=await fs.readFile('extensions/theme-extension/blocks/collection_loading.liquid','utf8');
 const bootstrap=await fs.readFile('extensions/theme-extension/assets/collectionLoading.js','utf8');
 const body=await fs.readFile('extensions/theme-extension/snippets/collectionFilterPro.liquid','utf8');
-test('head uses the complete scoped browser page before a fresh collection request',()=>{
- const start=bootstrap.indexOf('  function cachedFirstRow('),end=bootstrap.indexOf('  function start(){',start);
- assert.ok(start>=0&&end>start);
- const values=new Map(),now=1000000;
- const context={URLSearchParams,Date:{now:()=>now},sessionStorage:{getItem:key=>values.get(key)||null,removeItem:key=>values.delete(key)}};
- vm.runInNewContext(bootstrap.slice(start,end)+'\nthis.read=cachedFirstRow;',context);
- const params=new URLSearchParams({shop:'fixture.myshopify.com',collectionHandle:'formal',country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'});
- const keyParams=new URLSearchParams(params);keyParams.delete('responseProfile');keyParams.sort();
- const key='cfp:collection-result:v1:'+keyParams;
- const saved={at:now,rankingToken:'12345678-1234-1234-1234-123456789abc',totalCount:50,products:Array.from({length:25},(_,i)=>({id:String(i+1),handle:'dress-'+i,title:'Dress '+i}))};
- values.set(key,JSON.stringify(saved));
- const guest={dataset:{customerLoggedIn:'false',customerTags:''}};
- assert.equal(context.read(params,guest)?.products.length,25);
- assert.equal(context.read(params,{dataset:{customerLoggedIn:'true',customerTags:''}}),null);
- const otherCountry=new URLSearchParams(params);otherCountry.set('country','US');assert.equal(context.read(otherCountry,guest),null);
- values.set(key,JSON.stringify({...saved,products:saved.products.slice(0,5)}));assert.equal(context.read(params,guest),null);
- assert.equal(values.has(key),false);
-});
 test('head runs the bootstrap inline before deferred asset loading, using the same guarded source',async()=>{
  assert.ok(head.includes("{% render 'collection_loading_start' %}"));
  assert.equal(await fs.readFile('extensions/theme-extension/snippets/collection_loading_start.liquid','utf8'),'<script>'+await fs.readFile('extensions/theme-extension/assets/collectionLoading.min.js','utf8')+'</script>\n');

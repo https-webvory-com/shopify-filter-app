@@ -63,17 +63,12 @@
       }
       const placeholders=grid.querySelectorAll('.cfp-first-row-placeholder');
       const missing=Math.max(0,Math.min(25,payload.totalCount||25)-payload.products.length);
-      // A refreshed response can replace a browser-cached row or change its
-      // order. Keep the unchanged prefix and replace cards from the first diff.
-      const existing=[...grid.querySelectorAll('.cfp-initial-product')];
-      const mismatch=existing.findIndex((card,index)=>card.dataset.productId!==String(payload.products[index]?.id||''));
-      if(mismatch>=0){existing.slice(mismatch).forEach(card=>card.remove());rendered=mismatch;}
       if(payload.products.length===rendered&&placeholders.length===missing)return;
       placeholders.forEach(card=>card.remove());
       for(const [index,product] of payload.products.entries()){
         if(index<rendered)continue;
         const selection=firstRowSelection(product,context.handle,payload.globalSettings),card=document.createElement('div'),link=document.createElement('a'),img=document.createElement('img'),title=document.createElement('h3');
-        card.className='cfp-initial-product';card.dataset.productId=String(product.id);link.href=selection.url;img.alt=product.title;img.width=360;img.height=480;img.fetchPriority=index<5?'high':'low';if(index>=5)img.loading='lazy';img.decoding='async';
+        card.className='cfp-initial-product';link.href=selection.url;img.alt=product.title;img.width=360;img.height=480;img.fetchPriority=index<5?'high':'low';if(index>=5)img.loading='lazy';img.decoding='async';
         const resize=width=>{const clean=selection.image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?');return clean.includes('cdn.shopify.com')?clean+(clean.includes('?')?'&':'?')+'width='+width:clean;};
         img.src=resize(360);if(selection.image.includes('cdn.shopify.com')){img.srcset=[180,360,540].map(width=>resize(width)+' '+width+'w').join(', ');img.sizes='(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw';}
         title.textContent=product.title;link.append(img,title);card.append(link);grid.append(card);
@@ -105,26 +100,6 @@
       link.href=resize(360);link.imageSrcset=[180,360,540].map(width=>resize(width)+' '+width+'w').join(', ');
       link.imageSizes='(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw';document.head.append(link);
     }
-  }
-  function cachedFirstRow(params,meta){
-    // The full widget stores only complete, scoped first pages. Read the same
-    // ten-minute entry before the widget downloads, then verify in the background.
-    if(!meta||meta.dataset.customerLoggedIn!=='false'||meta.dataset.customerTags)return null;
-    try{
-      const keyParams=new URLSearchParams(params);keyParams.delete('responseProfile');keyParams.sort();
-      const key='cfp:collection-result:v1:'+keyParams;
-      const raw=sessionStorage.getItem(key);if(!raw)return null;
-      const saved=JSON.parse(raw),age=Date.now()-saved.at;
-      if(!Number.isFinite(age)||age<0||age>=10*60*1000||
-        !/^[a-f0-9-]{36}$/.test(saved.rankingToken||'')||
-        !Number.isSafeInteger(saved.totalCount)||saved.totalCount<=0||
-        !Array.isArray(saved.products)||saved.products.length!==Math.min(25,saved.totalCount)||
-        !saved.products.every(product=>product?.id&&product.handle&&product.title)){
-        sessionStorage.removeItem(key);return null;
-      }
-      return {products:saved.products,totalCount:saved.totalCount,globalSettings:saved.globalSettings,
-        cfpCards:{version:1,preview:false},debug:{collectionRankingStatus:'ready'}};
-    }catch{return null;}
   }
   function start(){
       try {
@@ -172,10 +147,6 @@
         var controller = new AbortController();
         var timer = setTimeout(function() {controller.abort();},30000);
         var entry={url:url,controller:controller,configurationPromise:null,verified:!provisional,context:context,delivered:false};
-        if(!provisional){
-          const cached=cachedFirstRow(params,meta);
-          if(cached)try{mountFirstRow(cached,context,controller);}catch{}
-        }
         entry.deliver=function(result){
           entry.partial=result;
           if(!result||result.status!==200||!entry.verified||entry.delivered&&!result.payload?.cfpCards?.streaming||controller.signal.aborted||window._cfpRankedEarlyFetch!==entry)return;
