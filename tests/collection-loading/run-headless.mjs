@@ -135,7 +135,9 @@ try{
       await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
       const timings=await evaluate('filterScheduling');
       assert.ok(timings.renders.length>=2);assert.equal(timings.requests.length,1);
-      assert.ok(timings.requests[0]<timings.renders[0].at,'Filter request waited for product rendering');
+      // An independent head loader may have already rendered a small prefix.
+      // The full filter request must precede the widget's card render.
+      assert.ok(timings.renders.some(render=>render.at>timings.requests[0]&&render.filters===0),'Filter request waited for product rendering: '+JSON.stringify(timings));
       assert.ok(timings.renders.at(-1).filters>0,'Complete filters waited for grid replacement');
       assert.deepEqual(await evaluate('browserErrors'),[]);return timings;
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:hook.identifier});}
@@ -344,12 +346,16 @@ try{
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-skeleton-image')).animationName"),'cfpSkeletonGlassShimmer');
     await wait("document.querySelectorAll('.cfp-product-card--preview').length===25");
     assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),0);
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview .cfp-product-card__price-row').length"),25,'first filtered cards must include price rows');
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview .cfp-product-swatches').length"),25,'first filtered cards must include variant swatches');
+    assert.equal(await evaluate("[...document.querySelectorAll('.cfp-product-card--preview .cfp-product-card__link')].some(link=>link.href.includes('variant='))"),true);
     const preview=await cards();
     await evaluate("window._cfpFilteredFirstCard=document.querySelector('.cfp-product-card--preview')");
     const pending=await getState();assert.ok(pending.requests.some(r=>r.profile==='fast-cards-v1'&&r.status===200));assert.equal(pending.facetResponses.length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar.cfp-loading')");
     assert.deepEqual(await cards(),preview);
     assert.equal(await evaluate('window._cfpFilteredFirstCard.isConnected'),true);
+    await wait("[...document.querySelectorAll('.cfp-product-card__price')].some(price=>price.textContent.includes('$'))");
     assert.ok((await getState()).facetResponses.some(r=>r.status===200));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });

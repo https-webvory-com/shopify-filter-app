@@ -1733,7 +1733,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
       }
 
-      if(previewOnly)return `
+      if(previewOnly&&!pricePreview)return `
         <div class="cfp-product-card cfp-product-card--reveal cfp-product-card--preview" style="--cfp-reveal-delay:0ms;--cfp-reveal-duration:0ms">
           <div class="cfp-product-card__image-wrapper"><a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
             <img src="${escapeCardHtml(primaryImg)}" ${getImageSrcset(primaryImg)} alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
@@ -1771,7 +1771,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       return `
-        <div class="cfp-product-card cfp-product-card--reveal" style="--cfp-reveal-delay: ${templateName === 'search' ? Math.min(productIndex, 5) * 75 : 0}ms; --cfp-reveal-duration: ${templateName === 'search' ? 300 : 0}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
+        <div class="cfp-product-card cfp-product-card--reveal${previewOnly ? ' cfp-product-card--preview' : ''}" style="--cfp-reveal-delay: ${templateName === 'search' ? Math.min(productIndex, 5) * 75 : 0}ms; --cfp-reveal-duration: ${templateName === 'search' ? 300 : 0}ms" data-pricing-render="${version}" data-pricing-index="${productIndex}">
           <div class="cfp-product-card__image-wrapper" style="position: relative;">
             <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link">
               <div class="cfp-product-card__image-container">
