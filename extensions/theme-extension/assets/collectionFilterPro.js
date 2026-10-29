@@ -858,7 +858,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           container.classList.remove('cfp-loading-retained');
           updateProductCount(data.totalCount);
           if (!data.cfpCards?.preview && !data.cfpCards?.prefix) renderPagination(container, data.totalCount);
-        } else await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2);
+        } else await renderProducts(data.products, data.totalCount, isLoadMore, data.mergedValues, data.contextualPricingApplied, data.cfpCards?.preview === true, data.cfpCards?.version===2, data.cfpCards?.prefix===true);
       }
       renderBreadcrumbs();
       updateActiveCountBadge();
@@ -967,6 +967,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       saveBrowserResult(request.searchParams, full);
     }catch(error){
       if(signal.aborted)return;
+      if(prefix)getProductContainer().querySelectorAll(':scope > .cfp-skeleton-card').forEach(card=>card.remove());
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
       const message=document.createElement('p');message.textContent=cards.cfpCards?.preview?'The remaining products and filters are temporarily unavailable.':'Filters are temporarily unavailable.';
       const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
@@ -1265,7 +1266,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   const cardScriptString=value=>escapeCardHtml(JSON.stringify(String(value??'')));
 
-  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false) {
+  async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false, partialPrefix = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
     // Render cards immediately, without displaying unverified market prices.
@@ -1813,6 +1814,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     } else {
       grid.classList.remove('cfp-loading-retained');
       grid.innerHTML = productsHtml;
+      if (partialPrefix && products.length < PAGE_SIZE) {
+        grid.insertAdjacentHTML('beforeend', Array.from({length:PAGE_SIZE-products.length},()=>`
+          <div class="cfp-product-card cfp-skeleton-card" aria-hidden="true">
+            <div class="cfp-skeleton-image cfp-skeleton">&nbsp;</div>
+            <div class="cfp-product-card__info">
+              <div class="cfp-skeleton-text cfp-skeleton-vendor cfp-skeleton">&nbsp;</div>
+              <div class="cfp-skeleton-text cfp-skeleton-title cfp-skeleton">&nbsp;</div>
+              <div class="cfp-skeleton-text cfp-skeleton-price cfp-skeleton">&nbsp;</div>
+            </div>
+          </div>`).join(''));
+      }
     }
 
     if(!previewOnly&&Number.isFinite(totalCount)&&(isLoadMore||products.length>=Math.min(PAGE_SIZE,totalCount)))renderPagination(grid,totalCount);

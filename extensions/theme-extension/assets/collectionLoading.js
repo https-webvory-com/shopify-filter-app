@@ -59,8 +59,12 @@
       grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';
       // Use the app block's settings before the full widget runs. Match the
       // final grid's breakpoints and spacing so early cards never reflow 4→5.
-      const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(var(--cfp-cols-desktop,3),minmax(0,1fr));gap:10px;padding:0;margin:0;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:1300px){.cfp-first-row{grid-template-columns:repeat(min(4,var(--cfp-cols-desktop,3)),minmax(0,1fr))}}@media(max-width:990px){.cfp-first-row{grid-template-columns:repeat(min(3,var(--cfp-cols-desktop,3)),minmax(0,1fr))}}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(var(--cfp-cols-mobile,2),minmax(0,1fr));gap:16px}}@media(max-width:480px){.cfp-first-row{gap:12px}}';grid.append(style);
+      const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(var(--cfp-cols-desktop,3),minmax(0,1fr));gap:10px;padding:0;margin:0;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(var(--cfp-cols-mobile,2),minmax(0,1fr));gap:16px}}@media(max-width:480px){.cfp-first-row{gap:12px}}';grid.append(style);
       }
+      const placeholders=grid.querySelectorAll('.cfp-first-row-placeholder');
+      const missing=Math.max(0,Math.min(25,payload.totalCount||25)-payload.products.length);
+      if(payload.products.length===rendered&&placeholders.length===missing)return;
+      placeholders.forEach(card=>card.remove());
       for(const [index,product] of payload.products.entries()){
         if(index<rendered)continue;
         const selection=firstRowSelection(product,context.handle,payload.globalSettings),card=document.createElement('div'),link=document.createElement('a'),img=document.createElement('img'),title=document.createElement('h3');
@@ -70,6 +74,7 @@
         title.textContent=product.title;link.append(img,title);card.append(link);grid.append(card);
       }
       rendered=payload.products.length;
+      grid.insertAdjacentHTML('beforeend','<div class="cfp-first-row-placeholder cfp-sk-card" aria-hidden="true"><span class="cfp-sk-image cfp-sk-anim"></span><span class="cfp-sk-title cfp-sk-anim"></span></div>'.repeat(missing));
       if(grid.parentElement!==app)app.prepend(grid);
       dismissSkeleton();
     };

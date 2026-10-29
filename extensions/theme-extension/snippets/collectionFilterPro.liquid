@@ -176,6 +176,8 @@
   }
   @media (max-width: 1300px) { .cfp-products-grid { grid-template-columns: repeat(min(4, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)) !important; } }
   @media (max-width: 990px) { .cfp-products-grid { grid-template-columns: repeat(min(3, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)) !important; } }
+  @media (min-width: 769px) and (max-width: 1300px) { .cfp-v1-app-container .cfp-first-row { grid-template-columns: repeat(min(4, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)); } }
+  @media (min-width: 769px) and (max-width: 990px) { .cfp-v1-app-container .cfp-first-row { grid-template-columns: repeat(min(3, var(--cfp-cols-desktop, 3)), minmax(0, 1fr)); } }
   @media (max-width: 768px) { .cfp-products-grid { grid-template-columns: repeat(var(--cfp-cols-mobile, 2), minmax(0, 1fr)) !important; gap: 16px !important; } }
   @media (max-width: 480px) { .cfp-products-grid { gap: 12px !important; } }
 

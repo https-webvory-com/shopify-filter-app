@@ -485,8 +485,9 @@ try{
     await control({reset:true,hold:true,precompute:true,headRenderer:true,early:true,assetDelay:8000,headDelay:0,apiDelay:50,cssDelay:0,streamDelay:160,imageDelay:50});
     await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
     await wait("document.querySelectorAll('.cfp-initial-product').length>0");
-    const first=await evaluate("(()=>{window.firstStreamCard=document.querySelector('.cfp-initial-product');return {at:performance.now(),count:document.querySelectorAll('.cfp-initial-product').length,title:firstStreamCard.textContent,widget:!!window._cfpInitStarted}})()");
+    const first=await evaluate("(()=>{window.firstStreamCard=document.querySelector('.cfp-initial-product');return {at:performance.now(),count:document.querySelectorAll('.cfp-initial-product').length,placeholders:document.querySelectorAll('.cfp-first-row-placeholder').length,title:firstStreamCard.textContent,widget:!!window._cfpInitStarted}})()");
     assert.ok(first.count<25);assert.ok(first.title);assert.equal(first.widget,false);
+    assert.equal(first.count+first.placeholders,25,'streamed cards must keep the unfinished page slots visible');
     const count=await evaluate("window._cfpRankedEarlyFetch.promise.then(r=>r.payload.products.length)");assert.equal(count,25);
     await wait("document.querySelectorAll('.cfp-initial-product').length===25");
     assert.equal(await evaluate("firstStreamCard===document.querySelector('.cfp-initial-product')"),true);
@@ -495,9 +496,12 @@ try{
     return {firstCardMs:Math.round(first.at),cardsAtFirstPaint:first.count,artificialTailDelayMs:160,liveTiming:false};
   });
   await test('a cold all-pin head renders with the ranking worker paused and hands off to canonical pagination',async()=>{
-    await control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],early:true,headRenderer:true,assetDelay:300,apiDelay:50,cssDelay:0,imageDelay:50,priceDelay:50});
-    await send('Network.clearBrowserCache');await navigate();
+    await control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],early:true,headRenderer:true,assetDelay:1500,apiDelay:50,cssDelay:0,imageDelay:50,priceDelay:50});
+    await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
+    await wait("document.querySelectorAll('.cfp-initial-product').length===6");
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-first-row-placeholder').length"),19,'the early pin row must show the unfinished page slots');
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===6");
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),19,'the widget must keep the remaining page slots loading');
     const prefix=await cards(),at=await evaluate('cardSnapshots[0].at');
     assert.deepEqual(prefix,['1','2','4','5','6','7']);
     assert.equal((await getState()).state.builds,0);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
@@ -505,6 +509,7 @@ try{
     assert.equal(await evaluate("document.querySelector('.cfp-product-count').textContent"),'');
     await fixture.prepareLast();
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),0);
     assert.deepEqual((await cards()).slice(0,prefix.length),prefix);assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);assert.ok(fixture.latestRankingToken());
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
     const all=await cards();assert.equal(new Set(all).size,30);assert.equal(all.at(-1),'3');
