@@ -11,6 +11,7 @@ import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../app/utils/collectionFilterMembership.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
+import * as facetNormalization from '../../app/utils/facetNormalization.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
@@ -185,6 +186,9 @@ export async function createLoadingServer({redisLayer}={}) {
     '../utils/percentSaleFilter.js':percentSaleFilter,
     '../utils/collectionNavigation.js':collectionNavigation,
     '../utils/marketAvailability.js':marketAvailability,
+    '../utils/facetNormalization.js':facetNormalization,
+    '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
+    '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};

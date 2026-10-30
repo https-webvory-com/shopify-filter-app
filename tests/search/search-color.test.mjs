@@ -8,6 +8,9 @@ import * as color from '../../app/utils/searchColor.js';
 import * as skuSearch from '../../app/utils/skuSearch.js';
 import {buildSearchSuggestions} from '../../app/utils/searchSuggestions.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
+import {createHash} from 'node:crypto';
+import {instantSearchCard,INSTANT_SEARCH_INDEX_FIELDS} from '../../app/utils/instantSearchCard.js';
+import {searchCacheHeaders} from '../../app/utils/searchCachePolicy.js';
 
 test('color constraints include compound colors and only configured aliases', () => {
   const colors=['Gold','Slate Blue','Navy','Periwinkle','Textured'];
@@ -91,6 +94,9 @@ test('instant endpoint constrains semantic retrieval and rejects wrong-color pin
   const mocks={
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null},
     '../utils/searchConfiguration.js':{publicSearchProduct:p=>p},
+    '../utils/instantSearchCard.js':{instantSearchCard,INSTANT_SEARCH_INDEX_FIELDS},
+    '../utils/searchCachePolicy.js':{searchCacheHeaders},
+    'node:crypto':{createHash},
     'react-router':{data:(value,init)=>Response.json(value,init)},
     '../utils/searchColor.js':color,'../utils/searchSuggestions.js':{buildSearchSuggestions},'../utils/spellingCorrection.js':{spellingCorrection},
     '../services/queryParser.server.js':{parseQuery:async()=>({colorIntent:intent,colorFilter:color.colorSearchFilter(intent)})},

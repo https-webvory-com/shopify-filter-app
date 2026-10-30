@@ -7,12 +7,18 @@ import * as helpers from '../../app/utils/suggestionBlacklist.js';
 import { buildSearchSuggestions } from '../../app/utils/searchSuggestions.js';
 import { selectSearchColorVariant } from '../../app/utils/searchColor.js';
 import { spellingCorrection } from '../../app/utils/spellingCorrection.js';
+import {instantSearchCard,INSTANT_SEARCH_INDEX_FIELDS} from '../../app/utils/instantSearchCard.js';
+import {searchCacheHeaders} from '../../app/utils/searchCachePolicy.js';
+import {createHash} from 'node:crypto';
 
 export async function load(file, mocks) {
   const {code} = await transform(await fs.readFile(file, 'utf8'), {loader:'jsx',format:'cjs'});
   const context = {module:{exports:{}},exports:{},URL,Response,console:{error(){}},require:name=>{
     if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),configuredSuggestions:async()=>null};
     if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:product=>product};
+    if(name==='../utils/instantSearchCard.js')return {instantSearchCard,INSTANT_SEARCH_INDEX_FIELDS};
+    if(name==='../utils/searchCachePolicy.js')return {searchCacheHeaders};
+    if(name==='node:crypto')return {createHash};
     if (!(name in mocks)) throw Error('Unexpected import '+name);
     return mocks[name];
   }};
@@ -95,7 +101,7 @@ export async function searchApi(getRules, globalSettings = {}) {
     '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:getRules},'react-router':{data:(v,i)=>Response.json(v,i)},
     '../db.server':{__esModule:true,default:{}},'../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
     '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
-    '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async()=>globalSettings},'../services/rateLimiter.server':{rateLimit:async()=>true},
+    '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async(key,read)=>key.startsWith('globalSettings:')?globalSettings:read()},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/semanticSearch.server':{semanticSearch:async()=>({hits:products})},
   });
 }
@@ -105,7 +111,7 @@ test('actual search API filters suggestions, preserves products and reads rules 
   const request=()=>({request:new Request('https://fixture/api/search?'+new URLSearchParams({shop,q:'dress'}))});
   const before=await(await route.loader(request())).json();assert.ok(before.suggestions.includes('Blue Dress'));
   rules=[{term:'blue dress',operator:'exact'}];const response=await route.loader(request());const after=await response.json();
-  assert.equal(response.headers.get('cache-control'),'no-store');assert.ok(!after.suggestions.includes('Blue Dress'));assert.ok(after.suggestions.includes('Red Dress'));
+  assert.match(response.headers.get('cache-control'),/s-maxage=60/);assert.ok(!after.suggestions.includes('Blue Dress'));assert.ok(after.suggestions.includes('Red Dress'));
   assert.deepEqual(after.products,before.products);assert.equal(calls,2);
 });
 test('blacklist database failures suppress suggestions without failing product search',async()=>{

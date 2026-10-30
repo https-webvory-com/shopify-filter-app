@@ -8,6 +8,7 @@ import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
 import {merchandisingRuleIds} from "../../app/utils/merchandisingSelection.js";
 import * as searchColor from "../../app/utils/searchColor.js";
+import * as facetNormalization from '../../app/utils/facetNormalization.js';
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
@@ -108,6 +109,9 @@ async function route(file,mocks){
    if(name==='../utils/csvImportReport.js')return csvImportReport;
    if(name==='../services/merchandisingImport.server.js')return {};
     if (name === "../utils/searchColor.js") return searchColor;
+    if (name === '../utils/facetNormalization.js') return facetNormalization;
+    if (name === '../services/searchIndex.server.js') return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})};
+    if (name === '../utils/searchConfiguration.js') return {publicSearchProduct:product=>product};
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
    if(name === "../utils/spellingCorrection.js")return {spellingCorrection};
    if(name in mocks)return mocks[name];
