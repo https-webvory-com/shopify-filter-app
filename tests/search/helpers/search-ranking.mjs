@@ -5,6 +5,9 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
 import { createHash } from 'node:crypto';
+import * as instantSearchCard from '../../../app/utils/instantSearchCard.js';
+import * as searchCachePolicy from '../../../app/utils/searchCachePolicy.js';
+import * as facetNormalization from '../../../app/utils/facetNormalization.js';
 import * as color from '../../../app/utils/searchColor.js';
 import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 import * as collectionCards from '../../../app/utils/collectionCards.js';
@@ -19,6 +22,10 @@ export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
     if(name==='../utils/skuSearch.js')return skuSearch;
+    if(name==='../utils/instantSearchCard.js')return instantSearchCard;
+    if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;
+    if(name==='../utils/facetNormalization.js')return facetNormalization;
+    if(name==='node:crypto')return {createHash};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;

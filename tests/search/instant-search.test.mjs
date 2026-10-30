@@ -6,6 +6,9 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
 import {buildSearchSuggestions} from '../../app/utils/searchSuggestions.js';
+import * as instantSearchCard from '../../app/utils/instantSearchCard.js';
+import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
+import { createHash } from 'node:crypto';
 
 const source=await fs.readFile('extensions/theme-extension/assets/instantSearch.js','utf8');
 const helpers=source.slice(source.indexOf('  // Search caching'),source.indexOf('  // UI Elements'));
@@ -141,12 +144,15 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   'react-router':{data:(value,init)=>Response.json(value,init)},
   '../utils/searchSuggestions.js':{buildSearchSuggestions},
   '../utils/spellingCorrection.js':{spellingCorrection},
+  '../utils/instantSearchCard.js':instantSearchCard,
+  '../utils/searchCachePolicy.js':searchCachePolicy,
+  'node:crypto':{createHash},
   '../db.server':{__esModule:true,default:{}},
   '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
   '../services/meiliClient.server':{__esModule:true,default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
   '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
   '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},
-  '../services/shopCache.server':{getCached:async()=>({})},
+  '../services/shopCache.server':{getCached:async(key,read)=>key.startsWith('globalSettings:')?{}:read()},
   '../services/rateLimiter.server':{rateLimit:async()=>true},
   '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
  };

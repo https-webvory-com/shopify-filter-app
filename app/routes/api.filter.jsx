@@ -35,6 +35,7 @@ import {prepareCollectionPinnedPrefix} from '../utils/collectionPinnedPrefix.js'
 import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
+import {mappedFacetValue,expandMappedFacetValues} from '../utils/facetNormalization.js';
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
@@ -345,14 +346,7 @@ export const loader = async ({ request, context }) => {
       let expanded = [...values];
       for (const val of values) {
         if (!val) continue;
-        const rules = mergedValues.filter(
-          (m) =>
-            m.filterType.toLowerCase() === type.toLowerCase() &&
-            m.targetValue.toLowerCase() === val.toLowerCase()
-        );
-        for (const r of rules) {
-          expanded.push(...r.sourceValues);
-        }
+        expanded.push(...expandMappedFacetValues(type,val,mergedValues));
 
         // Smart synonym/tag variation generator (e.g. "Back Zip" -> "Back Style_Back Zip", "Length_Floor Length")
         if (type.toLowerCase() === "tags") {
@@ -1547,14 +1541,7 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 16. Build facet counts from Meilisearch distribution ──────────
-    const getTargetValue = (type, rawValue) => {
-      const rule = mergedValues.find(
-        (m) =>
-          m.filterType.toLowerCase() === type.toLowerCase() &&
-          m.sourceValues.some((sv) => sv.toLowerCase() === rawValue.toLowerCase())
-      );
-      return rule ? rule.targetValue : rawValue;
-    };
+    const getTargetValue = (type, rawValue) => mappedFacetValue(type,rawValue,mergedValues);
 
     const vendorCounts = {};
     const typeCounts = {};

@@ -12,6 +12,9 @@ import { getFilterGlobalSettings } from "../services/filterSettings.server";
 import { getCached } from "../services/shopCache.server";
 import { rateLimit } from "../services/rateLimiter.server";
 import { semanticSearch } from "../services/semanticSearch.server";
+import { instantSearchCard, INSTANT_SEARCH_INDEX_FIELDS } from "../utils/instantSearchCard.js";
+import { createHash } from 'node:crypto';
+import { searchCacheHeaders } from '../utils/searchCachePolicy.js';
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -84,7 +87,8 @@ export const loader = async ({ request }) => {
         filter: meiliFilters,
         limit: limit + 20, // Request extra to compensate for post-filtering
         facets: ["tags", "productType"],
-        attributesToHighlight: ["title", "tags", "productType", "vendor"]
+        attributesToHighlight: ["title", "tags", "productType", "vendor"],
+        attributesToRetrieve: INSTANT_SEARCH_INDEX_FIELDS,
     };
 
     if (sortBy) {
@@ -114,8 +118,11 @@ export const loader = async ({ request }) => {
       rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
       mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
     }) : null;
+    const directCacheKey = `searchInstant:${shop}:${createHash('sha256').update(JSON.stringify([
+      cleanSearchQuery, meiliSearchParams,
+    ])).digest('hex')}`;
     const meiliRes = ranking ? { hits: ranking.products, semanticHitCount: ranking.semanticHitCount }
-      : await semanticSearch(cleanSearchQuery, meiliSearchParams);
+      : await getCached(directCacheKey, () => semanticSearch(cleanSearchQuery, meiliSearchParams), 30);
 
     const didYouMean = spellingCorrection(cleanSearchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 
@@ -284,7 +291,7 @@ export const loader = async ({ request }) => {
       query: query,
       totalCount: activeResults.length,
       pinnedCount: activeResults.filter(p => p.isPinned).length,
-      products: activeResults,
+      products: activeResults.map(instantSearchCard),
       suggestions: suggestions,
       didYouMean: didYouMean,
       contextualPricingApplied: contextualPricingApplied,
@@ -293,7 +300,7 @@ export const loader = async ({ request }) => {
       headers: {
         // Product cards retain their storefront session cache; suggestions
         // must reflect fresh blacklist settings on the next request.
-        'Cache-Control': 'no-store',
+        ...searchCacheHeaders(request),
         'X-CFP-Search-Ranking': ranking?.rankingMode || 'direct',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',

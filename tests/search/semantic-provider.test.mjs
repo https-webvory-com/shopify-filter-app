@@ -28,20 +28,24 @@ test('OpenAI queries and facet batches use only the OpenAI embedder', async () =
   const service = await fixture({openai:helpers.openaiEmbedder('key'),gemini:helpers.geminiEmbedder('key')});
   await service.semanticSearch('summer outfit',{filter:["shop = 'fixture'"],offset:25});
   await service.semanticMultiSearch([{q:'summer outfit',facets:['vendor']},{q:'',limit:0}]);
-  assert.equal(service.calls[0].hybrid.embedder,'openai');
-  assert.equal(service.calls[0].offset,25);
-  assert.deepEqual(Array.from(service.calls[0].filter),["shop = 'fixture'"]);
+  assert.equal(service.calls[0].matchingStrategy,'all');
+  assert.equal(service.calls[0].hybrid,undefined);
   assert.equal(service.calls[1].hybrid.embedder,'openai');
-  assert.equal(service.calls[2].hybrid,undefined);
+  assert.equal(service.calls[1].offset,25);
+  assert.deepEqual(Array.from(service.calls[1].filter),["shop = 'fixture'"]);
+  assert.equal(service.calls[2].hybrid.embedder,'openai');
+  assert.equal(service.calls[3].hybrid,undefined);
   assert.ok(service.keys.every(key=>key.endsWith(':openai')));
 });
 
 test('explicit Gemini selection and disabling semantic search are respected', async () => {
   const service = await fixture({gemini:helpers.geminiEmbedder('key')},{SEMANTIC_EMBEDDING_PROVIDER:'gemini'});
   await service.semanticSearch('summer outfit',{});
-  assert.equal(service.calls[0].hybrid.embedder,'gemini');
+  assert.equal(service.calls[0].matchingStrategy,'all');
+  assert.equal(service.calls[1].hybrid.embedder,'gemini');
   const disabled=await fixture({openai:helpers.openaiEmbedder('key')},{SEMANTIC_SEARCH_ENABLED:'false'});
   await disabled.semanticSearch('summer outfit',{});
   assert.equal(disabled.calls[0].hybrid,undefined);
+  assert.equal(disabled.calls[1].hybrid,undefined);
   assert.equal(disabled.keys.length,0);
 });

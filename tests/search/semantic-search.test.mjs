@@ -3,6 +3,45 @@ import assert from "node:assert/strict";
 import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
 import { loadModule } from './helpers/search-ranking.mjs';
 
+test('single-word junk returns no products and multiword queries relax only after an empty strict pass', async () => {
+  const calls = [];
+  const service = await loadModule('app/services/semanticSearch.server.js', {
+    './meiliClient.server': { default: { index: () => ({
+      getEmbedders: async () => ({}),
+      search: async (query, options) => {
+        calls.push({ query, strategy: options.matchingStrategy });
+        return { hits: options.matchingStrategy === 'all' ? [] : [{ id: 'relaxed' }] };
+      },
+    }) } },
+    './shopCache.server': { getCached: async (_key, read) => read() },
+    '../utils/semanticSearch.js': { withSemanticSearch, semanticFallback, semanticProvider },
+  });
+  assert.equal((await service.semanticSearch('xyzqq', {})).hits.length, 0);
+  assert.deepEqual(calls.map(call => call.strategy), ['all']);
+  calls.length = 0;
+  assert.equal((await service.semanticSearch('red prom dress', {})).hits[0].id, 'relaxed');
+  assert.deepEqual(calls.map(call => call.strategy), ['all', 'last']);
+});
+
+test('stop words are removed only after an exact search has no hits', async () => {
+  const calls = [];
+  const service = await loadModule('app/services/semanticSearch.server.js', {
+    './meiliClient.server': { default: { index: () => ({ search: async (query, options) => {
+      calls.push({ query, strategy: options.matchingStrategy });
+      return { hits: query === 'dress wedding guest' ? [{ id: 'guest' }] : [] };
+    } }) } },
+    './shopCache.server': { getCached: async (_key, read) => read() },
+    '../utils/semanticSearch.js': { withSemanticSearch, semanticFallback, semanticProvider },
+  });
+  const result = await service.semanticSearch('dress for wedding guest', {});
+  assert.equal(result.hits[0].id, 'guest');
+  assert.equal(result.relaxedQuery, 'dress wedding guest');
+  assert.deepEqual(calls, [
+    { query: 'dress for wedding guest', strategy: 'all' },
+    { query: 'dress wedding guest', strategy: 'all' },
+  ]);
+});
+
 test('page batches use a consistent provider mode and defer keyword restart to the whole page plan', async () => {
   const calls=[];
   const service=await loadModule('app/services/semanticSearch.server.js',{
@@ -31,7 +70,7 @@ test('exhaustive keyword retrieval bypasses hybrid preparation and retains its c
   const options = { filter: ["shop = 'fixture'", "status = 'ACTIVE'", 'option_Color IN ["Red"]'],
     sort: ['priceMin:asc'], offset: 1000, limit: 1000 };
   await service.keywordSearch('red dress for wedding', options);
-  assert.deepEqual(calls, [{query:'red dress for wedding', options}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{query:'red dress for wedding', options:{...options,matchingStrategy:'all'}}]);
   assert.equal(calls[0].options.hybrid, undefined);
 });
 test('search pages use complete keyword facets and retain semantic fallback',async()=>{

@@ -6,6 +6,7 @@ import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as searchColor from "../../app/utils/searchColor.js";
+import * as facetNormalization from '../../app/utils/facetNormalization.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import * as availableVariants from "../../app/utils/availableVariants.js";
@@ -228,6 +229,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if(name==='../utils/collectionFilterMembership.js')return {};
     if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
+    if (name === "../utils/facetNormalization.js") return facetNormalization;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
