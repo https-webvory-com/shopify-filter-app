@@ -51,6 +51,8 @@ window.runQuickViewTests = async () => {
   }
   await test('chart click uses detected content without a second fetch', async () => {
     fixture.chart = true; qv.chartCache.clear(); await open('multi', { showQuickViewSizeChart: true });
+    assert(chart().closest('.cfp-qv-option-group')?.getAttribute('aria-label') === 'Color', 'chart is not opposite Color');
+    assert(getComputedStyle(chart()).display !== 'none', 'chart is not displayed');
     const count = fixture.requests.length; chart().click(); await tick();
     assert(qv.sizeChart.open && fixture.requests.length === count, 'chart refetched or failed');
     await qv.sizeChart.hide();
@@ -120,10 +122,47 @@ window.runQuickViewTests = async () => {
   await test('successful cart closes and restores focus before drawer', async () => {
     await open(); fixture.cartMode = 'success';
     const original = CfpQuickViewAdapters.renderCart;
+    const originalBehavior = CfpQuickViewAdapters.getCartBehavior;
     let called = false; let restored = false;
+    CfpQuickViewAdapters.getCartBehavior = () => 'drawer';
     CfpQuickViewAdapters.renderCart = () => { called = true; restored = document.activeElement.id === 'collection'; return true; };
     try { await qv.addToCart(); assert(called && restored && !qv.overlay.classList.contains('cfp-active'), 'success or focus restoration not completed'); }
-    finally { CfpQuickViewAdapters.renderCart = original; }
+    finally { CfpQuickViewAdapters.renderCart = original; CfpQuickViewAdapters.getCartBehavior = originalBehavior; }
+  });
+  await test('cart behavior follows the visible theme cart component', async () => {
+    assert(CfpQuickViewAdapters.getCartBehavior() === 'page', 'cart page should be the default');
+    const notification = document.createElement('cart-notification');
+    document.body.appendChild(notification);
+    assert(CfpQuickViewAdapters.getCartBehavior() === 'notification', 'notification mode missed');
+    const drawer = document.createElement('cart-drawer');
+    document.body.appendChild(drawer);
+    assert(CfpQuickViewAdapters.getCartBehavior() === 'drawer', 'drawer mode missed');
+    drawer.remove(); notification.remove();
+  });
+  await test('theme x-drawer opens after a successful add', async () => {
+    const drawer = document.createElement('x-drawer');
+    drawer.id = 'cart-drawer';
+    drawer.show = () => { drawer.setAttribute('open', ''); };
+    document.body.appendChild(drawer);
+    try {
+      await open(); fixture.cartMode = 'success';
+      assert(CfpQuickViewAdapters.getCartBehavior() === 'drawer', 'theme drawer not detected');
+      await qv.addToCart();
+      assert(drawer.hasAttribute('open') && !qv.overlay.classList.contains('cfp-active'), 'theme drawer did not open');
+    } finally { drawer.remove(); }
+  });
+  await test('theme cart notification receives the added item and sections', async () => {
+    const notification = document.createElement('cart-notification');
+    notification.getSectionsToRender = () => [{ id: 'cart-notification' }];
+    let received;
+    notification.renderContents = data => { received = data; };
+    document.body.appendChild(notification);
+    try {
+      await open(); fixture.cartMode = 'success';
+      await qv.addToCart();
+      const body = JSON.parse(fixture.requests.find(request => request.url.includes('cart/add.js')).options.body);
+      assert(body.sections?.includes('cart-notification') && received?.id === 1, 'notification did not receive the added line');
+    } finally { notification.remove(); }
   });
   await test('unsupported theme and failed adapter use App default', async () => {
     await open('single', { quickViewStyle: 'theme' }); assert(!button().disabled, 'unsupported fallback failed');

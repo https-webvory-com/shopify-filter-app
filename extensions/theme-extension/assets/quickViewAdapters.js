@@ -324,33 +324,51 @@ if (!window.CfpQuickViewAdapters) {
       content.querySelectorAll('script, style, button, h1, h2, h3, h4, h5, h6, [slot="header"], [slot="title"]').forEach(element => element.remove());
       return content.textContent.trim() || content.querySelector('img[src]') ? chart : null;
     },
-    renderCart(data, trigger) {
+    getCartBehavior() {
       const drawer = document.querySelector('cart-drawer');
-      if (!drawer || typeof drawer.renderContents !== 'function' || !data.sections ||
+      if (drawer) return 'drawer';
+      if (document.querySelector('x-drawer[id*="cart" i]')) return 'drawer';
+      const notification = document.querySelector('cart-notification');
+      if (notification) return 'notification';
+      return 'page';
+    },
+    renderCart(data, trigger) {
+      const cart = document.querySelector('cart-drawer') || document.querySelector('cart-notification');
+      if (!cart || typeof cart.renderContents !== 'function' || !data.sections ||
           Object.values(data.sections).some(section => section === null)) return false;
-      drawer.setActiveElement?.(trigger);
-      drawer.classList.remove('is-empty');
-      drawer.querySelector('.drawer__inner')?.classList.remove('is-empty');
-      drawer.renderContents(data);
+      cart.setActiveElement?.(trigger);
+      cart.classList.remove('is-empty');
+      cart.querySelector('.drawer__inner')?.classList.remove('is-empty');
+      // Theme cart components commonly expect the single added line's id.
+      // Shopify can wrap the result in an items array for JSON requests.
+      const content = data.id || !Array.isArray(data.items) ? data : { ...data, id: data.items[0]?.id };
+      cart.renderContents(content);
       return true;
     },
     getCartSections() {
-      const drawer = document.querySelector('cart-drawer');
+      const cart = document.querySelector('cart-drawer') || document.querySelector('cart-notification');
       try {
-        return drawer?.getSectionsToRender?.().map(section => section.id).slice(0, 5) || ['cart-drawer', 'cart-icon-bubble'];
+        return cart?.getSectionsToRender?.().map(section => section.id).slice(0, 5) || [];
       } catch {
-        return ['cart-drawer', 'cart-icon-bubble'];
+        return [];
       }
     },
     notifyCartAdded(data) {
       document.dispatchEvent(new CustomEvent('ajaxProduct:added', { detail: { product: data } }));
       document.dispatchEvent(new CustomEvent('cart:updated', { detail: { cart: data } }));
-      window.dispatchEvent(new Event('cart:refresh'));
+      document.documentElement.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
       window.dispatchEvent(new CustomEvent('cart:build', { bubbles: true }));
+    },
+    openCart() {
+      const drawer = document.querySelector('x-drawer[id*="cart" i], cart-drawer');
+      if (!drawer) return false;
+      if (typeof drawer.show === 'function') { drawer.show(); return true; }
+      if (typeof drawer.open === 'function') { drawer.open(); return true; }
+      return false;
     },
     isCartOpen() {
       // Do not mistake an unrelated .is-open dialog (such as search) for the cart.
-      return Boolean(document.querySelector('cart-drawer.is-active, cart-drawer.active, .cart-drawer.is-open, .cart-drawer--open, .cart-notification.active, #CartDrawer.active, #CartDrawer.is-open'));
+      return Boolean(document.querySelector('cart-drawer.is-active, cart-drawer.active, .cart-drawer.is-open, .cart-drawer--open, cart-notification.active, #CartDrawer.active, #CartDrawer.is-open, x-drawer[id*="cart" i][open]'));
     },
   };
 }

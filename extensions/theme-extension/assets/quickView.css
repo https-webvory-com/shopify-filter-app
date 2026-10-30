@@ -201,6 +201,11 @@ x-modal.cfp-native-size-chart { z-index: 2147483647 !important; }
   margin-bottom: 15px;
   font-size: 14px;
 }
+.cfp-qv-option-header .cfp-qv-size-chart {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 
 .cfp-qv-option-selected {
   font-weight: 400;
@@ -220,6 +225,7 @@ x-modal.cfp-native-size-chart { z-index: 2147483647 !important; }
   align-items: center;
   gap: 6px;
 }
+.cfp-qv-size-chart[hidden] { display: none; }
 .cfp-qv-size-chart svg {
   width: 16px;
   height: 16px;

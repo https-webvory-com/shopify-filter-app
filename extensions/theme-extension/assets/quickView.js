@@ -381,6 +381,8 @@ if (typeof window.CfpQuickView === 'undefined') {
       const initialVariantUrl = this.productUrl(product, initialVariantId);
 
       let optionsHtml = '';
+      const chartOption = product.options?.find(option => /colou?r/i.test(option.name || '')) ||
+        product.options?.find(option => /size/i.test(option.name || ''));
       if (product.options && product.options.length > 0) {
         let defaultSelectedOptions = [];
         if (initialVariant) {
@@ -429,6 +431,7 @@ if (typeof window.CfpQuickView === 'undefined') {
             <div class="cfp-qv-option-group" role="group" aria-label="${this.escape(option.name)}">
               <div class="cfp-qv-option-header">
                 <span class="cfp-qv-option-name">${this.escape(option.name)}: <span class="cfp-qv-option-selected">${this.escape(selectedValueForOption)}</span></span>
+                ${option === chartOption ? '<button type="button" hidden class="cfp-qv-size-chart" aria-haspopup="dialog" aria-expanded="false">Size chart</button>' : ''}
               </div>
               <div class="cfp-qv-option-values">
                 ${valuesHtml}
@@ -470,7 +473,7 @@ if (typeof window.CfpQuickView === 'undefined') {
           <div class="cfp-qv-options">
             ${optionsHtml}
           </div>
-          <button type="button" hidden class="cfp-qv-size-chart" aria-haspopup="dialog" aria-expanded="false">Size chart</button>
+          ${chartOption ? '' : '<button type="button" hidden class="cfp-qv-size-chart" aria-haspopup="dialog" aria-expanded="false">Size chart</button>'}
           <p class="cfp-qv-cart-status" role="status" aria-live="polite"></p>
 
           ${(window.cfpGlobalSettings && window.cfpGlobalSettings.isWholesale && !window.cfpCustomerLoggedIn) 
@@ -902,8 +905,10 @@ if (typeof window.CfpQuickView === 'undefined') {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
       const rootUrl = window.Shopify?.routes?.root || '/';
+      const cartBehavior = window.CfpQuickViewAdapters?.getCartBehavior?.() || 'page';
       let added = false;
       try {
+        const sections = cartBehavior === 'page' ? [] : window.CfpQuickViewAdapters?.getCartSections?.() || [];
         const response = await fetch(`${rootUrl}cart/add.js`, {
           method: 'POST',
           signal: controller.signal,
@@ -911,7 +916,7 @@ if (typeof window.CfpQuickView === 'undefined') {
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({
             items: [{ id: variantId, quantity: 1 }],
-            sections: window.CfpQuickViewAdapters?.getCartSections() || ['cart-drawer', 'cart-icon-bubble'],
+            ...(sections.length ? { sections } : {}),
             sections_url: window.location.pathname,
           }),
         });
@@ -927,9 +932,14 @@ if (typeof window.CfpQuickView === 'undefined') {
         // purchase because a theme drawer failed after Shopify accepted the item.
         this.closeModal();
         const closedRequestId = this.productRequestId;
+        if (cartBehavior === 'page') {
+          window.location.href = `${rootUrl}cart`;
+          return;
+        }
         try {
           if (window.CfpQuickViewAdapters?.renderCart(data, opener)) return;
           window.CfpQuickViewAdapters?.notifyCartAdded(data);
+          if (cartBehavior === 'drawer' && window.CfpQuickViewAdapters?.openCart?.()) return;
           await new Promise(resolve => setTimeout(resolve, 500));
           if (closedRequestId !== this.productRequestId || window.CfpQuickViewAdapters?.isCartOpen()) return;
         } catch { /* fall through to the actual cart */ }

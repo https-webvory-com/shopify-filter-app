@@ -6,6 +6,11 @@ import { pathToFileURL } from 'node:url';
 const root = process.cwd();
 export const createFixtureServer = () => http.createServer(async (request, response) => {
   const pathname = new URL(request.url, 'http://localhost').pathname;
+  if (pathname === '/fr/cart') {
+    response.setHeader('Content-Type', 'text/html');
+    response.end('<!doctype html><title>Theme cart page fixture</title><main id="theme-cart-page">Cart</main>');
+    return;
+  }
   const allowed = pathname.startsWith('/tests/quick-view/') || pathname.startsWith('/extensions/theme-extension/assets/quickView');
   const file = path.resolve(root, `.${pathname}`);
   if (!allowed || !file.startsWith(root + path.sep)) { response.writeHead(404).end(); return; }

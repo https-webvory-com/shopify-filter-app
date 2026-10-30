@@ -29,7 +29,9 @@ window.fetch = async (url, options = {}) => {
     if (fixture.cartMode === 'error') return { ok: false, json: async () => ({ status: 422, description: 'This quantity is unavailable.' }) };
     if (fixture.cartMode === 'server') return { ok: false, json: async () => ({ status: 500, message: 'Please try again later.' }) };
     if (fixture.cartMode === 'html') return { ok: false, json: async () => { throw new SyntaxError('Invalid JSON'); } };
-    return { ok: true, json: async () => ({ items: [{ id: JSON.parse(options.body).items[0].id }], sections: { 'cart-drawer': '<div>Cart</div>' } }) };
+    const body = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ items: [{ id: body.items[0].id }],
+      sections: Object.fromEntries((body.sections || []).map(id => [id, '<div>Cart</div>'])) }) };
   }
   if (target.endsWith('.js')) {
     const handle = target.split('/').pop().slice(0, -3);
