@@ -27,7 +27,7 @@ import { fetchCollectionPage } from "../utils/collectionPage.js";
 import { readRankedCollectionPage, hydrateCollectionSkus } from "../utils/rankedCollectionPage.js";
 import { getCollectionPreparationRevision, getPreparedCollectionRanking, discardPreparedCollectionRanking, registerCollectionWarmup, registerCollectionCardVisit, getCollectionHeadVersion, reportCollectionHead, rememberCollectionHead, compareCollectionHead } from "../services/collectionPreparation.server.js";
 import { collectionRankingFingerprint, getCollectionRankingSession, saveCollectionRankingSession } from "../services/collectionRankingSession.server.js";
-import { semanticMultiSearch } from "../services/semanticSearch.server";
+import { semanticMultiSearch, searchPageBatch } from "../services/semanticSearch.server";
 import { rankSearchResults } from "../services/searchRanking.server.js";
 import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprint,acceptsCollectionPinnedPrefix} from '../utils/collectionCards.js';
 import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../services/collectionCards.server.js';
@@ -41,6 +41,7 @@ import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../uti
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
+import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -1019,8 +1020,13 @@ export const loader = async ({ request, context }) => {
       // Skip ordinary product searches whose hits would be discarded, and do
       // not force exhaustive hit-count ranking merely to obtain facets.
       const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
+      const searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
+      const sharedSearchKey=isSearch&&searchCacheHeaders(request)['Cache-Control'].startsWith('public')
+        ? 'searchPageBatch:'+shop+':'+JSON.stringify([country,url.searchParams.get('locale'),searchQueries]) : null;
+      const searchRead=()=>semanticMultiSearch(searchQueries,{preferKeyword:!!searchQuery});
       const [multiSearchRes,rankedPage] = await Promise.all([
-        semanticMultiSearch(fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]),{preferKeyword:!!searchQuery}),
+        sharedSearchKey&&sharedSearchKey.length<=32768
+          ? getCached(sharedSearchKey,searchRead,60,{maxBytes:524288}) : searchRead(),
         useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
           ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
         }):null,
@@ -1545,6 +1551,43 @@ export const loader = async ({ request, context }) => {
 
     // ── 16. Build facet counts from Meilisearch distribution ──────────
     const getTargetValue = (type, rawValue) => mappedFacetValue(type,rawValue,mergedValues);
+    const normalizedGroups = new Map();
+    for (const [field, values] of Object.entries(facetDistribution)) {
+      const type = ({vendor:'vendor',productType:'product_type',tags:'tags',title:'title'})[field] ||
+        (field.startsWith('option_') ? field.slice(7) : field.startsWith('metafield_') ? field.slice(10) : null);
+      if (!type) continue;
+      for (const raw of Object.keys(values || {})) {
+        const canonical = getTargetValue(type, raw);
+        const key = `${field}\u0000${canonical}`;
+        if (!normalizedGroups.has(key)) normalizedGroups.set(key, { field, canonical, raw: [] });
+        normalizedGroups.get(key).raw.push(raw);
+      }
+    }
+    const exactNormalizedCounts = new Map();
+    const duplicateGroups = [...normalizedGroups.entries()].filter(([, group]) => group.raw.length > 1);
+    if (duplicateGroups.length) {
+      try {
+        const countQueries = duplicateGroups.map(([, group]) => ({ indexUid: 'products', q: textSearchQuery,
+          filter: [...baseFilters, ...activeCategories.filter(category => category !== group.field).map(category => categoryFilters[category]),
+            `${group.field} IN ${JSON.stringify(group.raw)}`], hitsPerPage: 1, page: 1, attributesToRetrieve: [] }));
+        const response = await searchPageBatch(countQueries, false);
+        duplicateGroups.forEach(([key], index) => {
+          const result = response.results?.[index];
+          const count = result?.totalHits ?? result?.estimatedTotalHits;
+          if (Number.isSafeInteger(count)) exactNormalizedCounts.set(key, count);
+        });
+      } catch (error) {
+        console.error('CFP: Exact normalized facet counts unavailable:', error.name);
+      }
+    }
+    const addNormalizedCount = (destination, field, type, raw, count) => {
+      const canonical = getTargetValue(type, raw);
+      const key = `${field}\u0000${canonical}`;
+      const duplicate = normalizedGroups.get(key)?.raw.length > 1;
+      const display = duplicate && !exactNormalizedCounts.has(key) ? raw : canonical;
+      destination[display] = duplicate && exactNormalizedCounts.has(key)
+        ? exactNormalizedCounts.get(key) : (destination[display] || 0) + count;
+    };
 
     const vendorCounts = {};
     const typeCounts = {};
@@ -1558,26 +1601,22 @@ export const loader = async ({ request, context }) => {
 
     if (facetDistribution.vendor) {
       for (const [v, count] of Object.entries(facetDistribution.vendor)) {
-        const tv = getTargetValue("vendor", v);
-        vendorCounts[tv] = (vendorCounts[tv] || 0) + count;
+        addNormalizedCount(vendorCounts, 'vendor', 'vendor', v, count);
       }
     }
     if (facetDistribution.productType) {
       for (const [t, count] of Object.entries(facetDistribution.productType)) {
-        const tv = getTargetValue("product_type", t);
-        typeCounts[tv] = (typeCounts[tv] || 0) + count;
+        addNormalizedCount(typeCounts, 'productType', 'product_type', t, count);
       }
     }
     if (facetDistribution.tags) {
       for (const [t, count] of Object.entries(facetDistribution.tags)) {
-        const tv = getTargetValue("tags", t);
-        tagCounts[tv] = (tagCounts[tv] || 0) + count;
+        addNormalizedCount(tagCounts, 'tags', 'tags', t, count);
       }
     }
     if (facetDistribution.title) {
       for (const [title, count] of Object.entries(facetDistribution.title)) {
-        const value = getTargetValue("title", title);
-        titleCounts[value] = (titleCounts[value] || 0) + count;
+        addNormalizedCount(titleCounts, 'title', 'title', title, count);
       }
     }
 
@@ -1586,16 +1625,14 @@ export const loader = async ({ request, context }) => {
         const optName = facetKey.replace("option_", "");
         if (!optionCounts[optName]) optionCounts[optName] = {};
         for (const [val, count] of Object.entries(counts)) {
-          const tv = getTargetValue(optName, val);
-          optionCounts[optName][tv] = (optionCounts[optName][tv] || 0) + count;
+          addNormalizedCount(optionCounts[optName], facetKey, optName, val, count);
         }
       }
       if (facetKey.startsWith("metafield_")) {
         const metaKey = facetKey.replace("metafield_", "");
         if (!metafieldCounts[metaKey]) metafieldCounts[metaKey] = {};
         for (const [val, count] of Object.entries(counts)) {
-          metafieldCounts[metaKey][val] =
-            (metafieldCounts[metaKey][val] || 0) + count;
+          addNormalizedCount(metafieldCounts[metaKey], facetKey, metaKey, val, count);
         }
       }
     }
@@ -1682,7 +1719,7 @@ export const loader = async ({ request, context }) => {
     // ⚡ PERFORMANCE: Cache the response for 10 seconds on CDN/browser
     // This avoids repeat API calls when user navigates back or re-renders
     const responseHeaders = {
-      'Cache-Control': useRankedCollectionPagination ? 'no-store' : 'public, max-age=10, stale-while-revalidate=30',
+      ...(isSearch ? searchCacheHeaders(request) : { 'Cache-Control': useRankedCollectionPagination ? 'no-store' : 'public, max-age=10, stale-while-revalidate=30' }),
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',

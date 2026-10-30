@@ -45,9 +45,9 @@ test('Shopify bulk audit streams a complete identity file and scopes the databas
   assert.deepEqual(result.extra, []);
   const search = await auditSearchIndexDrift({
     shop: 'one.myshopify.com', bulkProducts: [{ id: gid(1), status: 'ACTIVE' }, { id: gid(2), status: 'DRAFT' }],
-    index: { search: async (_query, options) => {
-      assert.deepEqual(options.filter, ['shop = "one.myshopify.com"']);
-      return { hits: [{ id: '1', status: 'ACTIVE' }], totalHits: 1 };
+    index: { getDocuments: async options => {
+      assert.equal(options.filter, 'shop = "one.myshopify.com"');
+      return { results: [{ id: '1', status: 'ACTIVE' }], total: 1 };
     } },
   });
   assert.deepEqual(search.missing, [gid(2)]);

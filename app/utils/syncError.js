@@ -27,6 +27,7 @@ export function syncIssueForJob(job) {
 export function productSyncJobWhere(shop) {
   return { shop, OR: [
     { kind: "PRODUCTS" },
+    { kind: "BULK_PRODUCTS" },
     // Old sales jobs have no product cursor; do not treat them as product syncs.
     { kind: null, totalProducts: { not: null }, OR: [{ cursor: { not: null } }, { productsProcessed: 0 }] },
   ] };

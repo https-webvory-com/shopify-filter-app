@@ -271,6 +271,94 @@ export function syncProducts(shop, admin, session = null, forceFresh = false) {
   return starting;
 }
 
+export async function startBulkProductSync(shop, { restart = false } = {}) {
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop || '')) throw Error('Invalid shop');
+  const latest = await prisma.syncJob.findFirst({ where: productSyncJobWhere(shop), orderBy: { createdAt: 'desc' } });
+  if (latest?.status === 'IN_PROGRESS') return { jobId: latest.id, message: 'Product sync is already running' };
+  const job = !restart && latest?.kind === 'BULK_PRODUCTS' && latest.status === 'FAILED'
+    ? await prisma.syncJob.update({ where: { id: latest.id }, data: { status: 'IN_PROGRESS', lastError: null, retryCount: 0 } })
+    : await prisma.syncJob.create({ data: { shop, kind: 'BULK_PRODUCTS', status: 'IN_PROGRESS', totalProducts: 0 } });
+  try {
+    const { enqueueProductSync } = await import('./productSyncQueue.server.js');
+    await enqueueProductSync(job.id, shop);
+  } catch (error) {
+    await prisma.syncJob.update({ where: { id: job.id }, data: { status: 'FAILED', lastError: syncErrorMessage(error) } });
+    throw error;
+  }
+  return { jobId: job.id, message: 'Bulk product index started in background' };
+}
+
+export async function runBulkProductSync(jobId, shop, admin) {
+  const { startBulkProductIndex, bulkProductIndexStatus, streamBulkProductIndex } = await import('./shopifyBulkIndex.server.js');
+  let job = await prisma.syncJob.findUnique({ where: { id: jobId } });
+  if (!job || job.shop !== shop || job.kind !== 'BULK_PRODUCTS' || job.status !== 'IN_PROGRESS') return;
+  if (!job.cursor) {
+    const operationId = await startBulkProductIndex(admin);
+    job = await prisma.syncJob.update({ where: { id: jobId }, data: { cursor: operationId } });
+    return { needsContinuation: true, retryAfterMs: 10000 };
+  }
+  const operation = await bulkProductIndexStatus(admin, job.cursor);
+  if (operation.status === 'pending') return { needsContinuation: true, retryAfterMs: 10000 };
+  const expected = [];
+  const batch = [], products = [];
+  let lastRoot = job.productsProcessed || 0;
+  const flush = async () => {
+    if (batch.length) {
+      const index = meiliClient.index('products');
+      const task = await index.addDocuments(await withCollectionRuleFacts(batch.map(doc => ({ ...doc, ...searchIndexProjection(doc) }))));
+      const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
+      if (completed.status !== 'succeeded') throw Error('Bulk product indexing failed');
+      await verifyMembershipWrites(prisma, index, shop, products, batch);
+      await scheduleSearchIndexProducts(shop, batch.map(doc => doc.id), task.taskUid);
+      batch.length = 0; products.length = 0;
+    }
+    if (lastRoot > (job.productsProcessed || 0)) {
+      job = await prisma.syncJob.update({ where: { id: jobId }, data: { productsProcessed: lastRoot, totalProducts: operation.count, lastError: null } });
+    }
+  };
+  await streamBulkProductIndex({ ...operation, skip: lastRoot, onRoot: product => {
+    if (isStorefrontProduct(product)) expected.push({ id: product.id, status: 'ACTIVE' });
+  }, onProduct: async (product, root) => {
+    const result = await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true });
+    if (result) { products.push(result.product); batch.push(result.meiliDoc); }
+    lastRoot = root;
+    if (root % 20 === 0) await flush();
+  } });
+  await flush();
+  // The export is a complete catalog, so reconcile deleted/unpublished IDs
+  // that had no row to process. Never mark the job complete while any ID is
+  // absent from either the database or the serving search index.
+  const { auditCatalogDrift, auditSearchIndexDrift } = await import('./shopifyBulkCatalog.server.js');
+  const drift = await Promise.all([
+    auditCatalogDrift({ prisma, shop, bulkProducts: expected }),
+    auditSearchIndexDrift({ index: meiliClient.index('products'), shop, bulkProducts: expected }),
+  ]);
+  const repairIds = [...new Set(drift.flatMap(part => [...part.missing, ...part.extra, ...part.statusMismatch.map(row => row.id)]))];
+  const currentExpected = new Map(expected.map(product => [product.id, product]));
+  for (const id of repairIds) {
+    await syncSingleProduct(shop, admin, id, { retrySearchErrors: true });
+    const row = await prisma.product.findUnique({ where: { id }, select: { shop: true, status: true } });
+    if (row?.shop === shop && String(row.status).toUpperCase() === 'ACTIVE') currentExpected.set(id, { id, status: 'ACTIVE' });
+    else currentExpected.delete(id);
+  }
+  if (repairIds.length) {
+    const current = [...currentExpected.values()];
+    const verified = await Promise.all([
+      auditCatalogDrift({ prisma, shop, bulkProducts: current }),
+      auditSearchIndexDrift({ index: meiliClient.index('products'), shop, bulkProducts: current }),
+    ]);
+    if (verified.some(part => part.missing.length || part.extra.length || part.statusMismatch.length))
+      throw Error('Bulk product index still differs from Shopify export');
+  }
+  await autoSeedOptionFilters(shop);
+  await updateMeiliSettings(shop, { throwOnError: true });
+  const { syncHistoricalOrders } = await import('./orders.server.js');
+  if (await syncHistoricalOrders(shop) === false) throw Error('Sales data sync failed');
+  await invalidateShop(shop, { kind: 'catalog' });
+  await prisma.syncJob.update({ where: { id: jobId }, data: { status: 'COMPLETED', completedAt: new Date(), lastError: null } });
+  return { status: 'complete', count: operation.count };
+}
+
 async function initializeProductSync(shop, admin, session, forceFresh) {
   if (activeProductSyncs.has(shop)) {
     return { jobId: activeProductSyncs.get(shop), message: "Product sync is already running" };
@@ -283,7 +371,11 @@ async function initializeProductSync(shop, admin, session, forceFresh) {
     where: productSyncJobWhere(shop),
     orderBy: { createdAt: "desc" },
   });
-  if (latestJob?.status === "IN_PROGRESS" || (!forceFresh && (latestJob?.status === "FAILED" || (latestJob?.status === "COMPLETED" && !latestJob.completedAt)))) job = latestJob;
+  if (latestJob?.kind === 'BULK_PRODUCTS' && latestJob.status === 'IN_PROGRESS')
+    return { jobId: latestJob.id, message: 'Bulk product index is already running' };
+  if (latestJob?.kind === 'BULK_PRODUCTS' && latestJob.status === 'FAILED' && !forceFresh)
+    return startBulkProductSync(shop);
+  if (latestJob?.kind !== 'BULK_PRODUCTS' && (latestJob?.status === "IN_PROGRESS" || (!forceFresh && (latestJob?.status === "FAILED" || (latestJob?.status === "COMPLETED" && !latestJob.completedAt))))) job = latestJob;
 
   if (job) {
     // Resume from where it stopped
@@ -923,10 +1015,6 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
 export async function syncSingleProduct(shop, admin, productId, { retrySearchErrors = false } = {}) {
   console.log(`CFP: Syncing single product ${productId} for ${shop}...`);
 
-  const metafieldSettings = await prisma.filterSetting.findMany({
-    where: { shop, type: "metafield" },
-  });
-
   const query = `#graphql
     query getProduct($id: ID!) {
       product(id: $id) {
@@ -1045,6 +1133,12 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
   }
 
   const product = responseJson.data?.product;
+
+  return syncProductPayload(shop, admin, productId, product, { retrySearchErrors });
+}
+
+// Bulk JSONL and webhook reads share the same DB/index write contract.
+export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false } = {}) {
 
   const shouldDelete = !isStorefrontProduct(product);
 
@@ -1170,6 +1264,11 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
     ...formattedOptions,
     ...formattedMetafields,
   };
+
+  if (deferIndex) {
+    await smartUpsertProduct(shop, product, prisma);
+    return { product, meiliDoc };
+  }
 
   // ✅ Parallel: DB upsert + Meilisearch push at the same time
   await Promise.all([

@@ -4,7 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { syncProducts } from "../services/sync.server";
+import { syncProducts, startBulkProductSync } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import { productSyncQueue } from "../services/productSyncQueue.server.js";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -89,6 +89,15 @@ export const action = async ({ request }) => {
     }
   }
 
+  if (actionType === 'bulk_sync_fresh') {
+    try {
+      const result = await startBulkProductSync(session.shop, { restart: true });
+      return { success: true, message: result.message, type: 'sync' };
+    } catch (error) {
+      return { error: syncErrorMessage(error), type: 'sync' };
+    }
+  }
+
   if (actionType === "sync_orders") {
     try {
       // Run orders sync in background (don't await fully)
@@ -130,7 +139,7 @@ export default function Index() {
 
   const isSyncing =
     (["loading", "submitting"].includes(syncFetcher.state) &&
-      syncFetcher.formData?.get("actionType") === "sync") ||
+      ['sync', 'force_sync', 'bulk_sync_fresh'].includes(syncFetcher.formData?.get('actionType'))) ||
     isSyncingBackground;
 
   // Orders sync status from polling
@@ -690,6 +699,16 @@ export default function Index() {
                 🔄 Restart Full Sync
               </button>
             )}
+
+            <button
+              onClick={() => syncFetcher.submit({ actionType: 'bulk_sync_fresh' }, { method: 'POST' })}
+              disabled={isSyncing}
+              style={{ background: '#1d4ed8', color: '#fff', border: 0, padding: '10px 16px', borderRadius: 10,
+                fontSize: 14, fontWeight: 600, cursor: isSyncing ? 'not-allowed' : 'pointer', opacity: isSyncing ? 0.6 : 1 }}
+              title="Build a complete product index from a Shopify Bulk Operations export"
+            >
+              Bulk index products
+            </button>
 
             {/* Sync Sales Data Button */}
             <button

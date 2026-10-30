@@ -12,6 +12,7 @@ import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../app/utils/collectionFilterMembership.js';
 import * as availableVariants from '../../app/utils/availableVariants.js';
 import * as facetNormalization from '../../app/utils/facetNormalization.js';
+import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
 import {spellingCorrection} from '../../app/utils/spellingCorrection.js';
 import {fetchCollectionPage} from '../../app/utils/collectionPage.js';
 import * as ranked from '../../app/utils/rankedCollectionPage.js';
@@ -57,7 +58,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"')products=[];
       if(typeof filter==='string'){
         const fieldMatch=filter.match(/^(vendor|productType|collection_titles|tags|option_[^ ]+|metafield_[^ ]+) IN (\[.*\])$/);
-        if(fieldMatch){const [,field,raw]=fieldMatch;const values=[...raw.matchAll(/'((?:\\.|[^'])*)'/g)].map(m=>m[1].replace(/\\'/g,"'").replace(/\\\\/g,'\\'));
+        if(fieldMatch){const [,field,raw]=fieldMatch;let values;try{values=JSON.parse(raw);}catch{values=[...raw.matchAll(/'((?:\\.|[^'])*)'/g)].map(m=>m[1].replace(/\\'/g,"'").replace(/\\\\/g,'\\'));}
           products=products.filter(p=>{const value=field.startsWith('option_')?p.options.find(o=>o.name===field.slice(7))?.values:p[field];return (Array.isArray(value)?value:[value]).some(v=>values.includes(v));});}
         if(filter.startsWith('priceMin >= ')||filter.startsWith('priceMin <= ')||filter.startsWith('((priceMin >= ')){
           const ranges=[...filter.matchAll(/priceMin >= ([\d.]+)(?: AND priceMin <= ([\d.]+))?/g)].map(m=>[Number(m[1]),m[2]?Number(m[2]):Infinity]);
@@ -178,7 +179,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/collectionFilterMembership.server.js':{collectionMembershipProof:async()=>state.membershipProof||'fixture-membership-proof'},
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;if(state.rankingFailure==='throw')throw Error('Queue unavailable');if(state.rankingFailure==='failed')return {status:'failed'};return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{},getCollectionHeadVersion:headVersion,reportCollectionHead:(spec,path,reason)=>headEvents.push({event:'head-'+path,reason,collectionId:spec.collectionId}),rememberCollectionHead:headProofs.remember,compareCollectionHead:headProofs.compare},
       '../services/collectionCards.server.js':{getPreparedCollectionCards:(request,options)=>state.cardSnapshots?cardStore.get(request,options):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||(options.spec?preparationKey(options.spec):undefined)}):null},
-    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay||state.searchFacetDelay&&queries.some(query=>query.facets?.length))await new Promise(r=>setTimeout(r,state.facetDelay||state.searchFacetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};}},
+    '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay||state.searchFacetDelay&&queries.some(query=>query.facets?.length))await new Promise(r=>setTimeout(r,state.facetDelay||state.searchFacetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};},searchPageBatch:async queries=>({results:queries.map(select)})},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
     '../utils/productTitleFilter.js':productTitleFilter,
@@ -187,6 +188,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../utils/collectionNavigation.js':collectionNavigation,
     '../utils/marketAvailability.js':marketAvailability,
     '../utils/facetNormalization.js':facetNormalization,
+    '../utils/searchCachePolicy.js':searchCachePolicy,
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},

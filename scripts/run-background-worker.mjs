@@ -35,11 +35,18 @@ try {
   let auditing=false;
   const audit=async()=>{if(auditing||shuttingDown)return;auditing=true;try{await global.__scheduleMembershipAudits?.();}catch(error){console.error('CFP Membership scheduler unavailable:',error.name);}finally{auditing=false;}};
   const membershipTimer=setInterval(audit,60000);membershipTimer.unref();
+  let catalogAuditing=false;
+  const catalogAudit=async()=>{if(catalogAuditing||shuttingDown)return;catalogAuditing=true;try{
+    const {scheduleCatalogDriftAudits}=await import('../app/services/catalogDriftAudit.server.js');
+    await scheduleCatalogDriftAudits();
+  }catch(error){console.error('CFP catalog drift scheduler unavailable:',error.name);}finally{catalogAuditing=false;}};
+  const catalogAuditTimer=setInterval(catalogAudit,3600000);catalogAuditTimer.unref();
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(warmupTimer);
     clearInterval(membershipTimer);
+    clearInterval(catalogAuditTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
     process.exit(0);
@@ -48,6 +55,7 @@ try {
   process.once("SIGINT", shutdown);
   void warm();
   void audit();
+  void catalogAudit();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });
   console.error("CFP: Background worker startup failed:", error.message);

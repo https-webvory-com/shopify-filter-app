@@ -1,10 +1,12 @@
 import {Prisma} from '@prisma/client';
+import {canonicalSize,isSizeFacet,expandMappedFacetValues} from './facetNormalization.js';
 
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const trimCharacters='\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
 
 function selectedVariantValues(name,values,mergedValues){
  const expanded=new Set(values.map(normalize));
+ if(isSizeFacet(name))for(const value of values)for(const alias of expandMappedFacetValues(name,value,mergedValues))expanded.add(normalize(alias));
  for(const rule of mergedValues||[])if((!rule.optionName||normalize(rule.optionName)===normalize(name))&&values.some(value=>normalize(value)===normalize(rule.targetValue)))
   for(const value of rule.sourceValues||[])expanded.add(normalize(value));
  return [...expanded];
@@ -74,6 +76,7 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
       const actual = normalize(variant[`option${position + 1}`]);
       return selected.some(value => {
         if (actual === normalize(value)) return true;
+        if (isSizeFacet(name) && canonicalSize(actual) && canonicalSize(actual) === canonicalSize(value)) return true;
         return mergedValues.some(rule => normalize(rule.targetValue) === normalize(value) &&
           (!rule.optionName || normalize(rule.optionName) === normalize(name)) &&
           (rule.sourceValues || []).some(source => normalize(source) === actual));

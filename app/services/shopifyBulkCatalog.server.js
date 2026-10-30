@@ -3,7 +3,7 @@ import readline from 'node:readline';
 import { catalogDrift } from '../utils/catalogDrift.js';
 
 const BULK_QUERY = `query CatalogIdentityAudit {
-  products { edges { node { id status } } }
+  products { edges { node { id status publishedAt } } }
 }`;
 
 async function graphql(admin, query, variables) {
@@ -36,7 +36,10 @@ export async function readBulkCatalogAudit(admin, operationId, fetcher = fetch) 
   if (operation?.id !== operationId) throw Error('Bulk catalog audit is unavailable');
   if (operation.status === 'CREATED' || operation.status === 'RUNNING') return { status: 'pending' };
   if (operation.status !== 'COMPLETED') throw Error(`Bulk catalog audit ${operation.status || 'failed'}`);
-  if (!operation.url) return { status: 'complete', products: [] };
+  if (!operation.url) {
+    if (Number(operation.rootObjectCount) !== 0) throw Error('Completed bulk catalog audit has no data');
+    return { status: 'complete', products: [] };
+  }
   const url = new URL(operation.url);
   if (url.protocol !== 'https:') throw Error('Bulk catalog URL must use HTTPS');
   const response = await fetcher(url, { signal: AbortSignal.timeout(600000) });
@@ -49,7 +52,7 @@ export async function readBulkCatalogAudit(admin, operationId, fetcher = fetch) 
     const product = JSON.parse(line);
     if (!/^gid:\/\/shopify\/Product\/\d+$/.test(product?.id || '') ||
         !['ACTIVE', 'DRAFT', 'ARCHIVED'].includes(product.status)) throw Error('Invalid bulk catalog row');
-    products.push({ id: product.id, status: product.status });
+    products.push({ id: product.id, status: product.status, publishedAt: product.publishedAt || null });
   }
   if (Number.isSafeInteger(Number(operation.rootObjectCount)) && products.length !== Number(operation.rootObjectCount)) {
     throw Error('Incomplete Shopify bulk catalog download');
@@ -72,17 +75,17 @@ export async function auditSearchIndexDrift({ admin, index, shop, operationId, f
   const indexed = [];
   const limit = 1000;
   for (let offset = 0; ; offset += limit) {
-    const page = await index.search('', {
-      filter: [`shop = ${JSON.stringify(shop)}`],
-      offset, limit, attributesToRetrieve: ['id', 'status'],
+    const page = await index.getDocuments({
+      filter: `shop = ${JSON.stringify(shop)}`,
+      offset, limit, fields: ['id', 'status'],
     });
-    if (!Array.isArray(page.hits)) throw Error('Incomplete search index page');
-    for (const hit of page.hits) indexed.push({
+    if (!Array.isArray(page.results)) throw Error('Incomplete search index page');
+    for (const hit of page.results) indexed.push({
       id: String(hit.id || '').startsWith('gid://') ? hit.id : `gid://shopify/Product/${hit.id}`,
       status: String(hit.status || '').toUpperCase(),
     });
-    if (page.hits.length < limit) {
-      if (Number.isSafeInteger(page.totalHits) && indexed.length !== page.totalHits) throw Error('Incomplete search index scan');
+    if (page.results.length < limit) {
+      if (Number.isSafeInteger(page.total) && indexed.length !== page.total) throw Error('Incomplete search index scan');
       break;
     }
   }

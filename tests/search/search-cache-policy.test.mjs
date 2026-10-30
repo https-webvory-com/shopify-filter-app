@@ -8,5 +8,6 @@ test('shared search cache is bounded to anonymous URL context', () => {
   assert.equal(publicHeaders['Cache-Control'], 'public, max-age=0, s-maxage=60');
   assert.equal(publicHeaders['CDN-Cache-Control'], 'public, max-age=60');
   assert.equal(searchCacheHeaders(new Request(url + '&customer_tags=vip'))['Cache-Control'], 'private, no-store');
+  assert.equal(searchCacheHeaders(new Request(url + '&logged_in_customer_id=123'))['Cache-Control'], 'private, no-store');
   assert.equal(searchCacheHeaders(new Request(url, { headers: { Authorization: 'Bearer token' } }))['Cache-Control'], 'private, no-store');
 });

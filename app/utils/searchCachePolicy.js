@@ -3,7 +3,7 @@
 export function searchCacheHeaders(request) {
   const url = new URL(request.url);
   if (request.method !== 'GET' || request.headers.has('Authorization') ||
-      String(url.searchParams.get('customer_tags') || '').trim()) {
+      ['customer_tags', 'customer_id', 'logged_in_customer_id'].some(key => String(url.searchParams.get(key) || '').trim())) {
     return { 'Cache-Control': 'private, no-store' };
   }
   // Browsers revalidate on reload. A configured reverse proxy/CDN may reuse

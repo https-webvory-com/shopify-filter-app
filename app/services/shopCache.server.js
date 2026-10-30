@@ -3,15 +3,15 @@ import {createShopCacheInvalidation,configurationRevisionKey,productRevisionKey}
 const TTL_SEC=60;
 const pendingReads=new Map();
 let cacheGeneration=0;
-export async function getCached(key,fetchFn,ttl=TTL_SEC) {
+export async function getCached(key,fetchFn,ttl=TTL_SEC,{maxBytes=Infinity}={}) {
   const generation=cacheGeneration;
   const shop=key.match(/(?:^|:)([a-z0-9][a-z0-9-]*\.myshopify\.com)(?=:|$)/i)?.[1];
   let cacheKey=key;
   if(shop) {
     try {
       const config=await redis.get(configurationRevisionKey(shop)) ?? '0';
-      const products=/^(availableVariants|percentSale|extraFilterFacts|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates|searchNativeReady|searchInstant):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
-      const search=/^(searchRankingCandidates|searchNativeReady|skuSearch|queryParserFacets|searchInstant):/.test(key)?await redis.get(`searchIndexRevision:${shop}`)??'0':'0';
+      const products=/^(availableVariants|percentSale|extraFilterFacts|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates|searchNativeReady|searchInstant|searchPageBatch):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
+      const search=/^(searchRankingCandidates|searchNativeReady|skuSearch|queryParserFacets|searchInstant|searchPageBatch):/.test(key)?await redis.get(`searchIndexRevision:${shop}`)??'0':'0';
       cacheKey=`${key}:revision:${config}:${products}${search==='0'?'':':search:'+search}`;
     } catch(error) {console.error('CFP: Cache revision unavailable:',error.name);}
   }
@@ -20,7 +20,7 @@ export async function getCached(key,fetchFn,ttl=TTL_SEC) {
   const pending=(async()=>{
     const value=await fetchFn();
     if(generation===cacheGeneration&&value!==undefined&&value!==null) {
-      try{await redis.setex(cacheKey,ttl,JSON.stringify(value));}catch(error){console.error('CFP: Cache write unavailable:',error.name);}
+      try{const encoded=JSON.stringify(value);if(encoded.length*4<=maxBytes)await redis.setex(cacheKey,ttl,encoded);}catch(error){console.error('CFP: Cache write unavailable:',error.name);}
     }
     return value;
   })();

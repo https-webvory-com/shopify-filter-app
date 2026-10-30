@@ -4,19 +4,30 @@ import prisma from "../db.server.js";
 import { syncErrorMessage } from "../utils/syncError.js";
 
 export async function processProductSyncJob(job, token) {
+  if (job.name === 'CATALOG_DRIFT_AUDIT') {
+    const { processCatalogDriftAudit } = await import('../services/catalogDriftAudit.server.js');
+    const result = await processCatalogDriftAudit(job);
+    if (result?.needsContinuation) {
+      await job.moveToDelayed(Date.now() + (result.retryAfterMs || 10000), token);
+      throw new DelayedError();
+    }
+    return result;
+  }
   const { shop, syncJobId } = job.data;
   const saved = await prisma.syncJob.findUnique({ where: { id: syncJobId } });
   if (!saved || saved.shop !== shop || (saved.status === "COMPLETED" && saved.completedAt)) return;
-  await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: "IN_PROGRESS", kind: "PRODUCTS", completedAt: null } });
+  await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: "IN_PROGRESS", kind: saved.kind === 'BULK_PRODUCTS' ? 'BULK_PRODUCTS' : 'PRODUCTS', completedAt: null } });
   try {
     // Offline authentication survives closure of the admin page and server restarts.
     const { unauthenticated } = await import("../shopify.server.js");
-    const { runProductSync } = await import("../services/sync.server.js");
+    const { runProductSync, runBulkProductSync } = await import("../services/sync.server.js");
     const { admin } = await unauthenticated.admin(shop);
-    const result = await runProductSync(syncJobId, shop, admin, { markFailure: false, maxBatches: 5 });
+    const result = saved.kind === 'BULK_PRODUCTS'
+      ? await runBulkProductSync(syncJobId, shop, admin)
+      : await runProductSync(syncJobId, shop, admin, { markFailure: false, maxBatches: 5 });
     if (result?.needsContinuation) {
       // Release the worker between committed batches so another store can sync.
-      await job.moveToDelayed(Date.now() + 100, token);
+      await job.moveToDelayed(Date.now() + (result.retryAfterMs || 100), token);
       throw new DelayedError();
     }
   } catch (error) {

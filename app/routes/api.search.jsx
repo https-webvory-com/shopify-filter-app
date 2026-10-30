@@ -226,71 +226,9 @@ export const loader = async ({ request }) => {
     try{configured=await configuredSuggestions(shop,searchQuery,suggestionLimit,meiliFilters);}catch(error){console.error('Configured search suggestions unavailable:',error.name);configured=[];}
     suggestions = suggestionBlacklist === null || suggestionLimit === 0 ? [] : buildSearchSuggestions(searchQuery,configured===null?activeResults:[],configured===null?suggestions:configured,suggestionLimit,suggestionBlacklist);
 
-    // Contextual Pricing
-    let contextualPricingApplied = false;
-    const country = url.searchParams.get("country");
-    if (country && activeResults.length > 0) {
-      try {
-        const { unauthenticated } = await import("../shopify.server");
-        const { admin } = await unauthenticated.admin(shop);
-        if (admin) {
-           const productGids = activeResults.map(p => p.id);
-           const query = `
-             query getPrices($ids: [ID!]!, $country: CountryCode!) {
-               nodes(ids: $ids) {
-                 ... on Product {
-                   id
-                   variants(first: 100) {
-                     nodes {
-                       id
-                       contextualPricing(context: {country: $country}) {
-                         price { amount }
-                         compareAtPrice { amount }
-                       }
-                     }
-                   }
-                 }
-               }
-             }
-           `;
-           const response = await admin.graphql(query, { variables: { ids: productGids, country } });
-           const json = await response.json();
-           if (json.data && json.data.nodes) {
-              json.data.nodes.forEach(node => {
-                 if (!node) return;
-                 const product = activeResults.find(p => p.id === node.id);
-                 if (product) {
-                    let minPrice = Infinity;
-                    let maxPrice = -Infinity;
-                    if (node.variants && node.variants.nodes) {
-                        node.variants.nodes.forEach(vNode => {
-                           const v = (product.variants || []).find(pv => pv.id === vNode.id);
-                           if (v && vNode.contextualPricing) {
-                              const amt = parseFloat(vNode.contextualPricing.price.amount);
-                              v.price = amt;
-                              if (vNode.contextualPricing.compareAtPrice) {
-                                 v.compareAtPrice = parseFloat(vNode.contextualPricing.compareAtPrice.amount);
-                              }
-                              if (amt < minPrice) minPrice = amt;
-                              if (amt > maxPrice) maxPrice = amt;
-                           }
-                        });
-                    }
-                    if (minPrice !== Infinity) {
-                       product.priceMin = minPrice;
-                    }
-                    if (maxPrice !== -Infinity) {
-                       product.priceMax = maxPrice;
-                    }
-                 }
-              });
-              contextualPricingApplied = true;
-           }
-        }
-      } catch (e) {
-         console.error("Contextual pricing error in search:", e);
-      }
-    }
+    // Cards render before independently verified market prices arrive in the
+    // storefront. Waiting for Shopify Admin pricing here delayed every card.
+    const contextualPricingApplied = false;
 
     const searchContext=await getSearchIndexContext(shop);
     return data({
