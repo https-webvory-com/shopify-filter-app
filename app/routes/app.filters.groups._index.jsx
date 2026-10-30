@@ -963,6 +963,29 @@ export default function FilterGroups() {
           border-radius: 12px !important;
           box-shadow: 0 10px 25px -5px rgba(30, 27, 75, 0.08) !important;
         }
+
+        .filter-groups-container .table-toolbar { background: #ffffff !important; padding: 16px 20px !important; }
+        .groups-table { table-layout: auto !important; min-width: 760px; }
+        .groups-table th {
+          background: #f8fafc !important;
+          color: #475569 !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+          padding: 13px 16px !important;
+          font-size: 11px !important;
+          letter-spacing: .04em !important;
+          white-space: nowrap;
+        }
+        .groups-table td { padding: 15px 16px !important; vertical-align: middle !important; overflow-wrap: normal !important; }
+        .groups-table th:nth-child(2), .groups-table td:nth-child(2) { min-width: 190px; }
+        .groups-table th:last-child, .groups-table td:last-child { min-width: 116px; }
+        .groups-table tbody tr:last-child { border-bottom: 0 !important; }
+        .group-name-content { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+        .group-name-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+        .group-favorite-btn { flex: 0 0 22px; width: 22px; height: 22px; line-height: 1; padding: 0 !important; font-size: 18px; }
+        .groups-table .badge-default-group { margin: 0 !important; }
+        .group-empty-cell { color: #94a3b8; }
+        .groups-table .row-action-btn { min-width: 32px; min-height: 32px; justify-content: center; }
+        .groups-table input[type="checkbox"] { accent-color: #5b21b6; }
       `,
         }}
       />
@@ -1526,9 +1549,11 @@ export default function FilterGroups() {
                         if (col.id === "name") {
                           return (
                             <td key="name" style={{ padding: "18px 20px" }}>
-                              <button type="button" aria-label={`${favoriteGroups.includes(group.id) ? 'Remove' : 'Add'} ${group.name} ${favoriteGroups.includes(group.id) ? 'from' : 'to'} favorites`} aria-pressed={favoriteGroups.includes(group.id)} onClick={() => toggleFavorite(group.id)} style={{ background: 'none', border: 0, cursor: 'pointer', padding: '4px 8px', color: '#5B21B6' }}>
+                              <div className="group-name-content">
+                              <button type="button" className="group-favorite-btn" aria-label={`${favoriteGroups.includes(group.id) ? 'Remove' : 'Add'} ${group.name} ${favoriteGroups.includes(group.id) ? 'from' : 'to'} favorites`} aria-pressed={favoriteGroups.includes(group.id)} onClick={() => toggleFavorite(group.id)} style={{ background: 'none', border: 0, cursor: 'pointer', color: '#5B21B6' }}>
                                 {favoriteGroups.includes(group.id) ? '★' : '☆'}
                               </button>
+                              <div className="group-name-stack">
                               <button
                                 onClick={() =>
                                   navigate(`/app/filters/groups/${group.id}`)
@@ -1564,6 +1589,8 @@ export default function FilterGroups() {
                                   DEFAULT
                                 </span>
                               )}
+                              </div>
+                              </div>
                             </td>
                           );
                         }
@@ -1580,6 +1607,7 @@ export default function FilterGroups() {
                                   gap: "6px",
                                 }}
                               >
+                                {group.collections.filter((c) => c.pageType === "collection").length === 0 && <span className="group-empty-cell">—</span>}
                                 {group.collections
                                   .filter((c) => c.pageType === "collection")
                                   .map((c) => (
@@ -1604,6 +1632,7 @@ export default function FilterGroups() {
                                   gap: "6px",
                                 }}
                               >
+                                {group.collections.filter((c) => c.pageType === "search").length === 0 && <span className="group-empty-cell">—</span>}
                                 {group.collections
                                   .filter((c) => c.pageType === "search")
                                   .map((c) => (

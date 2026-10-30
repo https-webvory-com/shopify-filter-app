@@ -2301,7 +2301,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid" style="padding: 2px !important; ${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
+              <div class="cfp-color-grid" style="padding: 6px !important; ${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -2377,14 +2377,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const isTopRightCount = isGrid && !isColor;
                     const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
 
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} ${(isActive && !isImageItem) || (isActive && isImageItem && !isGrid) ? 'box-shadow: 0 0 0 2px #000;' : ''} flex-shrink: 0; margin: 2px auto !important; ${isActive && isImageItem && isGrid ? 'filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2)); box-shadow: 0 0 0 2px #000;' : ''}">${placeholderSvg}</span>`;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: 6px ${labelFlexDir === 'row' ? '6px' : 'auto'} !important;">${placeholderSvg}</span>`;
 
                     const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
@@ -3451,7 +3451,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const escapeBreadcrumb = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const addChip = (label, type, val, isColor = false) => {
       hasFilters = true;
-      const chipLabel = isColor ? `<strong class="cfp-breadcrumb-color">${escapeBreadcrumb(label)}</strong>` : escapeBreadcrumb(label);
+      const chipLabel = `<strong class="cfp-breadcrumb-value">${escapeBreadcrumb(label)}</strong>`;
       chipsHTML += `<span class="cfp-breadcrumb-chip${isColor ? ' cfp-breadcrumb-chip--color' : ''}" data-type="${escapeBreadcrumb(type)}" data-val="${escapeBreadcrumb(val)}">${chipLabel} <button type="button" class="cfp-breadcrumb-remove" aria-label="Remove ${escapeBreadcrumb(label)} filter">&times;</button></span>`;
     };
 

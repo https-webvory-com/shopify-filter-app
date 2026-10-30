@@ -501,14 +501,10 @@ export default function Index() {
             border: "1px solid rgba(91, 33, 182, 0.1)",
             borderRadius: "16px",
             padding: "24px 32px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "20px",
+            display: "block",
           }}
         >
-          <div style={{ flex: 1 }}>
+          <div>
             <h2
               style={{
                 fontSize: "18px",
@@ -535,7 +531,7 @@ export default function Index() {
                     <strong style={{ color: "#7c3aed", fontSize: "16px" }}>
                       {syncProgress.processed.toLocaleString()}
                     </strong>
-                    {syncProgress.total
+                    {syncProgress.total && syncProgress.processed <= syncProgress.total
                       ? <span> / {syncProgress.total.toLocaleString()} {latestSyncStatus === "COMPLETED" ? "processed" : latestSyncStatus === "FAILED" ? "sync stopped" : "syncing..."}</span>
                       : <span> products processed{latestSyncStatus === "FAILED" ? " before sync stopped" : ""}</span>}
                   </>
@@ -557,7 +553,7 @@ export default function Index() {
               {/* Fully synced */}
               {!isSyncing && latestSyncStatus === "COMPLETED" && !syncIssue && (
                 <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
-                  ✅ Fully Synced
+                  ✓ Last sync completed
                 </span>
               )}
               {shopifyUnpublishedCount > 0 && (
@@ -585,7 +581,7 @@ export default function Index() {
                     <div style={{ background: color, borderRadius: "999px", height: "8px", width: `${pct}%`, transition: "width 0.6s ease" }} />
                   </div>
                   <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px" }}>
-                    {pct}% — {done.toLocaleString()} / {total.toLocaleString()}
+                    {pct}% — {done.toLocaleString()}{done <= total ? ` / ${total.toLocaleString()}` : ' products processed'}
                   </div>
                 </div>
               );
@@ -598,7 +594,7 @@ export default function Index() {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", marginTop: "20px", paddingTop: "18px", borderTop: "1px solid rgba(91, 33, 182, 0.12)" }}>
             <button
               onClick={triggerSync}
               disabled={isSyncing}
@@ -703,7 +699,7 @@ export default function Index() {
             <button
               onClick={() => syncFetcher.submit({ actionType: 'bulk_sync_fresh' }, { method: 'POST' })}
               disabled={isSyncing}
-              style={{ background: '#1d4ed8', color: '#fff', border: 0, padding: '10px 16px', borderRadius: 10,
+              style={{ background: '#ffffff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '10px 16px', borderRadius: 10,
                 fontSize: 14, fontWeight: 600, cursor: isSyncing ? 'not-allowed' : 'pointer', opacity: isSyncing ? 0.6 : 1 }}
               title="Build a complete product index from a Shopify Bulk Operations export"
             >
@@ -715,9 +711,9 @@ export default function Index() {
               onClick={() => syncFetcher.submit({ actionType: "sync_orders" }, { method: "POST" })}
               disabled={isSyncing}
               style={{
-                background: "#059669",
-                color: "#ffffff",
-                border: "none",
+                background: "#ffffff",
+                color: "#047857",
+                border: "1px solid #a7f3d0",
                 padding: "10px 16px",
                 borderRadius: "10px",
                 fontSize: "14px",
