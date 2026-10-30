@@ -222,6 +222,8 @@ async function handleProductDelete(shop, payload, job) {
   const task=await meiliClient.index("products").deleteDocument(numericId);
   const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});
   if(completed.status!=='succeeded')throw Error('Product deletion indexing failed');
+  const {scheduleSearchIndexProducts}=await import('../services/searchIndex.server.js');
+  await scheduleSearchIndexProducts(shop,[numericId],task.taskUid);
   const { invalidateShop } = await import("../services/shopCache.server.js");
   await invalidateShop(shop,{kind:'products',collectionIds:job.data.deletedCollectionIds,
     externalProof:Array.isArray(job.data.deletedProductTags)?{tags:job.data.deletedProductTags,ids:[numericId]}:undefined});

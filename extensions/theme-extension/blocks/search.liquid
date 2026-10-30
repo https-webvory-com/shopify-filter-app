@@ -1,6 +1,7 @@
-{% if template.name == 'search' %}
+{% if template.name == 'search' or template.name == 'page' %}
   <div id="cfp-v1-app-container" class="cfp-v1-app-container">
     {% render 'collectionFilterPro',
+      search_widget: true,
       filter_bar_bg_color: block.settings.filter_bar_bg_color,
       filter_bg_color: block.settings.filter_bar_bg_color,
       search_header_bg: block.settings.search_header_bg,
@@ -41,7 +42,7 @@
 {
   "name": "AI Search and Filter",
   "target": "section",
-  "templates": ["search"],
+  "templates": ["search", "page"],
   "settings": [
     {
       "type": "header",

@@ -11,7 +11,8 @@ export async function getCached(key,fetchFn,ttl=TTL_SEC) {
     try {
       const config=await redis.get(configurationRevisionKey(shop)) ?? '0';
       const products=/^(availableVariants|percentSale|extraFilterFacts|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates|searchNativeReady|searchInstant):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
-      cacheKey=`${key}:revision:${config}:${products}`;
+      const search=/^(searchRankingCandidates|searchNativeReady|skuSearch|queryParserFacets|searchInstant):/.test(key)?await redis.get(`searchIndexRevision:${shop}`)??'0':'0';
+      cacheKey=`${key}:revision:${config}:${products}${search==='0'?'':':search:'+search}`;
     } catch(error) {console.error('CFP: Cache revision unavailable:',error.name);}
   }
   try {const raw=await redis.get(cacheKey);if(raw)return JSON.parse(raw);} catch(error) {console.error('CFP: Cache read unavailable:',error.name);}

@@ -31,6 +31,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
     search:async()=>({hits:indexed}),
   }, {get: (target,key) => target[key] || (async () => ({}))});
   const mocks = {
+    './searchIndex.server.js':{scheduleSearchIndexProducts:async()=>{}},
     './collectionRuleFacts.server.js':{withCollectionRuleFacts:async docs=>docs},
     './productCollections.server.js':memberships,
     '../utils/searchIndexProjection.js': searchProjection,

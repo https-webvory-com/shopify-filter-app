@@ -89,6 +89,22 @@ test('search pages use complete keyword facets and retain semantic fallback',asy
  assert.equal(calls.length,2);assert.ok(calls[1][0].hybrid);
 });
 
+test('search results prefer complete keyword facets while semantic fallback remains available',async()=>{
+ const calls=[];let keywordHits=86;
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './meiliClient.server':{default:{index:()=>({getEmbedders:async()=>({openai:{source:'openAi'}})}),multiSearch:async({queries})=>{calls.push(queries);return {results:[{totalHits:queries[0].hybrid?86:keywordHits,hits:keywordHits?[{id:'dress-outlet'}]:[],facetDistribution:{vendor:{'The Dress Outlet':56}}}]};}}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider:()=> 'openai'},
+ });
+ const queries=[{indexUid:'products',q:'cocktail dress',filter:["shop = 'fixture'"],facets:['vendor'],limit:25}];
+ const lexical=await service.semanticMultiSearch(queries,{preferKeyword:true});
+ assert.equal(lexical.results[0].facetDistribution.vendor['The Dress Outlet'],56);
+ assert.equal(calls.length,1);assert.equal(calls[0][0].hybrid,undefined);
+ keywordHits=0;calls.length=0;
+ await service.semanticMultiSearch(queries,{preferKeyword:true});
+ assert.equal(calls.length,2);assert.ok(calls[1][0].hybrid);
+});
+
 test("semantic requests retain tenant, filters, page and explicit sort", () => {
   const query = { q: "dress for beach wedding", filter: ["shop = 'fixture'", "available = true"], sort: ["priceMin:asc"], offset: 25, limit: 25 };
   const prepared = withSemanticSearch(query, true);

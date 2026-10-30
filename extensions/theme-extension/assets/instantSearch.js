@@ -34,6 +34,7 @@ if (!window.cfpSearchRedirectPromise && /\/search\/?$/i.test(window.location.pat
 document.addEventListener("DOMContentLoaded", async function () {
   await window.cfpSearchSettingsReady;
   const searchSettings = window.cfpSearchSettings || {};
+  if(searchSettings.instantSearchEnabled===false)return;
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
@@ -44,7 +45,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     collectionLimit: searchSettings.collectionLimit ?? 5,
     recentLimit: searchSettings.recentLimit ?? 4,
     manualSuggestions: searchSettings.manualSuggestions || [],
-    customSelector: userSettings.customTriggerSelector || "",
+    customSelector: searchSettings.searchBoxSelector || userSettings.customTriggerSelector || "",
+    enabled:searchSettings.instantSearchEnabled!==false,showPages:searchSettings.showPages===true,pageLimit:searchSettings.pageLimit??3,
+    showPopularProducts:searchSettings.showPopularProducts!==false,popularProductLimit:searchSettings.popularProductLimit??(searchSettings.productLimit??6),
     apiUrl: `${API_DOMAIN}/api/search`,
   };
 
@@ -62,7 +65,11 @@ document.addEventListener("DOMContentLoaded", async function () {
       collectionLimit: settings.collectionLimit ?? 5,
       recentLimit: settings.recentLimit ?? 4,
       manualSuggestions: settings.manualSuggestions || [],
+      enabled:settings.instantSearchEnabled!==false,showPages:settings.showPages===true,pageLimit:settings.pageLimit??3,
+      showPopularProducts:settings.showPopularProducts!==false,popularProductLimit:settings.popularProductLimit??(settings.productLimit??6),
+      customSelector:settings.searchBoxSelector||window.CFP_InstantSearchSettings?.customTriggerSelector||'',
     });
+    applySearchDisplaySettings();
   }
 
   async function fetchSearchJSON(url) {
@@ -270,12 +277,23 @@ document.addEventListener("DOMContentLoaded", async function () {
           <ul class="cfp-search-collections-list" id="cfp-search-collections">
             <!-- Collections will be rendered here -->
           </ul>
+          <div class="cfp-search-section-title" id="cfp-pages-title" style="display:none">Pages</div>
+          <ul class="cfp-search-collections-list" id="cfp-search-pages" style="display:none"></ul>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
     mainInput = document.getElementById("cfp-main-search-input");
+    applySearchDisplaySettings();
+  }
+
+  function applySearchDisplaySettings(){
+    if(!modal)return;
+    const settings=window.cfpSearchSettings||{};
+    modal.dataset.cfpLayout=settings.instantLayout||'fullscreen';
+    modal.dataset.cfpProductColumn=settings.productColumn||'left';
+    modal.style.setProperty('--cfp-instant-columns',String(settings.instantColumns||4));
   }
 
   function attachListeners() {
@@ -362,6 +380,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
 
       const handleEvent = (e) => {
+        if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         // ── GATE 0: Ignore events inside our own modal/overlay ───────────────
         if (e.target.closest('.cfp-search-modal') || e.target.closest('.cfp-search-modal-overlay')) return;
 
@@ -491,6 +510,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       // Handles keyboard users who tab into the search box.
       // Strictly guarded: INPUT tag + search type/name + in header + not our own modal.
       document.addEventListener('focus', (e) => {
+        if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         const el = e.target;
         if (!el) return;
         if (el.tagName !== 'INPUT') return;                           // Only input elements
@@ -563,7 +583,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const query = e.target.value.trim();
         if (query.length >= CONFIG.minChars) {
           saveRecentSearch(query);
-          window.location.href = `/search?q=${encodeURIComponent(query)}`;
+          window.location.href = window.cfpSearchResultUrl?.(query)||`/search?q=${encodeURIComponent(query)}`;
         }
       }
     });
@@ -588,6 +608,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   function openModal(triggerElement) {
+    if(CONFIG.enabled===false)return;
     // Already open — don't re-open
     if (modal.classList.contains('cfp-open')) return;
 
@@ -767,8 +788,8 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (window.cfpCustomerTags) countryParam += `&customer_tags=${encodeURIComponent(window.cfpCustomerTags)}`;
       
       // 1. Fetch 4 popular products in background
-      const productsPromise = fetchSearchJSON(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.productLimit}&sortBy=best-selling${countryParam}`
+      const productsPromise = CONFIG.showPopularProducts===false?Promise.resolve({products:[]}):fetchSearchJSON(
+        `${CONFIG.apiUrl}?shop=${shopDomain}&limit=${CONFIG.popularProductLimit}&sortBy=best-selling${countryParam}`
       );
 
       // 2. Fetch all/popular collections in background
@@ -788,6 +809,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value : "";
       if (!currentQuery) {
+        renderPages({resources:{results:{pages:[]}}});
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
         await renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
@@ -837,7 +859,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     searches.forEach((s) => {
       html += `
         <li class="cfp-recent-search-item">
-          <a href="/search?q=${encodeURIComponent(s)}" class="cfp-recent-search-link">
+          <a href="${window.cfpSearchResultUrl?.(s)||'/search?q='+encodeURIComponent(s)}" class="cfp-recent-search-link">
             <svg class="cfp-history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             ${highlightSearchText(s, '')}
           </a>
@@ -893,7 +915,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       
       html += `
         <li class="cfp-recent-search-item">
-          <a href="/search?q=${encodeURIComponent(s)}" class="cfp-recent-search-link">
+          <a href="${window.cfpSearchResultUrl?.(s)||'/search?q='+encodeURIComponent(s)}" class="cfp-recent-search-link">
             <svg class="cfp-history-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <span class="cfp-suggestion-text">${displayTitle}</span>
           </a>
@@ -908,6 +930,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     
     await refreshSearchConfiguration();
+    if(CONFIG.enabled===false){closeModal();return;}
     if (mainInput.value.trim() !== query) return;
     if (query.length < CONFIG.minChars) {
       document.getElementById('cfp-search-body').classList.remove('cfp-has-results');
@@ -935,9 +958,11 @@ document.addEventListener("DOMContentLoaded", async function () {
         `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=${CONFIG.collectionLimit ?? 5}`
       ).catch(() => ({resources:{results:{collections:[]}}}));
 
-      const [productsData, collectionsData] = await Promise.all([
+      const pagesPromise=CONFIG.showPages&&CONFIG.pageLimit>0?fetchSearchJSON(`${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=page&resources[limit]=${CONFIG.pageLimit}`).catch(()=>({resources:{results:{pages:[]}}})):Promise.resolve({resources:{results:{pages:[]}}});
+      const [productsData, collectionsData,pagesData] = await Promise.all([
         productsPromise,
         collectionsPromise,
+        pagesPromise,
       ]);
 
       // 4. Update UI with fresh data if user hasn't changed query
@@ -966,6 +991,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
 
         renderCollections(collectionsData, query);
+        renderPages(pagesData,query);
         if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
            renderSuggestions(productsData.suggestions, query);
         } else if (currentQuery.length > 0) {
@@ -986,6 +1012,13 @@ document.addEventListener("DOMContentLoaded", async function () {
     } finally {
       if (mainInput.value.trim().toLowerCase() === trimmedQuery) renderLoading(false);
     }
+  }
+
+  function renderPages(data,query=''){
+    const container=document.getElementById('cfp-search-pages'),title=document.getElementById('cfp-pages-title');if(!container||!title)return;
+    const pages=CONFIG.showPages?(data?.resources?.results?.pages||[]).slice(0,CONFIG.pageLimit):[];
+    const links=pages.flatMap(page=>{try{const url=new URL(page.url,location.origin);if(url.origin!==location.origin||!url.pathname.includes('/pages/'))return [];return `<li><a href="${instantEscapeHtml(url.pathname+url.search)}">${highlightSearchText(page.title||'',query)}</a></li>`;}catch{return [];}});
+    container.innerHTML=links.join('');container.style.display=links.length?'':'none';title.style.display=links.length?'':'none';
   }
 
   function renderCollections(data, query, isDefault = false) {
@@ -1021,7 +1054,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (query && query.trim().length > 0) {
       html += `
         <li>
-          <a href="/search?q=${encodeURIComponent(query)}" style="font-weight: 700; color: #000;">
+          <a href="${window.cfpSearchResultUrl?.(query)||'/search?q='+encodeURIComponent(query)}" style="font-weight: 700; color: #000;">
             ${highlightSearchText(query, '')}
           </a>
         </li>
@@ -1131,10 +1164,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Resize shopify image URL to avoid massive memory usage on storefront
     const getResizedImageUrl = (value, size = '600x') => {
        const raw=instantImageUrl(value);if(!raw)return '';
+       const settings=window.cfpSearchSettings||{};if(settings.imageSizeType==='original')return raw;
        try{
          const url=new URL(raw,location.href);
          if(url.hostname==='cdn.shopify.com'||url.pathname.startsWith('/cdn/shop/')){
-           url.searchParams.set('width',String(parseInt(size,10)||600));return url.href;
+           url.searchParams.set('width',String(settings.imageSizeType==='fixed'?settings.fixedImageWidth||600:parseInt(size,10)||600));return url.href;
          }
        }catch{}
        return raw;
@@ -1370,7 +1404,8 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (!price) return;
       const selected = new URL(card.querySelector('a')?.href || location.href).searchParams.get('variant');
       const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
-      price.textContent = new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(variant?.price ?? product.priceMin);
+      const text=new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(variant?.price ?? product.priceMin);
+      price.textContent=window.cfpSearchPriceUnit?.(text)||text;
     }).catch(() => {});
   }
 });

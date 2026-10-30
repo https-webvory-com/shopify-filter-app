@@ -18,6 +18,7 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     console: { log() {}, error() {} },
     prisma: {marketStorefrontConnection:{deleteMany:async({where})=>marketChanges.push(['connection-deleted',where.shop])},marketAvailabilitySnapshot:{deleteMany:async({where})=>marketChanges.push(['snapshots-deleted',where.shop])},product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
+      if(path.includes('searchIndex.server'))return {scheduleSearchIndexProducts:async(shop,ids,task)=>marketChanges.push(['search-index',shop,Array.from(ids),task])};
       if(path.includes('marketAvailability'))return {invalidateMarketAvailability:async(shop,id)=>marketChanges.push(['stock',shop,id])};
       if (path.includes("collectionBestSelling")) return { invalidateCollectionBestSelling: async (shop, collectionId) => calls.push(["collection-stale", shop, collectionId]), refreshCollectionBestSelling: async (shop, collectionId) => {
         calls.push(["collection-order", shop, collectionId]);

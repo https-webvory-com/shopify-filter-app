@@ -19,12 +19,12 @@ window.runSettingsChecks = async () => {
   try {
     await post({ intent: 'reset' });
     await test('actual editor saves settings and reloads persisted values', async () => {
-      await navigate('/admin-ui'); await wait(() => doc().querySelector('[name=productLimit]'));
+      await navigate('/admin-ui'); await wait(() => doc().querySelector('[role=tab]'));await click('Instant search');await wait(() => doc().querySelector('[name=productLimit]'));
       assert(!doc().querySelector('[name=instantEnabled]'), 'Removed instant-search toggle is still shown');
-      await fill('productLimit', '3'); await fill('pageSize', '4'); await fill('manualSuggestions', 'Blue Dress\nRed Dress\n<script>'); await click('Save settings');
+      await fill('productLimit', '3');await fill('manualSuggestions', 'Blue Dress\nRed Dress\n<script>');await click('Search results'); await fill('pageSize', '4');await click('Save settings');
       await wait(() => doc().body.textContent.includes('Search settings saved.'));
       assert((await read()).productLimit === 3, 'Product count not saved');
-      await navigate('/admin-ui'); await wait(() => doc().querySelector('[name=productLimit]'));
+      await navigate('/admin-ui');await wait(() => doc().querySelector('[role=tab]'));await click('Instant search');await wait(() => doc().querySelector('[name=productLimit]'));
       assert(doc().querySelector('[name=productLimit]').value === '3', 'Reload lost saved count');
     });
     await test('manual suggestions show in order, escape markup, and honor blacklist', async () => {
@@ -34,6 +34,16 @@ window.runSettingsChecks = async () => {
       assert(!list.textContent.includes('Red Dress'), 'Blacklisted manual term visible');
       assert(list.textContent.includes('<script>') && !list.querySelector('script'), 'Manual markup unsafe');
       assert(list.textContent.indexOf('Blue Dress') < list.textContent.indexOf('<script>'), 'Manual order changed');
+    });
+    await test('advanced instant layout and custom results path survive a reload', async () => {
+      await save({instantLayout:'two-columns',productColumn:'right',instantColumns:3,searchResultsPath:'/pages/find-dresses',showPopularProducts:false});
+      await navigate('/');await open();
+      const modal=doc().querySelector('.cfp-search-modal');
+      assert(modal.dataset.cfpLayout==='two-columns','Layout setting was ignored');
+      assert(modal.dataset.cfpProductColumn==='right','Product column setting was ignored');
+      assert(modal.style.getPropertyValue('--cfp-instant-columns')==='3','Column count was ignored');
+      assert(win().cfpSearchResultUrl('cocktail dress')==='/pages/find-dresses?q=cocktail%20dress','Custom results URL was ignored');
+      await save({instantLayout:'fullscreen',productColumn:'left',instantColumns:4,searchResultsPath:'/search',showPopularProducts:true});
     });
     await test('instant product count and typed suggestion/collection counts apply', async () => {
       await save({ suggestionLimit: 2, collectionLimit: 2 }); await navigate('/'); await open(); await query('blue');
@@ -93,7 +103,7 @@ window.runSettingsChecks = async () => {
       assert(doc().querySelector('.cfp-product-card__badge'), 'Search settings hid collection badges');
     });
     await test('restoring defaults through actual editor removes saved overrides', async () => {
-      await navigate('/admin-ui'); await wait(() => doc().querySelector('[name=productLimit]')); await click('Restore defaults');
+      await navigate('/admin-ui'); await wait(() => doc().querySelector('[role=tab]')); await click('Restore defaults');
       await wait(() => doc().body.textContent.includes('restored to defaults')); assert(await read() === null, 'Saved row not removed');
       await navigate('/'); await open(); await query('blue'); await wait(() => instantCards().length === 6);
     });
@@ -105,7 +115,7 @@ window.runSettingsChecks = async () => {
     });
     await test('narrow admin layout fits and no storefront JavaScript errors occurred', async () => {
       assert(win().browserErrors.length === 0, win().browserErrors.join('; '));
-      frame.style.width = '375px'; await navigate('/admin-ui'); await wait(() => doc().querySelector('[name=pageSize]'));
+      frame.style.width = '375px'; await navigate('/admin-ui'); await wait(() => doc().querySelector('[role=tab]'));
       assert(doc().documentElement.scrollWidth <= 375, 'Admin overflows mobile frame');
     });
   } finally { await control({ fail: false, slow: false, blacklist: [] }); frame.remove(); }

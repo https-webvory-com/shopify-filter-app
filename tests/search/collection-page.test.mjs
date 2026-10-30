@@ -219,7 +219,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     },
   };
   const source = (await fs.readFile("app/routes/api.filter.jsx", "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => null })');
-  const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require: name => {
+  const context = { module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require: name => {if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;

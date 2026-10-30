@@ -11,6 +11,8 @@ import { spellingCorrection } from '../../app/utils/spellingCorrection.js';
 export async function load(file, mocks) {
   const {code} = await transform(await fs.readFile(file, 'utf8'), {loader:'jsx',format:'cjs'});
   const context = {module:{exports:{}},exports:{},URL,Response,console:{error(){}},require:name=>{
+    if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),configuredSuggestions:async()=>null};
+    if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:product=>product};
     if (!(name in mocks)) throw Error('Unexpected import '+name);
     return mocks[name];
   }};

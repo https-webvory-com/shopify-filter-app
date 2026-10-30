@@ -19,7 +19,7 @@ import { buildCollectionSequence, readRankedCollectionPage, hydrateCollectionPri
 
 async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => testParsedQuery })');
-  const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {
+  const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;

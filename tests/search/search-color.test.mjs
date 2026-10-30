@@ -74,6 +74,7 @@ test('parser facets and color aliases are isolated by shop',async()=>{
     '../db.server':{default:{mergedValue:{findMany:async({where})=>where.shop==='shop-a'?[{filterType:'Color',targetValue:'Blue',sourceValues:['Navy']}]:[]}}},
     '../utils/searchColor.js':color,
     '../utils/skuSearch.js':skuSearch
+    ,'./searchIndex.server.js':{getSearchIndexContext:async()=>({settings:null})}
   };
   const context={module:{exports:{}},exports:{},console,require:name=>({__esModule:true,...mocks[name]})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/queryParser.server.js','utf8'),{format:'cjs'})).code,context);
@@ -88,6 +89,8 @@ test('instant endpoint constrains semantic retrieval and rejects wrong-color pin
   const intent=color.resolveSearchColor('blue wedding dress',['Slate Blue']);
   const variants=[{id:'1',option1:'Wine',available:true,imageUrl:'wine.jpg'}, {id:'2',option1:'Slate Blue',available:true,imageUrl:'blue.jpg',price:55}];
   const mocks={
+    '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null},
+    '../utils/searchConfiguration.js':{publicSearchProduct:p=>p},
     'react-router':{data:(value,init)=>Response.json(value,init)},
     '../utils/searchColor.js':color,'../utils/searchSuggestions.js':{buildSearchSuggestions},'../utils/spellingCorrection.js':{spellingCorrection},
     '../services/queryParser.server.js':{parseQuery:async()=>({colorIntent:intent,colorFilter:color.colorSearchFilter(intent)})},

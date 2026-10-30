@@ -1,5 +1,6 @@
 const upgradedShops=new Set();
 export async function processCollectionRankingJob(job, {prepare,warm,schedule,facts}) {
+  if(['SEARCH_INDEX_BUILD','SEARCH_INDEX_PRODUCTS','SEARCH_INDEX_RETIRE'].includes(job.name))return (await import('../services/searchIndex.server.js')).processSearchIndexJob(job.data);
   if(job.name==='COLLECTION_FACTS_REFRESH')return facts(job.data);
   if(job.name==='COLLECTION_RANKING_PREPARE'){
     const result=await prepare(job.data);

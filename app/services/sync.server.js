@@ -9,6 +9,7 @@ import { isStorefrontProduct } from "../utils/storefrontProduct.js";
 import { syncErrorMessage, productSyncJobWhere } from "../utils/syncError.js";
 import { searchIndexProjection, SEARCH_FILTER_FIELDS } from '../utils/searchIndexProjection.js';
 import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
+import {scheduleSearchIndexProducts} from './searchIndex.server.js';
 
 /**
  * Format products and push to Meilisearch index.
@@ -92,6 +93,7 @@ export async function formatAndPushToMeili(products) {
   try {
     const index = meiliClient.index("products");
     const task = await index.addDocuments(await withCollectionRuleFacts(documents.map(p => ({ ...p, ...searchIndexProjection(p) }))));
+    for(const shop of new Set(products.map(p=>p.shop)))await scheduleSearchIndexProducts(shop,documents.filter(p=>p.shop===shop).map(p=>p.id),task.taskUid);
     console.log(
       `CFP: Pushed ${documents.length} products to Meilisearch (Task ID: ${task.taskUid})`,
     );
@@ -548,7 +550,8 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       if (unpublishedProducts.length > 0) {
         for (const p of unpublishedProducts) {
           const numericId = p.id.split("/").pop();
-          await meiliClient.index("products").deleteDocument(numericId);
+          const deletion=await meiliClient.index("products").deleteDocument(numericId);
+          await scheduleSearchIndexProducts(shop,[numericId],deletion?.taskUid);
           await prisma.product.deleteMany({ where: { shop, id: p.id } });
           console.log(`CFP: Removed unpublished product ${p.id} from DB/Meili`);
         }
@@ -675,6 +678,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
             const task = await meiliClient.index("products").addDocuments(await withCollectionRuleFacts(meiliDocs.map(p => ({ ...p, ...searchIndexProjection(p) }))));
             const indexed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
             if (indexed.status !== "succeeded") throw new Error("Product indexing failed: " + (indexed.error?.code || indexed.status));
+            await scheduleSearchIndexProducts(shop,meiliDocs.map(p=>p.id),task.taskUid);
             console.log(
               `CFP: Pushed ${meiliDocs.length} docs to Meilisearch (Task ID: ${task.taskUid})`,
             );
@@ -1059,6 +1063,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
       const numericId = productId.split("/").pop();
       const task=await meiliClient.index("products").deleteDocument(numericId);
       if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product removal indexing failed');}
+      await scheduleSearchIndexProducts(shop,[numericId],task.taskUid);
       console.log(`CFP: Deleted document ${numericId} from Meilisearch`);
     } catch (e) {
       console.error("CFP: Failed to delete document from Meilisearch", e);
@@ -1174,6 +1179,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
       .addDocuments(await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }]))
       .then(async (task) => {
         if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product indexing failed');}
+        await scheduleSearchIndexProducts(shop,[meiliDoc.id],task.taskUid);
         console.log(
           `CFP: Pushed product ${meiliDoc.id} to Meilisearch (Task ID: ${task.taskUid})`,
         );

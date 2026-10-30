@@ -39,6 +39,8 @@ import {mappedFacetValue,expandMappedFacetValues} from '../utils/facetNormalizat
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
+import {getSearchIndexContext} from '../services/searchIndex.server.js';
+import {publicSearchProduct} from '../utils/searchConfiguration.js';
 
 /**
  * Storefront Filtering API — OPTIMIZED
@@ -860,6 +862,7 @@ export const loader = async ({ request, context }) => {
     }
     let extraCounts={};
     let saleCounts = {};
+    if(isSearch)for(const query of queries)query._cfpSearchSurface=true;
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
     if (useRankedCollectionPagination && !context?.rankingWarmup) {
@@ -1790,6 +1793,7 @@ export const loader = async ({ request, context }) => {
       },
     };
 
+    if(isSearch||searchQuery){const searchContext=await getSearchIndexContext(shop);responsePayload.products=responsePayload.products.map(p=>publicSearchProduct(p,searchContext.settings));}
     if(cardsOnly){
       if(pinnedPrefix){
         if(await getCollectionHeadVersion(preparedSpec)!==pinnedPrefixVersion)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});

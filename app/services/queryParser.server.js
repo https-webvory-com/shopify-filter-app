@@ -4,6 +4,7 @@ import { getCached } from "./shopCache.server.js";
 import prisma from "../db.server";
 import { resolveSearchColor, colorSearchFilter } from "../utils/searchColor.js";
 import {isProductCodeQuery,skuSearchWhere} from '../utils/skuSearch.js';
+import {getSearchIndexContext} from './searchIndex.server.js';
 
 export async function initializeParserCache(shop) {
   if (!shop) throw new Error("Query parser requires a shop");
@@ -26,7 +27,9 @@ export async function initializeParserCache(shop) {
 export async function parseQuery(query, shop) {
   if (!query || typeof query !== 'string') return null;
 
-  if(isProductCodeQuery(query)){
+  const context=await getSearchIndexContext(shop);
+  const searchable=context.settings?.fields.filter(f=>f.search&&f.weight>0);
+  if(isProductCodeQuery(query)&&(!searchable||searchable.some(f=>f.key==='sku'))){
     const ids=await getCached(`skuSearch:${shop}:${JSON.stringify(query.trim().toLowerCase())}`,async()=>{
       const rows=await prisma.product.findMany({where:skuSearchWhere(shop,query),select:{id:true}});
       return rows.map(row=>String(row.id).split('/').pop());
@@ -44,12 +47,13 @@ export async function parseQuery(query, shop) {
   let detectedTypes = [];
 
   const aliases = await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } }));
-  const colorIntent = resolveSearchColor(query, cache.colors, aliases);
+  const colorEnabled=!searchable||searchable.some(f=>f.key==='option:*'||/^option:colou?r$/i.test(f.key));
+  const colorIntent = resolveSearchColor(query, colorEnabled?cache.colors:[], colorEnabled?aliases:[]);
   const queryColorWords = colorIntent.requested;
   detectedColors = colorIntent.values;
 
   // Detect vendors
-  for (const v of cache.vendors) {
+  for (const v of (!searchable||searchable.some(f=>f.key==='vendor')?cache.vendors:[])) {
     if (v.trim() === '') continue;
     const vLower = v.toLowerCase();
     // Use word boundaries so "Mac" doesn't match "Machine"
@@ -60,7 +64,7 @@ export async function parseQuery(query, shop) {
   }
 
   // Detect types
-  for (const t of cache.productTypes) {
+  for (const t of (!searchable||searchable.some(f=>f.key==='productType')?cache.productTypes:[])) {
     if (t.trim() === '') continue;
     const tLower = t.toLowerCase();
     const regex = new RegExp(`(^|[^a-z])${escapeRegExp(tLower)}([^a-z]|$)`);

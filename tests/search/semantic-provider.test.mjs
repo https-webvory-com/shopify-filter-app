@@ -9,6 +9,7 @@ async function fixture(embedders, env = {}) {
   const calls = [], keys = [];
   const index = {getEmbedders:async()=>embedders,search:async(q,params)=>{calls.push({q,...params});return {hits:[]};}};
   const mocks = {
+    './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:q.indexUid||'products'}))},
     './meiliClient.server':{__esModule:true,default:{index:()=>index,multiSearch:async({queries})=>{calls.push(...queries);return {results:[]};}}},
     './shopCache.server':{getCached:async(key,read)=>{keys.push(key);return read();}},
     '../utils/semanticSearch.js':{...helpers,semanticProvider:()=>helpers.semanticProvider(env)},
@@ -35,7 +36,7 @@ test('OpenAI queries and facet batches use only the OpenAI embedder', async () =
   assert.deepEqual(Array.from(service.calls[1].filter),["shop = 'fixture'"]);
   assert.equal(service.calls[2].hybrid.embedder,'openai');
   assert.equal(service.calls[3].hybrid,undefined);
-  assert.ok(service.keys.every(key=>key.endsWith(':openai')));
+  assert.ok(service.keys.every(key=>key.endsWith(':openai:products')));
 });
 
 test('explicit Gemini selection and disabling semantic search are respected', async () => {

@@ -17,6 +17,7 @@ import * as collectionNavigation from '../../../app/utils/collectionNavigation.j
 import * as marketAvailability from '../../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../../app/utils/collectionFilterMembership.js';
 import * as skuSearch from '../../../app/utils/skuSearch.js';
+import * as searchConfiguration from '../../../app/utils/searchConfiguration.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
@@ -26,6 +27,8 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;
     if(name==='../utils/facetNormalization.js')return facetNormalization;
     if(name==='node:crypto')return {createHash};
+    if(name==='../utils/searchConfiguration.js')return searchConfiguration;
+    if(!(name in mocks)&&(name==='./searchIndex.server.js'||name==='../services/searchIndex.server.js'))return {prepareConfiguredSearchQueries:async queries=>queries.map(({_cfpSearchSurface,...q})=>({...q,indexUid:q.indexUid||'products'})),getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),scheduleSearchIndex:async()=>{},resetSearchIndexContext:async()=>{},retireSearchIndexes:async()=>{},syncConfiguredSearchSynonyms:async()=>{},getSearchIndexStatus:async()=>({phase:'default'}),configuredSuggestions:async()=>null};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;

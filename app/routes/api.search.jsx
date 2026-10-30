@@ -15,6 +15,8 @@ import { semanticSearch } from "../services/semanticSearch.server";
 import { instantSearchCard, INSTANT_SEARCH_INDEX_FIELDS } from "../utils/instantSearchCard.js";
 import { createHash } from 'node:crypto';
 import { searchCacheHeaders } from '../utils/searchCachePolicy.js';
+import {getSearchIndexContext,configuredSuggestions} from '../services/searchIndex.server.js';
+import {publicSearchProduct} from '../utils/searchConfiguration.js';
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -84,6 +86,7 @@ export const loader = async ({ request }) => {
     }
 
     let meiliSearchParams = {
+        _cfpSearchSurface:true,
         filter: meiliFilters,
         limit: limit + 20, // Request extra to compensate for post-filtering
         facets: ["tags", "productType"],
@@ -219,7 +222,9 @@ export const loader = async ({ request }) => {
     }
     const rawSuggestionLimit = url.searchParams.get('suggestionLimit');
     const suggestionLimit = rawSuggestionLimit !== null && /^\d+$/.test(rawSuggestionLimit) ? Math.min(10, Number(rawSuggestionLimit)) : 6;
-    suggestions = suggestionBlacklist === null || suggestionLimit === 0 ? [] : buildSearchSuggestions(searchQuery, activeResults, suggestions, suggestionLimit, suggestionBlacklist);
+    let configured=null;
+    try{configured=await configuredSuggestions(shop,searchQuery,suggestionLimit,meiliFilters);}catch(error){console.error('Configured search suggestions unavailable:',error.name);configured=[];}
+    suggestions = suggestionBlacklist === null || suggestionLimit === 0 ? [] : buildSearchSuggestions(searchQuery,configured===null?activeResults:[],configured===null?suggestions:configured,suggestionLimit,suggestionBlacklist);
 
     // Contextual Pricing
     let contextualPricingApplied = false;
@@ -287,11 +292,12 @@ export const loader = async ({ request }) => {
       }
     }
 
+    const searchContext=await getSearchIndexContext(shop);
     return data({
       query: query,
       totalCount: activeResults.length,
       pinnedCount: activeResults.filter(p => p.isPinned).length,
-      products: activeResults.map(instantSearchCard),
+      products: activeResults.map(p=>instantSearchCard(publicSearchProduct(p,searchContext.settings))),
       suggestions: suggestions,
       didYouMean: didYouMean,
       contextualPricingApplied: contextualPricingApplied,

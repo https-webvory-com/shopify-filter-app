@@ -21,7 +21,7 @@ function storage(){
 function fixture(store=storage()){
  const calls=[];const elements=new Map();
  const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'blue dress',style:{},classList:{add(){},remove(){}},addEventListener(){}});return elements.get(id);};
- const context={sessionStorage:store,Date,URL,location:{href:'https://shop.test/'},window:{Shopify:{country:'US',currency:{active:'USD'},locale:'en'}},document:{getElementById:element},mainInput:element('cfp-main-search-input'),shopDomain:'fixture',CONFIG:{apiUrl:'https://api.test/api/search',productLimit:6},console:{error(){}},renderRecentSearches(){},renderLoading:flag=>calls.push(['loading',flag]),renderCollections:()=>calls.push(['collections']),renderProducts:async()=>calls.push(['products']),renderSuggestions:suggestions=>calls.push(['suggestions',Array.from(suggestions)]),fetch:async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')?{products:[{title:'Blue dress'}],suggestions:['Blue formal dress']}:{resources:{results:{collections:[]}}}})};
+ const context={applySearchDisplaySettings(){},renderPages(){},closeModal(){},sessionStorage:store,Date,URL,location:{href:'https://shop.test/'},window:{Shopify:{country:'US',currency:{active:'USD'},locale:'en'}},document:{getElementById:element},mainInput:element('cfp-main-search-input'),shopDomain:'fixture',CONFIG:{apiUrl:'https://api.test/api/search',productLimit:6},console:{error(){}},renderRecentSearches(){},renderLoading:flag=>calls.push(['loading',flag]),renderCollections:()=>calls.push(['collections']),renderProducts:async()=>calls.push(['products']),renderSuggestions:suggestions=>calls.push(['suggestions',Array.from(suggestions)]),fetch:async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')?{products:[{title:'Blue dress'}],suggestions:['Blue formal dress']}:{resources:{results:{collections:[]}}}})};
  vm.createContext(context);vm.runInContext(helpers+search+defaults,context);
  return {context,calls,element,store};
 }
@@ -156,7 +156,7 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../services/rateLimiter.server':{rateLimit:async()=>true},
   '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
  };
- const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>{if(!(name in mocks))throw Error(name);return mocks[name];}};
+ const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext(code,context);
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
  assert.equal(response.status,200);

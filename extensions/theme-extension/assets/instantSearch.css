@@ -19,6 +19,17 @@
   backdrop-filter: blur(2px);
 }
 
+/* Store-specific layouts keep all rules inside the instant-search modal. */
+.cfp-search-modal[data-cfp-layout="two-columns"]{max-width:1120px;left:50%;right:auto;transform:translate(-50%,-100%);}
+.cfp-search-modal[data-cfp-layout="two-columns"].cfp-open{transform:translate(-50%,0);}
+.cfp-search-modal[data-cfp-layout="grid"] .cfp-search-body.cfp-has-results{flex-direction:column;gap:24px;}
+.cfp-search-modal[data-cfp-layout="grid"] .cfp-search-column-left,
+.cfp-search-modal[data-cfp-layout="grid"] .cfp-search-column-right{width:100%;flex:auto;max-width:none;border:0;padding:0;}
+.cfp-search-modal[data-cfp-product-column="right"] .cfp-search-column-left{order:2;}
+.cfp-search-modal[data-cfp-product-column="right"] .cfp-search-column-right{order:1;}
+@media(min-width:769px){.cfp-search-modal[data-cfp-layout] .cfp-search-product-grid{grid-template-columns:repeat(var(--cfp-instant-columns,4),minmax(0,1fr));}}
+@media(max-width:768px){.cfp-search-modal[data-cfp-layout="two-columns"]{width:100%;max-width:none;}.cfp-search-modal[data-cfp-product-column] .cfp-search-column-left,.cfp-search-modal[data-cfp-product-column] .cfp-search-column-right{order:initial;}}
+
 .cfp-search-modal-overlay.cfp-open {
   opacity: 1;
   visibility: visible;
