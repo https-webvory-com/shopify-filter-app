@@ -105,7 +105,7 @@ async function renderDashboard(data, stats = null) {
 test("completed store renders its dashboard without a sync status error",async()=>{
   const data=await routeFixture({id:"completed-store",status:"COMPLETED",productsProcessed:51,totalProducts:51,completedAt:new Date()});
   const html=await renderDashboard(data);
-  assert.match(html,/Fully Synced/);
+  assert.match(html,/Last sync completed/);
   assert.ok(!html.includes("Sync did not complete"));
 });
 
