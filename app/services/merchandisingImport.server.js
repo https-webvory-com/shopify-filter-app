@@ -1,6 +1,7 @@
 import prisma from '../db.server';
 import { normalizeCondition, validConditions, resolveCollectionTargets } from '../utils/merchandisingCondition.js';
 import { importRowInfo, importWriteError } from '../utils/csvImportReport.js';
+import { parseMarketRuleCountries } from '../utils/marketRuleCountries.js';
 
 export async function importMerchandisingRules(shop, rules, ruleType) {
   if (!Array.isArray(rules)) throw Error('Rules must be an array.');
@@ -25,7 +26,7 @@ export async function importMerchandisingRules(shop, rules, ruleType) {
       for (const key of ['startDate', 'endDate']) if (!reason && rule[key] && !Number.isFinite(Date.parse(rule[key]))) reason = `${key === 'startDate' ? 'Start' : 'End'} date is invalid.`;
       if (!reason && rule.startDate && rule.endDate && Date.parse(rule.startDate) > Date.parse(rule.endDate)) reason = 'End date is earlier than start date.';
       if (reason) { report.skipped++; report.errors.push({ ...info, reason }); continue; }
-      const data = { name: rule.name.trim(), status: rule.status !== false, collections: rule.collections || [], searchQueries: rule.searchQueries || [], customerTags: rule.customerTags || '', locales: rule.locales || '', startDate: rule.startDate ? new Date(rule.startDate) : null, endDate: rule.endDate ? new Date(rule.endDate) : null };
+      const data = { name: rule.name.trim(), status: rule.status !== false, collections: rule.collections || [], searchQueries: rule.searchQueries || [], customerTags: rule.customerTags || '', locales: rule.locales || '', countries: parseMarketRuleCountries(rule.countries), startDate: rule.startDate ? new Date(rule.startDate) : null, endDate: rule.endDate ? new Date(rule.endDate) : null };
       if (hasOrdinal) data.ordinal = ordinal;
       // Replace conditions atomically; a failed edit must not delete the saved rule.
       const updated = await prisma.$transaction(async tx => {

@@ -20,6 +20,7 @@ export default function CreateRuleModal({
   const [customerTags, setCustomerTags] = useState("");
   const [customerTagInput, setCustomerTagInput] = useState("");
   const [locales, setLocales] = useState("");
+  const [countries, setCountries] = useState("");
   const [ruleRules, setRuleRules] = useState([{ action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
   const [isCollectionDropdownOpen, setIsCollectionDropdownOpen] = useState(false);
   const [collectionSearch, setCollectionSearch] = useState("");
@@ -47,6 +48,7 @@ export default function CreateRuleModal({
     setCustomerTags("");
     setCustomerTagInput("");
     setLocales("");
+    setCountries("");
     setRuleRules([{ action: "Boost", field: "", value: "", operator: "Operator", operand: "", dateValue: "" }]);
     setIsCollectionDropdownOpen(false);
     setCollectionSearch("");
@@ -71,6 +73,7 @@ export default function CreateRuleModal({
         setRuleName(ruleToEdit.name || "");
         setCustomerTags(ruleToEdit.customerTags || "");
         setLocales(ruleToEdit.locales || "");
+        setCountries((ruleToEdit.countries || []).join(', '));
         setSelectedCollections(ruleToEdit.collections || []);
         setSelectedCollectionIds(ruleToEdit.collectionIds?.length ? ruleToEdit.collectionIds : (ruleToEdit.collections || []).flatMap(title => {
           const matches = shopifyCollections.filter(c => c.title === title);
@@ -118,6 +121,7 @@ export default function CreateRuleModal({
         setRuleName("");
         setCustomerTags("");
         setLocales("");
+        setCountries("");
         setRuleRules([{ action: "Boost", field: "", value: "", value2: "", operator: "Operator", operand: "", dateValue: "" }]);
         setIsCollectionDropdownOpen(false);
         setCollectionSearch("");
@@ -140,6 +144,7 @@ export default function CreateRuleModal({
       collectionIds: JSON.stringify(selectedCollectionIds),
       customerTags,
       locales,
+      countries,
       startDate: isDateRangeChecked ? startDate : null,
       endDate: isDateRangeChecked ? endDate : null,
       conditions: JSON.stringify(ruleRules)
@@ -217,6 +222,7 @@ export default function CreateRuleModal({
 
         {/* Modal Body */}
         <div style={{ padding: "0 32px 32px 32px", display: "flex", flexDirection: "column", gap: "20px", paddingBottom: "250px" }}>
+          {fetcher.data?.error && <p role="alert" style={{ color: '#b42318', margin: 0 }}>{fetcher.data.error}</p>}
           
           {/* Rule Name */}
           <div>
@@ -413,6 +419,11 @@ export default function CreateRuleModal({
             </div>
           </div>
 
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>Apply to countries</label>
+            <input value={countries} onChange={event => setCountries(event.target.value)}
+              placeholder="US, GB (blank means all countries)" style={{ width: '100%', padding: '9px 12px' }} />
+          </div>
           {/* Apply to locales */}
           <div>
             <label style={{ display: "flex", alignItems: "center", fontSize: "14px", fontWeight: "500", color: "#202223", marginBottom: "6px" }}>

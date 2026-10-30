@@ -11,7 +11,8 @@ function fixture(options={}){
  const url='https://api.test/api/filter?shop='+shop+'&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-preview-v1';
  const headers={Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'};
  const request=(changes={})=>{const u=new URL(url);for(const[k,v]of Object.entries(changes))u.searchParams.set(k,v);return new Request(u,{headers});};
- const store=createPublishedCollectionPages({...options,now:()=>time,redis:{get:async k=>values.get(k),setex:async(k,_ttl,v)=>values.set(k,v)},
+ const store=createPublishedCollectionPages({...options,now:()=>time,redis:{get:async k=>values.get(k),setex:async(k,_ttl,v)=>values.set(k,v),
+   set:async(k,v,mode)=>{if(mode!=='NX'||!values.has(k))values.set(k,v);},del:async k=>values.delete(k)},
   saveDurable:async row=>{const old=rows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;rows.set(row.key,row);return true;},
   loadDurable:async({shop:tenant,key})=>[...rows.values()].find(r=>r.shop===tenant&&r.aliases.includes(key))?.payload,
   createSession:(req,entry)=>{sessionCalls++;return sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata);},
@@ -31,7 +32,7 @@ test('background coverage probe recognizes a complete published fifty without cr
  assert.equal(f.sessionCalls(),0);assert.equal(f.values.size,before);
  assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true,marketAvailabilityVersion:'in-v2'}),null);
 });
-test('a scoped catalog change retires only its collection publication until a complete replacement is saved',async()=>{
+test('a scoped catalog change serves old cards while requiring a complete replacement',async()=>{
  let invalidatedAt=0;
  const f=fixture({readCatalogInvalidatedAt:async(_shop,id)=>id==='1'?invalidatedAt:0});
  await f.publish();
@@ -39,9 +40,41 @@ test('a scoped catalog change retires only its collection publication until a co
  invalidatedAt=f.now();
  assert.equal(await f.store.get(f.request(),{probe:true}),null);
  const stalePageTwo=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
- assert.equal(stalePageTwo.status,409);
+ assert.equal(stalePageTwo.status,200);
+ const staleFirst=await(await f.store.get(f.request())).json();
+ assert.equal(staleFirst.cfpCards.refreshDue,true);
+ assert.equal(staleFirst.products[0].title,'Dress 1');
  f.advance(1);await f.publish();
  assert.equal((await f.store.get(f.request(),{probe:true}))?.headers.get('X-CFP-Collection-Cards'),'published');
+});
+test('a country rule edit refreshes only that market while old cards remain visible',async()=>{
+ let usMarker=0;
+ const f=fixture({readMarketRuleInvalidatedAt:async(_shop,country)=>country==='US'?usMarker:0});
+ await f.publish({request:f.request({country:'US',limit:'50',responseProfile:'collection-cards-v1'})});
+ await f.publish();
+ usMarker=f.now();
+ assert.equal((await f.store.get(f.request())).status,200);
+ const us=await(await f.store.get(f.request({country:'US'}))).json();
+ assert.equal(us.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request({country:'US',limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
+ assert.equal((await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}))?.status,200);
+});
+test('outside pins or Include candidates refresh on product changes without hiding old cards',async()=>{
+ let revision='old';
+ const f=fixture({readExternalProof:async()=>revision});
+ await f.publish({external:true});
+ revision='new';
+ const old=await(await f.store.get(f.request())).json();
+ assert.equal(old.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
+ f.advance(1);await f.publish({external:true});
+ assert.equal((await f.store.get(f.request(),{probe:true}))?.status,200);
+});
+test('an external product change during preparation cannot publish an obsolete order',async()=>{
+ const f=fixture({readExternalProof:async()=> 'd1.new'});
+ const descriptor={version:1,tokens:['t'+'a'.repeat(64)]};
+ assert.equal(await f.publish({external:true,prepared:{ids:f.ids,metadata:{},externalDependencies:descriptor,reusableDataRevision:'0:0:d1.old'}}),false);
+ assert.equal(f.rows.size,0);
 });
 
 test('All products publishes 50 cards and serves two country-isolated 25-card pages',async()=>{
@@ -95,6 +128,28 @@ test('country publications retain fast 25/50-card serving and reject an obsolete
  const stale=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}),{marketAvailabilityVersion:'india-v2'});
  assert.equal(stale.status,409);
  assert.equal(await f.store.get(f.request({country:'US'}),{marketAvailabilityVersion:'usa-v1'}),null);
+});
+
+test('changed country stock keeps a complete old page briefly while a replacement is prepared',async()=>{
+ const f=fixture();await f.publish({marketAvailabilityVersion:'india-v1'});
+ const stale=await(await f.store.get(f.request(),{marketAvailabilityVersion:'india-v2',allowStaleMarket:true})).json();
+ assert.equal(stale.products.length,25);
+ assert.equal(stale.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true,marketAvailabilityVersion:'india-v2',allowStaleMarket:true}),null);
+ f.advance(600000);
+ assert.equal(await f.store.get(f.request(),{marketAvailabilityVersion:'india-v2',allowStaleMarket:true}),null);
+ f.advance(1);await f.publish({marketAvailabilityVersion:'india-v2'});
+ assert.equal((await f.store.get(f.request(),{marketAvailabilityVersion:'india-v2'})).status,200);
+});
+
+test('an unchanged stock refresh resets the brief stale-stock window',async()=>{
+ const f=fixture();await f.publish({marketAvailabilityVersion:'india-v1'});
+ assert.equal((await f.store.get(f.request(),{marketAvailabilityVersion:null,allowStaleMarket:true})).status,200);
+ f.advance(400000);
+ assert.equal((await f.store.get(f.request(),{marketAvailabilityVersion:'india-v1'})).status,200);
+ await Promise.resolve();
+ f.advance(400000);
+ assert.equal((await f.store.get(f.request(),{marketAvailabilityVersion:null,allowStaleMarket:true})).status,200);
 });
 
 test('page two retains its published version across replacement and rejects tokens from another context',async()=>{
@@ -155,13 +210,15 @@ test('published cards decline safely when current settings cannot be read',async
  const f=fixture({readGlobalSettings:async()=>{throw Error('unavailable');}});await f.publish();assert.equal(await f.store.get(f.request()),null);
 });
 
-test('new visits reject old pin and merchandising configurations and prioritize a replacement',async()=>{
+test('new visits retain old pin and merchandising cards while prioritizing a replacement',async()=>{
  let revision='one';const f=fixture({readConfigurationRevision:async()=>revision});await f.publish({configuration:'one'});
  const first=await(await f.store.get(f.request())).json();revision='two';const hits=[];
- assert.equal(await f.store.get(f.request(),{onHit:value=>hits.push(value)}),null);
+ const stale=await(await f.store.get(f.request(),{onHit:value=>hits.push(value)})).json();
+ assert.equal(stale.cfpCards.refreshDue,true);
  await Promise.resolve();assert.equal(hits.length,1);assert.equal(hits[0].refreshDue,true);
+ assert.equal(await f.store.get(f.request(),{probe:true}),null);
  const second=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
- assert.equal(second.status,409);
+ assert.equal(second.status,200);
  f.advance(1);await f.publish({configuration:'two'});assert.equal((await f.store.get(f.request())).status,200);
 });
 

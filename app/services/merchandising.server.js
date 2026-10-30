@@ -1,4 +1,6 @@
 import prisma from "../db.server.js";
+const ruleAppliesToCountry = (rule, country) => !Array.isArray(rule?.countries) || !rule.countries.length ||
+  Boolean(country && rule.countries.includes(String(country).toUpperCase()));
 
 // Reuse a single literal alternation for a condition's option values. Building
 // a new regex for every value of every variant can monopolize the ranking worker.
@@ -58,6 +60,7 @@ export async function getActiveRuleForCollection(
   currentCustomerTags = [],
   locale = "",
   collectionId = "",
+  country = "",
 ) {
   if (!shop || !collectionTitle) return null;
 
@@ -120,6 +123,7 @@ export async function getActiveRuleForCollection(
 
   const applicableRules = [];
   for (const rule of matchingRules) {
+    if (!ruleAppliesToCountry(rule, country)) continue;
     if (rule.locales?.trim()) {
       const current = String(locale).trim().toLowerCase().replaceAll("_", "-");
       const allowed = rule.locales.split(",").map(v => v.trim().toLowerCase().replaceAll("_", "-"));
@@ -182,6 +186,7 @@ export async function getActiveRuleForSearch(
   searchQuery,
   currentCustomerTags = [],
   locale = "",
+  country = "",
 ) {
   if (!shop || !searchQuery) return null;
 
@@ -209,6 +214,7 @@ export async function getActiveRuleForSearch(
   const queryLower = searchQuery.toLowerCase().trim();
 
   for (const rule of rules) {
+    if (!ruleAppliesToCountry(rule, country)) continue;
     if (rule.locales?.trim()) {
       const locales = rule.locales.split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
       if (!locales.includes(locale.toLowerCase())) continue;

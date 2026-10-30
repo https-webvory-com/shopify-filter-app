@@ -21,7 +21,7 @@ import {getMarketAvailabilityState} from './marketAvailability.server.js';
 import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
 import {preparationKey} from '../utils/collectionPreparation.js';
 import {createCollectionHeadProofs} from '../utils/collectionHeadProofs.js';
-import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
+import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,marketRuleInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 async function readCollectionHeadVersion(spec){
   const shop=spec.shop,id=String(spec.collectionId).split('/').pop();
@@ -234,7 +234,7 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   if(!collectionIds||collectionIds.includes('all'))for(const market of markets.values()){
     const url=new URL(market);url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle','all');
     const record=normalizeCollectionWarmup(shop,url);if(!record)continue;
-    const marker=Number(await redis.get(catalogPublicationInvalidatedAtKey(shop,'all')))||0;
+    const marker=Math.max(Number(await redis.get(catalogPublicationInvalidatedAtKey(shop,'all')))||0,Number(await redis.get(marketRuleInvalidatedAtKey(shop,url.searchParams.get('country'))))||0);
     const jobPriority=await publicationPriority(record.url,marker);
     const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
     const job=await collectionRankingQueue.getJob(jobId);
@@ -249,6 +249,11 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
     await collectionRankingQueue.add('COLLECTION_RANKING_CATALOG',{shop,record},{jobId,priority:jobPriority,attempts:5,backoff:{type:'exponential',delay:10000}});
   }
   let cursor;
+  const marketRuleMarkers=new Map();
+  for(const market of markets.values()){
+    const country=new URL(market).searchParams.get('country');
+    if(country&&!marketRuleMarkers.has(country))marketRuleMarkers.set(country,Number(await redis.get(marketRuleInvalidatedAtKey(shop,country)))||0);
+  }
   for(;;){
     const rows=await prisma.collection.findMany({where:{shop,...(scopes?.length?{id:{in:scopes.map(id=>'gid://shopify/Collection/'+id)}}:{})},select:{id:true},orderBy:{id:'asc'},take:100,
       ...(cursor?{cursor:{id:cursor},skip:1}:{})});
@@ -257,7 +262,7 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
       const row=rows[index];
       const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
       const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
-      const jobPriority=await publicationPriority(record.url,Number(markers[index])||0);
+      const jobPriority=await publicationPriority(record.url,Math.max(Number(markers[index])||0,marketRuleMarkers.get(url.searchParams.get('country'))||0));
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){

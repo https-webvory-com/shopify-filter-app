@@ -78,8 +78,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
   if(current.length===10)current[9]=saved[9];
   return JSON.stringify(current)===entry.state;
  };
- async function get(request,{probe=false,publishedOnly=false,onHit,marketAvailabilityVersion=null}={}){
-  if(publishedPages){const published=await publishedPages.get(request,{probe,onHit,marketAvailabilityVersion});if(published)return published;}
+ async function get(request,{probe=false,publishedOnly=false,onHit,marketAvailabilityVersion=null,allowStaleMarket=false}={}){
+  if(publishedPages){const published=await publishedPages.get(request,{probe,onHit,marketAvailabilityVersion,allowStaleMarket});if(published)return published;}
   // A catalog job is complete only when its durable 50-card publication can
   // serve this market. A working card hit must not let the worker skip publish.
   if(publishedOnly)return null;
@@ -201,7 +201,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      const finalState=await readState(identity),finalPrepared=current(finalState,external);
      if(!finalPrepared||stateSignature(finalState,external)!==state||sequenceSignature(finalPrepared)!==sequence)return;
      if(pageSize===50&&publishedPages){
-      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
+      if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,external:entry.external,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null}))return false;
      }
      if(pageSize===50)await saveCards();
      for(const alias of aliases)if(alias){

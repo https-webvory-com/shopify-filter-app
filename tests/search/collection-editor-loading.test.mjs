@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import {loadModule} from './helpers/search-ranking.mjs';
 import {pinProductSearchFilter, pinProductTagSuggestions} from '../../app/utils/pinProductSearch.server.js';
 import {catalogImageUrls} from '../../app/utils/pinProductImages.js';
+import * as marketRuleCountries from '../../app/utils/marketRuleCountries.js';
+import * as merchandisingMarketInvalidation from '../../app/utils/merchandisingMarketInvalidation.js';
 
 const shop = 'fixture.myshopify.com';
 const normalize = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const common = prisma => ({
   '../utils/merchandisingSelection.js': {},
+  '../utils/marketRuleCountries.js': marketRuleCountries,
+  '../utils/merchandisingMarketInvalidation.js': merchandisingMarketInvalidation,
   '../shopify.server': {authenticate: {admin: async () => ({session: {shop}})}},
   '../db.server': {default: prisma}, 'react-router': {}, react: {},
   '../utils/availablePins.server.js': {}, '../utils/pinProductImageFallbacks.server.js': {},

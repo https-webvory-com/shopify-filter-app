@@ -91,11 +91,17 @@ export const loader = async ({ request, context }) => {
     const marketState=url.searchParams.get('responseProfile')==='collection-config-v1'
       ? {status:'disabled',version:null} : await getMarketAvailabilityState(shop,marketCountry);
     const marketVersion=marketState.version;
-    if(marketState.status==='pending')return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+    if(marketState.status==='pending'){
+      if(!context?.rankingWarmup&&isPublicCollectionCards(request)){
+        const retained=await getPreparedCollectionCards(request,{onHit:registerCollectionCardVisit,marketAvailabilityVersion:null,allowStaleMarket:true});
+        if(retained)return retained;
+      }
+      return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+    }
     if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
       // Trusted background rendering reuses only completed publications. A
       // working-card hit must not let a catalog job skip its durable publish.
-      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,publishedOnly:context?.rankingCardsPrecompute===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion});
+      const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,publishedOnly:context?.rankingCardsPrecompute===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion,allowStaleMarket:marketState.status==='ready'});
       if(ready)return ready;
     }
 
@@ -453,8 +459,8 @@ export const loader = async ({ request, context }) => {
         : getActivePinningRuleForCollection(shop, resolvedCollectionTitle, resolvedCollectionId),
 
       isSearch && searchQuery
-        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "")
-        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "", resolvedCollectionId),
+        ? getActiveRuleForSearch(shop, searchQuery, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "", country)
+        : getActiveRuleForCollection(shop, resolvedCollectionTitle, currentCustomerTags, url.searchParams.get("locale") || url.searchParams.get("language") || "", resolvedCollectionId, country),
     ]);
 
     // ── 5. Parse pinned IDs ────────────────────────────────────────────

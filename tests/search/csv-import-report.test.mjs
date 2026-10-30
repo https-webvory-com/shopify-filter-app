@@ -7,6 +7,8 @@ import vm from 'node:vm';
 import { transform } from 'esbuild';
 import * as reportHelpers from '../../app/utils/csvImportReport.js';
 import * as conditions from '../../app/utils/merchandisingCondition.js';
+import * as marketRuleCountries from '../../app/utils/marketRuleCountries.js';
+import * as merchandisingMarketInvalidation from '../../app/utils/merchandisingMarketInvalidation.js';
 import { postPinImportBatch, unconfirmedPinRows } from '../../app/utils/pinImportBatch.js';
 const plain = value => JSON.parse(JSON.stringify(value));
 export async function loadImportModule(file, mocks) {
@@ -17,6 +19,8 @@ export async function loadImportModule(file, mocks) {
     if (name in mocks) return mocks[name];
     if (name === '../utils/csvImportReport.js') return reportHelpers;
     if (name === '../utils/merchandisingCondition.js') return conditions;
+    if (name === '../utils/marketRuleCountries.js') return marketRuleCountries;
+    if (name === '../utils/merchandisingMarketInvalidation.js') return merchandisingMarketInvalidation;
     if (name.startsWith('../components/') || ['react', 'react-router', '@shopify/app-bridge-react', '@shopify/shopify-app-react-router/server', '../services/searchPicker.server.js'].includes(name)) return {};
     throw Error('Unexpected import ' + name);
   } };

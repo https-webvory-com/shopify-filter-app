@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {configurationRevisionKey,productRevisionKey,rankingDataRevisionKey,catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
+import {configurationRevisionKey,productRevisionKey,rankingDataRevisionKey,catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,marketRuleInvalidatedAtKey,isOwnedShopCache,productRankingFingerprint,createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
 
 const shop='fixture.myshopify.com';
 function fixture(){
@@ -36,10 +36,21 @@ test('product invalidation advances only relevant data versions and keeps usable
   f.values.set(`searchRankingCandidates:${shop}:query`,'old');
   await f.invalidate(shop,{kind:'products',collectionIds:['gid://shopify/Collection/1','1','all']});
   assert.equal(f.values.get(productRevisionKey(shop,'1')),'1');assert.equal(f.values.get(productRevisionKey(shop,'all')),'1');
+  assert.ok(Number(f.values.get(catalogPublicationInvalidatedAtKey(shop,'1')))>0);
+  assert.ok(Number(f.values.get(catalogPublicationInvalidatedAtKey(shop,'all')))>0);
+  assert.equal(f.values.has(catalogPublicationInvalidatedAtKey(shop,'2')),false);
   assert.equal(f.values.has(productRevisionKey(shop,'2')),false);assert.equal(f.values.has(configurationRevisionKey(shop)),false);
   assert.equal(f.values.get(prepared),'ranking');assert.equal(f.values.has(`availableVariants:${shop}:query`),false);
   assert.equal(f.values.has(`searchRankingCandidates:${shop}:query`),false);
   assert.deepEqual(f.calls,[[shop,['1','all']]]);
+});
+test('country merchandising invalidation marks only targeted markets',async()=>{
+ const f=fixture();
+ await f.invalidate(shop,{kind:'market-rule',countries:['US']});
+ assert.ok(Number(f.values.get(marketRuleInvalidatedAtKey(shop,'US')))>0);
+ assert.equal(f.values.has(marketRuleInvalidatedAtKey(shop,'GB')),false);
+ assert.equal(f.values.has(configurationRevisionKey(shop)),false);
+ assert.deepEqual(f.calls,[[shop,null]]);
 });
 test('no-op indexed updates have the same fingerprint while ranking-relevant changes differ',()=>{
   const product={id:'1',tags:['blue'],inventoryTotal:5,variantPrices:[{price:10,available:true}],updatedAt:1,_vectors:{openai:[1]}};

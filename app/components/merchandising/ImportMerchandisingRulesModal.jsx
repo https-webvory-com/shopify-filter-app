@@ -151,6 +151,7 @@ export default function ImportMerchandisingRulesModal({ isOpen, onClose, onSubmi
       collections,
       customerTags: customerTagsStr,
       locales: row["Locales"] || "",
+      countries: row["Countries"] || "",
       startDate: row["StartDate"] || null,
       endDate: row["EndDate"] || null,
       searchQueries,

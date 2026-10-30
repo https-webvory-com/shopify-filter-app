@@ -272,7 +272,8 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
   '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
   '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:()=>({get:async()=>null,publish:async()=>true})},
-  '../utils/shopCacheInvalidation.js':{catalogPublicationInvalidatedAtKey:()=>''},
+  '../utils/collectionDependencies.js':{createCollectionDependencies:()=>({revision:async()=>null}),dependencyAnyKey:()=>''},
+  '../utils/shopCacheInvalidation.js':{catalogPublicationInvalidatedAtKey:()=>'',marketRuleInvalidatedAtKey:()=>''},
  });
  assert.equal(adapter.beginPreparedCollectionCards({spec,preparedKey:'old-order-key'}),null);
  assert.equal(adapter.beginPreparedCollectionCards({spec}).preparedKey,preparationKey(spec));

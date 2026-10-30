@@ -6,6 +6,8 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
+import * as marketRuleCountries from "../../app/utils/marketRuleCountries.js";
+import * as merchandisingMarketInvalidation from "../../app/utils/merchandisingMarketInvalidation.js";
 
 const shop = "fixture.myshopify.com";
 const request = new Request("https://fixture.test/app/search");
@@ -21,6 +23,8 @@ async function loadRoute(file, { authenticate, prisma }) {
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
       if (name === '../services/merchandisingImport.server.js') return {};
+      if (name === '../utils/marketRuleCountries.js') return marketRuleCountries;
+      if (name === '../utils/merchandisingMarketInvalidation.js') return merchandisingMarketInvalidation;
       if (name === "../services/searchPicker.server.js") return {};
       if (name === "../services/shopCache.server") return {};
       if (name === "../shopify.server") return { authenticate: { admin: authenticate } };

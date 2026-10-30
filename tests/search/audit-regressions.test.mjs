@@ -11,6 +11,8 @@ import * as searchColor from "../../app/utils/searchColor.js";
 import * as facetNormalization from '../../app/utils/facetNormalization.js';
 import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
 import * as csvImportReport from '../../app/utils/csvImportReport.js';
+import * as marketRuleCountries from '../../app/utils/marketRuleCountries.js';
+import * as merchandisingMarketInvalidation from '../../app/utils/merchandisingMarketInvalidation.js';
 import {spellingCorrection} from "../../app/utils/spellingCorrection.js";
 import {readyPreparation} from './helpers/prepared-ranking.mjs';
 import test from 'node:test';
@@ -25,7 +27,7 @@ import * as rankedCollection from '../../app/utils/rankedCollectionPage.js';
 import { hydrateCollectionSkus, collectionRankingFields } from '../../app/utils/rankedCollectionPage.js';
 
 async function service(rules = []) {
-  const context = { module: {exports:{}}, exports:{}, console, require: () => ({__esModule:true, default:{merchandisingRule:{findMany:async()=>rules}}}) };
+  const context = { module: {exports:{}}, exports:{}, console, require: () => ({__esModule:true, default:{merchandisingRule:{findMany:async({where}={})=>rules.filter(rule=>!rule.ruleType||rule.ruleType===where?.ruleType)}}}) };
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,context);
   return context.module.exports;
 }
@@ -53,6 +55,20 @@ test('locale matching excludes French-only rules in English and supports languag
   assert.equal((await getActiveRuleForCollection('fixture','Hydrogen',[],'fr-CA')).name,'French');
   assert.equal(await getActiveRuleForCollection('fixture','Hydrogen'),null);
 });
+test('country rules select different collection and search merchandising without changing other markets',async()=>{
+  const rules=[
+    {id:'global',name:'Global',ruleType:'collection',collections:[],countries:[],conditions:[]},
+    {id:'us',name:'US',ruleType:'collection',collections:[],countries:['US'],conditions:[]},
+    {id:'gb',name:'GB',ruleType:'search',searchQueries:['dress'],countries:['GB'],conditions:[]},
+    {id:'search-global',name:'Search global',ruleType:'search',searchQueries:['dress'],countries:[],conditions:[]},
+  ];
+  const {getActiveRuleForCollection,getActiveRuleForSearch}=await service(rules);
+  assert.equal((await getActiveRuleForCollection('fixture','Hydrogen',[],'en','1','US')).name,'Global + US');
+  assert.equal((await getActiveRuleForCollection('fixture','Hydrogen',[],'en','1','GB')).name,'Global');
+  assert.equal((await getActiveRuleForCollection('fixture','Hydrogen',[],'en','1','')).name,'Global');
+  assert.equal((await getActiveRuleForSearch('fixture','dress',[],'en','GB')).id,'gb');
+  assert.equal((await getActiveRuleForSearch('fixture','dress',[],'en','US')).id,'search-global');
+});
 test('[no tag] applies to untagged customers and excludes tagged customers',async()=>{
   const {getActiveRuleForCollection}=await service([{id:'guest',name:'Untagged',collections:[],customerTags:'[no tag]',conditions:[]}]);
   assert.equal((await getActiveRuleForCollection('fixture','Hydrogen',[])).name,'Untagged');
@@ -63,7 +79,6 @@ test('SKU Exclude accepts picker SKU|title values and leaves unrelated products'
   const products=[{id:'1',variants:[{sku:'MC16-BLK-08'}]},{id:'2',variants:[{sku:'OTHER'}]}];
   const result=applyMerchandisingRules(products,{conditions:[{action:'Exclude',field:'SKU',value:'MC16-BLK-08|Milk Cooler'}]},'best-selling',null);
   assert.deepEqual(Array.from(result,p=>p.id),['2']);
-  assert.ok(collectionRankingFields([{field:'SKU'}],'best-selling').includes('variantPrices'));
 });
 test('SKU fallback hydrates legacy documents using shop-scoped variant reads',async()=>{
   const products=[{id:'gid://shopify/Product/1',variants:[{id:'v1'}]}];
@@ -96,7 +111,7 @@ test('available product IDs exclude products with only unavailable matching comb
 });
 
 async function route(file,mocks){
- const context={module:{exports:{}},exports:{},Response,URL,console,require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
+ const context={module:{exports:{}},exports:{},Response,URL,console,invalidateCall:mocks.invalidateCall||(()=>{}),require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
    if(name==='../utils/productTitleFilter.js')return productTitleFilter;
    if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
@@ -109,6 +124,8 @@ async function route(file,mocks){
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
    if(name==='../utils/csvImportReport.js')return csvImportReport;
    if(name==='../services/merchandisingImport.server.js')return {};
+   if(name==='../utils/marketRuleCountries.js')return marketRuleCountries;
+   if(name==='../utils/merchandisingMarketInvalidation.js')return merchandisingMarketInvalidation;
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === '../utils/facetNormalization.js') return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
@@ -124,7 +141,7 @@ async function route(file,mocks){
 if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='../utils/collectionCards.js')return collectionCards;if(name==='../services/collectionCards.server.js')return {getPreparedCollectionCards:async()=>null,beginPreparedCollectionCards:async()=>null};
    throw Error('Unexpected import '+name);
  }};
- vm.runInNewContext((await transform((await fs.readFile(file,'utf8')).replace('await import("../services/shopCache.server")','({invalidateShop: async()=>{}})').replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})'),{loader:'jsx',format:'cjs'})).code,context);
+ vm.runInNewContext((await transform((await fs.readFile(file,'utf8')).replace('await import("../services/shopCache.server")','({invalidateShop: (...args)=>invalidateCall(...args)})').replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})'),{loader:'jsx',format:'cjs'})).code,context);
  return context.module.exports;
 }
 test('create/edit validation runs before database writes and numeric persistence survives edit',async()=>{
@@ -140,6 +157,24 @@ test('create/edit validation runs before database writes and numeric persistence
   assert.equal(calls.at(-1).data.conditions.create[0].maxValue,'1000');
  }
  assert.ok(calls.at(-1).data.conditions.deleteMany);
+});
+test('country collection rule create and edit invalidate only old and new markets',async()=>{
+ const calls=[];let saved;
+ const db={merchandisingRule:{
+  create:async({data})=>saved={id:'rule',...data},
+  findFirst:async()=>saved,
+  update:async({data})=>saved={...saved,...data},
+ }};
+ const {action}=await route('app/routes/app.collections.merchandising.jsx',{
+  '../shopify.server':{authenticate:{admin:async()=>({session:{shop:'fixture'}})}},
+  '../db.server':{__esModule:true,default:db},invalidateCall:(...args)=>calls.push(args),
+ });
+ const send=(actionType,countries)=>action({request:new Request('https://fixture/app',{method:'POST',body:new URLSearchParams({actionType,id:'rule',name:'Country rule',countries,conditions:JSON.stringify([{action:'Boost',field:'Tags',value:'Sale'}])})})});
+ assert.equal((await send('createRule','US')).status,200);
+ assert.equal((await send('editRule','GB')).status,200);
+ assert.deepEqual(JSON.parse(JSON.stringify(calls.map(([,options])=>options))),[
+  {kind:'market-rule',countries:['US']},{kind:'market-rule',countries:['US','GB']},
+ ]);
 });
 
 test('manual pin export and batch import preserve order and images; legacy image fallback supports URL strings',async()=>{

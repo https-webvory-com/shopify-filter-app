@@ -13,7 +13,7 @@ import {createCollectionSalesDependencies} from '../../app/utils/collectionSales
 import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.js';
 import {createCollectionPreparationTelemetry} from '../../app/utils/collectionPreparationTelemetry.js';
 import {publishedCollectionKey} from '../../app/utils/collectionPublishedPage.js';
-import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey} from '../../app/utils/shopCacheInvalidation.js';
+import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,marketRuleInvalidatedAtKey} from '../../app/utils/shopCacheInvalidation.js';
 
 async function fixture() {
   const writes=[],records=[],shops=[],registries=[],jobs=new Map(),catalog=[],snapshots=new Map(),seeds=[],schedules=[],published=[],connections=new Map(),primaryMarket={value:null};let scans=0;
@@ -40,7 +40,7 @@ async function fixture() {
     if(name==='../utils/collectionHeadProofs.js')return {createCollectionHeadProofs};
     if(name==='../utils/collectionPreparationTelemetry.js')return {createCollectionPreparationTelemetry};
     if(name==='../utils/collectionPublishedPage.js')return {publishedCollectionKey};
-    if(name==='../utils/shopCacheInvalidation.js')return {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey};
+    if(name==='../utils/shopCacheInvalidation.js')return {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,marketRuleInvalidatedAtKey};
     if(name==='./collectionRuleFacts.server.js')return {prepareCollectionFromFacts:async()=>null,scheduleCollectionFactRefresh:async()=>{}};
     if(name==='../config/collection-prewarm.json')return {__esModule:true,default:seeds};
     if(name==='../utils/prepareCollectionRanking.js')return {prepareCollectionRanking:()=>{throw Error('Unexpected preparation');}};
@@ -283,6 +283,22 @@ test('a scoped catalog invalidation promotes only its own published collection',
  f.snapshots.set(configurationInvalidatedAtKey(shop),String(Date.now()));
  await f.scheduleCatalogCollectionWarmups(shop);
  assert.equal(jobs.find(row=>row[2].record.collectionId==='2')[3].priority,2);
+});
+
+test('a country rule edit promotes only that market for background publication',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ for(const country of ['US','IN'])f.seeds.push({shop,collectionHandle:'seed',country,locale:'en'});
+ f.catalog.push({shop,id:'gid://shopify/Collection/1'});
+ for(const country of ['US','IN']){
+  const url=new URL('https://ranking.internal/api/filter');
+  for(const [key,value]of Object.entries({shop,collectionId:'1',country,locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))url.searchParams.set(key,value);
+  f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-1000)});
+ }
+ f.snapshots.set(marketRuleInvalidatedAtKey(shop,'US'),String(Date.now()));
+ await f.scheduleCatalogCollectionWarmups(shop);
+ const jobs=f.writes.filter(row=>row[0]==='queue'&&row[2].record.collectionId==='1');
+ assert.equal(jobs.find(row=>row[2].record.url.includes('country=US'))[3].priority,2);
+ assert.equal(jobs.find(row=>row[2].record.url.includes('country=IN'))[3].priority,10);
 });
 
 test('catalog jobs dispatch exactly their public context through the existing ranking worker lane',async()=>{

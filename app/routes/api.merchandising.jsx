@@ -23,7 +23,7 @@ export const loader = async ({ request }) => {
     let activeRule = null;
 
     if (isSearch && searchQuery) {
-      activeRule = await getActiveRuleForSearch(shop, searchQuery);
+      activeRule = await getActiveRuleForSearch(shop, searchQuery, [], url.searchParams.get("locale") || "", url.searchParams.get("country") || "");
     } else {
       let resolvedCollectionTitle = "";
       let resolvedCollectionId = "";
@@ -64,6 +64,7 @@ export const loader = async ({ request }) => {
         (url.searchParams.get("customerTags") || "").split(",").filter(Boolean),
         url.searchParams.get("locale") || url.searchParams.get("language") || "",
         resolvedCollectionId,
+        url.searchParams.get("country") || "",
       );
     }
 

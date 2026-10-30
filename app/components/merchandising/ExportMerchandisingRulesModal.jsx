@@ -18,6 +18,7 @@ export default function ExportMerchandisingRulesModal({ isOpen, onClose, selecte
     "End Date",
     "For collection pages",
     "Locales",
+    "Countries",
     "Locations",
     "Search queries",
     "Start Date"
@@ -88,6 +89,7 @@ export default function ExportMerchandisingRulesModal({ isOpen, onClose, selecte
       
       if (selectedFields.includes("For collection pages")) row["ForCollect"] = rule.ruleType === "search" ? "FALSE" : "TRUE";
       if (selectedFields.includes("Locales")) row["Locales"] = rule.locales || "";
+      if (selectedFields.includes("Countries")) row["Countries"] = (rule.countries || []).join(',');
       if (selectedFields.includes("Locations")) row["Locations"] = "";
       if (selectedFields.includes("Search queries")) row["SearchQueries"] = rule.searchQueries && rule.searchQueries.length > 0 ? JSON.stringify(rule.searchQueries) : "";
 

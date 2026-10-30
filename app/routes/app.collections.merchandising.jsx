@@ -1,4 +1,6 @@
 import { merchandisingRuleIds } from "../utils/merchandisingSelection.js";
+import { parseMarketRuleCountries } from '../utils/marketRuleCountries.js';
+import { merchandisingInvalidationOptions } from '../utils/merchandisingMarketInvalidation.js';
 import { importMerchandisingRules } from '../services/merchandisingImport.server.js';
 import { normalizeCondition, validConditions, resolveCollectionTargets } from "../utils/merchandisingCondition.js";
 import { useNavigate } from "react-router";
@@ -21,6 +23,11 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const actionType = formData.get("actionType");
+  let marketCountries = [];
+  if (actionType === 'createRule' || actionType === 'editRule') {
+    try { marketCountries = parseMarketRuleCountries(formData.get('countries')); }
+    catch (error) { return Response.json({ success: false, error: error.message }, { status: 400 }); }
+  }
   const { invalidateShop } = await import("../services/shopCache.server");
 
   if (actionType === "createRule") {
@@ -28,6 +35,7 @@ export const action = async ({ request }) => {
     const collections = JSON.parse(formData.get("collections") || "[]");
     const customerTags = formData.get("customerTags");
     const locales = formData.get("locales");
+    const countries = marketCountries;
     const startDateStr = formData.get("startDate");
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
@@ -53,6 +61,7 @@ export const action = async ({ request }) => {
         collectionIds: targets.collectionIds,
         customerTags,
         locales,
+        countries,
         startDate,
         endDate,
         conditions: {
@@ -61,7 +70,7 @@ export const action = async ({ request }) => {
       },
     });
 
-    await invalidateShop(shop);
+    await invalidateShop(shop,merchandisingInvalidationOptions([], [newRule]));
     return Response.json({ success: true, intent: "create", rule: newRule });
   }
 
@@ -71,14 +80,15 @@ export const action = async ({ request }) => {
     const collections = JSON.parse(formData.get("collections") || "[]");
     const customerTags = formData.get("customerTags");
     const locales = formData.get("locales");
+    const countries = marketCountries;
     const startDateStr = formData.get("startDate");
     const endDateStr = formData.get("endDate");
     const conditions = JSON.parse(formData.get("conditions") || "[]");
     if (!String(formData.get("name") || "").trim() || !validConditions(conditions)) return Response.json({ error: "Enter a name and complete every condition." }, { status: 400 });
-    let targets;
+    let targets,existingRule;
     try {
-      const existing = collections.length ? await prisma.merchandisingRule.findFirst({ where: { id, shop, ruleType: 'collection' } }) : null;
-      targets = await resolveCollectionTargets(prisma, shop, collections, formData.has('collectionIds') ? JSON.parse(formData.get('collectionIds')) : null, existing);
+      existingRule = await prisma.merchandisingRule.findFirst?.({ where: { id, shop, ruleType: 'collection' } });
+      targets = await resolveCollectionTargets(prisma, shop, collections, formData.has('collectionIds') ? JSON.parse(formData.get('collectionIds')) : null, existingRule);
     } catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
 
     const startDate =
@@ -98,6 +108,7 @@ export const action = async ({ request }) => {
         collectionIds: targets.collectionIds,
         customerTags,
         locales,
+        countries,
         startDate,
         endDate,
         conditions: {
@@ -106,7 +117,7 @@ export const action = async ({ request }) => {
         },
       },
     });
-    await invalidateShop(shop);
+    await invalidateShop(shop,existingRule?merchandisingInvalidationOptions([existingRule],[updatedRule]):undefined);
     return Response.json({ success: true, intent: "edit", rule: updatedRule });
   }
 
@@ -114,28 +125,31 @@ export const action = async ({ request }) => {
     let ids;
     try { ids = merchandisingRuleIds(formData.get("ids")); }
     catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
+    const oldRules=await prisma.merchandisingRule.findMany?.({where:{shop,ruleType:'collection',id:{in:ids}},select:{countries:true}});
     const result = await prisma.merchandisingRule.deleteMany({
       where: { shop, ruleType: "collection", id: { in: ids } },
     });
-    await invalidateShop(shop);
+    await invalidateShop(shop,oldRules?.length===result.count?merchandisingInvalidationOptions(oldRules,[]):undefined);
     return Response.json({ success: true, intent: "bulkDelete", count: result.count });
   }
 
   if (actionType === "deleteRule") {
     const id = formData.get("id");
+    const oldRule=await prisma.merchandisingRule.findFirst?.({where:{id,shop,ruleType:'collection'},select:{countries:true}});
     await prisma.merchandisingRule.deleteMany({ where: { id, shop } });
-    await invalidateShop(shop);
+    await invalidateShop(shop,oldRule?merchandisingInvalidationOptions([oldRule],[]):undefined);
     return Response.json({ success: true, intent: "delete" });
   }
 
   if (actionType === "toggleRule") {
     const id = formData.get("id");
     const status = formData.get("status") === "true";
+    const oldRule=await prisma.merchandisingRule.findFirst?.({where:{id,shop,ruleType:'collection'},select:{countries:true}});
     await prisma.merchandisingRule.updateMany({
       where: { id, shop },
       data: { status },
     });
-    await invalidateShop(shop);
+    await invalidateShop(shop,oldRule?merchandisingInvalidationOptions([oldRule],[]):undefined);
     return Response.json({ success: true, intent: "toggle" });
   }
 
@@ -156,6 +170,7 @@ export const action = async ({ request }) => {
         collectionIds: existingRule.collectionIds || [],
         customerTags: existingRule.customerTags || "",
         locales: existingRule.locales || "",
+        countries: existingRule.countries || [],
         startDate: existingRule.startDate || null,
         endDate: existingRule.endDate || null,
         status: existingRule.status,
@@ -164,7 +179,7 @@ export const action = async ({ request }) => {
         },
       },
     });
-    await invalidateShop(shop);
+    await invalidateShop(shop,merchandisingInvalidationOptions([], [newRule]));
     return Response.json({ success: true, intent: "duplicate", rule: newRule });
   }
 
@@ -172,9 +187,18 @@ export const action = async ({ request }) => {
     let rules;
     try { rules = JSON.parse(formData.get("rules") || "[]"); if (!Array.isArray(rules)) throw Error(); }
     catch { return Response.json({ intent: "import", error: "Invalid import data. Please select the CSV again." }, { status: 400 }); }
+    const readRules=async()=>{try{return await prisma.merchandisingRule.findMany?.({where:{shop,ruleType:'collection'},select:{id:true,countries:true,updatedAt:true}});}catch{return null;}};
+    const before=await readRules();
     const report = await importMerchandisingRules(shop, rules, "collection");
     if (report.imported) {
-      try { await invalidateShop(shop); }
+      const after=await readRules();
+      const oldById=new Map((before||[]).map(rule=>[rule.id,rule]));
+      const newById=new Map((after||[]).map(rule=>[rule.id,rule]));
+      const changedBefore=(before||[]).filter(rule=>!newById.has(rule.id)||String(newById.get(rule.id).updatedAt)!==String(rule.updatedAt));
+      const changedAfter=(after||[]).filter(rule=>!oldById.has(rule.id)||String(oldById.get(rule.id).updatedAt)!==String(rule.updatedAt));
+      const scoped=before&&after&&(changedBefore.length||changedAfter.length)
+        ?merchandisingInvalidationOptions(changedBefore,changedAfter):undefined;
+      try { await invalidateShop(shop,scoped); }
       catch { report.warnings.push({ name: "Storefront refresh", reason: "Rules were saved, but refreshing storefront data could not be confirmed. Refresh and check the rules before retrying." }); }
     }
     return Response.json({ success: true, intent: "import", count: report.imported, ...report });

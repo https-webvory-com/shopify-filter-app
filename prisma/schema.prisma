@@ -253,6 +253,7 @@ model MerchandisingRule {
   collectionIds String[]                     @default([])
   customerTags  String?
   locales       String?
+  countries     String[]                     @default([])
   startDate     DateTime?
   endDate       DateTime?
   status        Boolean                      @default(true)

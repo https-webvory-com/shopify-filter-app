@@ -7,6 +7,7 @@ export const productContentRevisionKey=(shop,collectionId)=>`collectionProductCo
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 export const catalogPublicationInvalidatedAtKey=(shop,collectionId)=>`collectionPublicationInvalidatedAt:${shop}:${String(collectionId||'all').split('/').pop()}`;
 export const configurationInvalidatedAtKey=shop=>`collectionConfigurationInvalidatedAt:${shop}`;
+export const marketRuleInvalidatedAtKey=(shop,country)=>`collectionMarketRuleInvalidatedAt:${shop}:${country}`;
 const owned = ['globalSettings','mergedValues','filterGroup','quickViewSettings','queryParserFacets','percentSale','extraFilterFacts','availableVariants','variantEligibilityFilter','contextualPricing','collectionPreparedSequence','collectionPreparedRetention','collectionFirstPage','collectionPageIds','fullApiResponse','merch','pinning','searchRankingCandidates'];
 const productCaches = ['queryParserFacets','percentSale','extraFilterFacts','availableVariants','contextualPricing','collectionPageIds','searchRankingCandidates'];
 export function isOwnedShopCache(key, shop, productOnly = false) {
@@ -31,8 +32,9 @@ export function productContentFingerprint(product){
  return productRankingFingerprint(content);
 }
 export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
-  return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof} = {}) {
+  return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof,countries=[]} = {}) {
     const products = kind === 'products'||kind==='scores';
+    const marketRule=kind==='market-rule'&&Array.isArray(countries)&&countries.length>0&&countries.every(country=>/^[A-Z]{2}$/.test(country));
     const scopes = [...new Set(collectionIds.map(id=>String(id).split('/').pop()))].filter(id=>id!=='all');
     // Bulk/index or membership changes can alter inputs absent from a rule's
     // signature. Reject saved rankings for those scopes immediately.
@@ -42,10 +44,17 @@ export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
       // Collection webhooks already have a scoped ranking epoch. Do not make
       // every other collection's complete published page obsolete as well.
       for(const id of scopes)await redis.set(catalogPublicationInvalidatedAtKey(shop,id),String(Date.now()));
+    }else if(marketRule){
+      const at=String(Date.now());
+      for(const country of new Set(countries))await redis.set(marketRuleInvalidatedAtKey(shop,country),at);
     }else{
       await redis.incr(configurationRevisionKey(shop));
       await redis.set(configurationInvalidatedAtKey(shop),String(Date.now()));
     }
+    // A published page bypasses the working ranker's product epochs. Mark its
+    // affected collection contexts for replacement without removing the old
+    // complete page from the shopper path during the rebuild.
+    if(products)for(const id of [...scopes,'all'])await redis.set(catalogPublicationInvalidatedAtKey(shop,id),String(Date.now()));
     // Old copies continue to check globalProducts. New supported copies use
     // tag/pin dependencies, with a broad fallback for unproven/bulk writes.
     if(kind==='products')for(const id of [...scopes,'all'])await redis.incr(productContentRevisionKey(shop,id));

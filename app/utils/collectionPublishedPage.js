@@ -18,14 +18,14 @@ export function publishedCollectionKey(request){
 }
 // Published versions are deliberately independent of working ranking epochs.
 // Only a complete, verified replacement is published; visits never rebuild it.
-export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,readCatalogInvalidatedAt,now=Date.now,lifetime=86400}){
+export function createPublishedCollectionPages({redis,loadDurable,saveDurable,createSession,readGlobalSettings,readConfigurationRevision,readCatalogInvalidatedAt,readMarketRuleInvalidatedAt,readExternalProof,now=Date.now,lifetime=86400}){
  const valid=(entry,serving=false)=>entry?.version===1&&entry.cardPresentationVersion===collectionCardPresentationVersion&&Number.isFinite(entry.at)&&entry.at<=now()&&(serving||now()-entry.at<lifetime*1000)&&
   Array.isArray(entry.ids)&&new Set(entry.ids).size===entry.ids.length&&entry.ids.every(id=>/^\d+$/.test(id))&&
   Number.isSafeInteger(entry.payload?.totalCount)&&entry.payload.totalCount===entry.ids.length&&
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
   entry.payload.products.every((p,i)=>String(p.id).split('/').pop()===entry.ids[i]&&p.title&&p.handle)&&
   entry.payload.settings&&entry.payload.facets&&hasUsableExtraFacets(entry.payload)&&hasUsableSaleFacets(entry.payload)&&hasUsableProductTitleFacets(entry.payload)&&hasUsableCollectionNavigation(entry.payload);
- async function get(request,{onHit,marketAvailabilityVersion=null,probe=false}={}){
+ async function get(request,{onHit,marketAvailabilityVersion=null,allowStaleMarket=false,probe=false}={}){
   const key=publishedCollectionKey(request);if(!key||!probe&&!acceptsPublishedCollectionPage(request))return null;
   const params=new URL(request.url).searchParams,shop=params.get('shop'),page=Number(params.get('page')),token=params.get('rankingToken');
   if(!probe&&params.get('limit')!=='25'||probe&&!['25','50'].includes(params.get('limit'))||page===2&&!/^[a-f0-9-]{36}$/.test(token||''))return null;
@@ -37,13 +37,39 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    // Retire stock-restricted publications from the reverted release, as well
    // as publications with an obsolete pin or merchandising configuration.
    const catalogInvalidatedAt=readCatalogInvalidatedAt?Number(await readCatalogInvalidatedAt(shop,entry.collectionId)):0;
-   if(entry.marketAvailabilityRevision!=null||(entry.marketAvailabilityVersion??null)!==marketAvailabilityVersion||(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)))||(catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at)){
+   const marketRuleInvalidatedAt=readMarketRuleInvalidatedAt?Number(await readMarketRuleInvalidatedAt(shop,params.get('country'))):0;
+   const stockChanged=entry.marketAvailabilityRevision!=null||(entry.marketAvailabilityVersion??null)!==marketAvailabilityVersion;
+   // A completed refresh with the same eligibility clears an earlier pending
+   // window, so the next independent stock change gets its own short window.
+   if(!stockChanged&&entry.marketAvailabilityVersion&&typeof redis.del==='function')
+    Promise.resolve().then(()=>redis.del(key+':staleStockSince')).catch(()=>{});
+   let stockStaleAllowed=false;
+   if(stockChanged&&allowStaleMarket&&!probe&&entry.marketAvailabilityRevision==null&&entry.marketAvailabilityVersion&&typeof redis.set==='function'){
+    const staleKey=key+':staleStockSince';
+    await redis.set(staleKey,String(now()),'NX');
+    const since=Number(await redis.get(staleKey));
+    stockStaleAllowed=Number.isFinite(since)&&since>0&&now()-since<600000;
+   }
+   const configurationChanged=Boolean(readConfigurationRevision&&entry.configuration!==String(await readConfigurationRevision(shop)));
+   let externalChanged=false;
+   if(readExternalProof){
+    if(typeof entry.external!=='boolean')externalChanged=true;
+    else if(entry.external){const current=await readExternalProof(shop,entry.externalDependencies);
+      externalChanged=!current||current!==entry.externalRevision;}
+   }
+   const catalogChanged=catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at||externalChanged;
+   // The last complete page remains shopper-usable while its replacement is
+   // prepared. Background probes must still reject it and finish publication.
+   // Country stock has a stricter freshness contract and cannot use this path.
+   if(stockChanged&&!stockStaleAllowed||entry.configuration==null&&readConfigurationRevision){
     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});
     }
     return null;
    }
+   const refreshDue=stockChanged||configurationChanged||catalogChanged||now()-entry.at>=lifetime*1000;
+   if(probe&&refreshDue)return null;
    // Presentation preferences must be fresh even while the last complete
    // product publication is retained. Eligibility changes require a new order.
    let globalSettings=entry.payload.globalSettings;
@@ -65,23 +91,28 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    // published version even if a replacement is published between clicks.
    if(page===1)await redis.setex(`collectionPublishedSession:${shop}:${session.token}`,3600,raw);
    const response=await collectionCardsResponse({...entry.payload,globalSettings,products:entry.payload.products.slice((page-1)*25,page*25),rankingToken:session.token,
-    cfpCards:{version:1,preview:false,published:true,publishedAt:entry.at,refreshDue:now()-entry.at>=lifetime*1000},
+    cfpCards:{version:1,preview:false,published:true,publishedAt:entry.at,refreshDue},
     debug:{...entry.payload.debug,collectionRankingStatus:'ready',collectionPublishedPage:true}},'published',request,{previewLimit:25});
    if(onHit&&page===1){
     const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
-    Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:now()-entry.at>=lifetime*1000})).catch(()=>{});
+    Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue})).catch(()=>{});
    }
    return response;
   }catch{return null;}
  }
- async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null}){
+ async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null,external=false}){
   const key=publishedCollectionKey(request);if(!key||new URL(request.url).searchParams.get('limit')!=='50')return false;
   const shop=new URL(request.url).searchParams.get('shop'),url=new URL(request.url);
   if(collectionId!=='all'){url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));}
   const canonical=publishedCollectionKey(new Request(url)),aliases=new Set([key,canonical]);
   if(collectionHandle){url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle',collectionHandle);aliases.add(publishedCollectionKey(new Request(url)));}
   const {rankingToken,...cards}=payload;
-  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards};
+  const externalDependencies=external?prepared.externalDependencies||null:null;
+  const externalRevision=external&&readExternalProof?await readExternalProof(shop,externalDependencies,{initialize:true}):null;
+  if(external&&readExternalProof&&!externalRevision)return false;
+  if(readExternalProof&&externalDependencies&&typeof prepared.reusableDataRevision==='string'&&
+    prepared.reusableDataRevision.split(':')[2]!==externalRevision)return false;
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards,external:Boolean(external),externalDependencies,externalRevision};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.
@@ -91,6 +122,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     if(redis.eval)await redis.eval(`local old=redis.call('GET',KEYS[2]);if old and tonumber(old)>tonumber(ARGV[1]) then return 0 end;redis.call('SETEX',KEYS[1],ARGV[2],ARGV[3]);redis.call('SETEX',KEYS[2],ARGV[2],ARGV[1]);return 1`,2,alias,alias+':publishedAt',at,lifetime,encoded);
     else await redis.setex(alias,lifetime,encoded);
    }catch{/* The durable published version remains available. */}
+   if(typeof redis.del==='function')try{await redis.del(alias+':staleStockSince');}catch{}
   }
   return true;
  }

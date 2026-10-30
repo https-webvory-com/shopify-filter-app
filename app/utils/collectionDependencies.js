@@ -3,6 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const clean=value=>String(value).split('/').pop();
 export const dependencyFallbackKey=shop=>`collectionExternalFallbackRevision:${shop}`;
+export const dependencyAnyKey=shop=>`collectionExternalAnyRevision:${shop}`;
 const counterKey=(shop,token)=>`collectionExternalInput:${shop}:${token}`;
 const token=(type,value)=>type+hash(value);
 function configuredPins(spec){
@@ -59,6 +60,9 @@ export function createCollectionDependencies(redis){
   return 'd1.'+hash([descriptor.tokens,values]);
  }
  async function changed(shop,proof){
+  // Unknown dependency descriptions still need a safe, coarse proof. Exact
+  // tag/pin descriptors retain their separate fine-grained counters below.
+  await redis.set(dependencyAnyKey(shop),randomUUID());
   if(!proof||!Array.isArray(proof.tags)||!Array.isArray(proof.ids)||!proof.ids.length||proof.tags.length>2000||proof.ids.length>2000||
       proof.tags.some(t=>typeof t!=='string')||proof.ids.some(id=>!/^\d+$/.test(clean(id)))){
    await redis.set(dependencyFallbackKey(shop),randomUUID());return {precise:false};

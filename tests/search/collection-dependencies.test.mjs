@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCollectionDependencies,describeCollectionDependencies,dependencyFallbackKey} from '../../app/utils/collectionDependencies.js';
+import {createCollectionDependencies,describeCollectionDependencies,dependencyFallbackKey,dependencyAnyKey} from '../../app/utils/collectionDependencies.js';
 import {createCollectionPreparation,preparationKey} from '../../app/utils/collectionPreparation.js';
 import {productRevisionKey} from '../../app/utils/shopCacheInvalidation.js';
 
@@ -15,6 +15,7 @@ function fixture(){
 test('unrelated products and newly enrolled contexts do not invalidate existing exact tag/pin dependencies',async()=>{
  const f=fixture(),rev=await f.deps.revision(f.spec.shop,f.descriptor,{initialize:true});
  await f.deps.changed(f.spec.shop,{tags:['Unrelated'],ids:['99']});
+ assert.ok(f.values.has(dependencyAnyKey(f.spec.shop)),'unknown external rules receive a coarse product-change proof');
  await f.deps.revision(f.spec.shop,describeCollectionDependencies({...f.spec,pinnedIds:['999']}),{initialize:true});
  assert.equal(await f.deps.revision(f.spec.shop,f.descriptor),rev);
  for(const proof of [{tags:['TopProm'],ids:['99']},{tags:[],ids:['2']}]){
