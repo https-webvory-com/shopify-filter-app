@@ -258,7 +258,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.precompute)await warm(shop,null,true);
         if(updates.publishFirst50){
           const response=await routeCtx.module.exports.loader({request:new Request('http://fixture/api/filter?locale=en&shop='+shop+'&country='+(updates.publishCountry||'US')+'&collectionHandle=fixture&sortBy=best-selling&page=1&limit=50&responseProfile=collection-cards-v1'),params:{},context:{rankingWarmup:true,rankingCardsPrecompute:true,rankingPrecompute:true}});
-          if(response.status!==200||response.headers.get('X-CFP-Collection-Cards')!=='stored')throw Error('Published fixture preparation failed');
+          if(response.status!==200||response.headers.get('X-CFP-Collection-Cards')!=='stored')throw Error('Published fixture preparation failed: '+response.status+' '+response.headers.get('X-CFP-Collection-Cards'));
         }
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({state:{...state,stormTimer:!!state.stormTimer},requests}));return;
       }

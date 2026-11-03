@@ -718,7 +718,7 @@ try{
       '2':{options:[{name:'Color',values:['Black']}],variantPrices:[{id:'200',price:20,available:true,option1:'Black',imageUrl:'/image/2.svg'}]},
       '3':{options:[{name:'Color',values:['Black']}],variantPrices:[{id:'300',price:30,available:true,option1:'Black',imageUrl:'/image/3.svg'}]},
     };
-    await control({reset:true,productCount:3,precompute:true,early:true,noPins:true,noMerchandising:true,
+    await control({reset:true,productCount:3,precompute:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,early:true,noPins:true,noMerchandising:true,
       filterSettings:settings,globalSettings:{hideUnavailableVariantsWhenSelected:true,showProductCount:false},productFields,
       apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");

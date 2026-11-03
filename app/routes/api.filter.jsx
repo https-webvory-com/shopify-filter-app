@@ -1666,11 +1666,12 @@ export const loader = async ({ request, context }) => {
     // This setting requires a matching available variant when a shopper picks
     // an option. Product-level Meilisearch facets also include sold-out option
     // values, so their unfiltered hover counts would otherwise be too high.
-    // The full canonical collection IDs are already prepared; count their
-    // available variant values once and save the result with the page facets.
-    let exactAvailableOptionCounts=useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
+    // The full canonical collection IDs are already prepared. Do this only
+    // while publishing in the worker: a large option/variant join must never
+    // delay the shopper's fallback response when a page is being rebuilt.
+    let exactAvailableOptionCounts=context?.rankingCardsPrecompute===true&&useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
       Object.keys(optionCounts).length===0;
-    if(useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
+    if(context?.rankingCardsPrecompute===true&&useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
        rankingSession?.ids?.length&&Object.keys(optionCounts).length){
       try{
         const rawOptions=Object.fromEntries(Object.entries(facetDistribution)
