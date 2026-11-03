@@ -97,6 +97,9 @@ jobs:
                 groups[label]+=1
             print('REDIS_ESTABLISHED_PEERS',dict(groups))
             PY
+            docker exec wishlist-growth node -e 'try{const p=require("./package.json"); const deps={...p.dependencies,...p.devDependencies}; console.log("WISHLIST_REDIS_PACKAGES",Object.keys(deps).filter(name=>/redis|bull|cache/i.test(name)).join(",")||"none")}catch{console.log("WISHLIST_REDIS_PACKAGES unavailable")}' || true
+            wishlist_redis_errors=$(docker logs --since 2026-10-30T00:00:00Z wishlist-growth 2>&1 | grep -Eic 'redis|NOAUTH' || true)
+            echo "WISHLIST_REDIS_LOG_MATCHES $wishlist_redis_errors"
             echo 'REDIS_DIAGNOSTIC_END'
   recover_redis:
     if: ${{ inputs.recover_redis == 'true' }}
