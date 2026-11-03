@@ -16,3 +16,14 @@ jobs:
           script: |
             docker logs --since 8m shopify-filter-sync-worker 2>&1 | grep -E 'Collection membership reconciliation|membership-target|Market price coverage|No space left|MeilisearchApiError' | tail -n 55
             docker ps --format '{{.Names}} {{.Status}}'
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {Queue} from 'bullmq';
+            import {redisOptions} from './app/services/queue.server.js';
+            const q=new Queue('collectionMembershipQueueV1',{connection:redisOptions});
+            try {
+              const id='membership-target-fa00634d440b466102797cbbd5d2de352ab7646f2e52613a21690b2ade303a00';
+              const job=await q.getJob(id);
+              console.log('TARGET_AUDIT',JSON.stringify(job?{state:await job.getState(),attempts:job.attemptsMade,reason:String(job.failedReason||'').slice(0,250)}:{state:'missing'}));
+              console.log('QUEUE_COUNTS',JSON.stringify(await q.getJobCounts('active','waiting','delayed','failed','completed')));
+            } finally {await q.close();}
+            NODE
