@@ -1,4 +1,4 @@
-name: Inspect private search disk
+name: Repair private search log rotation
 on:
   workflow_dispatch:
 permissions:
@@ -20,10 +20,36 @@ jobs:
           APP_USER: ${{ secrets.EC2_USER }}
           APP_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          aws ec2 describe-instances --instance-ids i-0ecb95972f915a915 --query 'Reservations[].Instances[].{az:Placement.AvailabilityZone,ami:ImageId,volumes:BlockDeviceMappings,groups:SecurityGroups}' --output json
           ssh-keygen -t ed25519 -N '' -f /tmp/cfp-diagnostic-key -q
           chmod 600 /tmp/cfp-diagnostic-key
           printf '%s\n' "$APP_KEY" > /tmp/cfp-app-key
           chmod 600 /tmp/cfp-app-key
           aws ec2-instance-connect send-ssh-public-key --instance-id i-0ecb95972f915a915 --instance-os-user ubuntu --ssh-public-key file:///tmp/cfp-diagnostic-key.pub --query Success --output text
-          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-diagnostic-key -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-app-key -W %h:%p $APP_USER@$APP_HOST" ubuntu@10.0.2.139 'cd /home/ubuntu/meilisearch && sudo docker compose config --format json | python3 -c "import json,sys;d=json.load(sys.stdin);s=d[\"services\"][\"meilisearch\"];print(json.dumps({k:s.get(k) for k in (\"image\",\"logging\",\"ports\",\"volumes\",\"restart\")}))"; sudo awk "/^services:|^  meilisearch:|^    [a-z_]+:/ { if (\$0 !~ /KEY|SECRET|PASSWORD|TOKEN/) print NR,\$0 }" /home/ubuntu/meilisearch/docker-compose.yml'
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-diagnostic-key -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-app-key -W %h:%p $APP_USER@$APP_HOST" ubuntu@10.0.2.139 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/meilisearch
+          path=$(sudo docker inspect --format '{{.LogPath}}' meilisearch)
+          case "$path" in /var/lib/docker/containers/*/*-json.log) ;; *) echo UNEXPECTED_LOG_PATH; exit 1;; esac
+          sudo truncate -s 0 "$path"
+          compose=/home/ubuntu/meilisearch/docker-compose.yml
+          sudo cp -a "$compose" "$compose.before-log-rotation-20261103"
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          path=Path('/home/ubuntu/meilisearch/docker-compose.yml')
+          source=path.read_text()
+          anchor='  meilisearch:\n'
+          if source.count(anchor)!=1 or '\n    logging:' in source:
+              raise SystemExit('Unexpected Compose layout; no edit made')
+          logging='    logging:\n      driver: json-file\n      options:\n        max-size: "50m"\n        max-file: "3"\n'
+          path.write_text(source.replace(anchor,anchor+logging,1))
+          PY
+          sudo docker compose config --quiet
+          sudo docker compose up -d --no-deps --force-recreate meilisearch
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:7700/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS --max-time 3 http://127.0.0.1:7700/health
+          sudo docker inspect --format 'log={{json .HostConfig.LogConfig}} volume={{range .Mounts}}{{.Name}}{{end}}' meilisearch
+          df -h /
+          REMOTE
