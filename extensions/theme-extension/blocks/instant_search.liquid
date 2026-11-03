@@ -4,12 +4,14 @@
   window.cfpCustomerTags = {{ customer.tags | join: ',' | json }};
   window.cfpCurrencySymbol = {{ cart.currency.symbol | json }};
   window.cfpCurrencyCode = {{ cart.currency.iso_code | json }};
+  window.cfpMoneySample = {% if settings.currency_code_enabled %}{{ 123456789 | money_with_currency | strip_html | json }}{% else %}{{ 123456789 | money | strip_html | json }}{% endif %};
   window.CFP_InstantSearchSettings = {
     customTriggerSelector: {{ block.settings.custom_trigger_selector | json }},
     primaryColor: {{ block.settings.primary_color | default: '#000000' | json }},
     productLimit: {{ block.settings.product_limit | default: 6 | json }}
   };
 </script>
+<script src="{{ 'moneyFormat.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'marketPricing.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'searchSettings.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'instantSearch.js' | asset_url }}" defer="defer"></script>

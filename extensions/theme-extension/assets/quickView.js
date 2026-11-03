@@ -322,6 +322,7 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     money(cents) {
+      if (window.cfpFormatMoneyCents) return window.cfpFormatMoneyCents(cents);
       const currency = window.Shopify?.currency?.active || window.cfpCurrencyCode;
       if (currency) {
         try { return new Intl.NumberFormat(document.documentElement.lang || undefined, { style: 'currency', currency }).format(cents / 100); } catch { /* use store symbol */ }
@@ -330,8 +331,9 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     renderProductDetails(product) {
-      const formattedPrice = (product.price / 100).toFixed(2);
-      const comparePrice = product.compare_at_price ? (product.compare_at_price / 100).toFixed(2) : null;
+      const formattedPrice = this.money(product.price);
+      const comparePrice = product.compare_at_price ? this.money(product.compare_at_price) : null;
+      const showComparePrice = product.compare_at_price > product.price;
       const allImages = product.images && product.images.length > 0 ? product.images : (product.featured_image ? [product.featured_image] : []);
 
       // Smart image ordering: put initial-variant image first so it's always visible in capped set
@@ -465,8 +467,8 @@ if (typeof window.CfpQuickView === 'undefined') {
           </div>
           ${(window.cfpGlobalSettings && window.cfpGlobalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
           <div class="cfp-qv-price-row">
-            <span class="cfp-qv-price">${window.cfpCurrencySymbol || '$'}${formattedPrice}</span>
-            <span class="cfp-qv-compare-price" style="display: ${comparePrice && parseFloat(comparePrice) > parseFloat(formattedPrice) ? 'inline-block' : 'none'};">${window.cfpCurrencySymbol || '$'}${comparePrice}</span>
+            <span class="cfp-qv-price">${this.escape(formattedPrice)}</span>
+            <span class="cfp-qv-compare-price" style="display: ${showComparePrice ? 'inline-block' : 'none'};">${comparePrice ? this.escape(comparePrice) : ''}</span>
           </div>
           `}
           

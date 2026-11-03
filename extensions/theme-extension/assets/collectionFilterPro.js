@@ -1239,9 +1239,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
     const sale = Number.isFinite(Number(compare)) && Number(compare) > Number(amount);
     const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
-    const format = value => currency === 'INR'
+    const format = value => window.cfpFormatMoney?.(value) || (currency === 'INR'
       ? 'Rs. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
-      : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value);
+      : new Intl.NumberFormat('en-US', {style:'currency', currency}).format(value));
     row.replaceChildren();
     const price = document.createElement('span');
     price.className = 'cfp-product-card__price';

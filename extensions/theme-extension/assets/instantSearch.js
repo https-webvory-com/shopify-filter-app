@@ -1319,24 +1319,9 @@ document.addEventListener("DOMContentLoaded", async function () {
       imageCandidates.push(instantImagePlaceholder);
       imageUrl=imageCandidates.shift();
 
-      const rate = 1; // Shopify storefront prices already include the visitor's market.
-      let symbol = '$';
-      if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
-         try {
-            const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
-            const sym = parts.find(p => p.type === 'currency');
-            if (sym) symbol = sym.value;
-         } catch(e) {
-            symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
-         }
-      } else {
-         symbol = (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
-      }
-      
       let price = "";
       if (p.priceMin !== undefined) {
-         let priceVal = parseFloat(p.priceMin) * rate;
-         price = `${symbol}${priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+         price = window.cfpFormatMoney?.(p.priceMin) || new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(p.priceMin);
       }
       let productUrl = `/products/${p.handle}`;
       if (defaultVariantId) {
@@ -1378,7 +1363,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${instantEscapeHtml(p.title)}</div>
             ${swatchesHtml}
             ${(data.globalSettings && data.globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
-            <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${p._marketPricingUnavailable ? "See product price" : price}</div>
+            <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${p._marketPricingUnavailable ? "See product price" : instantEscapeHtml(price)}</div>
             `}
           </a>
         </div>
@@ -1404,7 +1389,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (!price) return;
       const selected = new URL(card.querySelector('a')?.href || location.href).searchParams.get('variant');
       const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
-      const text=new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(variant?.price ?? product.priceMin);
+      const text=window.cfpFormatMoney?.(variant?.price ?? product.priceMin) || new Intl.NumberFormat('en-US', {style:'currency',currency:window.Shopify?.currency?.active || 'USD'}).format(variant?.price ?? product.priceMin);
       price.textContent=window.cfpSearchPriceUnit?.(text)||text;
     }).catch(() => {});
   }
