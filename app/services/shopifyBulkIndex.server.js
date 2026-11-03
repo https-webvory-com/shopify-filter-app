@@ -67,7 +67,7 @@ export async function bulkProductIndexStatus(admin, id) {
 }
 
 function beginProduct(row) {
-  if (!PRODUCT.test(row.id || '') || !['ACTIVE', 'DRAFT', 'ARCHIVED'].includes(row.status) ||
+  if (!PRODUCT.test(row.id || '') || !['ACTIVE', 'DRAFT', 'ARCHIVED', 'UNLISTED'].includes(row.status) ||
       typeof row.title !== 'string' || typeof row.handle !== 'string') throw Error('Invalid bulk product');
   return { ...row, images: { nodes: [] }, collections: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
     variants: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }, metafields: { nodes: [] } };

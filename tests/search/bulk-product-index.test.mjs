@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BULK_PRODUCT_QUERY, bulkProductQuery, startBulkProductIndex, bulkProductIndexStatus, streamBulkProductIndex } from '../../app/services/shopifyBulkIndex.server.js';
+import { readBulkCatalogAudit } from '../../app/services/shopifyBulkCatalog.server.js';
+import { isStorefrontProduct } from '../../app/utils/storefrontProduct.js';
 
 const id = 'gid://shopify/BulkOperation/41';
 const one = { id: 'gid://shopify/Product/1', title: 'Blue dress', handle: 'blue-dress', status: 'ACTIVE', publishedAt: '2026-10-01' };
@@ -51,6 +53,21 @@ test('bulk JSONL rejects partial files and foreign child groups', async () => {
   const broken = async () => new Response([JSON.stringify(one), JSON.stringify({ __parentId: two.id, url: 'https://cdn.shopify.com/image.jpg' })].join('\n'));
   await assert.rejects(streamBulkProductIndex({ url: 'https://storage.googleapis.com/catalog', count: 1,
     fetcher: broken, onProduct: async () => {} }), /not grouped/);
+});
+
+test('both bulk readers accept unlisted Shopify products without making them storefront eligible', async () => {
+  const unlisted={id:'gid://shopify/Product/3',title:'Private product',handle:'private-product',status:'UNLISTED',publishedAt:'2026-10-01'};
+  const fetcher=async()=>new Response(JSON.stringify(unlisted));
+  const received=[];
+  await streamBulkProductIndex({url:'https://storage.googleapis.com/catalog',count:1,objectCount:1,fetcher,
+    onProduct:async product=>received.push(product)});
+  assert.equal(received[0].status,'UNLISTED');
+  assert.equal(isStorefrontProduct(received[0]),false);
+  const admin={graphql:async()=>({json:async()=>({data:{bulkOperation:{id,status:'COMPLETED',
+    url:'https://storage.googleapis.com/catalog',rootObjectCount:'1'}}})})};
+  const audit=await readBulkCatalogAudit(admin,id,fetcher);
+  assert.equal(audit.products[0].status,'UNLISTED');
+  assert.equal(audit.products.filter(isStorefrontProduct).length,0);
 });
 
 test('bulk price query requests each observed country without adding a child connection', async () => {

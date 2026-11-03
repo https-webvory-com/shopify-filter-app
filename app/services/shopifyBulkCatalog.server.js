@@ -51,7 +51,7 @@ export async function readBulkCatalogAudit(admin, operationId, fetcher = fetch) 
     if (!line.trim()) continue;
     const product = JSON.parse(line);
     if (!/^gid:\/\/shopify\/Product\/\d+$/.test(product?.id || '') ||
-        !['ACTIVE', 'DRAFT', 'ARCHIVED'].includes(product.status)) throw Error('Invalid bulk catalog row');
+        !['ACTIVE', 'DRAFT', 'ARCHIVED', 'UNLISTED'].includes(product.status)) throw Error('Invalid bulk catalog row');
     products.push({ id: product.id, status: product.status, publishedAt: product.publishedAt || null });
   }
   if (Number.isSafeInteger(Number(operation.rootObjectCount)) && products.length !== Number(operation.rootObjectCount)) {
