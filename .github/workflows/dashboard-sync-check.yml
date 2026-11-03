@@ -6,35 +6,26 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 3
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 7m
+          command_timeout: 2m
           script: |
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
             import {Queue} from 'bullmq';
             import {redisOptions,collectionMembershipQueue} from './app/services/queue.server.js';
             import redis from './app/services/redis.server.js';
-            import meiliClient from './app/services/meiliClient.server.js';
-            import {createHash} from 'node:crypto';
-            const shop='thedressoutlet.myshopify.com',country='IN';
-            const db=new PrismaClient(),syncQueue=new Queue('productSyncQueue',{connection:redisOptions});
-            try {
-              const rows=await db.$queryRaw`SELECT COUNT(DISTINCT p."id")::integer AS products,COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL AND v."marketPrices" -> ${country} ->> 'currency' IS NOT NULL)::integer AS priced FROM "Product" p LEFT JOIN "Variant" v ON v."productId"=p."id" WHERE p."shop"=${shop} AND lower(p."status")='active'`;
-              const jobs=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,updatedAt:true,completedAt:true,lastError:true}});
-              const jobStates=[];for(const job of jobs){const queued=await syncQueue.getJob(job.id);jobStates.push({status:job.status,processed:job.productsProcessed,total:job.totalProducts,updatedAt:job.updatedAt,completedAt:job.completedAt,queueState:queued?await queued.getState():'missing',error:job.lastError?.replace(/https?:\S+/g,'[url]').slice(0,120)});}
-              const collectionId='gid://shopify/Collection/408926666';
-              const id='membership-target-'+createHash('sha256').update(`${shop}:${collectionId}`).digest('hex');
-              const auditJob=await collectionMembershipQueue.getJob(id);
-              const audit=await redis.get(`membershipAuditStatus:${shop}:${collectionId}`);
-              const index=meiliClient.index('products');const stats=await index.getStats();
-              const base=[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'"];
-              let coverage=null;try{const [all,priced]=await Promise.all([index.search('',{filter:base,hitsPerPage:1,page:1,attributesToRetrieve:[]}),index.search('',{filter:[...base,'marketPriceMin_IN EXISTS'],hitsPerPage:1,page:1,attributesToRetrieve:[]})]);coverage={all:all.totalHits,priced:priced.totalHits};}catch(error){coverage={error:error.name};}
-              console.log('SCOPED_READINESS',JSON.stringify({db:rows[0],syncJobs:jobStates,queue:await syncQueue.getJobCounts('waiting','active','failed','delayed'),auditQueue:await collectionMembershipQueue.getJobCounts('waiting','active','failed','delayed'),auditJob:auditJob?{state:await auditJob.getState(),attemptsMade:auditJob.attemptsMade}:null,audit:audit?JSON.parse(audit):null,meili:{documents:stats.numberOfDocuments,indexing:stats.isIndexing},coverage,flags:{semantic:process.env.SEMANTIC_SEARCH_ENABLED,regeneration:process.env.SEMANTIC_EMBEDDING_REGENERATION_ENABLED}}));
-            }finally{await syncQueue.close();await collectionMembershipQueue.close();await redis.quit();await db.$disconnect();}
+            const shop='thedressoutlet.myshopify.com';
+            const db=new PrismaClient(),queue=new Queue('productSyncQueue',{connection:redisOptions});
+            try{
+              const jobs=await db.syncJob.findMany({where:{shop},orderBy:{createdAt:'desc'},take:6,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,updatedAt:true,lastError:true}});
+              const sync=[];for(const job of jobs){const pending=await queue.getJob(job.id);sync.push({kind:job.kind,status:job.status,processed:job.productsProcessed,total:job.totalProducts,updatedAt:job.updatedAt,queueState:pending?await pending.getState():'missing',error:job.lastError?.slice(0,100)});}
+              const statuses=[];for(const id of ['408926666','400008610']){const raw=await redis.get(`membershipAuditStatus:${shop}:gid://shopify/Collection/${id}`);statuses.push({id,status:raw?JSON.parse(raw):null});}
+              console.log('SCOPED_QUEUE_STATE',JSON.stringify({sync,observedShops:await redis.smembers('marketPriceObservedShops'),observedCountries:await redis.smembers(`marketPriceObservedCountries:${shop}`),backfillTtl:await redis.ttl(`marketPriceBackfill:${shop}:IN`),queue:await queue.getJobCounts('waiting','active','failed','delayed'),auditQueue:await collectionMembershipQueue.getJobCounts('waiting','active','failed','delayed'),statuses}));
+            }finally{await queue.close();await collectionMembershipQueue.close();await redis.quit();await db.$disconnect();process.exit(0);}
             NODE
