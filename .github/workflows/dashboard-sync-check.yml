@@ -6,7 +6,7 @@ permissions:
 jobs:
   status:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
@@ -54,40 +54,3 @@ jobs:
             docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler|Optional collection cards warmup|Available option facet counts|collection cards ready|Collection catalog cards' | tail -35 || true
             docker logs --since 5m shopify-filter-app 2>&1 | grep -E 'Available option facet counts|Collection ranking|CFP.*Error|CFP.*error|timeout' | tail -30 || true
             docker logs --since 30m shopify-filter-sync-worker 2>&1 | grep -i -E 'sync.*(fail|error)|bulk.*(fail|error)|Product sync|error processing' | tail -60 || true
-      - name: Resume the verified failed bulk checkpoint
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 2m
-          script: |
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import {Queue} from 'bullmq';
-            const prisma=new PrismaClient();
-            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
-            if(!endpoint.password && process.env.REDIS_PASSWORD) endpoint.password=process.env.REDIS_PASSWORD;
-            const queue=new Queue('productSyncQueue',{connection:{host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})}});
-            let exitCode=0;
-            try {
-              const shop='thedressoutlet.myshopify.com';
-              const saved=await prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'}});
-              if(saved?.status==='IN_PROGRESS')console.log('PRICE_BACKFILL_RESUME already running');
-              else {
-                if(saved?.id!=='ccd8f1bc-15df-4840-beb5-c5d49beb163c'||saved?.status!=='FAILED'||saved.productsProcessed!==3460||!saved.cursor)throw Error('Saved checkpoint changed');
-                const job=await queue.getJob(saved.id);
-                if(!job||await job.getState()!=='failed')throw Error('Failed queue job is unavailable');
-                await prisma.syncJob.update({where:{id:saved.id},data:{status:'IN_PROGRESS',lastError:null,retryCount:0}});
-                try {await job.retry('failed',{resetAttemptsMade:true,resetAttemptsStarted:true});}
-                catch(error){await prisma.syncJob.update({where:{id:saved.id},data:{status:'FAILED'}});throw error;}
-                console.log('PRICE_BACKFILL_RESUME',JSON.stringify({jobId:saved.id,checkpoint:saved.productsProcessed,state:await job.getState()}));
-              }
-            } catch(error) {
-              console.error('PRICE_BACKFILL_RESUME_FAILED',error.message);
-              exitCode=1;
-            }
-            await prisma.$disconnect();
-            await queue.close();
-            process.exit(exitCode);
-            NODE
