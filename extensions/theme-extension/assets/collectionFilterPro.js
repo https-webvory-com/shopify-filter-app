@@ -555,7 +555,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (response.status >= 400 && response.status !== 409 && !['pending', 'failed'].includes(payload?.debug?.collectionBestSellingStatus) &&
           !['pending', 'failed'].includes(payload?.debug?.collectionRankingStatus)) {
         const error = new Error(payload?.error || 'Products are temporarily unavailable. Please retry.');
-        error.retryable = response.status === 429 || response.status >= 500;
+        error.priceSortPending = payload?.priceSortStatus === 'pending';
+        error.retryable = !error.priceSortPending && (response.status === 429 || response.status >= 500);
         throw error;
       }
       return { status: response.status, json: async () => payload };
@@ -943,7 +944,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       error.className = 'cfp-order-error';
       error.setAttribute('role', 'status');
       const message = document.createElement('p');
-      message.textContent = retainedResults ? 'Could not update products. Previous results are still shown.' : 'Products are temporarily unavailable. Please retry.';
+      message.textContent = e.priceSortPending ? e.message : retainedResults ? 'Could not update products. Previous results are still shown.' : 'Products are temporarily unavailable. Please retry.';
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.textContent = 'Retry';

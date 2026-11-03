@@ -88,18 +88,30 @@ export const loader = async ({ request, context }) => {
         }
       });
     }
+    const requestedSort=String(url.searchParams.get('sortBy')||url.searchParams.get('sort_by')||url.searchParams.get('sort')||url.searchParams.get('usf_sort')||'').toLowerCase().replaceAll('_','-');
+    const requestedCountry=String(url.searchParams.get('country')||'').toUpperCase();
+    const marketPriceSortRequested=['price-ascending','price-asc','price-descending','price-desc'].includes(requestedSort)
+      && url.searchParams.get('isSearch')!=='true' && url.searchParams.get('collectionHandle')?.toLowerCase()!=='search'
+      && !url.searchParams.get('q') && /^[A-Z]{2}$/.test(requestedCountry);
+    const verifiedMarketPriceSort=marketPriceSortRequested ? await marketPriceIntentReady(shop,requestedCountry) : null;
+    if(marketPriceSortRequested&&!verifiedMarketPriceSort&&url.searchParams.get('responseProfile')!=='collection-config-v1'){
+      const warmup=context?.rankingWarmup===true;
+      return data({error:'Price sorting is preparing for this country. Please try again later.',priceSortStatus:'pending',
+        ...(warmup?{debug:{collectionRankingStatus:'pending',marketPriceSortStatus:'pending'}}:{})},
+        {status:warmup?202:503,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'60'}});
+    }
     const marketCountry=url.searchParams.get('country');
     const marketState=url.searchParams.get('responseProfile')==='collection-config-v1'
       ? {status:'disabled',version:null} : await getMarketAvailabilityState(shop,marketCountry);
     const marketVersion=marketState.version;
     if(marketState.status==='pending'){
-      if(!context?.rankingWarmup&&isPublicCollectionCards(request)){
+      if(!marketPriceSortRequested&&!context?.rankingWarmup&&isPublicCollectionCards(request)){
         const retained=await getPreparedCollectionCards(request,{onHit:registerCollectionCardVisit,marketAvailabilityVersion:null,allowStaleMarket:true});
         if(retained)return retained;
       }
       return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending',marketAvailabilityStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
     }
-    if((!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
+    if(!marketPriceSortRequested&&(!context?.rankingWarmup||context?.rankingCardsPrecompute===true)&&(isPublicCollectionCards(request)||(request.headers.get('accept')||'').includes('application/x-cfp-published-page-v1'))){
       // Trusted background rendering reuses only completed publications. A
       // working-card hit must not let a catalog job skip its durable publish.
       const ready=await getPreparedCollectionCards(request,{probe:context?.rankingWarmup===true,publishedOnly:context?.rankingCardsPrecompute===true,onHit:registerCollectionCardVisit,marketAvailabilityVersion:marketVersion,allowStaleMarket:marketState.status==='ready'});
@@ -485,7 +497,7 @@ export const loader = async ({ request, context }) => {
     const priceSortSelected=['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy);
     const sortCountry=String(country||'').toUpperCase();
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
-      ? await marketPriceIntentReady(shop,sortCountry):false;
+      ? (marketPriceSortRequested?verifiedMarketPriceSort:await marketPriceIntentReady(shop,sortCountry)):false;
     const priceSortField=marketSortReady
       ? `market${globalSettings?.showOnlyInStock?'Available':''}PriceMin_${sortCountry}`:null;
     let meiliSort = null;
@@ -899,7 +911,8 @@ export const loader = async ({ request, context }) => {
     let collectionRankingApplied = false;
     let searchRankingApplied = false;
     let searchRankingMode = null;
-    const rankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
+    const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
+    const rankingFingerprint = priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}` : baseRankingFingerprint;
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
     if(marketVersion&&useRankedCollectionPagination&&url.searchParams.has('rankingToken')&&!rankingSession)return data({error:'Country availability changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});

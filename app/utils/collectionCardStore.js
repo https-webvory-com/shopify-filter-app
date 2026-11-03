@@ -161,7 +161,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    if(!raw&&loadDurable)raw=await loadDurable({shop,kind:'cards',key:collectionCardKey(request)});
    retainedEntry=decodePreparation(raw);
    if(retainedEntry?.version!==1||retainedEntry.policyVersion!==2||retainedEntry.cardPresentationVersion!==collectionCardPresentationVersion||retainedEntry.shop!==shop)return null;
-   spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true,marketAvailabilityVersion:retainedEntry.marketAvailabilityVersion};
+   spec={shop,collectionId:retainedEntry.collectionId,revision:retainedEntry.configuration,retainForIdle:true,marketAvailabilityVersion:retainedEntry.marketAvailabilityVersion,priceSortField:retainedEntry.priceSortField};
    preparedKey=retainedEntry.preparedKey;
   }catch{return null;}
   const key=collectionCardKey(request),shop=spec?.shop,collectionId=clean(spec?.collectionId|| (collectionHandle==='all'?'all':''));
@@ -185,7 +185,7 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      if(facetsReady&&facets&&Array.isArray(cards.settings)){
       cards.facets=facets;cards.cfpCards={version:1,facetsReady:true};
      }
-     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
+     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,priceSortField:spec.priceSortField??null,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);

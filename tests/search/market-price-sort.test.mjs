@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+import { transform } from 'esbuild';
 import { prepareCollectionRanking } from '../../app/utils/prepareCollectionRanking.js';
+
+test('shopper price sort waits for complete country prices before serving saved cards',async()=>{
+  let cardReads=0;
+  const source=(await transform(await fs.readFile('app/routes/api.filter.jsx','utf8'),{loader:'jsx',format:'cjs'})).code;
+  const mocks={
+    'react-router':{data:(value,init)=>Response.json(value,init)},
+    '../services/rateLimiter.server':{rateLimit:async()=>true},
+    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>false},
+    '../services/collectionCards.server.js':{getPreparedCollectionCards:async()=>{cardReads++;return Response.json({products:[{priceMin:1}]});}},
+  };
+  const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>({__esModule:true,...(mocks[name]||{})})};
+  vm.runInNewContext(source,context);
+  const request=new Request('https://fixture/api/filter?shop=fixture.myshopify.com&collectionHandle=prom-dresses&country=IN&sortBy=price-ascending&responseProfile=collection-v2');
+  const response=await context.module.exports.loader({request});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).priceSortStatus,'pending');
+  assert.equal(response.headers.get('retry-after'),'60');
+  assert.equal(cardReads,0,'a stale saved base-price page must not bypass the country proof');
+});
 
 test('complete market price ranking orders the full ID list without changing storefront base prices',async()=>{
   const docs=[

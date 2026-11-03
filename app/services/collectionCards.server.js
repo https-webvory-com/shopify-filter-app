@@ -24,7 +24,10 @@ const readExternalProof=async(shop,descriptor,{initialize=false}={})=>{
 
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
 
-const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata,entry.membershipProof);
+const createSession=(request,entry,prepared)=>{
+ const base=marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion);
+ return saveCollectionRankingSession(entry.shop,entry.priceSortField?`${base}:price:${entry.priceSortField}`:base,prepared.ids,entry.sessionUpdatedAt,prepared.metadata,entry.membershipProof);
+};
 const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
  readConfigurationRevision:async shop=>await redis.get(`collectionPreparationRevision:${shop}`)??'0',
  readCatalogInvalidatedAt:async(shop,id)=>await redis.get(catalogPublicationInvalidatedAtKey(shop,id)),
