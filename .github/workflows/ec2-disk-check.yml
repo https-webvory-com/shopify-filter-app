@@ -100,6 +100,17 @@ jobs:
             docker exec wishlist-growth node -e 'try{const p=require("./package.json"); const deps={...p.dependencies,...p.devDependencies}; console.log("WISHLIST_REDIS_PACKAGES",Object.keys(deps).filter(name=>/redis|bull|cache/i.test(name)).join(",")||"none")}catch{console.log("WISHLIST_REDIS_PACKAGES unavailable")}' || true
             wishlist_redis_errors=$(docker logs --since 2026-10-30T00:00:00Z wishlist-growth 2>&1 | grep -Eic 'redis|NOAUTH' || true)
             echo "WISHLIST_REDIS_LOG_MATCHES $wishlist_redis_errors"
+            python3 - <<'PY'
+            import subprocess,collections
+            output=subprocess.run(['docker','logs','--timestamps','--since','2026-10-30T00:00:00Z','wishlist-growth'],capture_output=True,text=True)
+            lines=[line for line in (output.stdout+'\n'+output.stderr).splitlines() if 'redis' in line.lower() or 'noauth' in line.lower()]
+            categories=collections.Counter()
+            for line in lines:
+                lower=line.lower()
+                categories['NOAUTH' if 'noauth' in lower else 'ERROR' if 'error' in lower or 'failed' in lower else 'CONNECTED' if 'connect' in lower else 'OTHER']+=1
+            print('WISHLIST_REDIS_LOG_CATEGORIES',dict(categories))
+            print('WISHLIST_REDIS_LOG_WINDOW',lines[0].split(' ',1)[0] if lines else 'none',lines[-1].split(' ',1)[0] if lines else 'none')
+            PY
             echo 'REDIS_DIAGNOSTIC_END'
   recover_redis:
     if: ${{ inputs.recover_redis == 'true' }}
