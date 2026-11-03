@@ -1,10 +1,10 @@
-name: Start scoped market price backfill
+name: Read-only scoped market price status
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  backfill:
+  status:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -16,14 +16,21 @@ jobs:
           command_timeout: 2m
           script: |
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {startBulkProductSync} from './app/services/sync.server.js';
-            import {productSyncQueue} from './app/services/productSyncQueue.server.js';
-            import prisma from './app/db.server.js';
-            import redis from './app/services/redis.server.js';
-            let failed=false;
+            import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
+            const prisma=new PrismaClient();
+            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
+            if(!endpoint.password && process.env.REDIS_PASSWORD) endpoint.password=process.env.REDIS_PASSWORD;
+            const redis=new Redis(endpoint.toString());
+            const shop='thedressoutlet.myshopify.com',country='IN';
             try{
-              const result=await startBulkProductSync('thedressoutlet.myshopify.com',{restart:true});
-              console.log('MARKET_BACKFILL_START',JSON.stringify({message:result.message,jobCreated:!!result.jobId}));
-            }catch(error){failed=true;console.log('MARKET_BACKFILL_ERROR',JSON.stringify({name:error.name,message:String(error.message).replace(/https?:\S+/g,'[url]').slice(0,220)}));}
-            finally{await productSyncQueue.close();await redis.quit();await prisma.$disconnect();process.exit(failed?1:0);}
+              const [job,proof,backfill,rows]=await Promise.all([
+                prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{status:true,createdAt:true,updatedAt:true,productsProcessed:true,totalProducts:true,lastError:true}}),
+                redis.get(`marketPriceIntentReady:${shop}:${country}`),
+                redis.ttl(`marketPriceBackfill:${shop}:${country}`),
+                prisma.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`
+              ]);
+              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0]}));
+            }finally{await prisma.$disconnect();redis.disconnect();}
             NODE
+            docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler' | tail -20 || true
