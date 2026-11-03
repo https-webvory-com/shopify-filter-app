@@ -73,6 +73,7 @@ jobs:
             print('REDIS_ENV_KEYS',','.join(key for key in environment if 'REDIS' in key or 'PASS' in key or 'ACL' in key))
             print('REDIS_MOUNT_DESTINATIONS',','.join(m['Destination'] for m in container.get('Mounts') or []))
             print('REDIS_SAFE_COMMAND',','.join(part for part in command if part in ('redis-server','--appendonly','yes','no','--save','--protected-mode')))
+            print('REDIS_EXPECTED_COMMAND_MATCH',command==['redis-server','--appendonly','yes'])
             print('REDIS_RESTART_POLICY',container['HostConfig']['RestartPolicy']['Name'])
             print('REDIS_MOUNT_KINDS',','.join(m['Type']+':'+m['Destination'] for m in container.get('Mounts') or []))
             print('REDIS_PORT_BINDINGS',json.dumps(container['HostConfig']['PortBindings']))
@@ -151,19 +152,9 @@ jobs:
             test -n "$redis_volume"
             docker exec redis test -s /data/dump.rdb
             test "$(docker inspect redis --format '{{.HostConfig.RestartPolicy.Name}}')" = unless-stopped
-            docker inspect redis --format '{{json .Config.Cmd}}' | grep -Fq -- '--appendonly'
+            docker inspect redis --format '{{json .Config.Cmd}}' | grep -Fqx '["redis-server","--appendonly","yes"]'
             redis_password=$(openssl rand -hex 32)
             cp -p "$app_env" "$backup_env"
-            printf 'appendonly yes\nrequirepass %s\ndir /data\n' "$redis_password" |
-              docker exec -i -u 0 redis sh -c 'umask 077; cat > /data/redis-secure.conf; chown redis:redis /data/redis-secure.conf; chmod 600 /data/redis-secure.conf'
-            REDIS_PASSWORD="$redis_password" APP_ENV="$app_env" python3 - <<'PY'
-            import os,pathlib
-            path=pathlib.Path(os.environ['APP_ENV'])
-            lines=[line for line in path.read_text().splitlines() if not line.startswith(('REDIS_PASSWORD=','REDIS_URL=','REDIS_USERNAME='))]
-            lines.append('REDIS_PASSWORD='+os.environ['REDIS_PASSWORD'])
-            path.write_text('\n'.join(lines)+'\n')
-            path.chmod(0o600)
-            PY
             old_stopped=false
             replaced=false
             rollback() {
@@ -182,6 +173,16 @@ jobs:
               exit "$failure_code"
             }
             trap 'rollback "$?"' EXIT
+            printf 'appendonly yes\nrequirepass %s\ndir /data\n' "$redis_password" |
+              docker exec -i -u 0 redis sh -c 'umask 077; cat > /data/redis-secure.conf; chown redis:redis /data/redis-secure.conf; chmod 600 /data/redis-secure.conf'
+            REDIS_PASSWORD="$redis_password" APP_ENV="$app_env" python3 - <<'PY'
+            import os,pathlib
+            path=pathlib.Path(os.environ['APP_ENV'])
+            lines=[line for line in path.read_text().splitlines() if not line.startswith(('REDIS_PASSWORD=','REDIS_URL=','REDIS_USERNAME='))]
+            lines.append('REDIS_PASSWORD='+os.environ['REDIS_PASSWORD'])
+            path.write_text('\n'.join(lines)+'\n')
+            path.chmod(0o600)
+            PY
             docker stop -t 120 redis >/dev/null
             old_stopped=true
             docker rename redis redis-before-cfp-recovery
