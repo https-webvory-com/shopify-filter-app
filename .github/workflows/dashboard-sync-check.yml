@@ -26,5 +26,7 @@ jobs:
               console.log('QUEUE_COUNTS',JSON.stringify(await q.getJobCounts('active','waiting','delayed','failed','completed')));
               for(const id of [744122,744127,744130,744133]){const task=await meili.tasks.getTask(id);console.log('MEILI_TASK',JSON.stringify({id,status:task.status,type:task.type,error:task.error?.message?.slice(0,180),duration:task.duration}));}
               const tasks=await meili.tasks.getTasks({limit:10});console.log('MEILI_RECENT',JSON.stringify(tasks.results.map(t=>({id:t.uid,status:t.status,type:t.type,error:t.error?.message?.slice(0,100)}))));
+              const failed=await meili.tasks.getTask(744122);console.log('EMBEDDING_FAILURE',JSON.stringify({error:failed.error?.message?.replace(/https?:\/\/[^\s"']+/g,'[url]').slice(0,800)}));
+              console.log('EMBEDDING_ENV',JSON.stringify({provider:process.env.SEMANTIC_EMBEDDING_PROVIDER,openaiKey:!!process.env.OPENAI_API_KEY,relayUrl:!!process.env.SEMANTIC_RELAY_URL,relayToken:!!process.env.SEMANTIC_RELAY_TOKEN,autoSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED}));
             } finally {await q.close();process.exit(0);}
             NODE
