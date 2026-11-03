@@ -26,4 +26,4 @@ jobs:
           printf '%s\n' "$APP_KEY" > /tmp/cfp-app-key
           chmod 600 /tmp/cfp-app-key
           aws ec2-instance-connect send-ssh-public-key --instance-id i-0ecb95972f915a915 --instance-os-user ubuntu --ssh-public-key file:///tmp/cfp-diagnostic-key.pub --query Success --output text
-          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-diagnostic-key -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-app-key -W %h:%p $APP_USER@$APP_HOST" ubuntu@10.0.2.139 'df -h; df -i; sudo du -xhd1 /var/lib/meilisearch /var/lib/docker /var/log 2>/dev/null | sort -h | tail -n 20'
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-diagnostic-key -o ProxyCommand="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -i /tmp/cfp-app-key -W %h:%p $APP_USER@$APP_HOST" ubuntu@10.0.2.139 'sudo du -ah /var/lib/docker/containers 2>/dev/null | sort -h | tail -n 12; sudo docker ps --format "{{.Names}} {{.ID}}"; sudo docker inspect --format "{{.Name}} {{json .HostConfig.LogConfig}} {{.LogPath}}" $(sudo docker ps -q); sudo docker system df'
