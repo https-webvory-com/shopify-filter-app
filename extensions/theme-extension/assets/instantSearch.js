@@ -265,6 +265,7 @@ document.addEventListener("DOMContentLoaded", async function () {
           <div class="cfp-search-product-grid" id="cfp-search-products">
             <!-- Products will be rendered here -->
           </div>
+          <a id="cfp-view-all-results" class="cfp-view-all-results" hidden></a>
 
         </div>
         <div class="cfp-search-column-right">
@@ -776,6 +777,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   async function fetchDefaultView() {
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
+    const viewAll = document.getElementById('cfp-view-all-results');
+    if (viewAll) viewAll.hidden = true;
     await refreshSearchConfiguration();
     renderLoading(true);
 
@@ -934,10 +937,14 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (mainInput.value.trim() !== query) return;
     if (query.length < CONFIG.minChars) {
       document.getElementById('cfp-search-body').classList.remove('cfp-has-results');
+      const viewAll = document.getElementById('cfp-view-all-results');
+      if (viewAll) viewAll.hidden = true;
       return;
     }
     renderRecentSearches(query);
     renderLoading(true);
+    const currentViewAll = document.getElementById('cfp-view-all-results');
+    if (currentViewAll) currentViewAll.hidden = true;
 
     try {
       let countryParam = "";
@@ -959,11 +966,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       ).catch(() => ({resources:{results:{collections:[]}}}));
 
       const pagesPromise=CONFIG.showPages&&CONFIG.pageLimit>0?fetchSearchJSON(`${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=page&resources[limit]=${CONFIG.pageLimit}`).catch(()=>({resources:{results:{pages:[]}}})):Promise.resolve({resources:{results:{pages:[]}}});
-      const [productsData, collectionsData,pagesData] = await Promise.all([
-        productsPromise,
-        collectionsPromise,
-        pagesPromise,
-      ]);
+      const productsData = await productsPromise;
 
       // 4. Update UI with fresh data if user hasn't changed query
       const inputEl = document.getElementById("cfp-main-search-input");
@@ -990,8 +993,6 @@ document.addEventListener("DOMContentLoaded", async function () {
           }
         }
 
-        renderCollections(collectionsData, query);
-        renderPages(pagesData,query);
         if (productsData && productsData.suggestions && productsData.suggestions.length > 0) {
            renderSuggestions(productsData.suggestions, query);
         } else if (currentQuery.length > 0) {
@@ -1000,11 +1001,29 @@ document.addEventListener("DOMContentLoaded", async function () {
            if (container) container.style.display = "none";
         }
         await renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
+        renderLoading(false);
+        const viewAll = document.getElementById('cfp-view-all-results');
+        if (viewAll) {
+          const count = Number.isSafeInteger(productsData?.matchCount) ? productsData.matchCount : productsData?.totalCount;
+          viewAll.hidden = !productsData?.products?.length;
+          if (!viewAll.hidden) {
+            viewAll.href = window.cfpSearchResultUrl?.(query) || `/search?q=${encodeURIComponent(query)}`;
+            viewAll.textContent = Number.isSafeInteger(count) && count >= productsData.products.length
+              ? `View all ${count.toLocaleString()} results` : 'View all results';
+          }
+        }
+      }
+      const [collectionsData,pagesData] = await Promise.all([collectionsPromise,pagesPromise]);
+      if (mainInput.value.trim().toLowerCase() === trimmedQuery) {
+        renderCollections(collectionsData, query);
+        renderPages(pagesData,query);
       }
 
     } catch (error) {
       console.error("Instant Search Error:", error);
       if (mainInput.value.trim().toLowerCase() === trimmedQuery) {
+        const viewAll = document.getElementById('cfp-view-all-results');
+        if (viewAll) viewAll.hidden = true;
         document.getElementById("cfp-search-products").innerHTML = 
           `<div class="cfp-search-no-results">Something went wrong. Please try again.</div>`;
         document.getElementById("cfp-search-collections").innerHTML = "";

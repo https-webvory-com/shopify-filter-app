@@ -492,14 +492,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const {cfpTransport, ...payload} = data;
     return {...payload, ...decode(cfpTransport.metadata)};
   }
+  const collectionConfigurationCache = new Map();
   async function fetchCollectionConfiguration(requestUrl, signal) {
     if (!requestUrl.includes('responseProfile=collection-v2')) return null;
     const url = new URL(requestUrl);
     if (url.searchParams.get('responseProfile') !== 'collection-v2') return null;
     url.searchParams.set('responseProfile','collection-config-v1');
+    const key = url.toString();
+    const cached = collectionConfigurationCache.get(key);
+    if (cached && cached.expires > Date.now()) return cached.value;
     try {
       const response = await fetch(url.toString(), {signal,cache:'no-cache'});
-      return response.ok ? await response.json() : null;
+      if (!response.ok) return null;
+      const value = await response.json();
+      collectionConfigurationCache.set(key,{value,expires:Date.now()+5000});
+      if (collectionConfigurationCache.size > 8) collectionConfigurationCache.delete(collectionConfigurationCache.keys().next().value);
+      return value;
     } catch { return null; }
   }
   async function completeCollectionResponse(payload, requestUrl, signal, configurationPromise) {

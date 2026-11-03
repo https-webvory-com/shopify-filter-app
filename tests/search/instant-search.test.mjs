@@ -32,6 +32,31 @@ test('quota errors never suppress successful live products and suggestions',asyn
  assert.ok(f.calls.some(call=>call[0]==='suggestions'));
  assert.ok(!f.element('cfp-search-products').innerHTML.includes('Something went wrong'));
 });
+test('instant results link shows the full match count and uses the configured search URL',async()=>{
+ const f=fixture();
+ f.context.window.cfpSearchResultUrl=query=>`/pages/search?q=${encodeURIComponent(query)}`;
+ f.context.fetch=async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')
+   ?{products:[{title:'Blue dress'}],matchCount:42,suggestions:[]}
+   :{resources:{results:{collections:[]}}}});
+ await f.context.performSearch('blue dress');
+ const link=f.element('cfp-view-all-results');
+ assert.equal(link.hidden,false);
+ assert.equal(link.href,'/pages/search?q=blue%20dress');
+ assert.equal(link.textContent,'View all 42 results');
+});
+test('products render while optional collection suggestions are still loading',async()=>{
+ const f=fixture();let releaseCollections;
+ f.context.fetch=async url=>String(url).includes('/api/search')
+   ?{ok:true,status:200,json:async()=>({products:[{title:'Blue dress'}],matchCount:42,suggestions:[]})}
+   :await new Promise(resolve=>{releaseCollections=()=>resolve({ok:true,status:200,json:async()=>({resources:{results:{collections:[]}}})});});
+ const pending=f.context.performSearch('blue dress');
+ for(let attempt=0;attempt<20&&!releaseCollections;attempt++)await new Promise(resolve=>setTimeout(resolve,1));
+ assert.ok(releaseCollections);
+ for(let attempt=0;attempt<20&&!f.calls.some(call=>call[0]==='products');attempt++)await new Promise(resolve=>setTimeout(resolve,1));
+ assert.ok(f.calls.some(call=>call[0]==='products'));
+ assert.equal(f.element('cfp-view-all-results').textContent,'View all 42 results');
+ releaseCollections();await pending;
+});
 test('blocked storage still allows typed and default searches',async()=>{
  const f=fixture({getItem(){throw Error('SecurityError');},get length(){throw Error('SecurityError');}});
  await f.context.performSearch('blue dress');
@@ -154,13 +179,16 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../services/searchRanking.server.js':{},'../services/filterSettings.server':{},
   '../services/shopCache.server':{getCached:async(key,read)=>key.startsWith('globalSettings:')?{}:read()},
   '../services/rateLimiter.server':{rateLimit:async()=>true},
-  '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
+  '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {estimatedTotalHits:42,hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
  };
  const context={module:{exports:{}},exports:{},URL,Response,setTimeout,console,require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext(code,context);
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
  assert.equal(response.status,200);
- assert.deepEqual((await response.json()).suggestions,['Blue Pleated Satin Evening Dress']);
+ const initial = await response.json();
+ assert.deepEqual(initial.suggestions,['Blue Pleated Satin Evening Dress']);
+ assert.equal(initial.totalCount,1);
+ assert.equal(initial.matchCount,42);
  for (const [value, expected] of [['0', 0], ['1', 1], ['-1', 1], ['bad', 1], ['999', 1]]) {
    const result = await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress&suggestionLimit='+value)});
    const body = await result.json();

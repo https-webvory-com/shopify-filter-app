@@ -253,6 +253,7 @@ export const loader = async ({ request }) => {
     return data({
       query: query,
       totalCount: activeResults.length,
+      matchCount: Math.max(activeResults.length, Number(ranking?.total ?? meiliRes.totalHits ?? meiliRes.estimatedTotalHits) || 0),
       pinnedCount: activeResults.filter(p => p.isPinned).length,
       products: activeResults.map(p=>instantSearchCard(publicSearchProduct(p,searchContext.settings))),
       suggestions: suggestions,
