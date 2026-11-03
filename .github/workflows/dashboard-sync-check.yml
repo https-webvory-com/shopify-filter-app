@@ -15,6 +15,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 2m
           script: |
+            docker logs --since 20m --tail 2000 shopify-filter-sync-worker 2>&1 | grep -Ei 'market price coverage|market price|bulk product|MeilisearchTaskTimeOutError' | tail -n 18 | cut -c1-190 || true
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
             import {Queue} from 'bullmq';
