@@ -14,7 +14,7 @@ function fixture(templateName = 'collection', settings = {}) {
  vm.runInNewContext(helper,context);
  return {card,row,image,update:context.window.cfpUpdateMarketCardPrice,setCurrency:code=>{context.window.Shopify.currency.active=code;},select:id=>{href='https://shop.test/products/dress?variant='+id;}};
 }
-const product={priceMin:10,tags:['sale'],available:true,variants:[{id:'gid://shopify/ProductVariant/1',price:10,compareAtPrice:null},{id:'gid://shopify/ProductVariant/2',price:20,compareAtPrice:30}]};
+const product={priceMin:10,tags:['show compare price'],available:true,variants:[{id:'gid://shopify/ProductVariant/1',price:10,compareAtPrice:null},{id:'gid://shopify/ProductVariant/2',price:20,compareAtPrice:30}]};
 
 test('late prices follow the currently selected variant and market currency',()=>{
  const f=fixture();f.update(f.card,product);
@@ -30,6 +30,14 @@ test('late prices follow the currently selected variant and market currency',()=
 test('removed cards and unavailable prices cannot replace displayed market prices',()=>{
  const f=fixture();f.update(null,product);f.update(f.card,{...product,_marketPricingUnavailable:true});
  assert.equal(f.row.children.length,0);
+});
+
+test('compare-at price and sale badge require the live theme show compare price tag',()=>{
+ for(const tags of [[],['Sale'],['Clearance']]){
+   const f=fixture();f.update(f.card,{...product,tags});
+   assert.equal(f.row.children.length,1);
+   assert.equal(f.image.children.length,0);
+ }
 });
 
 test('late market price updates respect search sale visibility without changing collection badges',()=>{

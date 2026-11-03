@@ -1262,7 +1262,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
-    const sale = Number.isFinite(Number(compare)) && Number(compare) > Number(amount);
+    const sale = Array.isArray(product.tags) && product.tags.includes('show compare price') &&
+      Number.isFinite(Number(compare)) && Number(compare) > Number(amount);
     const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
     const format = value => window.cfpFormatMoney?.(value) || (currency === 'INR'
       ? 'Rs. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
@@ -1571,7 +1572,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       let comparePrice = null;
       let onSale = false;
-      if (baseComparePrice) {
+      if (baseComparePrice && Array.isArray(product.tags) && product.tags.includes('show compare price')) {
         const compareVal = parseFloat(baseComparePrice) * rate;
         if (compareVal > priceVal) {
           comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

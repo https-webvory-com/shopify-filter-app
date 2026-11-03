@@ -80,12 +80,16 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
-  await test('discounted selected variant shows its compare-at price without a sale tag',async()=>{
-    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
+  await test('discounted selected variant shows compare-at only with the live theme show compare price tag',async()=>{
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['show compare price']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')",10000);
     const result=await evaluate("(()=>{const card=document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card');return {price:card?.querySelector('.cfp-product-card__price')?.textContent,compare:card?.querySelector('.cfp-product-card__compare-price')?.textContent,link:card?.querySelector('.cfp-product-card__link')?.href};})()");
     assert.match(result.compare,/50\.00/);assert.match(result.price,/1\.00/);assert.match(result.link,/variant=100/);
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['Sale']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__price')",10000);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')"),false);
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
