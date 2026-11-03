@@ -80,16 +80,18 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
-  await test('discounted selected variant shows compare-at only with the live theme show compare price tag',async()=>{
+  await test('compare-at and image sale badge follow separate live theme tags',async()=>{
     await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['show compare price']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')",10000);
     const result=await evaluate("(()=>{const card=document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card');return {price:card?.querySelector('.cfp-product-card__price')?.textContent,compare:card?.querySelector('.cfp-product-card__compare-price')?.textContent,link:card?.querySelector('.cfp-product-card__link')?.href};})()");
     assert.match(result.compare,/50\.00/);assert.match(result.price,/1\.00/);assert.match(result.link,/variant=100/);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__badge')"),false);
     await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['Sale']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__price')",10000);
-    assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')"),false);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')"),true);
+    assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__badge')"),true);
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
@@ -708,6 +710,22 @@ try{
     assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)"),
       [...sizes].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
     return {automatic:true,explicitAlphabetical:true};
+  });
+  await test('saved Color hover count excludes sold-out variants while cards stay ready',async()=>{
+    const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{}}];
+    const productFields={
+      '1':{options:[{name:'Color',values:['Black','Blue']}],variantPrices:[{id:'100',price:10,available:false,option1:'Black',imageUrl:'/image/1.svg'},{id:'101',price:10,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]},
+      '2':{options:[{name:'Color',values:['Black']}],variantPrices:[{id:'200',price:20,available:true,option1:'Black',imageUrl:'/image/2.svg'}]},
+      '3':{options:[{name:'Color',values:['Black']}],variantPrices:[{id:'300',price:30,available:true,option1:'Black',imageUrl:'/image/3.svg'}]},
+    };
+    await control({reset:true,productCount:3,precompute:true,early:true,noPins:true,noMerchandising:true,
+      filterSettings:settings,globalSettings:{hideUnavailableVariantsWhenSelected:true,showProductCount:false},productFields,
+      apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Black\"]').closest('label').title"),'Black (2)');
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Black\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===2&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('zzqxv shows zero products and browseable collections',async()=>{
     await control({reset:true,productCount:30,noMatchQuery:'zzqxv',noPins:true,

@@ -32,17 +32,26 @@ test('removed cards and unavailable prices cannot replace displayed market price
  assert.equal(f.row.children.length,0);
 });
 
-test('compare-at price and sale badge require the live theme show compare price tag',()=>{
- for(const tags of [[],['Sale'],['Clearance']]){
+test('compare-at and image sale badge follow their separate live theme tags',()=>{
+ for(const tags of [[],['Clearance']]){
    const f=fixture();f.update(f.card,{...product,tags});
    assert.equal(f.row.children.length,1);
    assert.equal(f.image.children.length,0);
  }
+ const compareOnly=fixture();compareOnly.update(compareOnly.card,product);
+ assert.equal(compareOnly.row.children.length,2);
+ assert.equal(compareOnly.image.children.length,0);
+ const sale=fixture();sale.update(sale.card,{...product,tags:['Sale']});
+ assert.equal(sale.row.children.length,2);
+ assert.equal(sale.image.children.length,1);
+ const noDiscount=fixture();noDiscount.update(noDiscount.card,{...product,tags:['Sale'],variants:product.variants.map(v=>({...v,compareAtPrice:null}))});
+ assert.equal(noDiscount.row.children.length,1);
+ assert.equal(noDiscount.image.children.length,1);
 });
 
 test('late market price updates respect search sale visibility without changing collection badges',()=>{
  for(const [template,showSale,count] of [['search',false,0],['search',true,1],['collection',false,1]]) {
-   const f=fixture(template,{showSale});f.update(f.card,product);
+   const f=fixture(template,{showSale});f.update(f.card,{...product,tags:['Sale']});
    assert.equal(f.image.children.length,count);
    assert.equal(f.row.children.length,2,'Hiding sale badge must preserve accurate compare-at prices');
  }

@@ -1262,7 +1262,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
-    const sale = Array.isArray(product.tags) && product.tags.includes('show compare price') &&
+    const tags = Array.isArray(product.tags) ? product.tags : [];
+    const showCompare = (tags.includes('show compare price') || tags.includes('Sale')) &&
       Number.isFinite(Number(compare)) && Number(compare) > Number(amount);
     const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
     const format = value => window.cfpFormatMoney?.(value) || (currency === 'INR'
@@ -1273,7 +1274,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     price.className = 'cfp-product-card__price';
     price.textContent = format(amount);
     row.append(price);
-    if (sale) {
+    if (showCompare) {
       const oldPrice = document.createElement('span');
       oldPrice.className = 'cfp-product-card__compare-price';
       oldPrice.textContent = format(compare);
@@ -1283,7 +1284,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       card.querySelector('.cfp-product-card__badge')?.remove();
       const position = window.collectionFilterProSettings?.sale_label_position || 'top-left';
       const showSale = templateName !== 'search' || window.cfpSearchSettings?.showSale !== false;
-      if (sale && position !== 'none' && showSale) {
+      if (tags.includes('Sale') && position !== 'none' && showSale) {
         const badge = document.createElement('span');
         badge.className = `cfp-product-card__badge cfp-badge--${position}`;
         badge.style.cssText = 'background-color:var(--cfp-sale-bg,#e11d48);color:var(--cfp-sale-text,#ffffff);z-index:2';
@@ -1572,7 +1573,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       let comparePrice = null;
       let onSale = false;
-      if (baseComparePrice && Array.isArray(product.tags) && product.tags.includes('show compare price')) {
+      if (baseComparePrice && Array.isArray(product.tags) &&
+          (product.tags.includes('show compare price') || product.tags.includes('Sale'))) {
         const compareVal = parseFloat(baseComparePrice) * rate;
         if (compareVal > priceVal) {
           comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1823,7 +1825,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            if (pos !== 'none' && searchDisplay.showSoldOut !== false) {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sold-out-bg); color: var(--cfp-sold-out-text); z-index: 2;">Sold out</span>`;
            }
-      } else if (onSale && !product._marketPricingUnavailable) {
+      } else if (Array.isArray(product.tags) && product.tags.includes('Sale')) {
          const pos = s.sale_label_position || 'top-left';
            if (pos !== 'none' && searchDisplay.showSale !== false) {
              badgesHtml = `<span class="cfp-product-card__badge cfp-badge--${pos}" style="background-color: var(--cfp-sale-bg, #e11d48); color: var(--cfp-sale-text, #ffffff); z-index: 2;">ON SALE</span>`;

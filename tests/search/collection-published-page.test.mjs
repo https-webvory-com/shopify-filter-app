@@ -34,6 +34,19 @@ test('published first page retains a complete membership proof for the first fil
  assert.equal(f.lastSession().membershipProof,proof);
 });
 
+test('older option counts refresh in the background while saved cards remain visible',async()=>{
+ const f=fixture();f.payload.globalSettings.hideUnavailableVariantsWhenSelected=true;
+ await f.publish();
+ const old=await(await f.store.get(f.request())).json();
+ assert.equal(old.products.length,25);
+ assert.equal(old.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
+ f.payload.facets.variantCountVersion=1;f.advance(1);await f.publish();
+ const next=await(await f.store.get(f.request())).json();
+ assert.equal(next.cfpCards.refreshDue,false);
+ assert.equal(next.products[0].id,old.products[0].id);
+});
+
 test('background coverage probe recognizes a complete published fifty without creating a shopper session',async()=>{
  const f=fixture();await f.publish({marketAvailabilityVersion:'in-v1'});
  const before=f.values.size;

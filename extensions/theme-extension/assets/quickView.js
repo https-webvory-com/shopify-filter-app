@@ -333,7 +333,8 @@ if (typeof window.CfpQuickView === 'undefined') {
     renderProductDetails(product) {
       const formattedPrice = this.money(product.price);
       const comparePrice = product.compare_at_price ? this.money(product.compare_at_price) : null;
-      const showComparePrice = Array.isArray(product.tags) && product.tags.includes('show compare price') &&
+      const showComparePrice = Array.isArray(product.tags) &&
+        (product.tags.includes('show compare price') || product.tags.includes('Sale')) &&
         product.compare_at_price > product.price;
       const allImages = product.images && product.images.length > 0 ? product.images : (product.featured_image ? [product.featured_image] : []);
 
@@ -609,7 +610,8 @@ if (typeof window.CfpQuickView === 'undefined') {
         
         const comparePriceEl = this.modal.querySelector('.cfp-qv-compare-price');
         if (comparePriceEl) {
-          if (Array.isArray(product.tags) && product.tags.includes('show compare price') &&
+          if (Array.isArray(product.tags) &&
+              (product.tags.includes('show compare price') || product.tags.includes('Sale')) &&
               matchingVariant.compare_at_price && matchingVariant.compare_at_price > matchingVariant.price) {
             comparePriceEl.textContent = this.money(matchingVariant.compare_at_price);
             comparePriceEl.style.display = 'inline-block';

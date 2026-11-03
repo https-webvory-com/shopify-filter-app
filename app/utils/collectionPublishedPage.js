@@ -68,7 +68,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     }
     return null;
    }
-   const refreshDue=stockChanged||configurationChanged||catalogChanged||now()-entry.at>=lifetime*1000;
+   const optionCountsChanged=entry.payload.globalSettings?.hideUnavailableVariantsWhenSelected===true&&entry.payload.facets?.variantCountVersion!==1;
+   const refreshDue=stockChanged||configurationChanged||catalogChanged||optionCountsChanged||now()-entry.at>=lifetime*1000;
    if(probe&&refreshDue)return null;
    // Presentation preferences must be fresh even while the last complete
    // product publication is retained. Eligibility changes require a new order.

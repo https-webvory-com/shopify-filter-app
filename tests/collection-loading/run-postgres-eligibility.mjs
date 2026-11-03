@@ -6,6 +6,7 @@ import net from 'node:net';
 import {spawnSync,spawn} from 'node:child_process';
 import {PrismaClient} from '@prisma/client';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
+import {availableOptionFacetCounts} from '../../app/utils/availableOptionFacetCounts.js';
 import {skuSearchWhere} from '../../app/utils/skuSearch.js';
 const bin=process.env.POSTGRES_BIN||'C:/Program Files/PostgreSQL/18/bin';
 const directory=fs.mkdtempSync(path.resolve('scratch','eligibility-postgres-')),data=path.join(directory,'data');
@@ -67,6 +68,21 @@ try{
  let fallback=0;const unknown={findMany:async()=>{fallback++;return [];}};
  await availableProductIds(unknown,{...where,vendor:'private-scope'},{},[],null,{database:wrapped});assert.equal(queries,0);assert.equal(fallback,1);
  console.log('PASS unknown predicates preserve the existing scoped path');
+ const gid=id=>`gid://shopify/Product/${id}`;
+ for(const [id,tenant,variants] of [
+  [101,'fixture',[v('Black','2XL',false),v('Blue','2XL')]],
+  [102,'fixture',[v(' Black ','2XL'),v('Black','L')]],
+  [103,'fixture',[v('Navy','2XL'),v('Black','L')]],
+  [104,'other',[v('Black','2XL')]],
+ ]){
+  await database.$executeRaw`INSERT INTO "Product" (id,shop,status,options) VALUES (${gid(id)},${tenant},'ACTIVE',${JSON.stringify(optionNames)}::jsonb)`;
+  for(const [index,variant]of variants.entries())await database.$executeRaw`INSERT INTO "Variant" (id,"productId",available,price,option1,option2,option3) VALUES (${`${id}-${index}`},${gid(id)},${variant.available},${variant.price},${variant.option1},${variant.option2},${variant.option3})`;
+ }
+ const exactCounts=await availableOptionFacetCounts(database,{shop:'fixture',productIds:['101','102','103','104'],
+  optionValues:{Color:['Black','Blue','Navy'],Size:['2XL','L']},
+  mergedValues:[{filterType:'Color',targetValue:'Blue',sourceValues:['Navy']}]});
+ assert.deepEqual(exactCounts,{Color:{Black:2,Blue:2},Size:{'2XL':3,L:2}});
+ console.log('PASS available option counts exclude sold-out values, other shops and duplicate variants');
  sql('ALTER TABLE "Variant" ADD COLUMN sku text;');
  const skuRows=[['sku-1','1517-Fuchsia-4','fixture','ACTIVE'],['sku-2','15170-Fuchsia-4','fixture','ACTIVE'],['sku-3','11517-Fuchsia-4','fixture','ACTIVE'],['sku-4','1517-Fuchsia-4','other','ACTIVE'],['sku-5','1517-Fuchsia-4','fixture','ARCHIVED'],['sku-6','1517_Fuchsia_4','fixture','ACTIVE'],['sku-7','AB_1517-Fuchsia-4','fixture','ACTIVE'],['sku-8','ABX1517-Fuchsia-4','fixture','ACTIVE']];
  for(const [id,sku,shop,status]of skuRows){
@@ -86,6 +102,9 @@ try{
   const second=performance.now(),optimized=await availableProductIds(model,scope,filters,[],null,{database}),optimizedMs=Math.round(performance.now()-second);
   assert.deepEqual(optimized,baseline);assert.equal(optimized.length,10000);
   console.log('LOCAL FIXTURE BENCHMARK '+JSON.stringify({products:10000,variants:240000,baselineMs,optimizedMs,identicalIds:true,liveTiming:false}));
+  const facetStart=performance.now(),facets=await availableOptionFacetCounts(database,{shop:'fixture',productIds:Array.from({length:10000},(_,i)=>`bulk-${i+1}`),optionValues:{Color:['Black','Red'],Size:['L','2XL']}});
+  assert.deepEqual(facets,{Color:{Black:10000,Red:10000},Size:{L:10000,'2XL':10000}});
+  console.log('LOCAL OPTION FACET BENCHMARK '+JSON.stringify({products:10000,variants:240000,facetMs:Math.round(performance.now()-facetStart),liveTiming:false}));
  }
  console.log('POSTGRES ELIGIBILITY CHECKS PASSED: 7');
 }finally{await database?.$disconnect();if(started)run('pg_ctl',['-D',data,'-m','immediate','-w','stop']);console.log('Disposable PostgreSQL stopped.');}

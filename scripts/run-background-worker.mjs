@@ -10,7 +10,8 @@ try {
   await import("../build/server/index.js");
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker) {
+    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker &&
+        typeof global.__scheduleCatalogDriftAudits==='function' && typeof global.__refreshConnectedMarketPriceCoverage==='function') {
       workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker, global.__marketAvailabilityWorker];
       break;
     }
@@ -37,14 +38,12 @@ try {
   const membershipTimer=setInterval(audit,60000);membershipTimer.unref();
   let catalogAuditing=false;
   const catalogAudit=async()=>{if(catalogAuditing||shuttingDown)return;catalogAuditing=true;try{
-    const {scheduleCatalogDriftAudits}=await import('../app/services/catalogDriftAudit.server.js');
-    await scheduleCatalogDriftAudits();
+    await global.__scheduleCatalogDriftAudits();
   }catch(error){console.error('CFP catalog drift scheduler unavailable:',error.name);}finally{catalogAuditing=false;}};
   const catalogAuditTimer=setInterval(catalogAudit,3600000);catalogAuditTimer.unref();
   let checkingMarketPrices=false;
   const checkMarketPrices=async()=>{if(checkingMarketPrices||shuttingDown)return;checkingMarketPrices=true;try{
-    const {refreshConnectedMarketPriceCoverage}=await import('../app/services/marketPriceCoverage.server.js');
-    await refreshConnectedMarketPriceCoverage();
+    await global.__refreshConnectedMarketPriceCoverage();
   }catch(error){console.error('CFP market price coverage unavailable:',error.name);}finally{checkingMarketPrices=false;}};
   const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
   const shutdown = async () => {

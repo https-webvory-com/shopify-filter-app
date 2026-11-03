@@ -163,6 +163,7 @@ export async function createLoadingServer({redisLayer}={}) {
     String(await redis.get(preparationRevisionKey(shop))??'0'),String(await redis.get(productRevisionKey(shop,'all'))??'0'),
   ]});
   const mocks={
+    'node:crypto':{createHash},
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
     '../services/merchandising.server':{...merch,getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null,
@@ -181,7 +182,22 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/collectionPreparation.server.js':{getCollectionPreparationRevision:preparation.revision,getPreparedCollectionRanking:(spec,options)=>{lastSpec=spec;if(state.rankingFailure==='throw')throw Error('Queue unavailable');if(state.rankingFailure==='failed')return {status:'failed'};return preparation.get(spec,options);},discardPreparedCollectionRanking:preparation.discard,registerCollectionWarmup:async()=>{},getCollectionHeadVersion:headVersion,reportCollectionHead:(spec,path,reason)=>headEvents.push({event:'head-'+path,reason,collectionId:spec.collectionId}),rememberCollectionHead:headProofs.remember,compareCollectionHead:headProofs.compare},
       '../services/collectionCards.server.js':{getPreparedCollectionCards:(request,options)=>state.cardSnapshots?cardStore.get(request,options):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||(options.spec?preparationKey(options.spec):undefined)}):null},
     '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay||state.searchFacetDelay&&queries.some(query=>query.facets?.length))await new Promise(r=>setTimeout(r,state.facetDelay||state.searchFacetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};},searchPageBatch:async queries=>({results:queries.map(select)})},
-    '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
+    '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':{...availableVariants,
+      availableOptionFacetCounts:async(_database,{productIds,optionValues,mergedValues})=>{
+      const selected=new Set(productIds.map(id=>String(id).split('/').pop())),counts={};
+      for(const [name,rawValues]of Object.entries(optionValues)){
+        counts[name]={};
+        for(const product of docs.filter(doc=>selected.has(doc.id))){
+          const position=product.options.findIndex(option=>option.name.toLowerCase()===name.toLowerCase());
+          if(position<0)continue;
+          const values=new Set((product.variantPrices||[]).filter(variant=>variant.available===true)
+            .map(variant=>variant[`option${position+1}`]).filter(value=>rawValues.some(raw=>raw.trim().toLowerCase()===String(value||'').trim().toLowerCase()))
+            .map(value=>facetNormalization.mappedFacetValue(name,value,mergedValues)));
+          for(const value of values)counts[name][value]=(counts[name][value]||0)+1;
+        }
+      }
+      return counts;
+    }},'../utils/spellingCorrection.js':{spellingCorrection},
     '../utils/collectionBootstrap.js':collectionBootstrap,'../utils/collectionResponse.js':collectionResponse,
     '../utils/productTitleFilter.js':productTitleFilter,
     '../utils/extraProductFilters.js':extraProductFilters,

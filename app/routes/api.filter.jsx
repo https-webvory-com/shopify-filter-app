@@ -2,7 +2,7 @@ import {extraFilterTypes,extraSelections,readExtraProductFacts,extraIdsFilter,ex
 import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,saleIdsFilter} from '../utils/percentSaleFilter.js';
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { spellingCorrection } from "../utils/spellingCorrection.js";
-import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter } from "../utils/availableVariants.js";
+import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -1663,6 +1663,27 @@ export const loader = async ({ request, context }) => {
         }
       }
     }
+    // This setting requires a matching available variant when a shopper picks
+    // an option. Product-level Meilisearch facets also include sold-out option
+    // values, so their unfiltered hover counts would otherwise be too high.
+    // The full canonical collection IDs are already prepared; count their
+    // available variant values once and save the result with the page facets.
+    let exactAvailableOptionCounts=useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
+      Object.keys(optionCounts).length===0;
+    if(useRankedCollectionPagination&&!userHasFilters&&globalSettings?.hideUnavailableVariantsWhenSelected===true&&
+       rankingSession?.ids?.length&&Object.keys(optionCounts).length){
+      try{
+        const rawOptions=Object.fromEntries(Object.entries(facetDistribution)
+          .filter(([key])=>key.startsWith('option_'))
+          .map(([key,counts])=>[key.slice(7),Object.keys(counts||{})]));
+        const signature=availableOptionFacetSignature(rawOptions,mergedValues);
+        const exact=await getCached(`availableOptionFacetCounts:${shop}:${rankingSession.token}:${signature}`,
+          ()=>availableOptionFacetCounts(prisma,{shop,productIds:rankingSession.ids,optionValues:rawOptions,mergedValues}),60);
+        for(const [name,counts] of Object.entries(optionCounts))for(const value of Object.keys(counts))
+          counts[value]=exact[name]?.[value]??0;
+        exactAvailableOptionCounts=true;
+      }catch(error){console.error('CFP: Available option facet counts unavailable:',error.name);}
+    }
     // Disjunctive facets are calculated without their own selected category.
     // Its displayed selected count must still agree with the exact ranked
     // result, including pins, Include rules and overlapping color aliases.
@@ -1812,6 +1833,7 @@ export const loader = async ({ request, context }) => {
         },
       },
       facets: {
+        ...(exactAvailableOptionCounts?{variantCountVersion:1}:{}),
         vendors: Object.entries(vendorCounts)
           .map(([value, count]) => ({ value, count }))
           .sort((a, b) => String(a.value || "").localeCompare(String(b.value || ""))),

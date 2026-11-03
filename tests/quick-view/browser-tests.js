@@ -73,14 +73,17 @@ window.runQuickViewTests = async () => {
     qv.modal.querySelector('[data-value="Red"]').click();
     assert(qv.selectedVariantId === null && button().disabled, 'stale invalid ID');
   });
-  await test('compare-at requires the exact show compare price tag in quick view', async () => {
+  await test('compare-at uses show compare price or Sale in quick view', async () => {
     const original = products.multi.tags;
     try {
-      products.multi.tags = ['Sale'];
+      products.multi.tags = ['Clearance'];
       await open('multi');
       assert(getComputedStyle(qv.modal.querySelector('.cfp-qv-compare-price')).display === 'none', 'untagged initial compare-at shown');
       qv.modal.querySelector('[data-value="Blue"]').click();
       assert(getComputedStyle(qv.modal.querySelector('.cfp-qv-compare-price')).display === 'none', 'untagged variant compare-at shown');
+      products.multi.tags = ['Sale'];
+      await open('multi');
+      assert(getComputedStyle(qv.modal.querySelector('.cfp-qv-compare-price')).display !== 'none', 'Sale initial compare-at hidden');
     } finally { products.multi.tags = original; }
   });
   await test('variant without an image returns to the product image', async () => {

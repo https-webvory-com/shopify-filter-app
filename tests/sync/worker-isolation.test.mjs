@@ -31,14 +31,14 @@ test("local development retains its combined worker mode",async()=>{
   const calls=await redisRole(undefined);assert.ok(calls.some(([name])=>name==="sync"));assert.ok(calls.some(([name])=>name==="keys"));
 });
 
-async function runner({failReady=false,missingWorkers=false,missingCountryWorker=false,warmup=async()=>{}}={}) {
+async function runner({failReady=false,missingWorkers=false,missingCountryWorker=false,missingScheduler=false,warmup=async()=>{},catalogAudit=async()=>{},marketCheck=async()=>{}}={}) {
   const files=new Map(),calls=[],signals={},timers=[];
   const worker=name=>({waitUntilReady:async()=>{calls.push("ready:"+name);if(failReady)throw Error("Redis unavailable");},close:async()=>calls.push("close:"+name)});
   const ctx={global:{},console:{log(){},error(){}},process:{env:{CFP_WORKER_MODE:"web"},pid:42,
     once:(signal,callback)=>{signals[signal]=callback;},exit:code=>calls.push("exit:"+code)},
     fs:{rmSync:path=>files.delete(path),writeFileSync:(path,value)=>files.set(path,value)},delay:async()=>{},
     setInterval:(callback,ms)=>{const timer={callback,ms,stopped:false,unref(){}};timers.push(timer);return timer;},clearInterval:timer=>{timer.stopped=true;},
-    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__collectionOrderWorker=worker("order");ctx.global.__collectionMembershipWorker=worker("membership");if(!missingCountryWorker)ctx.global.__marketAvailabilityWorker=worker('country-stock');ctx.global.__schedulePublicCollectionWarmups=warmup;}},
+    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__collectionOrderWorker=worker("order");ctx.global.__collectionMembershipWorker=worker("membership");if(!missingCountryWorker)ctx.global.__marketAvailabilityWorker=worker('country-stock');ctx.global.__schedulePublicCollectionWarmups=warmup;if(!missingScheduler){ctx.global.__scheduleCatalogDriftAudits=catalogAudit;ctx.global.__refreshConnectedMarketPriceCoverage=marketCheck;}}},
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
@@ -51,9 +51,17 @@ test("worker readiness is published only after all Redis workers are ready",asyn
   assert.equal(f.files.get("/tmp/cfp-background-worker.ready"),"42");
 });
 test("a failed worker startup reports failure and never publishes readiness",async()=>{
-  for(const options of [{failReady:true},{missingWorkers:true},{missingCountryWorker:true}]){
+  for(const options of [{failReady:true},{missingWorkers:true},{missingCountryWorker:true},{missingScheduler:true}]){
     const f=await runner(options);assert.equal(f.files.size,0);assert.ok(f.calls.includes("exit:1"));
   }
+});
+test('market price and catalog checks use bundled worker callbacks on startup and timer',async()=>{
+ let catalog=0,market=0;
+ const f=await runner({catalogAudit:async()=>{catalog++;},marketCheck:async()=>{market++;}});
+ assert.equal(catalog,1);assert.equal(market,1);
+ assert.equal(f.timers[2].ms,3600000);assert.equal(f.timers[3].ms,120000);
+ await f.timers[2].callback();await f.timers[3].callback();
+ assert.equal(catalog,2);assert.equal(market,2);
 });
 test("worker shutdown closes processors and removes readiness without touching web processes",async()=>{
   const f=await runner();await f.signals.SIGTERM();assert.equal(f.files.size,0);
