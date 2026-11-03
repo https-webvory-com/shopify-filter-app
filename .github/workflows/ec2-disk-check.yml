@@ -110,7 +110,22 @@ jobs:
                 categories['NOAUTH' if 'noauth' in lower else 'ERROR' if 'error' in lower or 'failed' in lower else 'CONNECTED' if 'connect' in lower else 'OTHER']+=1
             print('WISHLIST_REDIS_LOG_CATEGORIES',dict(categories))
             print('WISHLIST_REDIS_LOG_WINDOW',lines[0].split(' ',1)[0] if lines else 'none',lines[-1].split(' ',1)[0] if lines else 'none')
+            codes=collections.Counter()
+            for line in lines:
+                for code in ('NOAUTH','WRONGPASS','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','AUTH','DISABLED','UNAVAILABLE'):
+                    if code.lower() in line.lower(): codes[code]+=1
+            print('WISHLIST_REDIS_ERROR_CODES',dict(codes))
             PY
+            docker exec wishlist-growth node -e '
+              const fs=require("fs"),path=require("path"),root=process.cwd(),found=[];
+              let scanned=0;function walk(dir,depth){if(depth>5||scanned>5000)return;for(const item of fs.readdirSync(dir,{withFileTypes:true})){
+                if(item.name==="node_modules"||item.name===".git")continue;
+                const name=path.join(dir,item.name);if(item.isDirectory()){walk(name,depth+1);continue;}
+                if(!/\.(js|mjs|cjs|ts|json)$/.test(item.name))continue;
+                const stat=fs.statSync(name);if(stat.size>2000000)continue;scanned++;
+                if(/redis/i.test(fs.readFileSync(name,"utf8")))found.push(path.relative(root,name));
+              }}try{walk(root,0);console.log("WISHLIST_REDIS_SOURCE_FILES",JSON.stringify(found.slice(0,20)),"scanned",scanned)}
+                catch{console.log("WISHLIST_REDIS_SOURCE_FILES unavailable")}' || true
             echo 'REDIS_DIAGNOSTIC_END'
   recover_redis:
     if: ${{ inputs.recover_redis == 'true' }}
