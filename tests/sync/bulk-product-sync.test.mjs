@@ -45,6 +45,7 @@ async function fixture({ indexFails = false } = {}) {
     '../utils/storefrontProduct.js': { isStorefrontProduct: p => p.status === 'ACTIVE' && !!p.publishedAt },
     '../utils/searchIndexProjection.js': { searchIndexProjection: () => ({}) },
     './collectionRuleFacts.server.js': { withCollectionRuleFacts: async docs => docs },
+    '../utils/embeddingHold.js': { withHeldEmbeddingsForIndex: async (_index, docs) => docs },
     './searchIndex.server.js': { scheduleSearchIndexProducts: async () => {} },
   };
   const ctx = { module: { exports: {} }, exports: {}, require: name => mocks[name] || {}, bulk, audit,

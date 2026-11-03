@@ -35,6 +35,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
   const mocks = {
     './searchIndex.server.js':{scheduleSearchIndexProducts:async()=>{}},
     './collectionRuleFacts.server.js':{withCollectionRuleFacts:async docs=>docs},
+    '../utils/embeddingHold.js':{withHeldEmbeddingsForIndex:async(_index,docs)=>docs},
     './productCollections.server.js':memberships,
     '../utils/searchIndexProjection.js': searchProjection,
     "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },

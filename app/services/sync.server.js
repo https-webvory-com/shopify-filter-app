@@ -12,6 +12,7 @@ import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
 import {scheduleSearchIndexProducts} from './searchIndex.server.js';
 import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices } from '../utils/marketPricingIndex.js';
 import { allMarketPriceCountries, marketPriceCountriesForShop } from './marketPriceCoverage.server.js';
+import { withHeldEmbeddingsForIndex } from '../utils/embeddingHold.js';
 
 /**
  * Format products and push to Meilisearch index.
@@ -95,7 +96,7 @@ export async function formatAndPushToMeili(products) {
 
   try {
     const index = meiliClient.index("products");
-    const task = await index.addDocuments(await withCollectionRuleFacts(documents.map(p => ({ ...p, ...searchIndexProjection(p) }))));
+    const task = await index.addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts(documents.map(p => ({ ...p, ...searchIndexProjection(p) })) )));
     for(const shop of new Set(products.map(p=>p.shop)))await scheduleSearchIndexProducts(shop,documents.filter(p=>p.shop===shop).map(p=>p.id),task.taskUid);
     console.log(
       `CFP: Pushed ${documents.length} products to Meilisearch (Task ID: ${task.taskUid})`,
@@ -315,7 +316,7 @@ export async function runBulkProductSync(jobId, shop, admin) {
   const flush = async () => {
     if (batch.length) {
       const index = meiliClient.index('products');
-      const task = await index.addDocuments(await withCollectionRuleFacts(batch.map(doc => ({ ...doc, ...searchIndexProjection(doc) }))));
+      const task = await index.addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts(batch.map(doc => ({ ...doc, ...searchIndexProjection(doc) })) )));
       const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
       if (completed.status !== 'succeeded') throw Error('Bulk product indexing failed');
       await verifyMembershipWrites(prisma, index, shop, products, batch);
@@ -780,7 +781,8 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
         // Meili push (gracefully handled if remote VPS disk is full)
         (async () => {
           try {
-            const task = await meiliClient.index("products").addDocuments(await withCollectionRuleFacts(meiliDocs.map(p => ({ ...p, ...searchIndexProjection(p) }))));
+            const index = meiliClient.index("products");
+            const task = await index.addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts(meiliDocs.map(p => ({ ...p, ...searchIndexProjection(p) })) )));
             const indexed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
             if (indexed.status !== "succeeded") throw new Error("Product indexing failed: " + (indexed.error?.code || indexed.status));
             await scheduleSearchIndexProducts(shop,meiliDocs.map(p=>p.id),task.taskUid);
@@ -1291,11 +1293,11 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   }
 
   // ✅ Parallel: DB upsert + Meilisearch push at the same time
+  const index = meiliClient.index("products");
   await Promise.all([
     smartUpsertProduct(shop, product, prisma),
-    meiliClient
-      .index("products")
-      .addDocuments(await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }]))
+    index
+      .addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }])))
       .then(async (task) => {
         if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product indexing failed');}
         await scheduleSearchIndexProducts(shop,[meiliDoc.id],task.taskUid);

@@ -32,6 +32,7 @@ async function loadSync({ product, deleteError } = {}) {
   const mocks = {
     './searchIndex.server.js':{scheduleSearchIndexProducts:async()=>{}},
     './collectionRuleFacts.server.js':{withCollectionRuleFacts:async docs=>docs},
+    '../utils/embeddingHold.js':{withHeldEmbeddingsForIndex:async(_index,docs)=>docs},
     "../utils/syncError.js": { syncErrorMessage, productSyncJobWhere },
     "../db.server": { __esModule: true, default: prisma },
     "./meiliClient.server": { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: "succeeded" }) } } },

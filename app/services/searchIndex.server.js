@@ -8,6 +8,7 @@ import {searchIndexConfiguration,requiresCustomSearchIndex,projectConfiguredSear
 import {semanticEmbedderSettings} from '../utils/semanticSearch.js';
 import {readSearchIndexExtras} from '../utils/searchIndexExtras.js';
 import {isProductCodeQuery} from '../utils/skuSearch.js';
+import {withHeldEmbeddingsForIndex} from '../utils/embeddingHold.js';
 
 const validShop=shop=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop||'');
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
@@ -148,7 +149,7 @@ export async function processSearchIndexJob(data){
   const response=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)}`,offset:build.offset,limit:20});
   if(!Array.isArray(response.results)||!Number.isSafeInteger(response.total))throw Error('Incomplete source catalog response');
   const docs=response.results.filter(p=>p.shop===shop&&p.status==='ACTIVE');
-  if(docs.length){const enriched=await enrich(shop,docs,config);await wait(await index.addDocuments(enriched.map(doc=>projectConfiguredSearchDocument(doc,config))));}
+  if(docs.length){const enriched=await enrich(shop,docs,config);await wait(await index.addDocuments(await withHeldEmbeddingsForIndex(index,enriched.map(doc=>projectConfiguredSearchDocument(doc,config)))));}
   let offset=build.offset+response.results.length;
   const changed=(await redis.get(sourceRevisionKey(shop))||'0')!==sourceRevision;
   const complete=!changed&&offset>=response.total;
@@ -179,7 +180,7 @@ async function updateSearchIndexProducts(shop,ids,row){
  const docs=base.results.filter(p=>p.shop===shop&&p.status==='ACTIVE'),found=new Set(docs.map(p=>String(p.id)));
  for(const target of targets){
   const index=client.index(target.uid),config=validateSearchSettings(target.config),enriched=await enrich(shop,docs,config);
-  if(enriched.length)await wait(await index.addDocuments(enriched.map(p=>projectConfiguredSearchDocument(p,config))));
+  if(enriched.length)await wait(await index.addDocuments(await withHeldEmbeddingsForIndex(index,enriched.map(p=>projectConfiguredSearchDocument(p,config)))));
   const removed=ids.filter(id=>!found.has(id));if(removed.length)await wait(await index.deleteDocuments(removed));
  }
  await redis.incr(revisionKey(shop));return {updated:docs.length};
