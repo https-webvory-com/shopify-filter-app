@@ -43,3 +43,18 @@ jobs:
             done
             # Only status metadata for this store; never sessions or credentials.
             docker exec shopify-filter-app node -e 'const {PrismaClient}=require("@prisma/client"); const db=new PrismaClient(); db.syncJob.findMany({where:{shop:{in:["thedressoutlet.myshopify.com","another-shpyfy-store.myshopify.com"]},kind:"PRODUCTS"},orderBy:{createdAt:"desc"},take:5,select:{shop:true,id:true,status:true,productsProcessed:true,totalProducts:true,retryCount:true,completedAt:true,updatedAt:true}}).then(rows=>console.log("SYNC_AUDIT",JSON.stringify(rows))).catch(error=>{console.error("SYNC_AUDIT_FAILED",error.code||error.name);process.exitCode=1;}).finally(()=>db.$disconnect())'
+            # Redis diagnostics reveal only configuration presence, never values.
+            echo 'REDIS_DIAGNOSTIC_BEGIN'
+            sudo -n systemctl is-active redis-server 2>/dev/null || true
+            sudo -n ss -lntp '( sport = :6379 )' 2>/dev/null || true
+            for config_path in /etc/redis/redis.conf /etc/redis.conf; do
+              if sudo -n test -f "$config_path"; then
+                echo "REDIS_CONFIG_EXISTS $config_path"
+                sudo -n awk '/^[[:space:]]*requirepass[[:space:]]/ {pass=1} /^[[:space:]]*aclfile[[:space:]]/ {acl=1} END {print "REDIS_REQUIREPASS_CONFIGURED",pass?"yes":"no";print "REDIS_ACLFILE_CONFIGURED",acl?"yes":"no"}' "$config_path"
+              fi
+            done
+            if [ -f /home/ubuntu/shopify-filter-app/.env ]; then
+              awk -F= '/^REDIS_(URL|PASSWORD|USERNAME)=/ {print "APP_ENV_HAS",$1}' /home/ubuntu/shopify-filter-app/.env
+            fi
+            redis-cli -h 127.0.0.1 ping 2>&1 | grep -E 'PONG|NOAUTH|Connection refused' || true
+            echo 'REDIS_DIAGNOSTIC_END'
