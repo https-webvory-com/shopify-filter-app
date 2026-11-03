@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Add missing filter fields (reindexes existing documents; does not delete data)
+        description: Add missing filter and searchable fields (reindexes existing documents; does not delete data)
         type: boolean
         default: false
 permissions:

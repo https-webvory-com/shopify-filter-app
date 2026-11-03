@@ -24,14 +24,14 @@ test('SKU settings check is read-only until explicitly applied',async()=>{
 });
 test('SKU activation preserves searchable fields and waits for index completion without product sync',async()=>{
  const r=await prepare({apply:true});
- assert.deepEqual(Array.from(r.writes[0]),['title','vendor','variantPrices.sku']);
+ assert.deepEqual(Array.from(r.writes[0]),['title','vendor','variantPrices.sku','collection_titles']);
  assert.deepEqual(r.waited,[42]);assert.equal(r.process.exitCode,0);
 });
-test('SKU activation is idempotent and respects existing wildcard or parent fields',async()=>{
- for(const searchable of [['*'],['title','variantPrices'],['title','variantPrices.sku']]){
+test('search activation is idempotent and respects existing wildcard or parent fields',async()=>{
+ for(const searchable of [['*'],['title','variantPrices','collection_titles'],['title','variantPrices.sku','collection_titles']]){
   const r=await prepare({apply:true,searchable});assert.equal(r.writes.length,0);
  }
 });
 test('failed SKU indexing cannot report successful activation',async()=>{
- await assert.rejects(prepare({apply:true,taskStatus:'failed'}),/SKU search preparation failed/);
+ await assert.rejects(prepare({apply:true,taskStatus:'failed'}),/Search field preparation failed/);
 });
