@@ -1,10 +1,10 @@
-name: Inspect scoped filter readiness
+name: Start scoped market price backfill
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  backfill:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -15,18 +15,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 2m
           script: |
-            docker logs --since 20m --tail 2000 shopify-filter-sync-worker 2>&1 | grep -Ei 'market price coverage|market price|bulk product|MeilisearchTaskTimeOutError' | tail -n 18 | cut -c1-190 || true
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import {Queue} from 'bullmq';
-            import {redisOptions,collectionMembershipQueue} from './app/services/queue.server.js';
+            import {startBulkProductSync} from './app/services/sync.server.js';
+            import {productSyncQueue} from './app/services/productSyncQueue.server.js';
+            import prisma from './app/db.server.js';
             import redis from './app/services/redis.server.js';
-            const shop='thedressoutlet.myshopify.com';
-            const db=new PrismaClient(),queue=new Queue('productSyncQueue',{connection:redisOptions});
+            let failed=false;
             try{
-              const jobs=await db.syncJob.findMany({where:{shop},orderBy:{createdAt:'desc'},take:6,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,updatedAt:true,lastError:true}});
-              const sync=[];for(const job of jobs){const pending=await queue.getJob(job.id);sync.push({kind:job.kind,status:job.status,processed:job.productsProcessed,total:job.totalProducts,updatedAt:job.updatedAt,queueState:pending?await pending.getState():'missing',error:job.lastError?.slice(0,100)});}
-              const statuses=[];for(const id of ['408926666','400008610']){const raw=await redis.get(`membershipAuditStatus:${shop}:gid://shopify/Collection/${id}`);statuses.push({id,status:raw?JSON.parse(raw):null});}
-              console.log('SCOPED_QUEUE_STATE',JSON.stringify({sync,observedShops:await redis.smembers('marketPriceObservedShops'),observedCountries:await redis.smembers(`marketPriceObservedCountries:${shop}`),backfillTtl:await redis.ttl(`marketPriceBackfill:${shop}:IN`),queue:await queue.getJobCounts('waiting','active','failed','delayed'),auditQueue:await collectionMembershipQueue.getJobCounts('waiting','active','failed','delayed'),statuses}));
-            }finally{await queue.close();await collectionMembershipQueue.close();await redis.quit();await db.$disconnect();process.exit(0);}
+              const result=await startBulkProductSync('thedressoutlet.myshopify.com',{restart:true});
+              console.log('MARKET_BACKFILL_START',JSON.stringify({message:result.message,jobCreated:!!result.jobId}));
+            }catch(error){failed=true;console.log('MARKET_BACKFILL_ERROR',JSON.stringify({name:error.name,message:String(error.message).replace(/https?:\S+/g,'[url]').slice(0,220)}));}
+            finally{await productSyncQueue.close();await redis.quit();await prisma.$disconnect();process.exit(failed?1:0);}
             NODE
