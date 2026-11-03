@@ -116,17 +116,17 @@ test('instant endpoint constrains semantic retrieval and rejects wrong-color pin
     '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>({products:[{id:'pin'}]}),getActiveRuleForSearch:async()=>null},
     '../services/meiliClient.server':{default:{index:()=>({searchForFacetValues:async()=>({facetHits:[]})})}},
     '../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
-  '../services/filterSettings.server':{},'../services/shopCache.server':{getCached:async key=>key.startsWith('mergedValues')?[]:{}},'../services/rateLimiter.server':{rateLimit:async()=>true},
+  '../services/filterSettings.server':{getFilterGlobalSettings:async()=>({})},'../services/shopCache.server':{getCached:async(key,load)=>key.startsWith('mergedValues')?[]:typeof load==='function'?load():{}},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/semanticSearch.server':{semanticSearch:async(_q,params)=>{
       assert.ok(params.filter.includes(color.colorSearchFilter(intent)));
       return {hits:[{id:'organic',title:'Evening Dress',status:'ACTIVE',options:[{name:'Color'}],variantPrices:variants,images:['wine.jpg']}]};
     }}
   };
   mocks['../services/searchRanking.server.js'] = await loadRanking(mocks['../db.server'].default, mocks['../services/semanticSearch.server'].semanticSearch);
-  const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>({__esModule:true,...mocks[name]})};
+  const context={module:{exports:{}},exports:{},URL,Response,setTimeout,console,require:name=>({__esModule:true,...mocks[name]})};
   vm.runInNewContext((await transform(await fs.readFile('app/routes/api.search.jsx','utf8'),{loader:'jsx',format:'cjs'})).code,context);
   const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20wedding%20dress')});
-  const data=await response.json();assert.equal(response.status,200);assert.equal(data.products.length,1);
+  const data=await response.json();assert.equal(response.status,200,JSON.stringify(data));assert.equal(data.products.length,1);
   assert.equal(data.products[0].selectedVariantId,'gid://shopify/ProductVariant/2');
   assert.equal(data.products[0].searchColorImage,'blue.jpg');assert.equal(data.products[0].searchColor,'Slate Blue');
 });

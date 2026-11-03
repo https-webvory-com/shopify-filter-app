@@ -120,6 +120,7 @@ model Variant {
   option3        String?
   imageUrl       String?
   sku            String?
+  marketPrices   Json?
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, available])

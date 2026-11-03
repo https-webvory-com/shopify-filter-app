@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
+import * as marketPricingIndex from "../../app/utils/marketPricingIndex.js";
 
 test("only active products published to the Online Store are eligible", () => {
   assert.equal(isStorefrontProduct({ status: "ACTIVE", publishedAt: "2026-10-01T00:00:00Z" }), true);
@@ -36,6 +37,8 @@ async function loadSync({ product, deleteError } = {}) {
     "./meiliClient.server": { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: "succeeded" }) } } },
     "./shopCache.server": { invalidateShop: async () => {} },
     "../utils/storefrontProduct.js": { isStorefrontProduct },
+    "../utils/marketPricingIndex.js": marketPricingIndex,
+    "./marketPriceCoverage.server.js": { allMarketPriceCountries: async () => [], marketPriceCountriesForShop: async () => [] },
   };
   const context = { module: { exports: {} }, exports: {}, console: { log() {}, warn() {}, error() {} }, setTimeout: callback => callback(), require: name => mocks[name] };
   vm.runInNewContext((await transform(source, { format: "cjs" })).code, context);

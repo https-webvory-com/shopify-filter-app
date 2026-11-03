@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
     minChars: searchSettings.minChars ?? 2,
-    debounceTime: 300,
+    debounceTime: 250,
     productLimit: searchSettings.productLimit ?? (userSettings.productLimit || 6),
     suggestionLimit: searchSettings.suggestionLimit ?? 6,
     collectionLimit: searchSettings.collectionLimit ?? 5,

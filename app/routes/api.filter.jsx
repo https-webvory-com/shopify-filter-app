@@ -40,6 +40,7 @@ import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailabil
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
+import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
@@ -481,6 +482,12 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 6. Build Meilisearch sort ──────────────────────────────────────
+    const priceSortSelected=['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy);
+    const sortCountry=String(country||'').toUpperCase();
+    const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
+      ? await marketPriceIntentReady(shop,sortCountry):false;
+    const priceSortField=marketSortReady
+      ? `market${globalSettings?.showOnlyInStock?'Available':''}PriceMin_${sortCountry}`:null;
     let meiliSort = null;
     switch (sortBy) {
       case "best-selling":
@@ -501,11 +508,11 @@ export const loader = async ({ request, context }) => {
         break;
       case "price-ascending":
       case "price-asc":
-        meiliSort = ["priceMin:asc"];
+        meiliSort = [`${priceSortField||'priceMin'}:asc`];
         break;
       case "price-descending":
       case "price-desc":
-        meiliSort = ["priceMin:desc"];
+        meiliSort = [`${priceSortField||'priceMin'}:desc`];
         break;
       case "created-descending":
       case "created-desc":
@@ -932,7 +939,9 @@ export const loader = async ({ request, context }) => {
           const parent=await getCollectionRankingSession(shop,parentFingerprint,parentToken);
           if(parent.membershipProof===membershipProof){
             const filter=allFiltersList.filter((_,index)=>index!==marketFilterIndex);
-            const ids=await readNarrowerCollectionMembership(meiliClient.index('products'),{filter,parentIds:parent.ids,shop});
+            const parentHasFilters=[...parentUrl.searchParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+            const ids=await readNarrowerCollectionMembership(meiliClient.index('products'),{
+              filter,parentIds:parent.ids,shop,baseAlreadyScoped:!parentHasFilters});
             const currentProof=ids?await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
               marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
               orderRevision:collectionBestSellingState.revision}):null;
@@ -953,6 +962,7 @@ export const loader = async ({ request, context }) => {
         ...(marketVersion?{marketAvailabilityVersion:marketVersion}:{}),
         ...(userHasFilters&&marketIds?{marketFilterIndex}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
+        ...(priceSortField?{priceSortField}:{}),
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
@@ -1322,7 +1332,11 @@ export const loader = async ({ request, context }) => {
       const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
       const firstProductImage=productImages[0];
       const pinnedProductImage=pinnedDefault?(typeof firstProductImage==='string'?firstProductImage:firstProductImage?.url||firstProductImage?.src||firstProductImage?.image?.url||null):null;
-      let activeVariant = pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
+      const sortedPriceVariants=priceSortField?localVariantPrices
+        .filter(variant=>!globalSettings?.showOnlyInStock||variant.available===true)
+        .filter(variant=>Number.isFinite(Number(variant.marketPrices?.[sortCountry]?.price)))
+        .sort((left,right)=>Number(left.marketPrices[sortCountry].price)-Number(right.marketPrices[sortCountry].price)):[];
+      let activeVariant = sortedPriceVariants.length?sortedPriceVariants[0]:pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
         ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
             Object.entries(optionsFilters).every(([name, values]) => {
               const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
@@ -1756,6 +1770,7 @@ export const loader = async ({ request, context }) => {
       mergedValues,
       didYouMean,
       debug: {
+        ...(priceSortSelected?{priceSortSource:marketSortReady?'verified-market':'base-pending-market'}:{}),
         collectionPaginationApplied,
         collectionRankingApplied,
         collectionRankingStatus:pinnedPrefix?'prefix-ready':collectionRankingStatus,

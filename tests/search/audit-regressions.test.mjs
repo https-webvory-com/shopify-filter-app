@@ -129,6 +129,7 @@ async function route(file,mocks){
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === '../utils/facetNormalization.js') return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
+    if (name === '../services/marketPriceCoverage.server.js') return {marketPriceIntentReady:async()=>false};
     if (name === '../services/searchIndex.server.js') return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})};
     if (name === '../utils/searchConfiguration.js') return {publicSearchProduct:product=>product};
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};

@@ -10,6 +10,8 @@ import { syncErrorMessage, productSyncJobWhere } from "../utils/syncError.js";
 import { searchIndexProjection, SEARCH_FILTER_FIELDS } from '../utils/searchIndexProjection.js';
 import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
 import {scheduleSearchIndexProducts} from './searchIndex.server.js';
+import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices } from '../utils/marketPricingIndex.js';
+import { allMarketPriceCountries, marketPriceCountriesForShop } from './marketPriceCoverage.server.js';
 
 /**
  * Format products and push to Meilisearch index.
@@ -83,6 +85,7 @@ export async function formatAndPushToMeili(products) {
             option3: v.option3 || null,
             sku: v.sku || null,
             imageUrl: v.imageUrl || null,
+            marketPrices: v.marketPrices || {},
           }))
         : [],
       ...formattedOptions,
@@ -136,6 +139,10 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       }
     }
 
+    const marketCountries = await allMarketPriceCountries();
+    const marketFilterFields = marketCountries.flatMap(country =>
+      [`marketPriceMin_${country}`, `marketPriceMax_${country}`, `marketPriceCurrency_${country}`, `marketAvailablePriceMin_${country}`]);
+
     const filterableAttributes = [
       "id",
       "shop",
@@ -148,6 +155,8 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       "available",
       "status",
       "priceMin",
+      "availablePriceMin",
+      ...marketFilterFields,
       "createdAt",
       ...SEARCH_FILTER_FIELDS,
       ...Array.from(dynamicKeys),
@@ -163,7 +172,8 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       ...Array.from(dynamicKeys),
     ];
 
-    const sortableAttributes = ["priceMin", "createdAt", "title", "bestSellingScore", "trendingScore"];
+    const sortableAttributes = ["priceMin", "availablePriceMin", ...marketCountries.map(country => `marketAvailablePriceMin_${country}`),
+      "createdAt", "title", "bestSellingScore", "trendingScore"];
 
     await index.updateFilterableAttributes(filterableAttributes);
     await index.updateSearchableAttributes(searchableAttributes);
@@ -293,7 +303,7 @@ export async function runBulkProductSync(jobId, shop, admin) {
   let job = await prisma.syncJob.findUnique({ where: { id: jobId } });
   if (!job || job.shop !== shop || job.kind !== 'BULK_PRODUCTS' || job.status !== 'IN_PROGRESS') return;
   if (!job.cursor) {
-    const operationId = await startBulkProductIndex(admin);
+    const operationId = await startBulkProductIndex(admin, { countries: await marketPriceCountriesForShop(shop) });
     job = await prisma.syncJob.update({ where: { id: jobId }, data: { cursor: operationId } });
     return { needsContinuation: true, retryAfterMs: 10000 };
   }
@@ -492,6 +502,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
     publishedCollectionIds = null;
   }
 
+  const marketPricingFields = contextualPricingFields(await marketPriceCountriesForShop(shop));
   const query = `#graphql
     query getProducts($cursor: String) {
       products(first: 10, after: $cursor) {
@@ -543,6 +554,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
                 name
                 value
               }
+              ${marketPricingFields}
             }
           }
           ratingMetafield: metafield(namespace: "reviews", key: "rating") { id namespace key value type }
@@ -749,6 +761,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
               option3,
               sku: v.sku || null,
               imageUrl: v.image?.url || null,
+              marketPrices: variantMarketPrices(v, marketCountriesInVariants(p.variants.nodes)),
             };
           }),
           ...formattedOptions,
@@ -841,6 +854,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
 
 // Function for smart upserting — OPTIMIZED to use batch operations and avoid P2028 transaction timeouts
 export async function smartUpsertProduct(shop, product, prismaClient) {
+  const marketCountries = marketCountriesInVariants(product.variants.nodes);
   const optionsList = product.options.map((opt) => ({
     name: opt.name,
     values: opt.values,
@@ -912,6 +926,7 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
       available: variant.availableForSale === true,
       inventory: variant.inventoryQuantity || 0,
       imageUrl: variant.image?.url || null,
+      ...(marketCountries.length ? { marketPrices: variantMarketPrices(variant, marketCountries) } : {}),
       option1,
       option2,
       option3,
@@ -930,6 +945,7 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
           available: v.available,
           inventory: v.inventory,
           imageUrl: v.imageUrl,
+          ...(v.marketPrices ? { marketPrices: v.marketPrices } : {}),
           option1: v.option1,
           option2: v.option2,
           option3: v.option3,
@@ -1015,6 +1031,8 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
 export async function syncSingleProduct(shop, admin, productId, { retrySearchErrors = false } = {}) {
   console.log(`CFP: Syncing single product ${productId} for ${shop}...`);
 
+  const marketPricingFields = contextualPricingFields(await marketPriceCountriesForShop(shop));
+
   const query = `#graphql
     query getProduct($id: ID!) {
       product(id: $id) {
@@ -1060,6 +1078,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
               name
               value
             }
+              ${marketPricingFields}
           }
         }
         ratingMetafield: metafield(namespace: "reviews", key: "rating") { id namespace key value type }
@@ -1259,6 +1278,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
         option3,
         sku: v.sku || null,
         imageUrl: v.image?.url || null,
+        marketPrices: variantMarketPrices(v, marketCountriesInVariants(product.variants.nodes)),
       };
     }),
     ...formattedOptions,

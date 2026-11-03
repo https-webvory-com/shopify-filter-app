@@ -7,6 +7,7 @@ import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
 import * as searchProjection from '../../app/utils/searchIndexProjection.js';
+import * as marketPricingIndex from '../../app/utils/marketPricingIndex.js';
 import * as memberships from '../../app/services/productCollections.server.js';
 
 async function fixture({ failSetup = false, failIndex = false, failMembership = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
@@ -14,6 +15,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
   let heartbeat, cleared = false;
   const job = { id: "job", status: "IN_PROGRESS", cursor: "last-saved", productsProcessed: processed };
   const prisma = {
+    marketStorefrontConnection: { findUnique: async () => null },
     syncJob: {
       findUnique: async () => job,
       update: async ({data}) => { updates.push(data); return job; },
@@ -40,6 +42,8 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
     "./meiliClient.server": {__esModule:true,default:{index:()=>index,tasks:{waitForTask:async()=>({status:"succeeded"})}}},
     "./shopCache.server": {invalidateShop: async () => {}},
     "../utils/storefrontProduct.js": {isStorefrontProduct},
+    "../utils/marketPricingIndex.js": marketPricingIndex,
+    "./marketPriceCoverage.server.js": { allMarketPriceCountries: async () => [], marketPriceCountriesForShop: async () => [] },
     "../utils/semanticSearch.js": {},
   };
   const source = (await fs.readFile("app/services/sync.server.js","utf8"))

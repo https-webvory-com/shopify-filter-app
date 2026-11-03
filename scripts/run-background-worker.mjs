@@ -41,12 +41,19 @@ try {
     await scheduleCatalogDriftAudits();
   }catch(error){console.error('CFP catalog drift scheduler unavailable:',error.name);}finally{catalogAuditing=false;}};
   const catalogAuditTimer=setInterval(catalogAudit,3600000);catalogAuditTimer.unref();
+  let checkingMarketPrices=false;
+  const checkMarketPrices=async()=>{if(checkingMarketPrices||shuttingDown)return;checkingMarketPrices=true;try{
+    const {refreshConnectedMarketPriceCoverage}=await import('../app/services/marketPriceCoverage.server.js');
+    await refreshConnectedMarketPriceCoverage();
+  }catch(error){console.error('CFP market price coverage unavailable:',error.name);}finally{checkingMarketPrices=false;}};
+  const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(warmupTimer);
     clearInterval(membershipTimer);
     clearInterval(catalogAuditTimer);
+    clearInterval(marketPriceTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
     process.exit(0);
@@ -56,6 +63,7 @@ try {
   void warm();
   void audit();
   void catalogAudit();
+  void checkMarketPrices();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });
   console.error("CFP: Background worker startup failed:", error.message);

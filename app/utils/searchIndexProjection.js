@@ -1,4 +1,5 @@
 // Additive search-only fields. Keep the storefront document contract intact.
+import { productMarketPriceIndexFields } from './marketPricingIndex.js';
 export const SEARCH_PROJECTION_VERSION = 1;
 export const searchExactToken = value => Buffer.from(String(value), 'utf8').toString('hex');
 export const decodeSearchFacet = token => JSON.parse(Buffer.from(token, 'hex').toString('utf8'));
@@ -48,6 +49,10 @@ export function searchIndexProjection(product) {
     for(const v of values)facetValues.push(searchExactToken(JSON.stringify([field,v])));
   }
   return {
+    ...productMarketPriceIndexFields(variants),
+    availablePriceMin: variants.some(variant => variant.available === true)
+      ? Math.min(...variants.filter(variant => variant.available === true).map(variant => Number(variant.price)))
+      : null,
     cfpSearchVersion: complete ? SEARCH_PROJECTION_VERSION : 0,
     cfpSearchOptionPhrases: complete ? [...phrases].map(searchExactToken) : [],
     cfpSearchColors: colorPosition < 0 ? [] : [...new Set(variants.map(color).filter(Boolean))].map(searchExactToken),

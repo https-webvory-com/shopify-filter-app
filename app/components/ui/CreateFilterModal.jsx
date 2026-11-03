@@ -718,14 +718,34 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     currentOptionsData = currentOptionsData.map(o => ({ ...o, label: o.label.toLowerCase() }));
   }
 
-  // Apply Advanced Sorting
-  if (advanced.sortType === "Label - AZ") {
+  // Older Color/Size groups stored alphabetical as the default, even though
+  // merchants had not selected an order. Show their new automatic order here.
+  const optionSortType = ["color", "size"].includes(optionType?.toLowerCase()) &&
+    !advanced.sortModeExplicit && (!advanced.sortType || advanced.sortType === "Label - AZ")
+    ? "Automatic" : advanced.sortType;
+  if (optionSortType === "Automatic" && optionType?.toLowerCase() === "color") {
+    currentOptionsData.sort((a, b) => (b.count || 0) - (a.count || 0) || a.label.localeCompare(b.label));
+  } else if (optionSortType === "Automatic" && optionType?.toLowerCase() === "size") {
+    const names = ["XXXS", "XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL"];
+    const rank = label => {
+      const text = String(label || "").trim().toUpperCase();
+      const name = names.indexOf(text);
+      if (name >= 0) return [0, name];
+      const match = /^(\d{1,2})(P|W)?$/.exec(text);
+      return match && Number(match[1]) <= 30
+        ? [1, Number(match[1]) * 3 + (match[2] === "P" ? 1 : match[2] === "W" ? 2 : 0)] : [2, 0];
+    };
+    currentOptionsData.sort((a, b) => {
+      const left = rank(a.value || a.label), right = rank(b.value || b.label);
+      return left[0] - right[0] || left[1] - right[1] || a.label.localeCompare(b.label);
+    });
+  } else if (optionSortType === "Label - AZ") {
     currentOptionsData.sort((a, b) => a.label.localeCompare(b.label));
-  } else if (advanced.sortType === "Label - ZA") {
+  } else if (optionSortType === "Label - ZA") {
     currentOptionsData.sort((a, b) => b.label.localeCompare(a.label));
-  } else if (advanced.sortType === "Product count - Highest to lowest") {
+  } else if (optionSortType === "Product count - Highest to lowest") {
     currentOptionsData.sort((a, b) => b.count - a.count);
-  } else if (advanced.sortType === "Product count - Lowest to highest") {
+  } else if (optionSortType === "Product count - Lowest to highest") {
     currentOptionsData.sort((a, b) => a.count - b.count);
   }
 
@@ -1711,9 +1731,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <TooltipIcon content="How filter options should be ordered." />
                   </div>
                   <SimpleDropdown 
-                    value={advanced.sortType} 
-                    onChange={val => setAdvanced({ ...advanced, sortType: val })} 
-                    options={["Label - AZ", "Label - ZA", "Product count - Highest to lowest", "Product count - Lowest to highest"]} 
+                    value={optionSortType}
+                    onChange={val => setAdvanced({ ...advanced, sortType: val, sortModeExplicit: true })}
+                    options={["Automatic", "Label - AZ", "Label - ZA", "Product count - Highest to lowest", "Product count - Lowest to highest"]}
                     width="100%"
                   />
                 </div>

@@ -34,6 +34,7 @@ async function loadModule(file, mocks) {
     if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
+    if (name === '../services/marketPriceCoverage.server.js') return {marketPriceIntentReady:async()=>false};
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
     if (name in mocks) return mocks[name];

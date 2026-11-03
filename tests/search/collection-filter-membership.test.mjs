@@ -9,7 +9,21 @@ test('only adding a new filter category can narrow a prepared result',()=>{
  assert.equal(narrowerCollectionFilters(blue,blue+'&options[Color][]=Red'),false);
  assert.equal(narrowerCollectionFilters(blue+'&options[Size][]=L',blue),false);
  assert.equal(narrowerCollectionFilters(blue,blue.replace('country=IN','country=US')+'&options[Size][]=L'),false);
- assert.equal(narrowerCollectionFilters(base,blue),false);
+ assert.equal(narrowerCollectionFilters(base,blue),true);
+});
+
+test('the first filter narrows a complete saved collection without a giant ID clause',async()=>{
+ const parentIds=Array.from({length:14813},(_,i)=>String(i+1));
+ const candidates=parentIds.filter(id=>Number(id)%4===0);
+ const index={getSettings:async()=>({displayedAttributes:['*'],pagination:{maxTotalHits:1000}}),
+  getDocuments:async options=>{
+   assert.deepEqual(options.filter,['shop = "fixture.myshopify.com"','option_Color = "Black"']);
+   const rows=candidates.map(id=>({id,shop:'fixture.myshopify.com',status:'ACTIVE'})).reverse();
+   return {total:rows.length,results:rows.slice(options.offset,options.offset+options.limit)};
+  }};
+ const result=await readNarrowerCollectionMembership(index,{filter:['shop = "fixture.myshopify.com"','option_Color = "Black"'],
+  parentIds,shop:'fixture.myshopify.com',baseAlreadyScoped:true});
+ assert.deepEqual(result,candidates);
 });
 
 test('a new filter searches only parent IDs and retains their exact order',async()=>{

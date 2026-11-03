@@ -27,3 +27,15 @@ test('only successfully verified audits advance the cursor',async()=>{
 test('incomplete published catalog and invalid tenant abort without advancing',async()=>{
  const f=await fixture({catalogError:true});await assert.rejects(f.service.processMembershipAudit({shop}),/catalog unavailable/);assert.equal(f.cache.get('membershipAuditCursor:'+shop),undefined);await assert.rejects(f.service.processMembershipAudit({shop:'invalid'}),/Invalid/);
 });
+test('targeted collection repair is shop scoped and leaves rolling cursor untouched',async()=>{
+ const f=await fixture();
+ const queued=await f.service.enqueueCollectionMembershipAudit(shop,cid);
+ assert.equal(queued.status,'queued');
+ assert.equal(f.added.length,1);
+ assert.equal(f.added[0][1].collectionId,cid);
+ await f.service.processMembershipAudit({shop,collectionId:cid});
+ assert.equal(f.cache.get('membershipAuditCursor:'+shop),undefined);
+ assert.equal(JSON.parse(f.cache.get(`membershipAuditStatus:${shop}:${cid}`)).verified,true);
+ await assert.rejects(f.service.enqueueCollectionMembershipAudit('other.myshopify.com',cid),/ownership/);
+ await assert.rejects(f.service.processMembershipAudit({shop,collectionId:'invalid'}),/Invalid/);
+});

@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import readline from 'node:readline';
+import { contextualPricingFields } from '../utils/marketPricingIndex.js';
 
 const PRODUCT = /^gid:\/\/shopify\/Product\/\d+$/;
 const VARIANT = /^gid:\/\/shopify\/ProductVariant\/\d+$/;
@@ -10,7 +11,7 @@ const OPERATION = /^gid:\/\/shopify\/BulkOperation\/\d+$/;
 // Four child connections plus products are within Shopify's five-connection,
 // two-level Bulk Operations limit. Grouping permits one-product-at-a-time
 // ingestion without retaining a store's variants in worker memory.
-export const BULK_PRODUCT_QUERY = `query BulkProductIndex {
+const BULK_PRODUCT_QUERY_TEMPLATE = `query BulkProductIndex {
   products {
     edges { node {
       id title handle vendor productType tags totalInventory status
@@ -21,11 +22,13 @@ export const BULK_PRODUCT_QUERY = `query BulkProductIndex {
       weddingMetafield: metafield(namespace: "custom", key: "wedding_collection_image") { id namespace key value type reference { ... on MediaImage { image { url } } ... on GenericFile { url } } }
       images { edges { node { url } } }
       collections { edges { node { id title handle } } }
-      variants { edges { node { id sku price compareAtPrice inventoryQuantity availableForSale image { url } selectedOptions { name value } inventoryItem { id measurement { weight { value unit } } } } } }
+      variants { edges { node { id sku price compareAtPrice inventoryQuantity availableForSale image { url } selectedOptions { name value } inventoryItem { id measurement { weight { value unit } } } __CFP_MARKET_PRICING__ } } }
       metafields { edges { node { id namespace key value type reference { ... on MediaImage { image { url } } ... on GenericFile { url } } } } }
     } }
   }
 }`;
+export const bulkProductQuery = countries => BULK_PRODUCT_QUERY_TEMPLATE.replace('__CFP_MARKET_PRICING__', contextualPricingFields(countries));
+export const BULK_PRODUCT_QUERY = bulkProductQuery([]);
 
 async function graphql(admin, query, variables) {
   const response = await admin.graphql(query, { variables });
@@ -34,13 +37,13 @@ async function graphql(admin, query, variables) {
   return body.data;
 }
 
-export async function startBulkProductIndex(admin) {
+export async function startBulkProductIndex(admin, { countries = [] } = {}) {
   const data = await graphql(admin, `mutation StartBulkProductIndex($query: String!) {
     bulkOperationRunQuery(query: $query, groupObjects: true) {
       bulkOperation { id status }
       userErrors { message }
     }
-  }`, { query: BULK_PRODUCT_QUERY });
+  }`, { query: bulkProductQuery(countries) });
   const result = data.bulkOperationRunQuery;
   if (result?.userErrors?.length || !OPERATION.test(result?.bulkOperation?.id || '')) throw Error('Shopify rejected bulk product indexing');
   return result.bulkOperation.id;

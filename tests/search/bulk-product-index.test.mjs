@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BULK_PRODUCT_QUERY, startBulkProductIndex, bulkProductIndexStatus, streamBulkProductIndex } from '../../app/services/shopifyBulkIndex.server.js';
+import { BULK_PRODUCT_QUERY, bulkProductQuery, startBulkProductIndex, bulkProductIndexStatus, streamBulkProductIndex } from '../../app/services/shopifyBulkIndex.server.js';
 
 const id = 'gid://shopify/BulkOperation/41';
 const one = { id: 'gid://shopify/Product/1', title: 'Blue dress', handle: 'blue-dress', status: 'ACTIVE', publishedAt: '2026-10-01' };
@@ -51,4 +51,18 @@ test('bulk JSONL rejects partial files and foreign child groups', async () => {
   const broken = async () => new Response([JSON.stringify(one), JSON.stringify({ __parentId: two.id, url: 'https://cdn.shopify.com/image.jpg' })].join('\n'));
   await assert.rejects(streamBulkProductIndex({ url: 'https://storage.googleapis.com/catalog', count: 1,
     fetcher: broken, onProduct: async () => {} }), /not grouped/);
+});
+
+test('bulk price query requests each observed country without adding a child connection', async () => {
+  const query=bulkProductQuery(['IN','US','IN']);
+  assert.equal((query.match(/edges\s*\{/g)||[]).length,5);
+  assert.equal((query.match(/cfpMarket_IN:/g)||[]).length,1);
+  assert.equal((query.match(/cfpMarket_US:/g)||[]).length,1);
+  assert.match(query,/cfpMarket_IN: contextualPricing\(context: \{country: IN\}\)/);
+  let submitted;
+  await startBulkProductIndex({graphql:async(_query,{variables})=>{
+    submitted=variables.query;
+    return{json:async()=>({data:{bulkOperationRunQuery:{bulkOperation:{id},userErrors:[]}}})};
+  }},{countries:['IN']});
+  assert.match(submitted,/cfpMarket_IN:/);
 });

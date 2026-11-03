@@ -18,9 +18,10 @@ import * as marketAvailability from '../../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../../app/utils/collectionFilterMembership.js';
 import * as skuSearch from '../../../app/utils/skuSearch.js';
 import * as searchConfiguration from '../../../app/utils/searchConfiguration.js';
+import * as marketPricingIndex from '../../../app/utils/marketPricingIndex.js';
 
 export async function loadModule(file, mocks) {
-  const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
+  const context = { module: { exports: {} }, exports: {}, URL, Response, AbortSignal, setTimeout, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
     if(name==='../utils/skuSearch.js')return skuSearch;
     if(name==='../utils/instantSearchCard.js')return instantSearchCard;
@@ -28,6 +29,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/facetNormalization.js')return facetNormalization;
     if(name==='node:crypto')return {createHash};
     if(name==='../utils/searchConfiguration.js')return searchConfiguration;
+    if(name==='../utils/marketPricingIndex.js')return marketPricingIndex;
     if(!(name in mocks)&&(name==='./searchIndex.server.js'||name==='../services/searchIndex.server.js'))return {prepareConfiguredSearchQueries:async queries=>queries.map(({_cfpSearchSurface,...q})=>({...q,indexUid:q.indexUid||'products'})),getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),scheduleSearchIndex:async()=>{},resetSearchIndexContext:async()=>{},retireSearchIndexes:async()=>{},syncConfiguredSearchSynonyms:async()=>{},getSearchIndexStatus:async()=>({phase:'default'}),configuredSuggestions:async()=>null};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
@@ -36,6 +38,8 @@ export async function loadModule(file, mocks) {
     if (!(name in mocks)) {
       if(name==='../utils/marketAvailability.js')return marketAvailability;
       if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
+      if(name==='../services/marketPriceCoverage.server.js')return {marketPriceIntentReady:async()=>false};
+      if(name==='./marketPriceCoverage.server.js')return {allMarketPriceCountries:async()=>[],marketPriceCountriesForShop:async()=>[]};
       if(name==='../utils/collectionFilterMembership.js')return collectionFilterMembership;
       if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
       if(name==='../utils/collectionCards.js')return collectionCards;

@@ -8,13 +8,33 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
   const resolveFact=factProfile?collectionFactResolver(spec.rule,factProfile,spec.mergedValues):null;
   if(factProfile&&!resolveFact)throw Error('Collection rule facts do not cover this rule');
   const projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD,
-    'cfpCollectionFactProfile','cfpCollectionFactSource','cfpCollectionFactMatches','cfpCollectionFactImages'])]:undefined;
+    'cfpCollectionFactProfile','cfpCollectionFactSource','cfpCollectionFactMatches','cfpCollectionFactImages',
+    ...(spec.priceSortField?[spec.priceSortField]:[])])]:spec.priceSortField
+      ? [...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)),spec.priceSortField])]
+      : undefined;
+  const withSortPrice=product=>{
+    const price=Number(product[spec.priceSortField]);
+    if(!Number.isFinite(price)||price<0)throw Error('Incomplete market price sort index');
+    return {...product,priceMin:price};
+  };
+  const rankingIndex=spec.priceSortField?{...index,
+    ...(typeof index.getDocuments==='function'?{getDocuments:async options=>{
+      const response=await index.getDocuments({...options,fields:options.fields?[...new Set([...options.fields,spec.priceSortField])]:options.fields});
+      return {...response,results:(response.results||[]).map(withSortPrice)};
+    }}:{}),
+    ...(typeof index.getDocument==='function'?{getDocument:async(...args)=>withSortPrice(await index.getDocument(...args))}:{}),
+    search:async(...args)=>{
+    const [query,options]=args;
+    const response=await index.search(query,{...options,attributesToRetrieve:options?.attributesToRetrieve?
+      [...new Set([...options.attributesToRetrieve,spec.priceSortField])]:options?.attributesToRetrieve});
+    return {...response,hits:(response.hits||[]).map(withSortPrice)};
+  }}:index;
   let comparatorPins=[];
   try {
     const pins=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;
     if(Array.isArray(pins))comparatorPins=pins.map(p=>p?.id).filter(Boolean);
   } catch { /* Preserve the existing behavior for malformed legacy pin data. */ }
-  const ids = await buildCollectionSequence(index, {
+  const ids = await buildCollectionSequence(rankingIndex, {
     query: spec.query, conditions: spec.rule?.conditions ?? [], sortBy: spec.sortBy,
     pinnedIds: spec.pinnedIds, orderedIds: spec.orderedIds,
     projectedFields,

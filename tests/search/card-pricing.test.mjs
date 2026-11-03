@@ -2,21 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
-for(const name of ['collectionFilterPro','instantSearch']) {
- const source=await fs.readFile(`extensions/theme-extension/assets/${name}.js`,'utf8');
- const start=source.indexOf(name==='collectionFilterPro'?'      let priceVal = parseFloat(basePrice)':'      let price = "";');
- const end=source.indexOf(name==='collectionFilterPro'?'      let comparePrice = null;':'      let productUrl',start);
- const code=source.slice(start,end)+(name==='collectionFilterPro'?'\nresult=price;':'\nresult=price;');
- test(`${name} preserves INR prices without adding a surcharge or rounding upward`,()=>{
-  for(const amount of [2450,1025,885.95,2111]) {
-   const ctx={basePrice:amount,p:{priceMin:amount},rate:1,symbol:'?',price:'',result:null};
-   vm.runInNewContext(code,ctx);
-   assert.equal(ctx.result,(name==='instantSearch'?'?':'')+amount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+
+const source = await fs.readFile('extensions/theme-extension/assets/instantSearch.js', 'utf8');
+const start = source.indexOf('      let price = "";');
+const end = source.indexOf('      let productUrl', start);
+assert.ok(start >= 0 && end > start, 'The instant card price path must be present');
+const renderPrice = source.slice(start, end) + '\nresult = price;';
+
+test('instant search passes the already-localized amount to the shop formatter', () => {
+  for (const amount of [2450, 1025, 885.95, 2111]) {
+    const received = [];
+    const context = {
+      p: {priceMin: amount}, result: null, Intl,
+      window: {cfpFormatMoney(value) {received.push(value); return `formatted:${value}`;}},
+    };
+    vm.runInNewContext(renderPrice, context);
+    assert.deepEqual(received, [amount]);
+    assert.equal(context.result, `formatted:${amount}`);
   }
- });
- test(`${name} retains the currency conversion rate without extra adjustment`,()=>{
-  const ctx={basePrice:10,p:{priceMin:10},rate:83.5,symbol:'?',price:'',result:null};
-  vm.runInNewContext(code,ctx);
-  assert.equal(ctx.result,(name==='instantSearch'?'?':'')+'835.00');
- });
-}
+});
+
+test('instant search never applies a second currency conversion rate', () => {
+  const context = {
+    p: {priceMin: 10}, rate: 83.5, result: null, Intl,
+    window: {cfpFormatMoney: amount => `formatted:${amount}`},
+  };
+  vm.runInNewContext(renderPrice, context);
+  assert.equal(context.result, 'formatted:10');
+});

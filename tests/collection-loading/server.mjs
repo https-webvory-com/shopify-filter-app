@@ -53,6 +53,7 @@ export async function createLoadingServer({redisLayer}={}) {
   const byId=new Map(docs.map(p=>[p.id,p]));
   const select=options=>{
     let products=docs.filter(p=>p.status==='ACTIVE').map(p=>({...p}));
+    if(state.noMatchQuery && options.q===state.noMatchQuery)products=[];
     for(const filter of [options.filter || []].flat(Infinity)){
       if(typeof filter==='string'&&filter.startsWith('id IN ')) { const ids=JSON.parse(filter.slice(6));products=products.filter(p=>ids.includes(p.id)); }
       if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"')products=[];
@@ -192,6 +193,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
+    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>false},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
@@ -278,6 +280,10 @@ export async function createLoadingServer({redisLayer}={}) {
         target.push({profile:url.searchParams.get('responseProfile'),page:url.searchParams.get('page'),sort:url.searchParams.get('sortBy'),query:url.searchParams.get('q'),token:url.searchParams.get('rankingToken'),membershipParent:!!url.searchParams.get('membershipParentToken'),status:response.status,source:response.headers.get('X-CFP-Collection-Cards'),products:data.products?.length,first:data.products?.[0]?.id,ranking:data.debug?.collectionRankingStatus,revision:state.revision});
         return;
       }
+      if(url.pathname==='/collections.json'){
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({collections:[{handle:'formal-dresses',title:'Formal Dresses'},{handle:'prom-dresses',title:'Prom Dresses'}]}));return;
+      }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify({price_min:doc.priceMin*100,price_max:doc.priceMax*100,variants:doc.variantPrices.map(v=>({id:Number(v.id),price:(v.price??doc.priceMin)*100,compare_at_price:v.compareAtPrice==null?null:v.compareAtPrice*100}))}));return;
@@ -289,6 +295,7 @@ export async function createLoadingServer({redisLayer}={}) {
         .replace('class="cfp-v1-app-container"',`class="cfp-v1-app-container" style="--cfp-cols-desktop:${state.desktopColumns??4};--cfp-cols-mobile:${state.mobileColumns??2}"`)
         .replace('columns_desktop:4,columns_mobile:2',`columns_desktop:${state.desktopColumns??4},columns_mobile:${state.mobileColumns??2}`);
         if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
+        if(url.pathname==='/search')body=body.replace('data-search-terms="purple prom dress"','data-search-terms="'+String(url.searchParams.get('q')||'')+'"');
         if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){

@@ -23,6 +23,7 @@ import {publicSearchProduct} from '../utils/searchConfiguration.js';
  * Purpose: Returns fast search results using Meilisearch, merging Pinned products.
  */
 export const loader = async ({ request }) => {
+  const startedAt = Date.now();
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   let query = url.searchParams.get("q") || "";
@@ -46,12 +47,16 @@ export const loader = async ({ request }) => {
   }
 
   try {
-    const globalSettings = await getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop));
-    let organicProducts = [];
-
     const searchQuery = query ? query.trim() : "";
-
-    const parsedQuery = searchQuery ? await parseQuery(searchQuery, shop) : null;
+    const [globalSettings, parsedQuery, pinningRule, merchandisingRule, searchContext] = await Promise.all([
+      getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop)),
+      searchQuery ? parseQuery(searchQuery, shop) : null,
+      getActivePinningRuleForSearch(shop, query, "instant"),
+      getActiveRuleForSearch(shop, query, (url.searchParams.get('customer_tags') || '').split(',').map(t => t.trim()).filter(Boolean), url.searchParams.get('locale') || ''),
+      getSearchIndexContext(shop),
+    ]);
+    const bootstrapMs = Date.now() - startedAt;
+    let organicProducts = [];
 
     // -- TIER 1: NLP Intent Extraction (DISABLED) --
     // const aiExtracted = await extractFiltersFromQuery(searchQuery);
@@ -86,6 +91,16 @@ export const loader = async ({ request }) => {
         }
     }
 
+    const rawSuggestionLimit = url.searchParams.get('suggestionLimit');
+    const suggestionLimit = rawSuggestionLimit !== null && /^\d+$/.test(rawSuggestionLimit) ? Math.min(10, Number(rawSuggestionLimit)) : 6;
+    // Search settings with a dedicated index already provide suggestions.
+    // Start that read alongside product ranking and avoid three legacy facet
+    // searches when the configured index is ready.
+    const configuredSuggestionPromise = suggestionLimit > 0
+      ? configuredSuggestions(shop, searchQuery, suggestionLimit, meiliFilters)
+          .catch(error => { console.error('Configured search suggestions unavailable:', error.name); return []; })
+      : Promise.resolve([]);
+
     let meiliSearchParams = {
         _cfpSearchSurface:true,
         filter: meiliFilters,
@@ -112,26 +127,34 @@ export const loader = async ({ request }) => {
     }
 
     // 2. Fetch Active Pinning Rule
-    const [pinningRule, merchandisingRule] = await Promise.all([
-      getActivePinningRuleForSearch(shop, query, "instant"),
-      getActiveRuleForSearch(shop, query, (url.searchParams.get('customer_tags') || '').split(',').map(t => t.trim()).filter(Boolean), url.searchParams.get('locale') || ''),
-    ]);
 
-    const ranking = pinningRule || merchandisingRule ? await rankSearchResults({
-      shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy },
-      rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
-      mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
-    }) : null;
+    const rankingKey = `searchInstantRanking:${shop}:${createHash('sha256').update(JSON.stringify([
+      cleanSearchQuery, meiliSearchParams, sortBy, limit, parsedQuery?.colorIntent,
+      parsedQuery?.skuProductIds, url.searchParams.get('country') || '', url.searchParams.get('locale') || '',
+      url.searchParams.get('customer_tags') || '',
+    ])).digest('hex')}`;
+    const ranking = pinningRule || merchandisingRule
+      ? await getCached(rankingKey, async () => rankSearchResults({
+        shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy },
+        rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
+        mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
+      }), 60, { maxBytes: 2_000_000 }) : null;
     const directCacheKey = `searchInstant:${shop}:${createHash('sha256').update(JSON.stringify([
       cleanSearchQuery, meiliSearchParams,
     ])).digest('hex')}`;
     const meiliRes = ranking ? { hits: ranking.products, semanticHitCount: ranking.semanticHitCount }
       : await getCached(directCacheKey, () => semanticSearch(cleanSearchQuery, meiliSearchParams), 30);
+    const rankingMs = Date.now() - startedAt - bootstrapMs;
 
     const didYouMean = spellingCorrection(cleanSearchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 
     let suggestions = [];
-    if (searchQuery.length > 0) {
+    const configured = await Promise.race([
+      configuredSuggestionPromise,
+      new Promise(resolve => setTimeout(() => resolve([]), 500)),
+    ]);
+    const suggestionsMs = Date.now() - startedAt - bootstrapMs - rankingMs;
+    if (searchQuery.length > 0 && suggestionLimit > 0 && configured === null) {
       try {
         const [tagFacets, typeFacets, colorFacets] = await Promise.all([
           meiliClient.index("products").searchForFacetValues({
@@ -221,17 +244,12 @@ export const loader = async ({ request }) => {
         suggestionBlacklist = null;
       }
     }
-    const rawSuggestionLimit = url.searchParams.get('suggestionLimit');
-    const suggestionLimit = rawSuggestionLimit !== null && /^\d+$/.test(rawSuggestionLimit) ? Math.min(10, Number(rawSuggestionLimit)) : 6;
-    let configured=null;
-    try{configured=await configuredSuggestions(shop,searchQuery,suggestionLimit,meiliFilters);}catch(error){console.error('Configured search suggestions unavailable:',error.name);configured=[];}
     suggestions = suggestionBlacklist === null || suggestionLimit === 0 ? [] : buildSearchSuggestions(searchQuery,configured===null?activeResults:[],configured===null?suggestions:configured,suggestionLimit,suggestionBlacklist);
 
     // Cards render before independently verified market prices arrive in the
     // storefront. Waiting for Shopify Admin pricing here delayed every card.
     const contextualPricingApplied = false;
 
-    const searchContext=await getSearchIndexContext(shop);
     return data({
       query: query,
       totalCount: activeResults.length,
@@ -247,6 +265,8 @@ export const loader = async ({ request }) => {
         // must reflect fresh blacklist settings on the next request.
         ...searchCacheHeaders(request),
         'X-CFP-Search-Ranking': ranking?.rankingMode || 'direct',
+        'Server-Timing': `bootstrap;dur=${bootstrapMs}, ranking;dur=${rankingMs}, suggestions;dur=${suggestionsMs}, total;dur=${Math.max(0, Date.now() - startedAt)}`,
+        'Timing-Allow-Origin': '*',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',

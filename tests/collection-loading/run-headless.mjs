@@ -642,9 +642,12 @@ try{
     await control({reset:true,productCount:30,precompute:true,hold:true,directFacts:true,early:true,
       noPins:true,filterSettings,productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const unfiltered=await getState();
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const blue=await getState();
+    assert.equal(blue.trace.membershipBrowses-unfiltered.trace.membershipBrowses,1,'first Color filter should narrow the saved unfiltered ranking');
+    assert.equal(blue.trace.candidateBrowses,unfiltered.trace.candidateBrowses,'first Color filter should avoid a full collection candidate browse');
     await control({apiDelay:350});
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     const loading=await evaluate("(()=>{const grid=document.querySelector('#cfp-products-container'),card=grid.querySelector('.cfp-skeleton-card'),more=grid.querySelector('.cfp-load-more-container');return {skeletons:grid.querySelectorAll('.cfp-skeleton-card').length,offset:card?.getBoundingClientRect().top-grid.getBoundingClientRect().top,moreDisplay:more?getComputedStyle(more).display:null};})()");
@@ -658,6 +661,41 @@ try{
     assert.deepEqual(sizeCards,[...Array.from({length:13},(_,i)=>String(29-i*2)),'1','3']);
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {blueResults:30,sizeResults:15,visible:15,membershipBrowses:1,workerPaused:true};
+  });
+  await test('legacy Color and Size groups use popularity and natural size order; explicit alphabetical stays available',async()=>{
+    const sizes=['XL','XXS','2XL','S','10','2','10W','M'];
+    const colors=['Blue','Red','Blue','Green','Red','Blue','Black','Orange'];
+    const productFields=Object.fromEntries(sizes.map((size,i)=>[String(i+1),{
+      options:[{name:'Color',values:[colors[i]]},{name:'Size',values:[size]}],
+      variantPrices:[{id:String((i+1)*100),price:i+1,available:true,option1:colors[i],option2:size,imageUrl:`/image/${i+1}.svg`}],
+    }]));
+    const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{advanced:{sortType:'Label - AZ'}}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{advanced:{sortType:'Label - AZ'}}}];
+    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,filterSettings:settings,
+      productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const options=await evaluate("({color:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Color\"]')].map(e=>e.value),size:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)})");
+    assert.deepEqual(options.color.slice(0,2),['Blue','Red']);
+    assert.deepEqual(options.size,['XXS','S','M','XL','2XL','2','10','10W']);
+    settings[1].config.advanced.sortModeExplicit=true;
+    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,filterSettings:settings,
+      productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)"),
+      [...sizes].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
+    return {automatic:true,explicitAlphabetical:true};
+  });
+  await test('zzqxv shows zero products and browseable collections',async()=>{
+    await control({reset:true,productCount:30,noMatchQuery:'zzqxv',noPins:true,
+      apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await send('Page.navigate',{url:origin+'/search?q=zzqxv'});
+    await wait("!!document.querySelector('.cfp-no-products')&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await wait("document.querySelectorAll('.cfp-empty-collections a').length===2");
+    const result=await evaluate("({message:document.querySelector('.cfp-no-products p')?.innerText,count:document.body.innerText.match(/0 products/i)?.[0],cards:document.querySelectorAll('.cfp-product-card--reveal').length,links:[...document.querySelectorAll('.cfp-empty-collections a')].map(e=>e.getAttribute('href'))})");
+    assert.match(result.message,/zzqxv/);assert.equal(result.cards,0);
+    assert.deepEqual(result.links,['/collections/formal-dresses','/collections/prom-dresses']);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return result;
   });
   await test('purple prom dress search shows Size L cards before full filter counts',async()=>{
     const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>{

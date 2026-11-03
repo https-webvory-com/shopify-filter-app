@@ -36,6 +36,31 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     return Boolean(sidebar);
   }
 
+  function sizeOrder(value) {
+    const label = String(value || '').trim().toUpperCase();
+    const names = ['XXXS', 'XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL'];
+    const named = names.indexOf(label);
+    if (named >= 0) return [0, named];
+    const numbered = /^(\d{1,2})(P|W)?$/.exec(label);
+    if (numbered && Number(numbered[1]) <= 30) return [1, Number(numbered[1]) * 3 + (numbered[2] === 'P' ? 1 : numbered[2] === 'W' ? 2 : 0)];
+    return [2, 0];
+  }
+
+  function compareFilterOptions(a, b, sortType, type, key) {
+    const left = String(a.label || a.value || '');
+    const right = String(b.label || b.value || '');
+    const alpha = left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+    if (sortType === 'Product count - Highest to lowest') return (b.count || 0) - (a.count || 0) || alpha;
+    if (sortType === 'Product count - Lowest to highest') return (a.count || 0) - (b.count || 0) || alpha;
+    if (sortType === 'Label - ZA') return -alpha;
+    if (sortType === 'Automatic' && type === 'option' && /^color$/i.test(key || '')) return (b.count || 0) - (a.count || 0) || alpha;
+    if (sortType === 'Automatic' && type === 'option' && /^size$/i.test(key || '')) {
+      const l = sizeOrder(a.value || a.label), r = sizeOrder(b.value || b.label);
+      return l[0] - r[0] || l[1] - r[1] || alpha;
+    }
+    return alpha;
+  }
+
   let shop = '';
   let collectionId = '';
   let collectionHandle = '';
@@ -816,7 +841,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (fetchSignal.aborted) return;
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
-        if (hasSelectedFilters && !isLoadMore && activeFilters.page===1) {
+        if (!isLoadMore && activeFilters.page===1 && !data.cfpCards?.preview && !data.cfpCards?.prefix) {
           const source=new URLSearchParams(queryParams);
           source.delete('rankingToken');source.delete('membershipParentToken');source.delete('membershipParentQuery');
           lastMembershipResult={token:data.rankingToken,query:source.toString()};
@@ -1330,9 +1355,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (products.length === 0) {
       const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
-      let emptyMsg = searchTerms && Object.keys(activeFilters).every(k => k === 'page' || k === 'sortBy' || (Array.isArray(activeFilters[k]) ? activeFilters[k].length === 0 : !activeFilters[k]))
-         ? `No matches found for <strong>'${escapeCardHtml(searchTerms)}'</strong>. Please try again with a different term.`
-         : `No products match your selected filters.`;
+      const selectedFilters = (activeFilters.vendors?.length || 0) + (activeFilters.types?.length || 0) +
+        (activeFilters.tags?.length || 0) + (activeFilters.collections?.length || 0) +
+        (activeFilters.availability?.length || 0) + (activeFilters.titles?.length || 0) +
+        Object.values(activeFilters.options || {}).reduce((n, values) => n + values.length, 0) +
+        Object.values(activeFilters.metafields || {}).reduce((n, values) => n + values.length, 0) +
+        (activeFilters.priceRanges?.length || 0) + (activeFilters.saleRanges?.length || 0) +
+        Number(activeFilters.minPrice > 0 || activeFilters.maxPrice < 999999);
+      const emptySearch = templateName === 'search' && searchTerms && !selectedFilters && totalCount === 0;
+      let emptyMsg = emptySearch
+        ? `No matches found for <strong>'${escapeCardHtml(searchTerms)}'</strong>. Try another search or browse a collection.`
+        : `No products match your selected filters.`;
 
       if (totalCount > 0) {
         emptyMsg = `Products not found.`;
@@ -1343,11 +1376,23 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         <div class="cfp-no-products" style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: #475569; font-size: 15px;">
           ${emptyStateSvg}
           <p style="margin: 0;">${emptyMsg}</p>
-          <button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline" style="max-width: 137px; margin: 23px auto 0; width: 100%;">Reset Filters</button>
+          ${selectedFilters ? '<button class="cfp-btn cfp-btn--primary" id="cfp-reset-inline" style="max-width: 137px; margin: 23px auto 0; width: 100%;">Reset Filters</button>' : ''}
+          ${emptySearch ? '<div class="cfp-empty-collections" aria-live="polite"></div>' : ''}
         </div>
       `;
       const resetBtn = document.getElementById('cfp-reset-inline');
       if (resetBtn) resetBtn.addEventListener('click', clearAllFilters);
+      if (emptySearch) {
+        const target = grid.querySelector('.cfp-empty-collections');
+        const root = window.Shopify?.routes?.root || '/';
+        fetch(`${root}collections.json?limit=5`).then(response => response.ok ? response.json() : null)
+          .then(result => {
+            if (!target?.isConnected || !Array.isArray(result?.collections)) return;
+            const collections = result.collections.filter(item => /^[a-z0-9][a-z0-9-]*$/i.test(item.handle || '')).slice(0, 5);
+            if (!collections.length) return;
+            target.innerHTML = `<p style="margin: 20px 0 8px; font-weight: 600;">Browse collections</p><div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px;">${collections.map(item => `<a href="${root}collections/${item.handle}" class="cfp-btn" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:5px; color:#334155; text-decoration:none;">${escapeCardHtml(item.title)}</a>`).join('')}</div>`;
+          }).catch(() => {});
+      }
       renderPagination(grid, totalCount);
       if (templateName === 'search') {
         grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);
@@ -2245,12 +2290,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
         // Apply Advanced Sort
         if (!navigation && (!config.useManualValues || !config.sortManualValues)) {
-          if (adv.sortType) {
-            if (adv.sortType === "Label - AZ") items.sort((a,b) => (a.label || a.value).localeCompare(b.label || b.value));
-            else if (adv.sortType === "Label - ZA") items.sort((a,b) => (b.label || b.value).localeCompare(a.label || a.value));
-            else if (adv.sortType === "Product count - Highest to lowest") items.sort((a,b) => b.count - a.count);
-            else if (adv.sortType === "Product count - Lowest to highest") items.sort((a,b) => a.count - b.count);
-          }
+          // Existing Color/Size groups were saved with the old alphabetical default.
+          // Treat that legacy default as Automatic until the merchant selects an explicit order.
+          const legacyOptionDefault = type === 'option' && /^(color|size)$/i.test(key || '') &&
+            !adv.sortModeExplicit && (!adv.sortType || adv.sortType === 'Label - AZ');
+          items = [...items].sort((a, b) => compareFilterOptions(a, b,
+            legacyOptionDefault ? 'Automatic' : adv.sortType || 'Label - AZ', type, key));
         }
 
         if (items.length === 0) return;
