@@ -33,7 +33,7 @@ jobs:
                 prisma.$queryRaw`SELECT count(*)::integer AS members,count(*) FILTER (WHERE lower(p."status")='active')::integer AS active,count(*) FILTER (WHERE lower(p."status")='active' AND EXISTS (SELECT 1 FROM "Variant" v WHERE v."productId"=p."id" AND v."available"=true))::integer AS available FROM "ProductCollection" pc JOIN "Product" p ON p."id"=pc."productId" WHERE pc."collectionId"='gid://shopify/Collection/409248522' AND p."shop"=${shop}`,
                 prisma.marketStorefrontConnection.findUnique({where:{shop},select:{countries:true}}),
                 prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}},select:{ids:true,updatedAt:true}}),
-                prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:'gid://shopify/Collection/409248522'},orderBy:{validatedAt:'desc'},take:3,select:{validatedAt:true,expiresAt:true,size:true}}),
+                prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:'409248522'},orderBy:{validatedAt:'desc'},take:3,select:{validatedAt:true,expiresAt:true,size:true}}),
                 prisma.collectionLoadingSnapshot.findFirst({where:{shop,kind:'published'},select:{collectionId:true,validatedAt:true}}),
                 prisma.collectionLoadingSnapshot.count({where:{shop,kind:'published'}})
               ]);
