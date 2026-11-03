@@ -58,3 +58,5 @@ jobs:
             docker logs --since 5m shopify-filter-app 2>&1 | grep -E 'Available option facet counts|Collection ranking|CFP.*Error|CFP.*error|timeout' | tail -30 || true
             docker logs --since 30m shopify-filter-sync-worker 2>&1 | grep -i -E 'sync.*(fail|error)|bulk.*(fail|error)|Product sync|error processing' | tail -60 || true
             docker ps --format '{{.Names}} {{.Status}}' | grep -E 'shopify-filter-app|shopify-filter-sync-worker' || true
+            docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' shopify-filter-sync-worker shopify-filter-app || true
+            docker logs --since 20m shopify-filter-sync-worker 2>&1 | grep -E 'CFP catalog drift audit:|CFP Product sync retry: catalog-drift' | tail -20 || true
