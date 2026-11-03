@@ -24,13 +24,14 @@ jobs:
             const redis=new Redis(endpoint.toString());
             const shop='thedressoutlet.myshopify.com',country='IN';
             try{
-              const [job,proof,backfill,rows]=await Promise.all([
+              const [job,proof,backfill,rows,formalAudit]=await Promise.all([
                 prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{status:true,createdAt:true,updatedAt:true,productsProcessed:true,totalProducts:true,lastError:true}}),
                 redis.get(`marketPriceIntentReady:${shop}:${country}`),
                 redis.ttl(`marketPriceBackfill:${shop}:${country}`),
-                prisma.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`
+                prisma.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`,
+                redis.get(`membershipAuditStatus:${shop}:gid://shopify/Collection/409248522`)
               ]);
-              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0]}));
+              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null}));
             }finally{await prisma.$disconnect();redis.disconnect();}
             NODE
             docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler' | tail -20 || true
