@@ -1,0 +1,29 @@
+name: Resume saved market price backfill
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {startBulkProductSync} from './app/services/sync.server.js';
+            let exitCode=0;
+            try {
+              const result=await startBulkProductSync('thedressoutlet.myshopify.com');
+              console.log('PRICE_BACKFILL_RESUME',JSON.stringify(result));
+            } catch(error) {
+              console.error('PRICE_BACKFILL_RESUME_FAILED',error.message);
+              exitCode=1;
+            }
+            process.exit(exitCode);
+            NODE
