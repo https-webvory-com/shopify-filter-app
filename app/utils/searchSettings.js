@@ -23,7 +23,7 @@ export const DEFAULT_SEARCH_FIELD_CONFIG=Object.freeze([
  ['title','Product title',1],['handle','Product handle',.95],['productType','Product type',.8],['vendor','Vendor',.8],['tags','Tags',.7],
  ['collections','Collections',.5],['sku',"Variants’ SKU",.9],['barcode','Barcode',.8],['description','Product description',.3],
  ['option:*','Product options',.7],['productMetafield:*','Product metafields',.5],
-].map(([key,label,weight])=>Object.freeze({key,label,weight,search:!['description','barcode','collections'].includes(key),suggest:!['sku','barcode','description','handle'].includes(key),transforms:[],indexTransforms:[],delimiter:'',numeric:false})));
+].map(([key,label,weight])=>Object.freeze({key,label,weight,search:!['description','barcode'].includes(key),suggest:!['sku','barcode','description','handle'].includes(key),transforms:[],indexTransforms:[],delimiter:'',numeric:false})));
 const advancedDefaults=Object.fromEntries(Object.entries(ADVANCED_SEARCH_FIELDS).map(([key,field])=>[key,field[1]]));
 export const SEARCH_ENUM_FIELDS={
  instantLayout:['fullscreen','two-columns','grid'],productColumn:['left','right'],pagination:['load-more','infinite'],imageSizeType:['dynamic','original','fixed'],productDateType:['created','published','updated'],

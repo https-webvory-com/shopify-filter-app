@@ -46,6 +46,21 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('review stars initialize on dynamic cards and Load more',async()=>{
+    const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.reviewsIoStore='fixture-store';window.reviewCalls=[];window.ratingSnippet=(selector,settings)=>{reviewCalls.push({selector,store:settings.store,count:document.querySelectorAll('.ruk_rating_snippet').length});};`});
+    try{
+      await control({reset:true,productCount:50,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0});
+      await control({publishFirst50:true});
+      await navigate();
+      await wait("document.querySelectorAll('.cfp-product-card--reveal .ruk_rating_snippet').length===25");
+      await wait('window.reviewCalls.length>0');
+      assert.ok((await evaluate("document.querySelector('.ruk_rating_snippet').getAttribute('data-sku')")).startsWith('dress-1;'));
+      assert.equal(await evaluate('window.reviewCalls.at(-1).store'),'fixture-store');
+      await evaluate("document.querySelector('#cfp-load-more-btn').click()");
+      await wait("document.querySelectorAll('.cfp-product-card--reveal .ruk_rating_snippet').length===50");
+      await wait('window.reviewCalls.some(call=>call.count===50)');
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});}
+  });
   await test('country stock publications preserve fast pages, market switches and inventory refresh',async()=>{
     const all=Array.from({length:65},(_,i)=>String(i+1));
     const stock={version:'v1',ids:{US:all,IN:all.filter(id=>!['1','3'].includes(id))}};

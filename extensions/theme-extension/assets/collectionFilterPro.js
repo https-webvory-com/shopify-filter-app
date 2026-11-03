@@ -1328,6 +1328,31 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   }
   const cardScriptString=value=>escapeCardHtml(JSON.stringify(String(value??'')));
+  let reviewSnippetTimer = null;
+  function reviewSnippetHtml(product) {
+    if (!window.reviewsIoStore || !product.handle) return '';
+    const identifiers = [product.handle, ...(product.variants || []).flatMap(variant => [variant.sku, String(variant.id || '').split('/').pop()])]
+      .filter(Boolean);
+    return `<div class="ruk_rating_snippet" role="img" data-sku="${escapeCardHtml([...new Set(identifiers)].join(';'))}"></div>`;
+  }
+  function initializeReviewSnippets(grid) {
+    if (!window.reviewsIoStore || !grid.querySelector('.ruk_rating_snippet')) return;
+    if (reviewSnippetTimer) clearTimeout(reviewSnippetTimer);
+    let attempts = 0;
+    const tryInitialize = () => {
+      if (!grid.querySelector('.ruk_rating_snippet')) return;
+      if (typeof window.ratingSnippet === 'function') {
+        window.ratingSnippet('ruk_rating_snippet', {
+          store: window.__REVIEWSIO_RATING_SNIPPET_STORE_OVERRIDE__ || window.reviewsIoStore,
+          color: '#000000', textClr: '#333333', linebreak: false,
+          listenForChanges: true, text: 'Reviews', lang: window.reviewsIoLang || 'en',
+          mode: 'default', showEmptyStars: true,
+          enableSyndication: window.reviewsIoEnableSyndication || false,
+        });
+      } else if (++attempts < 20) reviewSnippetTimer = setTimeout(tryInitialize, 200);
+    };
+    reviewSnippetTimer = setTimeout(tryInitialize, 0);
+  }
 
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false, partialPrefix = false) {
     const version = ++marketRenderVersion;
@@ -1823,7 +1848,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           <div class="cfp-product-card__image-wrapper"><a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
             <img src="${escapeCardHtml(primaryImg)}" ${getImageSrcset(primaryImg)} alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
           </div></a></div>
-          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${titleHtml}</h3></div></a>
+          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${titleHtml}</h3>${reviewSnippetHtml(product)}</div></a>
         </div>`;
       let badgesHtml = '';
       const searchDisplay = templateName === 'search' ? (window.cfpSearchSettings || {}) : {};
@@ -1872,6 +1897,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             <div class="cfp-product-card__info">
               ${searchDisplay.showVendor === false ? '' : `<span class="cfp-product-card__vendor">${escapeCardHtml(product.vendor)}</span>`}
               <h3 class="cfp-product-card__title">${titleHtml}</h3>
+              ${reviewSnippetHtml(product)}
               ${swatchesHtml}
               ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
               <div class="cfp-product-card__price-row">
@@ -1911,6 +1937,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
     }
 
+    initializeReviewSnippets(grid);
     if(!previewOnly&&Number.isFinite(totalCount)&&(isLoadMore||products.length>=Math.min(PAGE_SIZE,totalCount)))renderPagination(grid,totalCount);
     if (templateName === 'search') {
       if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);

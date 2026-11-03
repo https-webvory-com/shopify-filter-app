@@ -17,6 +17,16 @@ const settings=patch=>schema.validateSearchSettings({...defaults,...patch});
 const fields=patch=>defaults.fields.map(field=>({...field,...(patch[field.key]||{})}));
 const product=(id,tenant=shop)=>({id:String(id),shop:tenant,status:'ACTIVE',title:'Blue Dress '+id,handle:'dress-'+id,vendor:'Brand',options:[{name:'Color',values:['Blue','Red']}],variantPrices:[{id:'v1',sku:'1517-Blue-4',option1:'Blue',available:true},{id:'v2',sku:'9999-Red-4',option1:'Red',available:false}]});
 
+test('collection names participate in default search without changing title priority',()=>{
+ const collectionField=defaults.fields.find(field=>field.key==='collections');
+ assert.equal(collectionField.search,true);
+ assert.ok(defaults.fields.find(field=>field.key==='title').weight>collectionField.weight);
+ const document=configuration.projectConfiguredSearchDocument({...product(1),collection_titles:['Prom Dresses']},defaults);
+ const query=configuration.configuredSearchOptions({q:'prom dress'},defaults);
+ assert.deepEqual(document.cfp_field_005,['Prom Dresses']);
+ assert.ok(query.attributesToSearchOn.includes('cfp_field_005'));
+});
+
 test('advanced controls validate types, limits, custom fields and safe paths',()=>{
  assert.deepEqual(settings({}),defaults);
  for(const [key,[,fallback,min,max]]of Object.entries(schema.ADVANCED_SEARCH_FIELDS)){

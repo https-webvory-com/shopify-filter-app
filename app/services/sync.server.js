@@ -169,6 +169,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       "productType",
       "vendor",
       "tags",
+      "collection_titles",
       "variantPrices.sku",
       ...Array.from(dynamicKeys),
     ];
