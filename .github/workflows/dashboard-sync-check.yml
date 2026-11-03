@@ -8,14 +8,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+      - name: Inspect private search instance access
+        shell: bash
+        run: |
+          aws ec2 describe-instances --filters Name=private-ip-address,Values=10.0.2.139 --query 'Reservations[].Instances[].{id:InstanceId,state:State.Name,profile:IamInstanceProfile.Arn,key:KeyName}' --output json
+          aws ssm describe-instance-information --query 'InstanceInformationList[].{id:InstanceId,status:PingStatus}' --output json
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            df -h
-            df -i
-            docker system df
-            sudo du -xhd1 /var/lib/docker 2>/dev/null | sort -h | tail -n 12
-            docker ps --format '{{.Names}} {{.Size}}'
+            echo APP_HOST_OK
