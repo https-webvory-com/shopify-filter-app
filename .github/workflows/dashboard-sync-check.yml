@@ -26,7 +26,7 @@ jobs:
             const rankingQueue=new Queue('collectionRankingQueueV2',{connection:{host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})}});
             const shop='thedressoutlet.myshopify.com',country='IN';
             try{
-              const [job,proof,backfill,rows,formalAudit,formalCounts,connection,marketSnapshot,published,publishedSample,publishedCount,rankingCounts]=await Promise.all([
+              const [job,proof,backfill,rows,formalAudit,formalCounts,connection,marketSnapshot,published,publishedSample,publishedCount,rankingCounts,rankingJobs]=await Promise.all([
                 prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{status:true,createdAt:true,updatedAt:true,productsProcessed:true,totalProducts:true,lastError:true}}),
                 redis.get(`marketPriceIntentReady:${shop}:${country}`),
                 redis.ttl(`marketPriceBackfill:${shop}:${country}`),
@@ -38,9 +38,10 @@ jobs:
                 prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:'409248522'},orderBy:{validatedAt:'desc'},take:3,select:{validatedAt:true,expiresAt:true,size:true}}),
                 prisma.collectionLoadingSnapshot.findFirst({where:{shop,kind:'published'},select:{collectionId:true,validatedAt:true}}),
                 prisma.collectionLoadingSnapshot.count({where:{shop,kind:'published'}}),
-                rankingQueue.getJobCounts('waiting','active','delayed','failed','completed')
+                rankingQueue.getJobCounts('waiting','active','delayed','failed','completed'),
+                rankingQueue.getJobs(['active','waiting'],0,5)
               ]);
-              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null,formalCounts:formalCounts[0],connectionCountries:connection?.countries||[],marketSnapshot:marketSnapshot?{ids:marketSnapshot.ids.length,updatedAt:marketSnapshot.updatedAt}:null,published,publishedSample,publishedCount,rankingCounts}));
+              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null,formalCounts:formalCounts[0],connectionCountries:connection?.countries||[],marketSnapshot:marketSnapshot?{ids:marketSnapshot.ids.length,updatedAt:marketSnapshot.updatedAt}:null,published,publishedSample,publishedCount,rankingCounts,rankingJobs:rankingJobs.map(j=>({name:j.name,collectionId:j.data?.record?.collectionId||j.data?.spec?.collectionId||null,processedOn:j.processedOn}))}));
             }finally{await prisma.$disconnect();await rankingQueue.close();redis.disconnect();}
             NODE
             docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler' | tail -20 || true
