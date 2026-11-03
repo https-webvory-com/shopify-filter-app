@@ -67,5 +67,10 @@ jobs:
             print('REDIS_COMMAND_ACLFILE', '--aclfile' in command or '--aclfile' in entry)
             print('REDIS_ENV_KEYS',','.join(key for key in environment if 'REDIS' in key or 'PASS' in key or 'ACL' in key))
             print('REDIS_MOUNT_DESTINATIONS',','.join(m['Destination'] for m in container.get('Mounts') or []))
+            print('REDIS_SAFE_COMMAND',','.join(part for part in command if part in ('redis-server','--appendonly','yes','no','--save','--protected-mode')))
+            print('REDIS_RESTART_POLICY',container['HostConfig']['RestartPolicy']['Name'])
+            print('REDIS_MOUNT_KINDS',','.join(m['Type']+':'+m['Destination'] for m in container.get('Mounts') or []))
+            print('REDIS_PORT_BINDINGS',json.dumps(container['HostConfig']['PortBindings']))
             PY
+            docker exec redis sh -c 'for path in /data/dump.rdb /data/appendonly.aof /data/appendonlydir; do if test -e "$path"; then ls -ldh "$path"; fi; done'
             echo 'REDIS_DIAGNOSTIC_END'
