@@ -106,7 +106,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     else if (searchTerms) activeFilters.q = searchTerms;
 
     if (urlParams.has('page')) activeFilters.page = parseInt(urlParams.get('page')) || 1;
-    if (urlParams.has('sortBy')) activeFilters.sortBy = urlParams.get('sortBy');
+    if (urlParams.has('sort_by') || urlParams.has('sortBy')) activeFilters.sortBy = urlParams.get('sort_by') || urlParams.get('sortBy');
     if (urlParams.has('minPrice')) activeFilters.minPrice = parseInt(urlParams.get('minPrice')) || 0;
     if (urlParams.has('maxPrice')) activeFilters.maxPrice = parseInt(urlParams.get('maxPrice')) || 999999;
     activeFilters.priceRanges = urlParams.getAll('price[]');
@@ -158,8 +158,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (activeFilters.page > 1) params.set('page', activeFilters.page);
     else params.delete('page');
 
-    if (activeFilters.sortBy && activeFilters.sortBy !== 'best-selling') params.set('sortBy', activeFilters.sortBy);
-    else params.delete('sortBy');
+    params.delete('sortBy');
+    if (activeFilters.sortBy && activeFilters.sortBy !== (templateName === 'search' ? 'relevance' : 'best-selling')) params.set('sort_by', activeFilters.sortBy);
+    else params.delete('sort_by');
 
     if (activeFilters.minPrice > 0) params.set('minPrice', activeFilters.minPrice);
     else params.delete('minPrice');
@@ -198,6 +199,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
     window.history.replaceState(null, '', newUrl);
   }
+
+  function selectSort(value) {
+    if (!value || value === activeFilters.sortBy) return;
+    activeFilters.sortBy = value;
+    activeFilters.page = 1;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('page');
+    params.delete('sort_by');
+    params.delete('sortBy');
+    if (value === (templateName === 'search' ? 'relevance' : 'best-selling')) params.delete('sort_by');
+    else params.set('sort_by', value);
+    window.history.pushState(null, '', window.location.pathname + (params.toString() ? '?' + params : ''));
+    fetchAndRenderData();
+  }
+
+  window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    activeFilters.sortBy = params.get('sort_by') || params.get('sortBy') || (templateName === 'search' ? 'relevance' : 'best-selling');
+    activeFilters.page = Number.parseInt(params.get('page'), 10) || 1;
+    fetchAndRenderData();
+  });
 
   parseURLState(); // Call immediately to populate activeFilters
 
@@ -928,8 +950,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
     if(signal.aborted)return;
-    const request=new URL(requestUrl);request.searchParams.set('responseProfile','collection-v1');
     const prefix=cards.cfpCards?.prefix===true;
+    const facetsOnly=cards.cfpCards?.filtered===true&&!prefix;
+    const request=new URL(requestUrl);request.searchParams.set('responseProfile',facetsOnly?'collection-facets-v1':'collection-v1');
     if(prefix)request.searchParams.delete('rankingToken');else request.searchParams.set('rankingToken',cards.rankingToken);
     const signature=JSON.stringify(cards.products);
     const presentationKeys=['showQuickViewCollection','secondImageOnHover','isWholesale'];
@@ -943,7 +966,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
       let full=await response.json();
       if(prefix)full=await waitForCollectionOrder(full,request.toString(),signal);
-      if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Filters unavailable');
+      if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||(!full.cfpFacetsOnly&&!Array.isArray(full.products)))throw Error('Filters unavailable');
       if(signal.aborted)return;
       if(prefix){
         // The early pins occupy page one only. Subsequent canonical pages,
@@ -954,7 +977,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
-      if(JSON.stringify(full.products)!==signature || JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]))!==presentation)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
+      if(full.cfpFacetsOnly){
+        updateProductCount(full.totalCount);renderPagination(getProductContainer(),full.totalCount);
+        getProductContainer().querySelectorAll('.cfp-product-card--preview').forEach(card=>card.classList.remove('cfp-product-card--preview'));
+      }
+      else if(JSON.stringify(full.products)!==signature || JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]))!==presentation)await renderProducts(full.products,full.totalCount,false,full.mergedValues,full.contextualPricingApplied);
       else if(prefix||cards.cfpCards?.version===2){
         // Identical complete cards keep their DOM and verified prices. Only
         // the now-known total and canonical pagination need to be activated.
@@ -964,7 +991,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           wishlistProducts.clear();full.products.forEach(product=>wishlistProducts.set(product.handle,product));syncWishlistProducts();
         }
       }
-      saveBrowserResult(request.searchParams, full);
+      saveBrowserResult(request.searchParams,full.cfpFacetsOnly?{...cards,...full,products:cards.products,cfpCards:null}:full);
     }catch(error){
       if(signal.aborted)return;
       if(prefix)getProductContainer().querySelectorAll(':scope > .cfp-skeleton-card').forEach(card=>card.remove());
@@ -1210,7 +1237,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
-    const sale = product.tags?.some(t => String(t).toLowerCase().includes('sale')) && compare > amount;
+    const sale = Number.isFinite(Number(compare)) && Number(compare) > Number(amount);
     const currency = String(window.Shopify?.currency?.active || window.cfpCurrencyCode || window.cfpCurrency?.isoCode || 'USD').trim().toUpperCase();
     const format = value => currency === 'INR'
       ? 'Rs. ' + new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(value) + ' INR'
@@ -1404,6 +1431,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
             const firstAvailable = product.variants.find(v => v.available === true);
             if (firstAvailable) {
+                matchedVariant = firstAvailable;
                 matchedVariantId = firstAvailable.id ? firstAvailable.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : null;
             }
         }
@@ -1496,10 +1524,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       let priceVal = parseFloat(basePrice) * rate;
       const price = priceVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-      const hasSaleTag = Array.isArray(product.tags) && product.tags.some(t => typeof t === 'string' && t.toLowerCase().trim().includes('sale'));
       let comparePrice = null;
       let onSale = false;
-      if (baseComparePrice && hasSaleTag) {
+      if (baseComparePrice) {
         const compareVal = parseFloat(baseComparePrice) * rate;
         if (compareVal > priceVal) {
           comparePrice = compareVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2807,9 +2834,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const label = document.getElementById('cfp-custom-sort-label');
         if (label) label.textContent = text;
 
-        activeFilters.sortBy = val;
-        activeFilters.page = 1;
-        fetchAndRenderData();
+        selectSort(val);
 
         if (sortContainer) sortContainer.classList.remove('is-open');
       }
@@ -2818,8 +2843,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const sortSelect = document.getElementById('cfp-sort-select-top');
     if (sortSelect) {
       sortSelect.addEventListener('change', () => {
-        activeFilters.sortBy = sortSelect.value;
-        fetchAndRenderData();
+        selectSort(sortSelect.value);
       });
     }
   }

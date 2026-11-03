@@ -228,7 +228,8 @@ export const loader = async ({ request, context }) => {
       }
     }
     
-    const textSearchQuery=parsedQuery?.skuProductIds?.length?'':searchQuery;
+    const textSearchQuery=parsedQuery?.skuProductIds?.length?'':isSearch && parsedQuery?.colorIntent?.requested.length
+      ? parsedQuery.colorQuery : searchQuery;
     // Search results describe every product matching the shopper's words.
     // Parsing "cocktail dress" as a product type must not hide products whose
     // title matches but whose Shopify product type differs.
@@ -405,6 +406,7 @@ export const loader = async ({ request, context }) => {
     types = expandFilterValues("product_type", types);
     tags = expandFilterValues("tags", tags);
     titles = expandFilterValues("title", titles);
+    const selectedOptionValues = Object.fromEntries(Object.entries(optionsFilters).map(([key,values])=>[key,[...values]]));
     for (const key of Object.keys(optionsFilters)) {
       optionsFilters[key] = expandFilterValues(key, optionsFilters[key]);
     }
@@ -441,6 +443,7 @@ export const loader = async ({ request, context }) => {
       minPrice > 0 ||
       maxPrice < 9999999;
     const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
+    const facetsOnly=url.searchParams.get('responseProfile')==='collection-facets-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const variantEligibilityScope = resolvedCollectionId ? {collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}} : {};
@@ -853,11 +856,14 @@ export const loader = async ({ request, context }) => {
     const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
     let configuredPrices=[];try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
     const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
-    for(const range of priceCountRanges){
+    const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+    const priceEligibleIds=hideUnavailable?await Promise.all(priceCountRanges.map(range=>
+      getCached('availableVariantPrices:'+shop+':'+JSON.stringify([priceScope,optionsFilters,mergedValues,range]),
+        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,range,{database:prisma}),30,{maxBytes:1048576}))):[];
+    for(const [index,range] of priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
       if(hideUnavailable){
-        const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
-        const ids=await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma});priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
+        const ids=priceEligibleIds[index];priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
       }
       queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
@@ -1033,7 +1039,7 @@ export const loader = async ({ request, context }) => {
       const [multiSearchRes,rankedPage] = await Promise.all([
         sharedSearchKey&&sharedSearchKey.length<=32768
           ? getCached(sharedSearchKey,searchRead,60,{maxBytes:524288}) : searchRead(),
-        useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
+        facetsOnly?{hits:[],total:rankingSession.ids.length}:useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
           ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
         }):null,
       ]);
@@ -1499,7 +1505,8 @@ export const loader = async ({ request, context }) => {
       debug:{variantEligibilityMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
-      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true}},
+      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:true},
+      debug:{variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 
     // ── 15. Price range counts (from Meilisearch hits) ────────────────
@@ -1641,6 +1648,13 @@ export const loader = async ({ request, context }) => {
           addNormalizedCount(metafieldCounts[metaKey], facetKey, metaKey, val, count);
         }
       }
+    }
+    // Disjunctive facets are calculated without their own selected category.
+    // Its displayed selected count must still agree with the exact ranked
+    // result, including pins, Include rules and overlapping color aliases.
+    for(const [name,values] of Object.entries(selectedOptionValues))if(values.length===1){
+      const label=getTargetValue(name,values[0]);
+      if(optionCounts[name]&&Object.hasOwn(optionCounts[name],label))optionCounts[name][label]=totalCount;
     }
 
     // ── 17. Optional contextual pricing (country-based) ───────────────
@@ -1837,6 +1851,10 @@ export const loader = async ({ request, context }) => {
     };
 
     if(isSearch||searchQuery){const searchContext=await getSearchIndexContext(shop);responsePayload.products=responsePayload.products.map(p=>publicSearchProduct(p,searchContext.settings));}
+    if(facetsOnly)return data({rankingToken:rankingSession.token,totalCount:responsePayload.totalCount,
+      settings:responsePayload.settings,facets:responsePayload.facets,globalSettings:responsePayload.globalSettings,
+      mergedValues:responsePayload.mergedValues,cfpFacetsOnly:true,debug:{timing:responsePayload.debug.timing}},
+      {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(cardsOnly){
       if(pinnedPrefix){
         if(await getCollectionHeadVersion(preparedSpec)!==pinnedPrefixVersion)return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});

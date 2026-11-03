@@ -20,7 +20,7 @@ const chrome=spawn(process.env.HEADLESS_CHROME_PATH||'C:\\Program Files\\Google\
 let stderr='';chrome.stderr.on('data',chunk=>stderr+=chunk.toString());
 const results=[];let socket;
 // Track the intentional facet follow-up separately from product delivery/polling.
-const phases=data=>({...data,allRequests:data.requests,facetResponses:data.requests.filter(r=>r.profile==='collection-v1'&&r.page==='1'&&r.token),requests:data.requests.filter(r=>!(r.profile==='collection-v1'&&r.page==='1'&&r.token))});
+const phases=data=>({...data,allRequests:data.requests,facetResponses:data.requests.filter(r=>['collection-v1','collection-facets-v1'].includes(r.profile)&&r.page==='1'&&r.token),requests:data.requests.filter(r=>!(['collection-v1','collection-facets-v1'].includes(r.profile)&&r.page==='1'&&r.token))});
 const getState=async()=>phases(await(await fetch(origin+'/__state')).json());
 let beforeReset=async()=>{};
 const control=async values=>{if(values.reset)await beforeReset();const response=await fetch(origin+'/__control',{method:'POST',body:JSON.stringify(values)});const body=await response.json();if(!response.ok)throw Error(body.error||'Fixture control failed');return phases(body);};
@@ -69,6 +69,25 @@ try{
     return {indiaTotal:63,updatedIndiaTotal:62,usaTotal:65,initialCards:25,afterLoadMore:50,liveTiming:false};
   });
   console.log('Headless browser connected: '+version.product);
+
+  await test('sort updates the URL and restores on browser Back',async()=>{
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"price-ascending\"]').click()");
+    await wait("new URLSearchParams(location.search).get('sort_by')==='price-ascending'&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate('history.back()');await wait("!new URLSearchParams(location.search).has('sort_by')&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.equal(await evaluate("document.querySelector('#cfp-custom-sort-label')?.textContent.trim()"),await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"best-selling\"]')?.textContent.trim()"));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+
+  await test('discounted selected variant shows its compare-at price without a sale tag',async()=>{
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')",10000);
+    const result=await evaluate("(()=>{const card=document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card');return {price:card?.querySelector('.cfp-product-card__price')?.textContent,compare:card?.querySelector('.cfp-product-card__compare-price')?.textContent,link:card?.querySelector('.cfp-product-card__link')?.href};})()");
+    assert.match(result.compare,/50\.00/);assert.match(result.price,/1\.00/);assert.match(result.link,/variant=100/);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
 
   await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{
     await control({reset:true,hold:true,precompute:true,early:true,assetDelay:200,apiDelay:300,facetDelay:3000,clockOffset:0,cssDelay:0});
@@ -607,7 +626,7 @@ try{
     const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
     assert.equal(requests.length,4);assert.ok(requests.every(r=>r.status===200),JSON.stringify(requests));
     assert.equal(requests.filter(r=>r.profile==='fast-cards-v1').length,2);
-    assert.equal(requests.filter(r=>r.profile==='collection-v1'&&r.token&&r.ranking==='ready').length,2);
+    assert.equal(requests.filter(r=>r.profile==='collection-facets-v1'&&r.token&&r.status===200&&r.products===undefined).length,2,JSON.stringify(requests));
     assert.equal(after.state.builds,before.state.builds);
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};

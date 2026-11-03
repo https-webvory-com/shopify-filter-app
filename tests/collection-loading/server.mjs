@@ -280,7 +280,7 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));
-        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({price_min:doc.priceMin*100,price_max:doc.priceMax*100,variants:doc.variantPrices.map(v=>({id:Number(v.id),price:(v.price??doc.priceMin)*100,compare_at_price:null}))}));return;
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({price_min:doc.priceMin*100,price_max:doc.priceMax*100,variants:doc.variantPrices.map(v=>({id:Number(v.id),price:(v.price??doc.priceMin)*100,compare_at_price:v.compareAtPrice==null?null:v.compareAtPrice*100}))}));return;
       }
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;

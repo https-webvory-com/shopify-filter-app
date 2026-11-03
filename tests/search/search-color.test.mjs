@@ -22,6 +22,16 @@ test('color constraints include compound colors and only configured aliases', ()
   assert.equal(color.colorSearchFilter(color.resolveSearchColor('wedding dress',colors)),null);
 });
 
+test('one-edit color typo keeps the catalog color constraint and records the misspelled token', () => {
+  const intent = color.resolveSearchColor('blak prom dres', ['Black', 'Red']);
+  assert.deepEqual(intent.requested, ['black']);
+  assert.deepEqual(intent.queryWords, ['blak']);
+  assert.deepEqual(intent.values, ['Black']);
+  assert.match(color.colorSearchFilter(intent), /option_Color IN \["Black"\]/);
+  assert.deepEqual(color.resolveSearchColor('black prom dress', ['Black']).values, ['Black']);
+  assert.deepEqual(color.resolveSearchColor('prom dres', ['Black']).values, []);
+});
+
 test('selects an available matching Colour variant and borrows only a same-color image', () => {
   const product={options:JSON.stringify([{name:'Size'},{name:'Colour'}]),variants:[
     {id:'1',option2:'Wine',available:true,imageUrl:'wine.jpg'},
@@ -71,7 +81,7 @@ test('parser facets and color aliases are isolated by shop',async()=>{
   const mocks={
     './meiliClient.server.js':{default:{index:()=>({getFilterableAttributes:async()=>['shop','option_Color','option_Colour'],search:async(_q,params)=>{
       requests.push(params);const a=params.filter[0].includes('shop-a');
-      return {facetDistribution:{option_Color:a?{'Slate Blue':1,Navy:1}:{Gold:1},option_Colour:{},vendor:{},productType:{}}};
+      return {facetDistribution:{option_Color:a?{'Slate Blue':1,Navy:1,Black:1}:{Gold:1},option_Colour:{},vendor:{},productType:{}}};
     }})}},
     './shopCache.server.js':{getCached:async(_key,fetch)=>fetch()},
     '../db.server':{default:{mergedValue:{findMany:async({where})=>where.shop==='shop-a'?[{filterType:'Color',targetValue:'Blue',sourceValues:['Navy']}]:[]}}},
@@ -83,7 +93,9 @@ test('parser facets and color aliases are isolated by shop',async()=>{
   vm.runInNewContext((await transform(await fs.readFile('app/services/queryParser.server.js','utf8'),{format:'cjs'})).code,context);
   const a=await context.module.exports.parseQuery('blue dress','shop-a');
   const b=await context.module.exports.parseQuery('blue dress','shop-b');
+  const typo=await context.module.exports.parseQuery('blak prom dres','shop-a');
   assert.deepEqual(Array.from(a.filters.colors),['Slate Blue','Navy']);assert.deepEqual(Array.from(b.filters.colors),[]);
+  assert.equal(typo.colorQuery,'prom dres');assert.deepEqual(Array.from(typo.filters.colors),['Black']);
   assert.ok(requests.every(request=>request.filter.includes("status = 'ACTIVE'")));
   assert.match(requests[0].filter[0],/shop-a/);assert.match(requests[1].filter[0],/shop-b/);
 });

@@ -57,7 +57,7 @@ test('actual API filters by sale percentage with exact full-collection disjuncti
   const parse=source.slice(source.indexOf('  function parseURLState()'),source.indexOf('  function syncSortControls()'));
   const start=source.indexOf('  function syncStateToURL()');const sync=source.slice(start,source.indexOf('\n  }',start)+4);
   const activeFilters={options:{},metafields:{},page:1,sortBy:'best-selling',minPrice:0,maxPrice:999999};let saved;
-  const context={URLSearchParams,activeFilters,searchTerms:'',window:{location:{pathname:'/collections/all',search:'?sale[]=20:30&sale[]=50:100&vendors=Fixture'},history:{replaceState:(_a,_b,url)=>saved=url}}};
+  const context={URLSearchParams,activeFilters,searchTerms:'',templateName:'collection',window:{location:{pathname:'/collections/all',search:'?sale[]=20:30&sale[]=50:100&vendors=Fixture'},history:{replaceState:(_a,_b,url)=>saved=url}}};
   vm.runInNewContext(parse+sync+';parseURLState();syncStateToURL();',context);
   assert.deepEqual([...activeFilters.saleRanges],['20:30','50:100']);assert.deepEqual(new URL(saved,'http://fixture').searchParams.getAll('sale[]'),['20:30','50:100']);
   assert.equal(new URL(saved,'http://fixture').searchParams.get('vendors'),'Fixture');

@@ -49,7 +49,7 @@ export async function parseQuery(query, shop) {
   const aliases = await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } }));
   const colorEnabled=!searchable||searchable.some(f=>f.key==='option:*'||/^option:colou?r$/i.test(f.key));
   const colorIntent = resolveSearchColor(query, colorEnabled?cache.colors:[], colorEnabled?aliases:[]);
-  const queryColorWords = colorIntent.requested;
+  const queryColorWords = colorIntent.queryWords || colorIntent.requested;
   detectedColors = colorIntent.values;
 
   // Detect vendors
@@ -80,6 +80,7 @@ export async function parseQuery(query, shop) {
       remainingQuery = remainingQuery.replace(new RegExp(`(^|\\s)${cw}(\\s|$)`, 'ig'), ' ').trim();
     }
   }
+  const colorQuery = remainingQuery.replace(/\s+/g, ' ').trim();
 
   if (detectedVendors.length > 0) {
     for (const v of detectedVendors) {
@@ -106,6 +107,7 @@ export async function parseQuery(query, shop) {
       types: detectedTypes
     },
     queryColorWords,
+    colorQuery,
     colorIntent,
     colorFilter: colorSearchFilter(colorIntent, cache.colorFields)
   };

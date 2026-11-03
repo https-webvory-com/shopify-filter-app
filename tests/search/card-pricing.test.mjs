@@ -5,7 +5,7 @@ import vm from 'node:vm';
 for(const name of ['collectionFilterPro','instantSearch']) {
  const source=await fs.readFile(`extensions/theme-extension/assets/${name}.js`,'utf8');
  const start=source.indexOf(name==='collectionFilterPro'?'      let priceVal = parseFloat(basePrice)':'      let price = "";');
- const end=source.indexOf(name==='collectionFilterPro'?'      const hasSaleTag':'      let productUrl',start);
+ const end=source.indexOf(name==='collectionFilterPro'?'      let comparePrice = null;':'      let productUrl',start);
  const code=source.slice(start,end)+(name==='collectionFilterPro'?'\nresult=price;':'\nresult=price;');
  test(`${name} preserves INR prices without adding a surcharge or rounding upward`,()=>{
   for(const amount of [2450,1025,885.95,2111]) {
