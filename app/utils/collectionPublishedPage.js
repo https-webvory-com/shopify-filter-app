@@ -100,7 +100,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    return response;
   }catch{return null;}
  }
- async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null,external=false}){
+ async function publish({request,collectionId,collectionHandle,prepared,payload,at=now(),sessionUpdatedAt,configuration,marketAvailabilityVersion=null,external=false,membershipProof=null}){
   const key=publishedCollectionKey(request);if(!key||new URL(request.url).searchParams.get('limit')!=='50')return false;
   const shop=new URL(request.url).searchParams.get('shop'),url=new URL(request.url);
   if(collectionId!=='all'){url.searchParams.delete('collectionHandle');url.searchParams.set('collectionId',String(collectionId));}
@@ -112,7 +112,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   if(external&&readExternalProof&&!externalRevision)return false;
   if(readExternalProof&&externalDependencies&&typeof prepared.reusableDataRevision==='string'&&
     prepared.reusableDataRevision.split(':')[2]!==externalRevision)return false;
-  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards,external:Boolean(external),externalDependencies,externalRevision};
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),...(typeof membershipProof==='string'&&/^[a-f0-9]{64}$/.test(membershipProof)?{membershipProof}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards,external:Boolean(external),externalDependencies,externalRevision};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.

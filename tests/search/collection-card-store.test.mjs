@@ -272,6 +272,7 @@ test('production card adapter rejects fallback ranking keys and reads tenant-sco
   '../utils/collectionPreparation.js':{preparationKey},'../utils/collectionCardValidation.js':{},'./collectionRankingSession.server.js':{},
   '../utils/collectionPreparationTelemetry.js':{createCollectionPreparationTelemetry:()=>async()=>{}},
   '../utils/collectionPublishedPage.js':{createPublishedCollectionPages:()=>({get:async()=>null,publish:async()=>true})},
+  './collectionFilterMembership.server.js':{collectionMembershipProof:async()=>null},
   '../utils/collectionDependencies.js':{createCollectionDependencies:()=>({revision:async()=>null}),dependencyAnyKey:()=>''},
   '../utils/shopCacheInvalidation.js':{catalogPublicationInvalidatedAtKey:()=>'',marketRuleInvalidatedAtKey:()=>''},
  });

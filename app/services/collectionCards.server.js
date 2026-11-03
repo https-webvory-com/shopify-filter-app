@@ -10,6 +10,7 @@ import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot,getCollectio
 import {createCollectionPreparationTelemetry} from '../utils/collectionPreparationTelemetry.js';
 import {createPublishedCollectionPages} from '../utils/collectionPublishedPage.js';
 import {marketRankingFingerprint} from '../utils/marketAvailability.js';
+import {collectionMembershipProof} from './collectionFilterMembership.server.js';
 import {createCollectionDependencies,dependencyAnyKey} from '../utils/collectionDependencies.js';
 import {catalogPublicationInvalidatedAtKey,marketRuleInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
 const recordCardEvent=createCollectionPreparationTelemetry(redis);
@@ -23,7 +24,7 @@ const readExternalProof=async(shop,descriptor,{initialize=false}={})=>{
 
 export function createCardStateReader(redis,database=prisma,now=Date.now,loadDurable=loadCollectionLoadingSnapshot){return readCardState(redis,database,now,loadDurable,getCollectionLoadingGeneration);}
 
-const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata);
+const createSession=(request,entry,prepared)=>saveCollectionRankingSession(entry.shop,marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion),prepared.ids,entry.sessionUpdatedAt,prepared.metadata,entry.membershipProof);
 const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
  readConfigurationRevision:async shop=>await redis.get(`collectionPreparationRevision:${shop}`)??'0',
  readCatalogInvalidatedAt:async(shop,id)=>await redis.get(catalogPublicationInvalidatedAtKey(shop,id)),
@@ -39,6 +40,7 @@ const store=createCollectionCardStore({redis,readState:createCardStateReader(red
  observe:event=>recordCardEvent(event).catch(()=>{}),
  validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(meili.index('products'),entry,prepared,{...options,batchOwner:meili}),
  createSession,
+ makeMembershipProof:(spec,collectionId)=>collectionMembershipProof({shop:spec.shop,collectionId,configuration:spec.revision,marketVersion:spec.marketAvailabilityVersion,rule:spec.rule,pinningRule:spec.pinningRule,mergedValues:spec.mergedValues,globalSettings:spec.globalSettings,orderRevision:spec.orderRevision}),
 });
 export const getPreparedCollectionCards=store.get;
 export const beginPreparedCollectionCards=options=>{

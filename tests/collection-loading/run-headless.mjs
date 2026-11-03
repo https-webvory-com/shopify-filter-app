@@ -666,6 +666,19 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {blueResults:30,sizeResults:15,visible:15,membershipBrowses:1,workerPaused:true};
   });
+  await test('first filter narrows a published complete collection without rebuilding candidates',async()=>{
+    const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
+    await control({reset:true,productCount:60,precompute:true,hold:true,directFacts:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,early:true,noPins:true,filterSettings,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const before=await getState();
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const after=await getState();
+    assert.equal(after.trace.membershipBrowses-before.trace.membershipBrowses,1);
+    assert.equal(after.trace.candidateBrowses,before.trace.candidateBrowses);
+    assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('legacy Color and Size groups use popularity and natural size order; explicit alphabetical stays available',async()=>{
     const sizes=['XL','XXS','2XL','S','10','2','10W','M'];
     const colors=['Blue','Red','Blue','Green','Red','Blue','Black','Orange'];
@@ -673,17 +686,24 @@ try{
       options:[{name:'Color',values:[colors[i]]},{name:'Size',values:[size]}],
       variantPrices:[{id:String((i+1)*100),price:i+1,available:true,option1:colors[i],option2:size,imageUrl:`/image/${i+1}.svg`}],
     }]));
-    const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{advanced:{sortType:'Label - AZ'}}},
-      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{advanced:{sortType:'Label - AZ'}}}];
-    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,filterSettings:settings,
-      productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{advanced:{sortType:'Label - AZ'}}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',displayMode:'Box/Button',config:{advanced:{sortType:'Label - AZ'}}},
+      {id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{}}];
+    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,noMerchandising:true,filterSettings:settings,
+      globalSettings:{showProductCount:false},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const hoverCounts=await evaluate("({color:document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]')?.closest('label').title,size:document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"XXS\"]')?.closest('label').title,vendor:document.querySelector('#cfp-sidebar input[name=\"vendor\"][value=\"Fixture\"]')?.closest('label').title,printed:document.querySelectorAll('#cfp-sidebar .cfp-checkbox__count').length})");
+    assert.deepEqual(hoverCounts,{color:'Blue (3)',size:'XXS (1)',vendor:'Fixture (8)',printed:0});
     const options=await evaluate("({color:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Color\"]')].map(e=>e.value),size:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)})");
     assert.deepEqual(options.color.slice(0,2),['Blue','Red']);
     assert.deepEqual(options.size,['XXS','S','M','XL','2XL','2','10','10W']);
+    await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===3&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"vendor\"][value=\"Fixture\"]').closest('label').title"),'Fixture (3)');
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]').closest('label').title"),'Blue (3)');
     settings[1].config.advanced.sortModeExplicit=true;
-    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,filterSettings:settings,
-      productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,noMerchandising:true,filterSettings:settings,
+      globalSettings:{showProductCount:false},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)"),
       [...sizes].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));

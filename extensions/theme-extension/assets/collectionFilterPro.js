@@ -2033,7 +2033,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if(stock.outOfStock?.enabled)choices.push(['out_of_stock',stock.outOfStock.label]);
         groupContent=choices.map(([value,label])=>{
           const count=facets.extraFilters?.choices?.find(c=>c.type==='stock_status'&&c.value===value)?.count ?? (value==='in_stock'?facets.availability?.inStock:facets.availability?.outOfStock) ?? 0;
-          return `<label class="cfp-checkbox"><input type="checkbox" name="availability" value="${value}" ${activeFilters.availability.includes(value)?'checked':''}><span class="cfp-checkbox__box"></span><span class="cfp-checkbox__label">${escapeCardHtml(label||value.replaceAll('_',' '))}</span>${globalSettings.showProductCount===false?'':`<span class="cfp-checkbox__count">${count}</span>`}</label>`;
+          return `<label class="cfp-checkbox" title="${escapeCardHtml(`${label||value.replaceAll('_',' ')} (${count})`)}"><input type="checkbox" name="availability" value="${value}" ${activeFilters.availability.includes(value)?'checked':''}><span class="cfp-checkbox__box"></span><span class="cfp-checkbox__label">${escapeCardHtml(label||value.replaceAll('_',' '))}</span>${globalSettings.showProductCount===false?'':`<span class="cfp-checkbox__count">${count}</span>`}</label>`;
         }).join('');
       }
       else if (['percent_sale','weight','review_rating'].includes(type) && displayMode.toLowerCase() === 'range') {
@@ -2457,7 +2457,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                      <label class="cfp-color-swatch ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)} (${item.count})`)}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
@@ -2486,7 +2486,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                 ${items.map((item, idx) => {
                   const hide = isViewMore && idx >= limit;
                   return `
-                  <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${item.value} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}">
+                  <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)} (${item.count})`)}">
                     <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                     <span><span class="cfp-button-chip__text">${getDisplayLabel(item.label || item.value, prefix)}</span>${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}</span>
                   </label>
@@ -2510,7 +2510,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               ${items.map((item, idx) => {
                 const hide = isViewMore && idx >= limit;
                 return `
-                <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}">
+                <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)} (${item.count})`)}">
                   <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                   <span class="cfp-checkbox__box"></span>
                   <span class="cfp-checkbox__label">${getDisplayLabel(item.label || item.value, prefix)}</span>

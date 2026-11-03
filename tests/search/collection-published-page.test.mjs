@@ -7,7 +7,7 @@ import {encodePreparation,decodePreparation} from '../../app/utils/collectionPre
 const sessions=await loadModule('app/services/collectionRankingSession.server.js',{'node:crypto':crypto,'./redis.server.js':{default:{setex:async()=>{}}}});
 
 function fixture(options={}){
- const shop='fixture.myshopify.com',values=new Map(),rows=new Map();let time=100000,sessionCalls=0;
+ const shop='fixture.myshopify.com',values=new Map(),rows=new Map();let time=100000,sessionCalls=0,lastSession=null;
  const url='https://api.test/api/filter?shop='+shop+'&country=IN&locale=en&collectionHandle=one&sortBy=best-selling&page=1&limit=25&responseProfile=collection-preview-v1';
  const headers={Accept:'application/x-cfp-published-page-v1, application/x-cfp-pinned-prefix-v3, application/json'};
  const request=(changes={})=>{const u=new URL(url);for(const[k,v]of Object.entries(changes))u.searchParams.set(k,v);return new Request(u,{headers});};
@@ -15,13 +15,24 @@ function fixture(options={}){
    set:async(k,v,mode)=>{if(mode!=='NX'||!values.has(k))values.set(k,v);},del:async k=>values.delete(k)},
   saveDurable:async row=>{const old=rows.get(row.key);if(old&&old.validatedAt>row.validatedAt)return false;rows.set(row.key,row);return true;},
   loadDurable:async({shop:tenant,key})=>[...rows.values()].find(r=>r.shop===tenant&&r.aliases.includes(key))?.payload,
-  createSession:(req,entry)=>{sessionCalls++;return sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata);},
+  createSession:async(req,entry)=>{sessionCalls++;lastSession=await sessions.saveCollectionRankingSession(entry.shop,sessions.collectionRankingFingerprint(req.url),entry.ids,entry.sessionUpdatedAt,entry.metadata,entry.membershipProof);return lastSession;},
  });
  const ids=Array.from({length:70},(_,i)=>String(i+1));
  const payload={totalCount:70,products:ids.slice(0,50).map(id=>({id,title:'Dress '+id,handle:'dress-'+id,variants:[{id:'v'+id,price:100}]})),settings:[{field:'Color'}],facets:{options:{Color:[{value:'Black',count:70}]}},globalSettings:{},debug:{collectionRankingStatus:'ready'}};
  const publish=(options={})=>store.publish({request:request({limit:'50',responseProfile:'collection-cards-v1'}),collectionId:'1',collectionHandle:'one',prepared:{ids,metadata:{}},payload,sessionUpdatedAt:time,...options});
- return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time,sessionCalls:()=>sessionCalls};
+ return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time,sessionCalls:()=>sessionCalls,lastSession:()=>lastSession};
 }
+
+test('published first page retains a complete membership proof for the first filter',async()=>{
+ const f=fixture(),proof='a'.repeat(64);
+ await f.publish({membershipProof:proof});
+ const first=await(await f.store.get(f.request())).json();
+ const saved=decodePreparation([...f.rows.values()][0].payload);
+ assert.equal(saved.membershipProof,proof);
+ assert.equal(first.totalCount,f.ids.length);
+ assert.ok(first.rankingToken);
+ assert.equal(f.lastSession().membershipProof,proof);
+});
 
 test('background coverage probe recognizes a complete published fifty without creating a shopper session',async()=>{
  const f=fixture();await f.publish({marketAvailabilityVersion:'in-v1'});
