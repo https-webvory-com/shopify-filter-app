@@ -168,6 +168,21 @@ jobs:
             $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             npx prisma db execute --file scripts/prepare-quick-view.sql --schema prisma/schema.prisma
 
+            # Check Redis before replacing healthy containers. A missing or stale
+            # credential must stop this rollout without interrupting shoppers.
+            docker run --rm --env-file .env \
+              $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+              node --input-type=module -e '
+                import Redis from "ioredis";
+                import {redisConnectionOptions} from "./app/services/redisConnection.server.js";
+                const client = new Redis({...redisConnectionOptions,lazyConnect:true,
+                  maxRetriesPerRequest:1,connectTimeout:5000,retryStrategy:()=>null});
+                client.on("error",()=>{});
+                try { await client.connect(); await client.ping(); console.log("Redis preflight passed"); }
+                catch { console.error("Redis preflight failed; check server Redis credentials"); process.exitCode=1; }
+                finally { client.disconnect(); }
+              '
+
             # Keep the exact previous image IDs so a failed startup can restore
             # the last app/worker pair instead of leaving the new app without ranking.
             previous_app_image=$(docker inspect --format '{{.Image}}' shopify-filter-app 2>/dev/null || true)

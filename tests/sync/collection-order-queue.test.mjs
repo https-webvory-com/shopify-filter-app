@@ -11,7 +11,7 @@ test('collection order queue is independent, retrying and reused on reload', asy
     on() {}
   }
   const context = { module: { exports: {} }, exports: {}, global: {}, console,
-    require: name => { assert.equal(name, 'bullmq'); return { Queue }; } };
+    require: name => name === 'bullmq' ? {Queue} : name === './redisConnection.server.js' ? {redisConnectionOptions: {host:'fixture',port:6379}} : assert.fail(`Unexpected import: ${name}`) };
   const source = (await transform(await fs.readFile('app/services/queue.server.js', 'utf8'), { format: 'cjs' })).code;
   vm.runInNewContext(`(function(){${source}\n})();`, context);
   const order = context.module.exports.collectionOrderQueue;

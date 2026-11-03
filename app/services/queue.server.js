@@ -1,14 +1,7 @@
 import { Queue } from "bullmq";
+import {redisConnectionOptions} from './redisConnection.server.js';
 
-const REDIS_HOST = "184.72.37.227";
-const REDIS_PORT = 6379;
-
-export const redisOptions = {
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-  family: 4,
-  connectTimeout: 10000,
-};
+export const redisOptions = redisConnectionOptions;
 
 let webhookQueue;
 

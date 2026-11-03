@@ -24,7 +24,7 @@ import { initWebhookWorker } from "../workers/webhookWorker.server.js";
 import { initProductSyncWorker } from "../workers/productSyncWorker.server.js";
 
 redis.on('connect', () => {
-  console.log(`CFP Connected to Redis successfully at ${REDIS_URL}`);
+  console.log('CFP Connected to Redis');
   if (process.env.CFP_WORKER_MODE !== "web") {
     initWebhookWorker();
     initProductSyncWorker();
