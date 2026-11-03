@@ -57,4 +57,15 @@ jobs:
               awk -F= '/^REDIS_(URL|PASSWORD|USERNAME)=/ {print "APP_ENV_HAS",$1}' /home/ubuntu/shopify-filter-app/.env
             fi
             redis-cli -h 127.0.0.1 ping 2>&1 | grep -E 'PONG|NOAUTH|Connection refused' || true
+            python3 - <<'PY'
+            import json, subprocess
+            container=json.loads(subprocess.check_output(['docker','inspect','redis']))[0]
+            config=container['Config']; command=config.get('Cmd') or []; entry=config.get('Entrypoint') or []
+            environment=[part.split('=',1)[0] for part in config.get('Env') or []]
+            print('REDIS_CONTAINER_STARTED',container['State']['StartedAt'])
+            print('REDIS_COMMAND_REQUIREPASS', '--requirepass' in command or '--requirepass' in entry)
+            print('REDIS_COMMAND_ACLFILE', '--aclfile' in command or '--aclfile' in entry)
+            print('REDIS_ENV_KEYS',','.join(key for key in environment if 'REDIS' in key or 'PASS' in key or 'ACL' in key))
+            print('REDIS_MOUNT_DESTINATIONS',','.join(m['Destination'] for m in container.get('Mounts') or []))
+            PY
             echo 'REDIS_DIAGNOSTIC_END'
