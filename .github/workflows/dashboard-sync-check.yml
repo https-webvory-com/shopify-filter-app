@@ -24,7 +24,7 @@ jobs:
             const redis=new Redis(endpoint.toString());
             const shop='thedressoutlet.myshopify.com',country='IN';
             try{
-              const [job,proof,backfill,rows,formalAudit,formalCounts,connection,marketSnapshot]=await Promise.all([
+              const [job,proof,backfill,rows,formalAudit,formalCounts,connection,marketSnapshot,published]=await Promise.all([
                 prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{status:true,createdAt:true,updatedAt:true,productsProcessed:true,totalProducts:true,lastError:true}}),
                 redis.get(`marketPriceIntentReady:${shop}:${country}`),
                 redis.ttl(`marketPriceBackfill:${shop}:${country}`),
@@ -32,9 +32,10 @@ jobs:
                 redis.get(`membershipAuditStatus:${shop}:gid://shopify/Collection/409248522`),
                 prisma.$queryRaw`SELECT count(*)::integer AS members,count(*) FILTER (WHERE lower(p."status")='active')::integer AS active,count(*) FILTER (WHERE lower(p."status")='active' AND EXISTS (SELECT 1 FROM "Variant" v WHERE v."productId"=p."id" AND v."available"=true))::integer AS available FROM "ProductCollection" pc JOIN "Product" p ON p."id"=pc."productId" WHERE pc."collectionId"='gid://shopify/Collection/409248522' AND p."shop"=${shop}`,
                 prisma.marketStorefrontConnection.findUnique({where:{shop},select:{countries:true}}),
-                prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}},select:{ids:true,updatedAt:true}})
+                prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}},select:{ids:true,updatedAt:true}}),
+                prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:'gid://shopify/Collection/409248522'},orderBy:{validatedAt:'desc'},take:3,select:{validatedAt:true,expiresAt:true,size:true}})
               ]);
-              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null,formalCounts:formalCounts[0],connectionCountries:connection?.countries||[],marketSnapshot:marketSnapshot?{ids:marketSnapshot.ids.length,updatedAt:marketSnapshot.updatedAt}:null}));
+              console.log('MARKET_PRICE_STATUS',JSON.stringify({job,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null,formalCounts:formalCounts[0],connectionCountries:connection?.countries||[],marketSnapshot:marketSnapshot?{ids:marketSnapshot.ids.length,updatedAt:marketSnapshot.updatedAt}:null,published}));
             }finally{await prisma.$disconnect();redis.disconnect();}
             NODE
             docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler' | tail -20 || true
