@@ -25,5 +25,5 @@ jobs:
               const job=await q.getJob(id);
               console.log('TARGET_AUDIT',JSON.stringify(job?{state:await job.getState(),attempts:job.attemptsMade,reason:String(job.failedReason||'').slice(0,250)}:{state:'missing'}));
               console.log('QUEUE_COUNTS',JSON.stringify(await q.getJobCounts('active','waiting','delayed','failed','completed')));
-            } finally {await q.close();}
+            } finally {await q.close();process.exit(0);}
             NODE
