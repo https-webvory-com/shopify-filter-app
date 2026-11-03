@@ -34,3 +34,4 @@ jobs:
             }finally{await prisma.$disconnect();redis.disconnect();}
             NODE
             docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler' | tail -20 || true
+            docker logs --since 5m shopify-filter-app 2>&1 | grep -E 'Available option facet counts|Collection ranking|CFP.*Error|CFP.*error|timeout' | tail -30 || true
