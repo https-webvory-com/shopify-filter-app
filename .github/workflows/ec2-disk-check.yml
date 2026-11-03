@@ -1,6 +1,11 @@
 name: Inspect EC2 deployment disk
 on:
   workflow_dispatch:
+    inputs:
+      recover_redis:
+        description: 'Replace the Redis container using its existing persistent volume and a new local credential'
+        required: false
+        default: 'false'
 permissions:
   contents: read
 jobs:
@@ -74,3 +79,72 @@ jobs:
             PY
             docker exec redis sh -c 'for path in /data/dump.rdb /data/appendonly.aof /data/appendonlydir; do if test -e "$path"; then ls -ldh "$path"; fi; done'
             echo 'REDIS_DIAGNOSTIC_END'
+  recover_redis:
+    if: ${{ inputs.recover_redis == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Restore authenticated Redis with the existing data volume
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 8m
+          script: |
+            set -eu
+            app_env="$HOME/shopify-filter-app/.env"
+            backup_env="$HOME/shopify-filter-app/.env.before-redis-recovery"
+            test -f "$app_env"
+            test ! -e "$backup_env"
+            redis_volume=$(docker inspect redis --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}')
+            test -n "$redis_volume"
+            docker exec redis test -s /data/dump.rdb
+            test "$(docker inspect redis --format '{{.HostConfig.RestartPolicy.Name}}')" = unless-stopped
+            docker inspect redis --format '{{json .Config.Cmd}}' | grep -Fq -- '--appendonly'
+            redis_password=$(openssl rand -hex 32)
+            cp -p "$app_env" "$backup_env"
+            printf 'appendonly yes\nrequirepass %s\ndir /data\n' "$redis_password" |
+              docker exec -i -u 0 redis sh -c 'umask 077; cat > /data/redis-secure.conf; chown redis:redis /data/redis-secure.conf; chmod 600 /data/redis-secure.conf'
+            REDIS_PASSWORD="$redis_password" APP_ENV="$app_env" python3 - <<'PY'
+            import os,pathlib
+            path=pathlib.Path(os.environ['APP_ENV'])
+            lines=[line for line in path.read_text().splitlines() if not line.startswith(('REDIS_PASSWORD=','REDIS_URL=','REDIS_USERNAME='))]
+            lines.append('REDIS_PASSWORD='+os.environ['REDIS_PASSWORD'])
+            path.write_text('\n'.join(lines)+'\n')
+            path.chmod(0o600)
+            PY
+            replaced=false
+            rollback() {
+              failure_code="$1"
+              trap - EXIT
+              if [ "$replaced" = true ]; then
+                docker rm -f redis >/dev/null 2>&1 || true
+                docker rename redis-before-cfp-recovery redis || true
+                docker start redis >/dev/null || true
+              fi
+              cp -p "$backup_env" "$app_env"
+              docker exec -u 0 redis rm -f /data/redis-secure.conf >/dev/null 2>&1 || true
+              echo 'Redis recovery failed; previous container and app environment restored.'
+              exit "$failure_code"
+            }
+            trap 'rollback "$?"' EXIT
+            docker stop -t 120 redis >/dev/null
+            docker rename redis redis-before-cfp-recovery
+            replaced=true
+            docker run -d --name redis --restart unless-stopped -p 6379:6379 \
+              -v "$redis_volume:/data" redis:7-alpine redis-server /data/redis-secure.conf >/dev/null
+            ready=false
+            for attempt in $(seq 1 90); do
+              if docker exec -e REDISCLI_AUTH="$redis_password" redis redis-cli ping 2>/dev/null | grep -qx PONG; then
+                ready=true
+                break
+              fi
+              sleep 2
+            done
+            test "$ready" = true
+            docker exec -e REDISCLI_AUTH="$redis_password" redis redis-cli dbsize >/dev/null
+            replaced=false
+            trap - EXIT
+            unset redis_password
+            echo 'Redis recovery succeeded; existing data volume and previous stopped container retained.'
