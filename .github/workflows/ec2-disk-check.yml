@@ -115,6 +115,8 @@ jobs:
                 for code in ('NOAUTH','WRONGPASS','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','AUTH','DISABLED','UNAVAILABLE'):
                     if code.lower() in line.lower(): codes[code]+=1
             print('WISHLIST_REDIS_ERROR_CODES',dict(codes))
+            local=sum(any(marker in line for marker in ('184.72.37.227','127.0.0.1:6379','localhost:6379',':6379')) for line in lines)
+            print('WISHLIST_REDIS_LOCAL_ENDPOINT_LOG_MATCHES',local)
             PY
             docker exec wishlist-growth node -e '
               const fs=require("fs"),path=require("path"),root=process.cwd(),found=[];
