@@ -114,6 +114,7 @@ jobs:
             path.write_text('\n'.join(lines)+'\n')
             path.chmod(0o600)
             PY
+            old_stopped=false
             replaced=false
             rollback() {
               failure_code="$1"
@@ -121,6 +122,8 @@ jobs:
               if [ "$replaced" = true ]; then
                 docker rm -f redis >/dev/null 2>&1 || true
                 docker rename redis-before-cfp-recovery redis || true
+                docker start redis >/dev/null || true
+              elif [ "$old_stopped" = true ]; then
                 docker start redis >/dev/null || true
               fi
               cp -p "$backup_env" "$app_env"
@@ -130,6 +133,7 @@ jobs:
             }
             trap 'rollback "$?"' EXIT
             docker stop -t 120 redis >/dev/null
+            old_stopped=true
             docker rename redis redis-before-cfp-recovery
             replaced=true
             docker run -d --name redis --restart unless-stopped -p 6379:6379 \
@@ -143,7 +147,8 @@ jobs:
               sleep 2
             done
             test "$ready" = true
-            docker exec -e REDISCLI_AUTH="$redis_password" redis redis-cli dbsize >/dev/null
+            restored_keys=$(docker exec -e REDISCLI_AUTH="$redis_password" redis redis-cli dbsize)
+            test "$restored_keys" -gt 0
             replaced=false
             trap - EXIT
             unset redis_password
