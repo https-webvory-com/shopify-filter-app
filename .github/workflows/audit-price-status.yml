@@ -1,0 +1,34 @@
+name: Read-only audit price backfill status
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
+            const db=new PrismaClient();
+            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
+            if(!endpoint.password&&process.env.REDIS_PASSWORD)endpoint.password=process.env.REDIS_PASSWORD;
+            const redis=new Redis(endpoint.toString());
+            const shop='thedressoutlet.myshopify.com',country='IN';
+            try{
+              const [job,proof,counts]=await Promise.all([
+                db.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{id:true,status:true,productsProcessed:true,totalProducts:true,updatedAt:true,lastError:true}}),
+                redis.get(`marketPriceIntentReady:${shop}:${country}`),
+                db.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`
+              ]);
+              console.log('AUDIT_PRICE_STATUS',JSON.stringify({job,coverage:counts[0],proofReady:!!proof}));
+            }finally{await db.$disconnect();redis.disconnect();}
+            NODE
