@@ -1,34 +1,50 @@
-name: Inspect dashboard sync error
+name: Read-only scoped market price status
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inspect:
+  status:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 2m
           script: |
-            docker ps --format '{{.Names}} {{.Status}}'
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
             import {Queue} from 'bullmq';
-            import {redisOptions,webhookQueue} from './app/services/queue.server.js';
-            import meiliClient from './app/services/meiliClient.server.js';
-            const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
-            try {
-              const stats=await meiliClient.index('products').getStats();
-              const embedders=(await meiliClient.index('products').getSettings()).embedders || {};
-              const embeddingTask=await meiliClient.tasks.getTask(252811);
-              console.log('SEARCH_ENGINE_STATUS',JSON.stringify({documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,embedders:Object.keys(embedders),embeddingTask:embeddingTask.status,autoEmbeddingSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
-              for(const shop of ['thedressoutlet.myshopify.com','another-shpyfy-store.myshopify.com']){
-                const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
-                for(const row of rows){const queued=await queue.getJob(row.id);console.log('SYNC_JOB',JSON.stringify({...row,shop,queueState:queued?await queued.getState():'missing',lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));}
-              }
-            }finally{await queue.close();await webhookQueue.close();await db.$disconnect();}
+            const prisma=new PrismaClient();
+            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
+            if(!endpoint.password && process.env.REDIS_PASSWORD) endpoint.password=process.env.REDIS_PASSWORD;
+            const redis=new Redis(endpoint.toString());
+            const rankingQueue=new Queue('collectionRankingQueueV2',{connection:{host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})}});
+            const shop='thedressoutlet.myshopify.com',country='IN';
+            try{
+              const [job,proof,backfill,rows,formalAudit,formalCounts,connection,marketSnapshot,published,publishedSample,publishedCount,rankingCounts,rankingJobs]=await Promise.all([
+                prisma.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{status:true,createdAt:true,updatedAt:true,productsProcessed:true,totalProducts:true,lastError:true,cursor:true}}),
+                redis.get(`marketPriceIntentReady:${shop}:${country}`),
+                redis.ttl(`marketPriceBackfill:${shop}:${country}`),
+                prisma.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`,
+                redis.get(`membershipAuditStatus:${shop}:gid://shopify/Collection/409248522`),
+                prisma.$queryRaw`SELECT count(*)::integer AS members,count(*) FILTER (WHERE lower(p."status")='active')::integer AS active,count(*) FILTER (WHERE lower(p."status")='active' AND EXISTS (SELECT 1 FROM "Variant" v WHERE v."productId"=p."id" AND v."available"=true))::integer AS available FROM "ProductCollection" pc JOIN "Product" p ON p."id"=pc."productId" WHERE pc."collectionId"='gid://shopify/Collection/409248522' AND p."shop"=${shop}`,
+                prisma.marketStorefrontConnection.findUnique({where:{shop},select:{countries:true}}),
+                prisma.marketAvailabilitySnapshot.findUnique({where:{shop_country:{shop,country}},select:{ids:true,updatedAt:true}}),
+                prisma.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:'409248522'},orderBy:{validatedAt:'desc'},take:3,select:{validatedAt:true,expiresAt:true,size:true}}),
+                prisma.collectionLoadingSnapshot.findFirst({where:{shop,kind:'published'},select:{collectionId:true,validatedAt:true}}),
+                prisma.collectionLoadingSnapshot.count({where:{shop,kind:'published'}}),
+                rankingQueue.getJobCounts('waiting','active','delayed','failed','completed'),
+                rankingQueue.getJobs(['active','waiting','delayed'],0,5)
+              ]);
+              let bulkOperation=null;
+              if(job?.cursor){const session=await prisma.session.findFirst({where:{shop,isOnline:false},select:{accessToken:true}});if(session){const response=await fetch(`https://${shop}/admin/api/2025-10/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':session.accessToken},body:JSON.stringify({query:'query($id:ID!){bulkOperation(id:$id){status errorCode rootObjectCount objectCount}}',variables:{id:job.cursor}}),signal:AbortSignal.timeout(10000)});bulkOperation=(await response.json()).data?.bulkOperation||{httpStatus:response.status};}}
+              console.log('MARKET_PRICE_STATUS',JSON.stringify({job:{...job,cursor:undefined},bulkOperation,ready:!!proof,backfillTtl:backfill,coverage:rows[0],formalAudit:formalAudit?JSON.parse(formalAudit):null,formalCounts:formalCounts[0],connectionCountries:connection?.countries||[],marketSnapshot:marketSnapshot?{ids:marketSnapshot.ids.length,updatedAt:marketSnapshot.updatedAt}:null,published,publishedSample,publishedCount,rankingCounts,rankingJobs:rankingJobs.map(j=>({name:j.name,collectionId:j.data?.record?.collectionId||j.data?.spec?.collectionId||null,processedOn:j.processedOn,attemptsMade:j.attemptsMade,failedReason:String(j.failedReason||'').slice(0,100)}))}));
+            }finally{await prisma.$disconnect();await rankingQueue.close();redis.disconnect();}
             NODE
+            docker logs --since 10m shopify-filter-sync-worker 2>&1 | grep -E 'Market price coverage|market price coverage|BULK_PRODUCTS|catalog drift scheduler|Optional collection cards warmup|Available option facet counts|collection cards ready|Collection catalog cards' | tail -35 || true
+            docker logs --since 5m shopify-filter-app 2>&1 | grep -E 'Available option facet counts|Collection ranking|CFP.*Error|CFP.*error|timeout' | tail -30 || true
