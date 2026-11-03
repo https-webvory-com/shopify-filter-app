@@ -76,8 +76,27 @@ jobs:
             print('REDIS_RESTART_POLICY',container['HostConfig']['RestartPolicy']['Name'])
             print('REDIS_MOUNT_KINDS',','.join(m['Type']+':'+m['Destination'] for m in container.get('Mounts') or []))
             print('REDIS_PORT_BINDINGS',json.dumps(container['HostConfig']['PortBindings']))
+            for name in subprocess.check_output(['docker','ps','--format','{{.Names}}'],text=True).splitlines():
+                item=json.loads(subprocess.check_output(['docker','inspect',name]))[0]
+                keys=[part.split('=',1)[0] for part in item['Config'].get('Env') or []]
+                relevant=[key for key in keys if any(word in key.upper() for word in ('REDIS','CACHE','QUEUE','BULL'))]
+                networks=sorted(item['NetworkSettings'].get('Networks') or {})
+                print('CONTAINER_REDIS_AUDIT',json.dumps({'name':name,'envKeys':relevant,'networks':networks}))
             PY
             docker exec redis sh -c 'for path in /data/dump.rdb /data/appendonly.aof /data/appendonlydir; do if test -e "$path"; then ls -ldh "$path"; fi; done'
+            python3 - <<'PY'
+            import ipaddress,subprocess,collections
+            lines=subprocess.run(['sudo','-n','ss','-tn','state','established','( sport = :6379 )'],capture_output=True,text=True).stdout.splitlines()[1:]
+            groups=collections.Counter()
+            for line in lines:
+                peer=line.split()[-1].rsplit(':',1)[0].strip('[]')
+                try:
+                    address=ipaddress.ip_address(peer)
+                    label='loopback' if address.is_loopback else 'private' if address.is_private else 'public'
+                except ValueError: label='unknown'
+                groups[label]+=1
+            print('REDIS_ESTABLISHED_PEERS',dict(groups))
+            PY
             echo 'REDIS_DIAGNOSTIC_END'
   recover_redis:
     if: ${{ inputs.recover_redis == 'true' }}
