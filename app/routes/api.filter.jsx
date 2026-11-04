@@ -460,7 +460,9 @@ export const loader = async ({ request, context }) => {
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
       maxPrice < 9999999;
-    const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
+    const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&
+      (userHasFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy))&&
+      page===1&&limit<=40&&!context?.rankingWarmup;
     const facetsOnly=url.searchParams.get('responseProfile')==='collection-facets-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
@@ -1539,7 +1541,7 @@ export const loader = async ({ request, context }) => {
       debug:{variantEligibilityMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
-      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:true},
+      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
       debug:{variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});

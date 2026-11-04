@@ -627,7 +627,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   async function waitForCollectionOrder(data, requestUrl, signal) {
     const unresolved = value => ['pending', 'failed'].includes(value.debug?.collectionBestSellingStatus) ||
       ['pending', 'failed'].includes(value.debug?.collectionRankingStatus);
-    for (let attempt = 0; attempt < 30 && unresolved(data); attempt++) {
+    // A busy ranking worker can take longer than thirty seconds. Keep waiting
+    // for this exact order; a filter/sort change still aborts the old request.
+    while (unresolved(data)) {
       await new Promise((resolve, reject) => {
         const onAbort = () => {
           clearTimeout(timer);
@@ -641,11 +643,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         signal.addEventListener('abort', onAbort, { once: true });
         if (signal.aborted) onAbort();
       });
-      const response = await fetchCollectionResponse(requestUrl, signal);
+      let response;
+      try { response = await fetchCollectionResponse(requestUrl, signal); }
+      catch (error) {
+        if (signal.aborted) throw error;
+        if (error.priceSortPending || error.retryable || error.name === 'AbortError' || error instanceof TypeError) continue;
+        throw error;
+      }
       if (response.status === 409) throw Object.assign(new Error('Collection ranking session expired'), { collectionSessionExpired: true });
       data = await response.json();
     }
-    if (unresolved(data)) throw new Error('Product order is temporarily unavailable. Please retry.');
     if (data.crash || data.error) throw new Error(data.error || 'Products are temporarily unavailable. Please retry.');
     if (!Array.isArray(data.products)) throw new Error('Invalid product response. Please retry.');
     return data;
@@ -763,6 +770,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
+      if(templateName!=='search'&&!isLoadMore&&activeFilters.page===1&&
+          ['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy))
+        queryParams.set('responseProfile','fast-cards-v1');
       if(templateName==='search'&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
       if (templateName!=='search'&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
@@ -1165,7 +1175,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   function renderSkeleton() {
     const productContainer = getProductContainer();
     const previousCards = productContainer.querySelectorAll('.cfp-product-card:not(.cfp-skeleton-card)').length;
-    const retaining = previousCards > 0;
+    // A new price order must not display cards from the old order while it
+    // prepares. Other collection changes keep their existing retained-card UI.
+    const priceSort = ['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy);
+    const retaining = previousCards > 0 && !priceSort;
     productContainer.querySelectorAll(':scope > .cfp-skeleton-card').forEach(card => card.remove());
     const oldPagination = productContainer.querySelector('.cfp-load-more-container');
     if (oldPagination) oldPagination.style.setProperty('display', 'none', 'important');

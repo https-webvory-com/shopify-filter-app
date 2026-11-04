@@ -132,6 +132,11 @@ test("priority ON respects price sorting and filtered collection membership", as
   const us=await inLoad("page=1&sortBy=price-ascending&country=US");
   assert.equal(us.priceSortSource,'saved-usd-base');
   assert.deepEqual(Array.from(us.products,p=>Number(p.id.split('/').pop())),Array.from({length:25},(_,i)=>i+1));
+  const fast=await inLoad("page=1&sortBy=price-ascending&country=US&responseProfile=fast-cards-v1");
+  assert.equal(fast.priceSortSource,'saved-usd-base');
+  assert.equal(fast.cfpCards.version,2);
+  assert.equal(fast.cfpCards.filtered,false);
+  assert.deepEqual(Array.from(fast.products,p=>Number(p.id.split('/').pop())),Array.from({length:25},(_,i)=>i+1));
   const filtered=await load("page=1&tag[]=TopFormal&sortBy=best-selling");
   assert.equal(filtered.totalCount,10);
   assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[1,10,9,8,7,6,5,4,3,2]);

@@ -35,11 +35,12 @@ test('changing filters cancels a pending collection order request', async () => 
   const wait = load(() => { throw Error('Unexpected request'); });
   await assert.rejects(wait(pending, '/api/filter', controller.signal), { name: 'AbortError' });
 });
-test('unavailable workers cannot cause unlimited polling', async () => {
+test('slow ranking keeps polling beyond the former thirty-second limit', async () => {
   let calls = 0;
-  const wait = load(async () => { calls++; return { ok: true, json: async () => pending }; });
-  await assert.rejects(wait(pending, '/api/filter', new AbortController().signal), /temporarily unavailable/);
-  assert.equal(calls, 30);
+  const ready={products:['saved-order'],debug:{collectionBestSellingStatus:'ready'}};
+  const wait = load(async () => ({ status:200, json: async () => ++calls <= 35 ? pending : ready }));
+  assert.equal(await wait(pending, '/api/filter', new AbortController().signal),ready);
+  assert.equal(calls, 36);
 });
 
 test('failed refreshes are retried instead of rendering fallback products', async () => {
@@ -88,7 +89,9 @@ test('a session expiring during polling signals one automatic restart rather tha
   await assert.rejects(wait(pending,'/api/filter',new AbortController().signal),error=>error.collectionSessionExpired===true);
 });
 
-test('HTTP failure with an empty products array is still a failure',async()=>{
-  const wait=load(async()=>({status:503,json:async()=>({products:[]})}));
-  await assert.rejects(wait(pending,'/api/filter',new AbortController().signal),/temporarily unavailable/);
+test('a temporary HTTP failure during preparation is retried until the sorted page is ready',async()=>{
+  let calls=0;const ready={products:['priced'],debug:{collectionRankingStatus:'ready'}};
+  const wait=load(async()=>++calls===1?{status:503,json:async()=>({products:[]})}:{status:200,json:async()=>ready});
+  assert.equal(await wait(pending,'/api/filter',new AbortController().signal),ready);
+  assert.equal(calls,2);
 });

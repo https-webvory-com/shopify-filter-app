@@ -295,14 +295,15 @@ try{
     await evaluate("document.querySelector('#cfp-close-btn').click()");assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),false);
     const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile('scratch/collection-headless-mobile.png',Buffer.from(image.data,'base64'));
   });
-  await test('unavailable preparation stops polling, shows Retry, and recovers after Retry',async()=>{
-    await control({reset:true,hold:true,noPins:true});await navigate();await wait("!!document.querySelector('.cfp-order-error button')",110000);
-    assert.equal((await cards()).length,0);assert.equal(await evaluate('!!document.querySelector(".cfp-loading-notice")'),false);
-    const before=(await getState()).requests.length;assert.equal(before,31);
-    await delay(1400);assert.equal((await getState()).requests.length,before);
-    await control({invalidate:true,hold:false,delay:100});await evaluate("document.querySelector('.cfp-order-error button').click()");
-    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",15000);assert.equal(await evaluate('!!document.querySelector(".cfp-order-error")'),false);
-    return {boundedRequests:before,retryRecovered:true};
+  await test('unavailable preparation keeps retrying past thirty seconds and then renders products',async()=>{
+    await control({reset:true,hold:true,noPins:true});await navigate();
+    await wait("document.querySelectorAll('.cfp-skeleton-card').length>0");
+    await delay(32000);
+    assert.equal((await cards()).length,0);assert.equal(await evaluate('!!document.querySelector(".cfp-order-error")'),false);
+    const before=(await getState()).requests.length;assert.ok(before>31,before);
+    await control({invalidate:true,hold:false,delay:100});
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",15000);
+    return {requestsBeforeReady:before,recoveredAutomatically:true};
   });
   await test('continuous unrelated product updates do not restart a native collection without external candidates',async()=>{
     await control({reset:true,delay:1500,stormCollection:'2',noPins:true});await navigate();
@@ -346,15 +347,17 @@ try{
     assert.equal((await getState()).state.apiFailure,null);
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('network loss shows Retry and returns to the cached collection when restored',async()=>{
+  await test('network loss during a price sort does not show products in the old order',async()=>{
     await control({reset:true,delay:100});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     await send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     await evaluate("document.querySelector('[data-value=\"price-ascending\"]').click()");await wait("!!document.querySelector('.cfp-order-error button')");
-    assert.equal(await evaluate("document.querySelector('.cfp-order-error p').textContent.includes('Previous results are still shown')"),true);
-    assert.equal((await cards()).length,25,'network failure removed the prior products');
+    assert.equal((await cards()).length,0,'old-order products remained visible during price sort');
     await send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
-    await evaluate("document.querySelector('.cfp-order-error button').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    await evaluate("document.querySelector('.cfp-order-error button').click()");
+    await wait("!!document.querySelector('.cfp-order-error button')");
+    assert.equal((await cards()).length,0,'unverified market prices displayed an old order');
+    assert.ok((await getState()).requests.some(request=>request.profile==='fast-cards-v1'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('failed filter request keeps prior products and Retry applies the filter',async()=>{

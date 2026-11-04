@@ -3,6 +3,13 @@ import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFa
 
 export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
+  // Customer-selected price order must be numerically exact for this shop.
+  // Keep its SoBooster-matched default collection order and rule membership;
+  // only price sorts let the requested price outrank pins and score tiers.
+  const exactPriceSort=spec.shop==='thedressoutlet.myshopify.com'&&
+    ['price-ascending','price-asc','price-descending','price-desc'].includes(spec.sortBy);
+  const sortSettings=exactPriceSort?{...spec.globalSettings,prioritizeSortOverPinning:true,
+    prioritizeSortOverMerchandising:true}:spec.globalSettings;
   const missingMarketPriceIds = new Set();
   const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;
   let sourceOutsideIds=native?[]:null;
@@ -49,7 +56,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
         if(sourceOutsideIds.length===1000)sourceOutsideIds=null;else sourceOutsideIds.push(id);
       }
     }}}:{}),
-    compare: comparator?.(spec.sortBy,comparatorPins,{...spec.globalSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder}),
+    compare: comparator?.(spec.sortBy,comparatorPins,{...sortSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder}),
     hydrateRanking: async products => {
       if(spec.allowIncompleteMarketPrice)for(const product of products)
         if(product._rankingPinPlaceholder)missingMarketPriceIds.add(String(product.id).split('/').pop());
@@ -65,7 +72,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     },
     arrange: products => {
       const ranked = arrange(products, spec.rule, spec.sortBy, spec.pinningRule, spec.mergedValues,
-        { ...spec.globalSettings, preserveCollectionBestSellingOrder: spec.needsShopifyOrder });
+        { ...sortSettings, preserveCollectionBestSellingOrder: spec.needsShopifyOrder });
       for (const p of ranked) if (p.merchandisingScore || p.merchandisingImage) metadata[p.id.split('/').pop()] = {
         merchandisingScore: p.merchandisingScore, merchandisingImage: p.merchandisingImage,
       };

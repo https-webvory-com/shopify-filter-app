@@ -63,3 +63,29 @@ test('market prices survive the bounded variant hydration path',async()=>{
     comparator:()=>((a,b)=>a.priceMin-b.priceMin)});
   assert.deepEqual(result.ids,['2','1']);
 });
+
+test('this shop gives explicit India price order priority without changing default ranking settings',async()=>{
+  const docs=[
+    {id:'1',priceMin:20,marketPriceMin_IN:2000},
+    {id:'2',priceMin:26,marketPriceMin_IN:2600},
+    {id:'3',priceMin:24,marketPriceMin_IN:2400},
+    {id:'4',priceMin:30,marketPriceMin_IN:3000},
+  ];
+  const settings={prioritizeSortOverPinning:false,prioritizeSortOverMerchandising:false};
+  const spec={shop:'thedressoutlet.myshopify.com',sortBy:'price-ascending',priceSortField:'marketPriceMin_IN',
+    allowIncompleteMarketPrice:true,query:{indexUid:'products',q:'',filter:[]},pinnedIds:['2'],globalSettings:settings};
+  const comparison=(a,b)=>a.priceMin-b.priceMin;
+  const result=await prepareCollectionRanking(spec,{index:{search:async()=>({hits:docs,totalHits:4})},prisma:{},
+    arrange:(products,_rule,_sort,_pins,_merged,applied)=>{
+      assert.equal(applied.prioritizeSortOverPinning,true);
+      assert.equal(applied.prioritizeSortOverMerchandising,true);
+      return products.sort(comparison);
+    },
+    comparator:(_sort,_pins,applied)=>{
+      assert.equal(applied.prioritizeSortOverPinning,true);
+      assert.equal(applied.prioritizeSortOverMerchandising,true);
+      return comparison;
+    }});
+  assert.deepEqual(result.ids,['1','3','2','4']);
+  assert.deepEqual(settings,{prioritizeSortOverPinning:false,prioritizeSortOverMerchandising:false});
+});
