@@ -408,27 +408,24 @@ try{
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('.cfp-order-error')");
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('filtered collection shows exact cards before slow facets without replacing their DOM',async()=>{
+  await test('filtered collection gets cards and facets in one request',async()=>{
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Designer',config:{}}];
     await control({reset:true,delay:100,facetDelay:1800,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     await control({apiDelay:800});
+    const before=await getState();
     await evaluate("const input=document.querySelector('input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
     await wait("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length===25");
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-skeleton-image')).animationName"),'cfpSkeletonGlassShimmer');
-    await wait("document.querySelectorAll('.cfp-product-card--preview').length===25");
-    assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),0);
-    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview .cfp-product-card__price-row').length"),25,'first filtered cards must include price rows');
-    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card--preview .cfp-product-swatches').length"),25,'first filtered cards must include variant swatches');
-    assert.equal(await evaluate("[...document.querySelectorAll('.cfp-product-card--preview .cfp-product-card__link')].some(link=>link.href.includes('variant='))"),true);
-    const preview=await cards();
-    await evaluate("window._cfpFilteredFirstCard=document.querySelector('.cfp-product-card--preview')");
-    const pending=await getState();assert.ok(pending.requests.some(r=>r.profile==='fast-cards-v1'&&r.status===200));assert.equal(pending.facetResponses.length,0);
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.deepEqual(await cards(),preview);
-    assert.equal(await evaluate('window._cfpFilteredFirstCard.isConnected'),true);
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),0);
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price-row').length"),25,'filtered cards must include price rows');
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-swatches').length"),25,'filtered cards must include variant swatches');
+    assert.equal(await evaluate("[...document.querySelectorAll('.cfp-product-card__link')].some(link=>link.href.includes('variant='))"),true);
     await wait("[...document.querySelectorAll('.cfp-product-card__price')].some(price=>price.textContent.includes('$'))");
-    assert.ok((await getState()).facetResponses.some(r=>r.status===200));
+    const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
+    assert.equal(requests.filter(request=>request.status===200).length,1,JSON.stringify(requests));
+    assert.ok(requests.every(request=>request.profile==='collection-v1'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('variant-dependent merchandising preserves global order and selected images across small batches',async()=>{
@@ -677,9 +674,7 @@ try{
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     }
     const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
-    assert.equal(requests.length,4);assert.ok(requests.every(r=>r.status===200),JSON.stringify(requests));
-    assert.equal(requests.filter(r=>r.profile==='fast-cards-v1').length,2);
-    assert.equal(requests.filter(r=>r.profile==='collection-facets-v1'&&r.token&&r.status===200&&r.products===undefined).length,2,JSON.stringify(requests));
+    assert.equal(requests.length,2);assert.ok(requests.every(r=>r.status===200&&r.profile==='collection-v1'),JSON.stringify(requests));
     assert.equal(after.state.builds,before.state.builds);
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};
@@ -710,7 +705,7 @@ try{
     const after=await getState(),sizeCards=await cards();
     assert.equal(after.trace.membershipBrowses-blue.trace.membershipBrowses,1,'Size L should query only the Blue ID set');
     assert.equal(after.trace.candidateBrowses,blue.trace.candidateBrowses,'Size L should skip a full candidate browse');
-    assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
+    assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='collection-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(sizeCards,[...Array.from({length:13},(_,i)=>String(29-i*2)),'1','3']);
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {blueResults:30,sizeResults:15,visible:15,membershipBrowses:1,workerPaused:true};
@@ -725,7 +720,7 @@ try{
     const after=await getState();
     assert.equal(after.trace.membershipBrowses-before.trace.membershipBrowses,1);
     assert.equal(after.trace.candidateBrowses,before.trace.candidateBrowses);
-    assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
+    assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='collection-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('legacy Color and Size groups use popularity and natural size order; explicit alphabetical stays available',async()=>{
@@ -786,7 +781,7 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return result;
   });
-  await test('purple prom dress search shows Size L cards before full filter counts',async()=>{
+  await test('purple prom dress search applies Size L with one complete filter response',async()=>{
     const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>{
       const id=String(i+1),size=i%2===0?'L':'M';
       return [id,{options:[{name:'Color',values:['Purple']},{name:'Size',values:[size]}],
@@ -804,22 +799,18 @@ try{
     assert.equal(initial.allRequests.filter(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===25).length,1);
     await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     assert.deepEqual(await cards(),initialCards,'full search facets should preserve early card order');
+    const beforeFilter=await getState();
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await evaluate("document.querySelector('#cfp-apply-btn').click()");
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-    const earlyCards=await cards();
-    const early=await getState();
-    assert.equal(early.allRequests.filter(r=>r.profile==='search-fast-cards-v1'&&r.query==='purple prom dress'&&r.status===200&&r.products===15).length,1);
-    const firstSearch=fixture.facetRequests.at(-1);
-    assert.equal(firstSearch.q,'purple prom dress');
-    assert.ok(firstSearch.filter.some(value=>value.includes("option_Size IN ['L']")));
-    assert.equal(firstSearch.facets,undefined,'the first search-card request should skip count and facet queries');
-    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-    assert.deepEqual(await cards(),earlyCards,'full facets should retain the same search cards and order');
-    assert.deepEqual(earlyCards,Array.from({length:15},(_,i)=>String(29-i*2)));
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    const filteredCards=await cards();
+    const filtered=await getState(),requests=filtered.allRequests.slice(beforeFilter.allRequests.length);
+    assert.equal(requests.filter(r=>r.status===200).length,1,JSON.stringify(requests));
+    assert.equal(requests.filter(r=>r.status===200)[0].profile,null);
+    assert.deepEqual(filteredCards,Array.from({length:15},(_,i)=>String(29-i*2)));
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);
     assert.deepEqual(await evaluate('browserErrors'),[]);
-    return {query:'purple prom dress',firstCardsMs:Math.round(firstCardsMs),delayedFacetsMs:3000,sizeResults:15,cardsBeforeFacets:true};
+    return {query:'purple prom dress',firstCardsMs:Math.round(firstCardsMs),sizeResults:15,filterRequests:1};
   });
   await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
     const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};

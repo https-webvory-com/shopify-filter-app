@@ -815,15 +815,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('limit', PAGE_SIZE);
       const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
       if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
-        queryParams.set('responseProfile',hasSelectedFilters&&!isLoadMore&&activeFilters.page===1?'fast-cards-v1':'collection-v1');
+        queryParams.set('responseProfile','collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
-      if(templateName!=='search'&&!isLoadMore&&activeFilters.page===1&&
+      if(templateName!=='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1&&
           ['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy))
         queryParams.set('responseProfile','fast-cards-v1');
-      if(templateName==='search'&&!isLoadMore&&activeFilters.page===1)
+      if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
       if (templateName!=='search'&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
         queryParams.set('membershipParentToken', lastMembershipResult.token);

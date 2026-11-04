@@ -30,7 +30,7 @@ function ResultsTable({ tab, rows, shop }) {
   const shown = rows.slice(page * pageSize, (page + 1) * pageSize);
   const heading = tabs.find(item => item[0] === tab)?.[3] || 'Item';
   return <div className="cfp-analytics-table"><table>
-    <thead><tr><th>{heading}</th><th>{tab === 'products' ? 'Clicks' : tab === 'volume' ? 'Volume' : 'Hits'}</th></tr></thead>
+    <thead><tr><th>{heading}</th><th>{tab === 'products' ? 'Clicks' : tab === 'filters' ? 'Uses' : 'Searches'}</th></tr></thead>
     <tbody>{shown.length ? shown.map(row => <tr key={row.key}>
       <td>{tab === 'products' && row.url ? <a href={`https://${shop}${row.url}`} target="_blank" rel="noreferrer">{row.label}</a> : row.label}</td>
       <td>{Number(row.hits).toLocaleString()}</td>
@@ -39,8 +39,8 @@ function ResultsTable({ tab, rows, shop }) {
     <label>Rows per page: <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(0); }}>
       {[5, 10, 20, 25, 50, 100].map(size => <option key={size} value={size}>{size === 100 ? 'All' : size}</option>)}
     </select></label><span>{rows.length ? `${page * pageSize + 1}-${Math.min((page + 1) * pageSize, rows.length)} of ${rows.length}` : '0 results'}</span>
-    <button type="button" aria-label="Previous page" disabled={!page} onClick={() => setPage(page - 1)}>‹</button>
-    <button type="button" aria-label="Next page" disabled={(page + 1) * pageSize >= rows.length} onClick={() => setPage(page + 1)}>›</button>
+    <button type="button" aria-label="Previous page" disabled={!page} onClick={() => setPage(page - 1)}>Previous</button>
+    <button type="button" aria-label="Next page" disabled={(page + 1) * pageSize >= rows.length} onClick={() => setPage(page + 1)}>Next</button>
   </div></div>;
 }
 
@@ -62,7 +62,7 @@ export default function Analytics() {
   };
   const tabUrl = value => `/app/analytics?${new URLSearchParams({ tab: value, from: report.from, to: report.to, group: report.group })}`;
   return <main className="cfp-analytics-page">
-    <header><h1>Analytics</h1><p>Storefront search and collection activity recorded with visitor consent.</p></header>
+    <header><span className="cfp-analytics-eyebrow">Store insights</span><h1>Analytics</h1><p>Search and collection activity recorded with visitor consent.</p></header>
     <section className="cfp-analytics-panel">
       <nav className="cfp-analytics-tabs" aria-label="Analytics reports">{tabs.map(item => <Link key={item[0]} to={tabUrl(item[0])}
         aria-current={report.tab === item[0] ? 'page' : undefined} className={report.tab === item[0] ? 'active' : ''}>{item[1]}</Link>)}</nav>
@@ -86,28 +86,31 @@ export default function Analytics() {
       </div>
     </section>
     <style>{`
-      .cfp-analytics-page{max-width:1500px;margin:0 auto;padding:28px;color:#172033;font:14px/1.45 Arial,sans-serif}
-      .cfp-analytics-page h1{font-size:27px;margin:0}.cfp-analytics-page header p{color:#64748b;margin:4px 0 22px}
-      .cfp-analytics-panel{background:#fff;border:1px solid #e3e9f0;border-radius:12px;overflow:hidden;box-shadow:0 3px 18px #14213d0a}
-      .cfp-analytics-tabs{display:flex;overflow:auto;border-bottom:1px solid #e3e9f0;padding:0 12px;gap:5px}
-      .cfp-analytics-tabs a{white-space:nowrap;padding:18px 17px;color:#5276a9;text-decoration:none;border-bottom:3px solid transparent}
-      .cfp-analytics-tabs a:hover{color:#146de8}.cfp-analytics-tabs a.active{color:#146de8;border-color:#146de8;font-weight:600}
-      .cfp-analytics-content{padding:26px 28px}.cfp-analytics-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
-      .cfp-analytics-controls h2{font-size:18px;margin:0}.cfp-analytics-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-      .cfp-analytics-form label{display:flex;gap:5px;align-items:center;color:#66758c}.cfp-analytics-form input,.cfp-analytics-form select,.cfp-analytics-form button,.cfp-analytics-pager select{border:1px solid #dbe5f1;background:#f4f8fd;color:#1855a0;border-radius:7px;padding:9px 11px;font:inherit}
-      .cfp-analytics-form button{background:#147cf4;color:#fff;border-color:#147cf4;cursor:pointer}
-      .cfp-chart-toolbar{display:flex;justify-content:flex-end;gap:5px;margin:18px 0 3px}.cfp-chart-toolbar button,.cfp-chart-toolbar summary{border:0;background:#edf5ff;color:#246cb7;padding:6px 9px;border-radius:5px;cursor:pointer;list-style:none}
-      .cfp-chart-toolbar details{position:relative}.cfp-chart-menu{position:absolute;right:0;top:100%;display:grid;background:#fff;border:1px solid #dbe5f1;box-shadow:0 8px 24px #16213c22;z-index:2;min-width:145px;padding:5px}
-      .cfp-chart-menu button{white-space:nowrap;text-align:left;background:#fff}.cfp-chart-menu button:hover{background:#edf5ff}
-      .cfp-chart-svg svg{width:100%;height:auto;min-height:245px}.cfp-chart-legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:3px 0 18px}
-      .cfp-chart-legend button{border:0;background:none;cursor:pointer;color:#475569;font:inherit}.cfp-chart-legend button[aria-pressed=false]{opacity:.45;text-decoration:line-through}
+      .cfp-analytics-page{max-width:1500px;margin:0 auto;padding:24px 28px 36px;color:#111827;font:14px/1.5 Inter,system-ui,sans-serif}
+      .cfp-analytics-eyebrow{display:inline-block;color:#6d28d9;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;margin-bottom:5px}
+      .cfp-analytics-page h1{font-size:28px;letter-spacing:-.03em;margin:0}.cfp-analytics-page header p{color:#6b7280;margin:4px 0 22px}
+      .cfp-analytics-panel{background:#fff;border:1px solid #ede9fe;border-radius:16px;overflow:hidden;box-shadow:0 1px 8px #5b21b60c}
+      .cfp-analytics-tabs{display:flex;overflow:auto;border-bottom:1px solid #ede9fe;padding:0 16px;gap:6px;background:#fcfaff}
+      .cfp-analytics-tabs a{white-space:nowrap;padding:16px 15px;color:#6b7280;text-decoration:none;border-bottom:3px solid transparent;font-weight:600}
+      .cfp-analytics-tabs a:hover{color:#6d28d9;background:#f5f3ff}.cfp-analytics-tabs a.active{color:#5b21b6;border-color:#7c3aed;background:#f5f3ff}
+      .cfp-analytics-content{padding:25px 28px}.cfp-analytics-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+      .cfp-analytics-controls h2{font-size:19px;letter-spacing:-.02em;margin:0}.cfp-analytics-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      .cfp-analytics-form label{display:flex;gap:6px;align-items:center;color:#6b7280}.cfp-analytics-form input,.cfp-analytics-form select,.cfp-analytics-pager select{border:1px solid #d8d3e5;background:#fff;color:#374151;border-radius:8px;padding:8px 10px;font:inherit}
+      .cfp-analytics-form button{background:#6d28d9;color:#fff;border:1px solid #6d28d9;border-radius:8px;padding:8px 15px;font:inherit;font-weight:700;cursor:pointer}
+      .cfp-analytics-form button:hover{background:#5b21b6}.cfp-analytics-form :focus-visible,.cfp-analytics-page button:focus-visible,.cfp-analytics-tabs a:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+      .cfp-chart{margin-top:18px;border:1px solid #ede9fe;border-radius:12px;padding:12px 16px 4px;background:#fff}
+      .cfp-chart-toolbar{display:flex;justify-content:flex-end;gap:5px;margin:0 0 8px}.cfp-chart-toolbar button,.cfp-chart-toolbar summary{border:1px solid #e9e3f5;background:#faf8ff;color:#5b21b6;padding:6px 10px;border-radius:7px;cursor:pointer;list-style:none;font:inherit}
+      .cfp-chart-toolbar button:hover,.cfp-chart-toolbar summary:hover{background:#f3edff}.cfp-chart-toolbar details{position:relative}.cfp-chart-menu{position:absolute;right:0;top:100%;display:grid;background:#fff;border:1px solid #d8d3e5;border-radius:8px;box-shadow:0 8px 24px #3b126622;z-index:2;min-width:145px;padding:5px}
+      .cfp-chart-menu button{white-space:nowrap;text-align:left;background:#fff;border:0}.cfp-chart-menu button:hover{background:#f5f3ff}
+      .cfp-chart-svg svg{display:block;width:100%;height:auto;min-height:245px}.cfp-chart-legend{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:3px 0 12px}
+      .cfp-chart-legend button{border:1px solid #e9e3f5;background:#faf8ff;border-radius:20px;padding:5px 10px;cursor:pointer;color:#374151;font:inherit}.cfp-chart-legend button[aria-pressed=false]{opacity:.45;text-decoration:line-through}
       .cfp-chart-legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
-      .cfp-analytics-table{overflow-x:auto;margin-top:24px}.cfp-analytics-table table{width:100%;border-collapse:collapse;min-width:480px}
-      .cfp-analytics-table th{text-align:left;font-size:12px;color:#66758c;font-weight:600}.cfp-analytics-table th,.cfp-analytics-table td{padding:13px 10px;border-bottom:1px solid #e8edf3}
-      .cfp-analytics-table th:last-child,.cfp-analytics-table td:last-child{text-align:right}.cfp-analytics-table a{color:#146de8}
-      .cfp-analytics-empty,.cfp-analytics-chart-empty{color:#718096;text-align:center;padding:48px 10px}.cfp-analytics-pager{display:flex;justify-content:flex-end;align-items:center;gap:14px;padding-top:14px;color:#64748b}
-      .cfp-analytics-pager button{border:1px solid #dbe5f1;border-radius:5px;background:#fff;padding:5px 10px;cursor:pointer}.cfp-analytics-pager button:disabled{opacity:.4;cursor:default}
-      .cfp-analytics-note{font-size:12px;color:#8491a5;margin:17px 0 0}@media(max-width:700px){.cfp-analytics-page{padding:15px}.cfp-analytics-content{padding:16px}.cfp-analytics-form{width:100%}}
+      .cfp-analytics-table{overflow-x:auto;margin-top:20px;border:1px solid #ede9fe;border-radius:12px}.cfp-analytics-table table{width:100%;border-collapse:collapse;min-width:480px}
+      .cfp-analytics-table th{text-align:left;font-size:12px;color:#6b7280;font-weight:700;background:#faf8ff}.cfp-analytics-table th,.cfp-analytics-table td{padding:13px 16px;border-bottom:1px solid #f0edf5}
+      .cfp-analytics-table tr:last-child td{border-bottom:0}.cfp-analytics-table tbody tr:hover{background:#fcfaff}.cfp-analytics-table th:last-child,.cfp-analytics-table td:last-child{text-align:right}.cfp-analytics-table a{color:#5b21b6}
+      .cfp-analytics-empty,.cfp-analytics-chart-empty{color:#6b7280;text-align:center;padding:48px 10px}.cfp-analytics-pager{display:flex;justify-content:flex-end;align-items:center;gap:14px;padding:12px 16px;color:#6b7280;border-top:1px solid #f0edf5}
+      .cfp-analytics-pager button{border:1px solid #d8d3e5;border-radius:7px;background:#fff;padding:6px 10px;cursor:pointer;font:inherit;color:#5b21b6}.cfp-analytics-pager button:disabled{opacity:.4;cursor:default}
+      .cfp-analytics-note{font-size:12px;color:#6b7280;margin:17px 0 0}@media(max-width:700px){.cfp-analytics-page{padding:15px}.cfp-analytics-content{padding:16px}.cfp-analytics-form{width:100%}}
     `}</style>
   </main>;
 }

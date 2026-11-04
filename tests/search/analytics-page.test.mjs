@@ -41,4 +41,6 @@ test('analytics renders six reports with real table data, date controls and char
     'Black dress', 'From', 'To', 'Group by']) assert.ok(html.includes(label), label);
   assert.match(html, /fixture\.myshopify\.com\/products\/black-dress/);
   assert.match(html, /aria-label="products chart"/);
+  assert.match(html, /stroke="#6d28d9" stroke-width="2.5" stroke-linecap="round"/);
+  assert.match(html, /Store insights/);
 });
