@@ -313,24 +313,35 @@ export async function runBulkProductSync(jobId, shop, admin) {
   if (operation.status === 'pending') return { needsContinuation: true, retryAfterMs: 10000 };
   const expected = [];
   const batch = [], products = [], pending = [];
+  // Shopify repeats the same collection metadata on thousands of products.
+  // One successful upsert per collection is enough for this export snapshot.
+  const collectionUpserts = new Map();
   let lastRoot = job.productsProcessed || 0;
+  let measuredRoots=lastRoot, productWriteMs=0, indexPublishMs=0;
   const flush = async () => {
     if (batch.length) {
+      const indexStarted=Date.now();
       const index = meiliClient.index('products');
       const task = await index.addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts(batch.map(doc => ({ ...doc, ...searchIndexProjection(doc) })) )));
       const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 120000, interval: 500 });
       if (completed.status !== 'succeeded') throw Error('Bulk product indexing failed');
       await verifyMembershipWrites(prisma, index, shop, products, batch);
       await scheduleSearchIndexProducts(shop, batch.map(doc => doc.id), task.taskUid);
+      indexPublishMs+=Date.now()-indexStarted;
       batch.length = 0; products.length = 0;
     }
     if (lastRoot > (job.productsProcessed || 0)) {
       job = await prisma.syncJob.update({ where: { id: jobId }, data: { productsProcessed: lastRoot, totalProducts: operation.count, lastError: null } });
     }
+    if(lastRoot-measuredRoots>=1000){
+      console.log('CFP: Bulk sync stages',JSON.stringify({shop,from:measuredRoots,to:lastRoot,productWriteMs,indexPublishMs}));
+      measuredRoots=lastRoot;productWriteMs=0;indexPublishMs=0;
+    }
   };
   const flushPending = async () => {
     if (!pending.length) return;
     const ready = pending.splice(0);
+    const writesStarted=Date.now();
     // This setting is shared by the whole batch; avoid a database read for
     // every product in a full catalog import.
     const wantsLocations = Boolean(await prisma.filterGroupItem.findFirst({
@@ -343,7 +354,7 @@ export async function runBulkProductSync(jobId, shop, admin) {
     for (let offset = 0; offset < ready.length; offset += 4) {
       const group = ready.slice(offset, offset + 4);
       const settled = await Promise.allSettled(group.map(async ({ product }) =>
-        await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations })));
+        await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations, collectionUpserts })));
       const failure = settled.find(result => result.status === 'rejected');
       if (failure) throw failure.reason;
       settled.forEach(result => {
@@ -351,7 +362,10 @@ export async function runBulkProductSync(jobId, shop, admin) {
       });
       lastRoot = group.at(-1).root;
     }
-    await flush();
+    productWriteMs+=Date.now()-writesStarted;
+    // Publish one verified search task per 100 roots. Flushing every 20
+    // products multiplies Meilisearch task overhead across large catalogs.
+    if(lastRoot%100===0)await flush();
   };
   await streamBulkProductIndex({ ...operation, skip: lastRoot, onRoot: product => {
     if (isStorefrontProduct(product)) expected.push({ id: product.id, status: 'ACTIVE' });
@@ -880,7 +894,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
 }
 
 // Function for smart upserting — OPTIMIZED to use batch operations and avoid P2028 transaction timeouts
-export async function smartUpsertProduct(shop, product, prismaClient) {
+export async function smartUpsertProduct(shop, product, prismaClient, {collectionUpserts}={}) {
   const marketCountries = marketCountriesInVariants(product.variants.nodes);
   const optionsList = product.options.map((opt) => ({
     name: opt.name,
@@ -988,8 +1002,12 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
 
   // Upsert all collections in a single transaction
   if (product.collections.nodes.length > 0) {
-    await prismaClient.$transaction(
-      product.collections.nodes.map((collection) =>
+    const unseen=collectionUpserts
+      ?product.collections.nodes.filter(collection=>!collectionUpserts.has(collection.id))
+      :product.collections.nodes;
+    if(unseen.length){
+      const task=prismaClient.$transaction(
+      unseen.map((collection) =>
         prismaClient.collection.upsert({
           where: { id: collection.id },
           update: { title: collection.title, handle: collection.handle },
@@ -997,7 +1015,14 @@ export async function smartUpsertProduct(shop, product, prismaClient) {
         })
       ),
       { timeout: 10000 }
-    );
+      );
+      if(collectionUpserts)for(const collection of unseen)collectionUpserts.set(collection.id,task);
+      try{await task;}catch(error){
+        if(collectionUpserts)for(const collection of unseen)if(collectionUpserts.get(collection.id)===task)collectionUpserts.delete(collection.id);
+        throw error;
+      }
+    }
+    if(collectionUpserts)await Promise.all([...new Set(product.collections.nodes.map(collection=>collectionUpserts.get(collection.id)).filter(Boolean))]);
   }
 
   // Get existing links and remove stale ones, add new ones
@@ -1184,7 +1209,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
 }
 
 // Bulk JSONL and webhook reads share the same DB/index write contract.
-export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false, wantsLocations } = {}) {
+export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false, wantsLocations, collectionUpserts } = {}) {
 
   const shouldDelete = !isStorefrontProduct(product);
 
@@ -1313,7 +1338,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   };
 
   if (deferIndex) {
-    await smartUpsertProduct(shop, product, prisma);
+    await smartUpsertProduct(shop, product, prisma, {collectionUpserts});
     return { product, meiliDoc };
   }
 

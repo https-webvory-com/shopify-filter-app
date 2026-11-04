@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
+import * as marketPricingIndex from '../../app/utils/marketPricingIndex.js';
 
 const shop = 'fixture.myshopify.com';
 const active = { id: 'gid://shopify/Product/1', status: 'ACTIVE', publishedAt: '2026-10-01', collections: { nodes: [] } };
@@ -10,13 +11,14 @@ const draft = { id: 'gid://shopify/Product/2', status: 'DRAFT', publishedAt: nul
 
 async function fixture({ indexFails = false, bulkProducts = [active, draft], payloadFails = null, delayMs = 0 } = {}) {
   const writes = [], indexed = [], checks = [];
+  let indexTasks=0;
   let inFlight = 0, maxConcurrent = 0, locationReads = 0;
   const job = { id: 'bulk-job', shop, kind: 'BULK_PRODUCTS', status: 'IN_PROGRESS', cursor: 'gid://shopify/BulkOperation/7', productsProcessed: 0 };
   const prisma = { filterGroupItem: { findFirst: async () => { locationReads++; return null; } }, syncJob: {
     findUnique: async () => job,
     update: async ({ data }) => { writes.push(data); Object.assign(job, data); return job; },
   } };
-  const index = { addDocuments: async docs => { if (indexFails) throw Error('index unavailable'); indexed.push(...docs); return { taskUid: 1 }; } };
+  const index = { addDocuments: async docs => { if (indexFails) throw Error('index unavailable'); indexTasks++; indexed.push(...docs); return { taskUid: 1 }; } };
   const bulk = { bulkProductIndexStatus: async () => ({ status: 'complete', url: 'https://storage.test/file', count: bulkProducts.length, objectCount: bulkProducts.length }),
     streamBulkProductIndex: async ({ onRoot, onProduct, skip }) => {
       for (const [offset, product] of bulkProducts.entries()) {
@@ -32,7 +34,7 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     .replace("await import('./shopifyBulkIndex.server.js')", 'bulk')
     .replace("await import('./shopifyBulkCatalog.server.js')", 'audit')
     .replace("await import('./orders.server.js')", 'orders')
-    .replace("await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations })", 'await fakePayload(product)')
+    .replace("await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations, collectionUpserts })", 'await fakePayload(product)')
     .replaceAll('await autoSeedOptionFilters(shop)', 'await pretendSeed(shop)')
     .replaceAll('await updateMeiliSettings(shop, { throwOnError: true })', 'await pretendSettings(shop)');
   const mocks = {
@@ -47,6 +49,7 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     '../utils/searchIndexProjection.js': { searchIndexProjection: () => ({}) },
     './collectionRuleFacts.server.js': { withCollectionRuleFacts: async docs => docs },
     '../utils/embeddingHold.js': { withHeldEmbeddingsForIndex: async (_index, docs) => docs },
+    '../utils/marketPricingIndex.js': marketPricingIndex,
     './searchIndex.server.js': { scheduleSearchIndexProducts: async () => {} },
   };
   const ctx = { module: { exports: {} }, exports: {}, require: name => mocks[name] || {}, bulk, audit,
@@ -61,8 +64,9 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     },
     pretendSeed: async () => {}, pretendSettings: async () => {}, console: { log() {} }, process: { env: {} } };
   vm.runInNewContext((await transform(source, { format: 'cjs' })).code, ctx);
-  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), job, writes, indexed, checks,
-    maxConcurrent: () => maxConcurrent, locationReads: () => locationReads };
+  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), persist: ctx.module.exports.smartUpsertProduct,
+    job, writes, indexed, checks,
+    maxConcurrent: () => maxConcurrent, locationReads: () => locationReads, indexTasks: () => indexTasks };
 }
 
 test('bulk sync commits complete batches, excludes drafts, verifies both stores and completes', async () => {
@@ -73,6 +77,35 @@ test('bulk sync commits complete batches, excludes drafts, verifies both stores 
   assert.equal(f.job.status, 'COMPLETED');
   assert.deepEqual(f.indexed.map(doc => doc.id), ['1']);
   assert.deepEqual(JSON.parse(JSON.stringify(f.checks)), [[active.id], [active.id]]);
+});
+
+test('bulk import upserts shared collection metadata once while retaining each product link',async()=>{
+  const f=await fixture();
+  const collections=[],links=[];
+  const db={
+    product:{upsert:async()=>{}},variant:{deleteMany:async()=>{},upsert:async()=>{}},
+    collection:{upsert:async({where})=>{collections.push(where.id);}},
+    productCollection:{findMany:async()=>[],createMany:async({data})=>{links.push(...data);}},
+    productMetafield:{deleteMany:async()=>{}},
+    $transaction:async operations=>Promise.all(operations),
+  };
+  const shared={id:'gid://shopify/Collection/7',title:'Formal',handle:'formal'};
+  const product=id=>({id:`gid://shopify/Product/${id}`,title:'Dress',handle:'dress',vendor:'Vendor',
+    productType:'Dress',tags:[],images:{nodes:[]},options:[],status:'ACTIVE',variants:{nodes:[]},
+    collections:{nodes:[shared]},metafields:{nodes:[]}});
+  const collectionUpserts=new Map();
+  await Promise.all([f.persist(shop,product(1),db,{collectionUpserts}),f.persist(shop,product(2),db,{collectionUpserts})]);
+  assert.deepEqual(collections,[shared.id]);
+  assert.deepEqual(links.map(link=>link.productId).sort(),[product(1).id,product(2).id]);
+});
+
+test('bulk import verifies one search task per 100 roots',async()=>{
+  const bulkProducts=Array.from({length:100},(_,index)=>({...active,id:`gid://shopify/Product/${index+1}`}));
+  const f=await fixture({bulkProducts});
+  await f.run();
+  assert.equal(f.indexTasks(),1);
+  assert.equal(f.job.productsProcessed,100);
+  assert.equal(f.indexed.length,100);
 });
 
 test('bulk sync does not advance its checkpoint when search indexing fails', async () => {
