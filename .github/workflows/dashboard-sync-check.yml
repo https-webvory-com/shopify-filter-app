@@ -1,4 +1,4 @@
-name: Read-only audit price backfill status
+name: Read-only price sorting readiness
 on:
   workflow_dispatch:
 permissions:
@@ -16,69 +16,18 @@ jobs:
           command_timeout: 3m
           script: |
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
             import Redis from 'ioredis';
             import {Queue} from 'bullmq';
-            const db=new PrismaClient();
-            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
-            if(!endpoint.password&&process.env.REDIS_PASSWORD)endpoint.password=process.env.REDIS_PASSWORD;
-            const redis=new Redis(endpoint.toString());
-            const queue=new Queue('productSyncQueue',{connection:redis});
-            const shop='thedressoutlet.myshopify.com',country='IN';
+            const endpoint=new URL(process.env.REDIS_URL);
+            const connection={host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})};
+            const redis=new Redis(connection);
+            const queue=new Queue('collectionRankingQueueV2',{connection});
             try{
-              const [job,proof,counts,usProof,usCounts]=await Promise.all([
-                db.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{id:true,status:true,productsProcessed:true,totalProducts:true,updatedAt:true,lastError:true}}),
-                redis.get(`marketPriceIntentReady:${shop}:${country}`),
-                db.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> ${country} ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`,
-                redis.get(`marketPriceIntentReady:${shop}:US`),
-                db.$queryRaw`SELECT count(v."id")::integer AS variants,count(v."id") FILTER (WHERE v."marketPrices" -> 'US' ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`
-              ]);
-              const queued=job?await queue.getJob(job.id):null;
-              const active=await queue.getJobs(['active'],0,4);
-              console.log('AUDIT_PRICE_STATUS',JSON.stringify({job,coverage:counts[0],proofReady:!!proof,queue:queued?{state:await queued.getState(),attemptsMade:queued.attemptsMade,processedOn:queued.processedOn,finishedOn:queued.finishedOn,failedReason:String(queued.failedReason||'').slice(0,500)}:null,activeJobs:active.map(item=>({id:item.id,name:item.name,shop:item.data?.shop,processedOn:item.processedOn}))}));
-              console.log('AUDIT_US_PRICE_STATUS',JSON.stringify({coverage:usCounts[0],proofReady:!!usProof}));
-              const sample=await db.$queryRaw`SELECT p."id" AS "productId",p."title",p."priceMin" AS "baseProductMin",v."id" AS "variantId",v."price" AS "baseVariantPrice",v."available",v."marketPrices" -> 'IN' AS "india",v."marketPrices" -> 'US' AS "unitedStates" FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active' AND v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL ORDER BY p."id",v."id" LIMIT 1`;
-              console.log('AUDIT_MARKET_PRICE_SAMPLE',JSON.stringify(sample[0]||null));
-              const collection='gid://shopify/Collection/408926666';
-              const scoped=await db.$queryRaw`SELECT COUNT(*)::integer AS products,COALESCE(SUM(variants),0)::integer AS variants,COALESCE(SUM(priced),0)::integer AS priced,COUNT(*) FILTER (WHERE variants=priced AND variants>0)::integer AS "completeProducts",COUNT(*) FILTER (WHERE available>0 AND available=available_priced)::integer AS "availableCompleteProducts" FROM (SELECT p."id",COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL)::integer AS priced,COUNT(v."id") FILTER (WHERE v."available")::integer AS available,COUNT(v."id") FILTER (WHERE v."available" AND v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL)::integer AS available_priced FROM "ProductCollection" pc JOIN "Product" p ON p."id"=pc."productId" LEFT JOIN "Variant" v ON v."productId"=p."id" WHERE pc."collectionId"=${collection} AND p."shop"=${shop} AND lower(p."status")='active' GROUP BY p."id") scoped`;
-              console.log('AUDIT_COLLECTION_PRICE_COVERAGE',JSON.stringify({collection,counts:scoped[0]}));
-              const session=await db.session.findFirst({where:{shop,isOnline:false},select:{accessToken:true}});
-              if(session){const response=await fetch(`https://${shop}/admin/api/2025-10/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':session.accessToken},body:JSON.stringify({query:'query{shop{currencyCode}}'}),signal:AbortSignal.timeout(15000)});console.log('AUDIT_SHOP_CURRENCY',JSON.stringify({httpStatus:response.status,currencyCode:(await response.json()).data?.shop?.currencyCode||null}));}
-            }finally{await queue.close();await db.$disconnect();redis.disconnect();}
+              const counts=await queue.getJobCounts('active','waiting','delayed','failed','completed','prioritized');
+              const active=await queue.getJobs(['active'],0,10);
+              const waiting=await queue.getJobs(['waiting','prioritized'],0,10);
+              console.log('PRICE_RANKING_QUEUE',JSON.stringify({counts,active:active.map(j=>({id:j.id,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy,processedOn:j.processedOn})),waiting:waiting.map(j=>({id:j.id,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy}))}));
+            }finally{await queue.close();redis.disconnect();}
             NODE
-            docker stats --no-stream --format 'AUDIT_WORKER_MEMORY {{.MemUsage}}' shopify-filter-sync-worker
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import {Readable} from 'node:stream';
-            import readline from 'node:readline';
-            const db=new PrismaClient();
-            const shop='thedressoutlet.myshopify.com';
-            try{
-              const job=await db.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'},select:{cursor:true,productsProcessed:true,status:true}});
-              if(job?.status==='FAILED'&&job.cursor){
-                const session=await db.session.findFirst({where:{shop,isOnline:false},select:{accessToken:true}});
-                if(!session)throw Error('Offline session unavailable');
-                const response=await fetch(`https://${shop}/admin/api/2025-10/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':session.accessToken},body:JSON.stringify({query:'query($id:ID!){bulkOperation(id:$id){status url}}',variables:{id:job.cursor}}),signal:AbortSignal.timeout(15000)});
-                const operation=(await response.json()).data?.bulkOperation;
-                console.log('AUDIT_BULK_OPERATION',JSON.stringify({status:operation?.status||null,hasUrl:!!operation?.url,checkpoint:job.productsProcessed}));
-                if(operation?.status==='COMPLETED'&&operation.url){
-                  const download=await fetch(operation.url,{signal:AbortSignal.timeout(90000)});
-                  if(!download.ok)throw Error('Bulk export unavailable');
-                  let root=0,productId='',printed=0;
-                  for await(const line of readline.createInterface({input:Readable.fromWeb(download.body),crlfDelay:Infinity})){
-                    if(!line.trim())continue;
-                    const row=JSON.parse(line);
-                    if(!row.__parentId){root++;productId=row.id;if(root>job.productsProcessed+200)break;continue;}
-                    if(root<=job.productsProcessed||!String(row.id||'').startsWith('gid://shopify/ProductVariant/'))continue;
-                    const value=row.cfpMarket_IN;
-                    const amount=value?.price?.amount==null?NaN:Number(value.price.amount),currency=value?.price?.currencyCode,compare=value?.compareAtPrice?.amount==null?null:Number(value.compareAtPrice.amount);
-                    if(!Number.isFinite(amount)||amount<0||!/^[A-Z]{3}$/.test(currency||'')||(compare!==null&&(!Number.isFinite(compare)||compare<0||value.compareAtPrice.currencyCode!==currency))){
-                      console.log('AUDIT_MISSING_MARKET_PRICE',JSON.stringify({root,productId,variantId:row.id,price:value?.price||null,compareAtPrice:value?.compareAtPrice||null,basePrice:row.price,availableForSale:row.availableForSale}));
-                      if(++printed>=5)break;
-                    }
-                  }
-                  console.log('AUDIT_BULK_SCAN',JSON.stringify({roots:root,missingPrinted:printed}));
-                }
-              }
-            }finally{await db.$disconnect();}
-            NODE
+            docker logs --since 10m --tail 100 shopify-filter-sync-worker 2>&1 | grep -E 'collection preparation|Collection ranking|Ranking Queue|India price|error|Error' | tail -n 35 || true
+            docker exec shopify-filter-sync-worker sh -c 'if test -f /tmp/india-price-backfill.log; then tail -n 10 /tmp/india-price-backfill.log; fi'
