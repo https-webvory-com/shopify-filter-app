@@ -28,7 +28,10 @@ test('a missing or inconsistent country price cannot enter a complete market ran
   const first=variantMarketPrices({cfpMarket_GB:gb,cfpMarket_US:us},['GB','US']);
   assert.deepEqual(first.GB,{price:115,compareAtPrice:140,currency:'GBP'});
   assert.throws(()=>variantMarketPrices({cfpMarket_GB:gb},['GB','US']),/Incomplete contextual price for US/);
-  assert.throws(()=>variantMarketPrices({cfpMarket_GB:{...gb,compareAtPrice:{amount:'140',currencyCode:'USD'}}},['GB']),/Incomplete contextual price/);
+  assert.deepEqual(variantMarketPrices({cfpMarket_GB:{...gb,compareAtPrice:{amount:'140',currencyCode:'USD'}}},['GB']).GB,
+    {price:115,compareAtPrice:null,currency:'GBP'});
+  assert.deepEqual(variantMarketPrices({cfpMarket_GB:{...gb,compareAtPrice:{amount:'-175600',currencyCode:'GBP'}}},['GB']).GB,
+    {price:115,compareAtPrice:null,currency:'GBP'});
   const ranges=productMarketPriceRanges([{marketPrices:first},{marketPrices:{GB:{price:125,currency:'GBP'},US:{price:159,currency:'USD'}}}],['GB','US']);
   assert.deepEqual(ranges,{GB:{min:115,max:125,currency:'GBP'},US:{min:149,max:159,currency:'USD'}});
   assert.deepEqual(productMarketPriceRanges([{marketPrices:first},{marketPrices:{US:{price:159,currency:'USD'}}}],['GB','US']),

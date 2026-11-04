@@ -25,10 +25,14 @@ export function variantMarketPrices(variant, countries) {
     const value = variant?.[`cfpMarket_${country}`];
     const price = value?.price?.amount == null ? NaN : Number(value.price.amount);
     const currency = value?.price?.currencyCode;
-    const compare = value?.compareAtPrice == null ? null :
-      value.compareAtPrice.amount == null ? NaN : Number(value.compareAtPrice.amount);
-    if (!Number.isFinite(price) || price < 0 || !CURRENCY.test(currency || '') ||
-      (compare !== null && (!Number.isFinite(compare) || compare < 0 || value.compareAtPrice.currencyCode !== currency))) {
+    const rawCompare = value?.compareAtPrice == null || value.compareAtPrice.amount == null
+      ? NaN : Number(value.compareAtPrice.amount);
+    // Shopify can return an invalid optional compare-at amount for a variant.
+    // Keep its valid selling price; invalid sale metadata must not stop an
+    // entire market-price backfill.
+    const compare = Number.isFinite(rawCompare) && rawCompare >= 0 && value.compareAtPrice.currencyCode === currency
+      ? rawCompare : null;
+    if (!Number.isFinite(price) || price < 0 || !CURRENCY.test(currency || '')) {
       throw Error(`Incomplete contextual price for ${country}`);
     }
     prices[country] = { price, compareAtPrice: compare, currency };
