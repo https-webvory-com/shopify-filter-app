@@ -8,21 +8,22 @@ const shop = 'fixture.myshopify.com';
 const active = { id: 'gid://shopify/Product/1', status: 'ACTIVE', publishedAt: '2026-10-01', collections: { nodes: [] } };
 const draft = { id: 'gid://shopify/Product/2', status: 'DRAFT', publishedAt: null, collections: { nodes: [] } };
 
-async function fixture({ indexFails = false } = {}) {
+async function fixture({ indexFails = false, bulkProducts = [active, draft], payloadFails = null, delayMs = 0 } = {}) {
   const writes = [], indexed = [], checks = [];
+  let inFlight = 0, maxConcurrent = 0;
   const job = { id: 'bulk-job', shop, kind: 'BULK_PRODUCTS', status: 'IN_PROGRESS', cursor: 'gid://shopify/BulkOperation/7', productsProcessed: 0 };
   const prisma = { syncJob: {
     findUnique: async () => job,
     update: async ({ data }) => { writes.push(data); Object.assign(job, data); return job; },
   } };
   const index = { addDocuments: async docs => { if (indexFails) throw Error('index unavailable'); indexed.push(...docs); return { taskUid: 1 }; } };
-  const bulk = { bulkProductIndexStatus: async () => ({ status: 'complete', url: 'https://storage.test/file', count: 2, objectCount: 2 }),
+  const bulk = { bulkProductIndexStatus: async () => ({ status: 'complete', url: 'https://storage.test/file', count: bulkProducts.length, objectCount: bulkProducts.length }),
     streamBulkProductIndex: async ({ onRoot, onProduct, skip }) => {
-      for (const [offset, product] of [active, draft].entries()) {
+      for (const [offset, product] of bulkProducts.entries()) {
         await onRoot(product, offset + 1);
         if (offset + 1 > skip) await onProduct(product, offset + 1);
       }
-      return 2;
+      return bulkProducts.length;
     } };
   const drift = { missing: [], extra: [], statusMismatch: [] };
   const audit = { auditCatalogDrift: async ({ bulkProducts }) => { checks.push(bulkProducts.map(p => p.id)); return drift; },
@@ -40,7 +41,7 @@ async function fixture({ indexFails = false } = {}) {
     './shopCache.server': { invalidateShop: async () => {} },
     './productCollections.server.js': { verifyMembershipWrites: async (_db, _index, _shop, products, docs) => {
       assert.equal(products.length, docs.length);
-      assert.equal(docs[0].id, '1');
+      for (let i = 0; i < docs.length; i++) assert.equal(docs[i].id, products[i].id.split('/').pop());
     } },
     '../utils/storefrontProduct.js': { isStorefrontProduct: p => p.status === 'ACTIVE' && !!p.publishedAt },
     '../utils/searchIndexProjection.js': { searchIndexProjection: () => ({}) },
@@ -49,11 +50,18 @@ async function fixture({ indexFails = false } = {}) {
     './searchIndex.server.js': { scheduleSearchIndexProducts: async () => {} },
   };
   const ctx = { module: { exports: {} }, exports: {}, require: name => mocks[name] || {}, bulk, audit,
-    orders: { syncHistoricalOrders: async () => true }, fakePayload: async product => product === draft ? null :
-      { product, meiliDoc: { id: '1', shop, status: 'ACTIVE', collections: [] } },
+    orders: { syncHistoricalOrders: async () => true }, fakePayload: async product => {
+      inFlight++; maxConcurrent = Math.max(maxConcurrent, inFlight);
+      try {
+        if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+        if (product.id === payloadFails) throw Error('product write failed');
+        return product.status !== 'ACTIVE' ? null :
+          { product, meiliDoc: { id: product.id.split('/').pop(), shop, status: 'ACTIVE', collections: [] } };
+      } finally { inFlight--; }
+    },
     pretendSeed: async () => {}, pretendSettings: async () => {}, console: { log() {} }, process: { env: {} } };
   vm.runInNewContext((await transform(source, { format: 'cjs' })).code, ctx);
-  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), job, writes, indexed, checks };
+  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), job, writes, indexed, checks, maxConcurrent: () => maxConcurrent };
 }
 
 test('bulk sync commits complete batches, excludes drafts, verifies both stores and completes', async () => {
@@ -72,4 +80,17 @@ test('bulk sync does not advance its checkpoint when search indexing fails', asy
   assert.equal(f.job.productsProcessed, 0);
   assert.equal(f.job.status, 'IN_PROGRESS');
   assert.equal(f.checks.length, 0);
+});
+
+test('bulk sync runs four product writes at once and advances only after verified indexing', async () => {
+  const bulkProducts = Array.from({ length: 20 }, (_, index) => ({ ...active, id: `gid://shopify/Product/${index + 1}` }));
+  const f = await fixture({ bulkProducts, delayMs: 5 });
+  await f.run();
+  assert.equal(f.maxConcurrent(), 4);
+  assert.equal(f.indexed.length, 20);
+  assert.equal(f.job.productsProcessed, 20);
+  const failed = await fixture({ bulkProducts, delayMs: 5, payloadFails: bulkProducts[8].id });
+  await assert.rejects(failed.run(), /product write failed/);
+  assert.equal(failed.job.productsProcessed, 0);
+  assert.equal(failed.indexed.length, 0);
 });

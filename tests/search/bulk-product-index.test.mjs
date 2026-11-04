@@ -55,6 +55,21 @@ test('bulk JSONL rejects partial files and foreign child groups', async () => {
     fetcher: broken, onProduct: async () => {} }), /not grouped/);
 });
 
+test('slow product writes do not abort a healthy bulk stream, but stalled reads time out', async () => {
+  let aborted = false;
+  await streamBulkProductIndex({ url: 'https://storage.googleapis.com/catalog', count: 2, objectCount: 6,
+    readIdleTimeoutMs: 10, fetcher: async (_url, { signal }) => {
+      signal.addEventListener('abort', () => { aborted = true; });
+      return fetcher();
+    }, onProduct: async () => new Promise(resolve => setTimeout(resolve, 30)) });
+  assert.equal(aborted, false);
+  const stalled = async (_url, { signal }) => new Response(new ReadableStream({ start(controller) {
+    signal.addEventListener('abort', () => controller.error(Error('aborted')));
+  } }));
+  await assert.rejects(streamBulkProductIndex({ url: 'https://storage.googleapis.com/catalog', count: 1,
+    readIdleTimeoutMs: 10, fetcher: stalled, onProduct: async () => {} }), /Bulk product export stalled/);
+});
+
 test('both bulk readers accept unlisted Shopify products without making them storefront eligible', async () => {
   const unlisted={id:'gid://shopify/Product/3',title:'Private product',handle:'private-product',status:'UNLISTED',publishedAt:'2026-10-01'};
   const fetcher=async()=>new Response(JSON.stringify(unlisted));

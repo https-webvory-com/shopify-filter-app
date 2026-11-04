@@ -312,7 +312,7 @@ export async function runBulkProductSync(jobId, shop, admin) {
   const operation = await bulkProductIndexStatus(admin, job.cursor);
   if (operation.status === 'pending') return { needsContinuation: true, retryAfterMs: 10000 };
   const expected = [];
-  const batch = [], products = [];
+  const batch = [], products = [], pending = [];
   let lastRoot = job.productsProcessed || 0;
   const flush = async () => {
     if (batch.length) {
@@ -328,14 +328,32 @@ export async function runBulkProductSync(jobId, shop, admin) {
       job = await prisma.syncJob.update({ where: { id: jobId }, data: { productsProcessed: lastRoot, totalProducts: operation.count, lastError: null } });
     }
   };
+  const flushPending = async () => {
+    if (!pending.length) return;
+    const ready = pending.splice(0);
+    // Keep the JSONL stream bounded while independent product/variant writes
+    // proceed together. A checkpoint is published only after every write and
+    // the matching search documents have been verified.
+    for (let offset = 0; offset < ready.length; offset += 4) {
+      const group = ready.slice(offset, offset + 4);
+      const settled = await Promise.allSettled(group.map(async ({ product }) =>
+        await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true })));
+      const failure = settled.find(result => result.status === 'rejected');
+      if (failure) throw failure.reason;
+      settled.forEach(result => {
+        if (result.value) { products.push(result.value.product); batch.push(result.value.meiliDoc); }
+      });
+      lastRoot = group.at(-1).root;
+    }
+    await flush();
+  };
   await streamBulkProductIndex({ ...operation, skip: lastRoot, onRoot: product => {
     if (isStorefrontProduct(product)) expected.push({ id: product.id, status: 'ACTIVE' });
   }, onProduct: async (product, root) => {
-    const result = await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true });
-    if (result) { products.push(result.product); batch.push(result.meiliDoc); }
-    lastRoot = root;
-    if (root % 20 === 0) await flush();
+    pending.push({ product, root });
+    if (pending.length >= 20) await flushPending();
   } });
+  await flushPending();
   await flush();
   // The export is a complete catalog, so reconcile deleted/unpublished IDs
   // that had no row to process. Never mark the job complete while any ID is

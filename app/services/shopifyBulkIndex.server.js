@@ -73,16 +73,37 @@ function beginProduct(row) {
     variants: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }, metafields: { nodes: [] } };
 }
 
-export async function streamBulkProductIndex({ url, count, objectCount, onProduct, onRoot, skip = 0, fetcher = fetch }) {
+export async function streamBulkProductIndex({ url, count, objectCount, onProduct, onRoot, skip = 0, fetcher = fetch,
+  headerTimeoutMs = 60000, readIdleTimeoutMs = 120000 }) {
   if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(skip) || skip < 0 || skip > count) throw Error('Invalid bulk index count');
   if (!url) { if (count !== 0) throw Error('Missing bulk index data'); return 0; }
-  const response = await fetcher(url, { signal: AbortSignal.timeout(600000) });
+  // A bulk export can take hours to ingest. An absolute fetch timeout would
+  // abort the body during healthy database writes, repeatedly failing at the
+  // saved checkpoint. Bound connection and stalled reads independently.
+  const controller = new AbortController();
+  const headerTimer = setTimeout(() => controller.abort(), headerTimeoutMs);
+  let response;
+  try { response = await fetcher(url, { signal: controller.signal }); }
+  finally { clearTimeout(headerTimer); }
   if (!response.ok || !response.body) throw Error('Could not download bulk product index');
-  const lines = readline.createInterface({ input: Readable.fromWeb(response.body), crlfDelay: Infinity });
+  const input = Readable.fromWeb(response.body);
+  // An idle timeout aborts the body after the caller has stopped awaiting the
+  // next line. Keep that expected late stream error from escaping the worker.
+  input.on('error', () => {});
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  lines.on('error', () => {});
+  const iterator = lines[Symbol.asyncIterator]();
   let current = null, roots = 0, objects = 0;
   const seen = new Set();
   const finish = async () => { if (current && roots > skip) await onProduct(current, roots); };
-  for await (const line of lines) {
+  try { for (;;) {
+    let idleTimer;
+    const next = await Promise.race([
+      iterator.next(),
+      new Promise((_, reject) => { idleTimer = setTimeout(() => { controller.abort(); reject(Error('Bulk product export stalled')); }, readIdleTimeoutMs); }),
+    ]).finally(() => clearTimeout(idleTimer));
+    if (next.done) break;
+    const line = next.value;
     if (line.length > 2097152) throw Error('Bulk product row is too large');
     if (!line.trim()) continue;
     const row = JSON.parse(line);
@@ -101,7 +122,7 @@ export async function streamBulkProductIndex({ url, count, objectCount, onProduc
     else if (METAFIELD.test(row.id || '')) current.metafields.nodes.push(row);
     else if (typeof row.url === 'string' && !row.id) current.images.nodes.push(row);
     else throw Error('Unknown bulk product child');
-  }
+  } } finally { lines.close(); }
   if (roots !== count || (Number.isSafeInteger(objectCount) && objectCount >= 0 && objects !== objectCount)) throw Error('Incomplete bulk product export');
   await finish();
   return roots;
