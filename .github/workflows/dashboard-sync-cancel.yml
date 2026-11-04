@@ -1,0 +1,46 @@
+name: Cancel full product sync for India price repair
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
+            import {Queue} from 'bullmq';
+            const db=new PrismaClient();
+            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
+            if(!endpoint.password&&process.env.REDIS_PASSWORD)endpoint.password=process.env.REDIS_PASSWORD;
+            const redis=new Redis(endpoint.toString());
+            const queue=new Queue('productSyncQueue',{connection:{host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})}});
+            const shop='thedressoutlet.myshopify.com',jobId='42c1d24d-640c-4f12-8f0f-ebede467a927';
+            try{
+              const saved=await db.syncJob.findUnique({where:{id:jobId}});
+              if(!saved||saved.shop!==shop||saved.kind!=='BULK_PRODUCTS'||saved.productsProcessed!==0||!['IN_PROGRESS','CANCELLED'].includes(saved.status))throw Error('Full-sync job changed; inspect before cancellation');
+              await redis.set(`marketPriceBackfill:${shop}:IN`,'cancelled','EX',86400);
+              let removed=false,state='missing';
+              for(let attempt=0;attempt<60;attempt++){
+                const item=await queue.getJob(jobId);
+                state=item?await item.getState():'missing';
+                if(!item){removed=true;break;}
+                if(['waiting','delayed','prioritized','failed','completed'].includes(state)){
+                  try{await item.remove();removed=true;break;}catch{}
+                }
+                await new Promise(resolve=>setTimeout(resolve,1000));
+              }
+              if(!removed)throw Error('Full-sync queue job is still active; retry cancellation');
+              await db.syncJob.update({where:{id:jobId},data:{status:'CANCELLED',lastError:'Cancelled for India-only market price repair'}});
+              console.log('AUDIT_FULL_SYNC_CANCELLED',JSON.stringify({id:jobId,processed:saved.productsProcessed,queueState:state}));
+            }finally{await queue.close();redis.disconnect();await db.$disconnect();}
+            NODE
