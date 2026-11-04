@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {productRevisionKey,productContentRevisionKey,rankingDataRevisionKey} from './shopCacheInvalidation.js';
 import {encodePreparation,decodePreparation} from './collectionPreparationPayload.js';
 import {collectionHasExternalCandidates} from './collectionDependencies.js';
+import {reorderVerifiedPinPrefix} from './collectionPinReorder.js';
 
 // Keep the last usable product-data version through idle periods. Explicit
 // configuration revisions still invalidate it immediately.
@@ -127,7 +128,7 @@ for _, key in ipairs(redis.call('ZRANGE',KEYS[1],0,-tonumber(ARGV[4])-1)) do
 end
 return 1`;
 
-export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, loadDurable,saveDurable,dependencies,scores,validateReuse=async()=>true, revalidateSaved=false, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
+export function createCollectionPreparation({ redis, queue, prepare, prepareDirect, loadDurable,saveDurable,dependencies,scores,validateReuse=async()=>true, readPinReorderSource=async()=>null, verifyNewPins=async()=>false, revalidateSaved=false, now = Date.now, observe = () => {}, retentionLimit=publicRetentionLimit, retentionBytes=publicRetentionBytes }) {
   const report = event => {try {observe(event);} catch { /* Diagnostics never affect availability. */ }};
   const valid = value => value && Array.isArray(value.ids) && value.ids.every(id=>typeof id==='string'&&id.length>0) &&
     new Set(value.ids).size===value.ids.length && value.metadata && typeof value.metadata==='object' && !Array.isArray(value.metadata);
@@ -280,6 +281,40 @@ export function createCollectionPreparation({ redis, queue, prepare, prepareDire
           if(!restored.superseded){raw=await redis.get(key);report({event:'durable-restored',shop:spec.shop,collectionId:spec.collectionId,key});}
         }
       }catch(error){report({event:'durable-read-unavailable',shop:spec.shop,error:error.name});}
+    }
+    if(!raw&&spec.retainForIdle===true){
+      try{
+        const source=await readPinReorderSource(spec);
+        if(source){
+          const sourceKey=preparationKey(source);
+          const oldRaw=await redis.get(sourceKey)||await loadDurable?.({shop:spec.shop,kind:'ranking',key:sourceKey});
+          let old;try{old=decodePreparation(oldRaw);}catch{}
+          const currentDataRevision=await reuseRevision(spec);
+          const sourceDataMatches=old?.reusableDataRevision===await reuseRevision(source);
+          if(valid(old)&&old.rankingEventsVersion===1&&Number.isFinite(old.preparedAt)&&old.preparedAt<=now()&&
+              old.productRevision===spec.productRevision&&sourceDataMatches&&
+              await dataEpochMatches(spec,old.reusableDataRevision)&&await scoreValid(spec,old)&&await validateReuse(spec,old)){
+            const ids=reorderVerifiedPinPrefix(old.ids,source.pinnedIds,spec.pinnedIds);
+            const addedPins=spec.pinnedIds.filter(id=>!source.pinnedIds.includes(id));
+            if(ids&&(!addedPins.length||await verifyNewPins(spec,addedPins))){
+              const metadata={...old.metadata};
+              if(addedPins.length){
+                const rows=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;
+                for(const pin of rows||[]){
+                  if(!addedPins.includes(pin?.id))continue;
+                  const image=pin.image||pin.imageUrl||pin.src;
+                  const imageUrl=typeof image==='string'?image:image?.src||image?.url;
+                  if(imageUrl)metadata[String(pin.id).split('/').pop()]={...metadata[String(pin.id).split('/').pop()],merchandisingImage:imageUrl};
+                }
+              }
+              const result=await publish(key,spec,{...old,ids,metadata},old.productRevision,
+                {sourcePreparedAt:old.preparedAt,startedDataRevision:currentDataRevision});
+              if(!result.superseded){raw=await redis.get(key);
+                report({event:'pin-reorder-reused',shop:spec.shop,collectionId:spec.collectionId,key,pins:spec.pinnedIds.length});}
+            }
+          }
+        }
+      }catch(error){report({event:'pin-reorder-unavailable',shop:spec.shop,collectionId:spec.collectionId,reason:error.name});}
     }
     if(!raw&&spec.retainForIdle===true){
       const previous=await reusable(spec);

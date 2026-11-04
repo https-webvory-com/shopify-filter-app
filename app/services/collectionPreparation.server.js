@@ -21,6 +21,7 @@ import {getMarketAvailabilityState} from './marketAvailability.server.js';
 import {createCollectionSalesDependencies} from '../utils/collectionSalesDependencies.js';
 import {preparationKey} from '../utils/collectionPreparation.js';
 import {createCollectionHeadProofs} from '../utils/collectionHeadProofs.js';
+import {activePinsInSavedOrder,isSafeCollectionPinEdit} from '../utils/collectionPinReorder.js';
 import {catalogPublicationInvalidatedAtKey,configurationInvalidatedAtKey,marketRuleInvalidatedAtKey} from '../utils/shopCacheInvalidation.js';
 const recordPreparationEvent=createCollectionPreparationTelemetry(redis);
 async function readCollectionHeadVersion(spec){
@@ -40,6 +41,50 @@ async function readCollectionHeadVersion(spec){
 const headProofs=createCollectionHeadProofs({redis,readVersion:readCollectionHeadVersion,observe:event=>{
   (event.event==='head-comparison-mismatch'?console.error:console.info)('CFP: collection head',JSON.stringify(event));recordPreparationEvent(event).catch(()=>{});
 }});
+const pinTransitionKey=(shop,revision,ruleId)=>`collectionPinReorder:${shop}:${revision}:${ruleId}`;
+export async function rememberCollectionPinReorder(shop,before,after,oldRevision,newRevision){
+  if(!isSafeCollectionPinEdit(before,after)||oldRevision===newRevision)return false;
+  try{
+    await redis.setex(pinTransitionKey(shop,newRevision,after.id),600,JSON.stringify({oldRevision,before}));
+    return true;
+  }catch{return false;}
+}
+export async function rememberCollectionPinCreation(shop,rule,oldRevision,newRevision){
+  if(!rule?.id||rule.ruleType!=='collection'||rule.status!==true||oldRevision===newRevision)return false;
+  try{
+    await redis.setex(pinTransitionKey(shop,newRevision,rule.id),600,JSON.stringify({oldRevision,before:null}));
+    return true;
+  }catch{return false;}
+}
+async function readPinReorderSource(spec){
+  if(spec.retainForIdle!==true||spec.needsShopifyOrder!==true||
+      !['best-selling','bestselling'].includes(spec.sortBy)||!spec.pinningRule?.id)return null;
+  let transition;try{transition=JSON.parse(await redis.get(pinTransitionKey(spec.shop,spec.revision,spec.pinningRule.id)));}catch{return null;}
+  if(!transition||transition.before && !isSafeCollectionPinEdit(transition.before,spec.pinningRule))return null;
+  if(transition.before===null){
+    if(!Array.isArray(spec.pinnedIds)||!spec.pinnedIds.length)return null;
+    return {...spec,revision:transition.oldRevision,pinningRule:null,pinnedIds:[]};
+  }
+  const pinnedIds=activePinsInSavedOrder(transition.before,spec.pinnedIds);
+  if(!pinnedIds||pinnedIds.length!==spec.pinnedIds.length)return null;
+  return {...spec,revision:transition.oldRevision,pinningRule:transition.before,pinnedIds};
+}
+async function verifyNewPins(spec,pinIds){
+  if(!pinIds.length||pinIds.length>250)return false;
+  const ids=[...new Set(pinIds.map(value=>String(value).split('/').pop()))];
+  if(ids.length!==pinIds.length||ids.some(value=>!/^\d+$/.test(value)))return false;
+  try{
+    const [products,documents]=await Promise.all([
+      prisma.product.findMany({where:{shop:spec.shop,id:{in:pinIds}},select:{id:true,priceMin:true,status:true}}),
+      meiliClient.index('products').getDocuments({filter:`id IN ${JSON.stringify(ids)}`,fields:['id','shop','priceMin','status'],limit:ids.length,offset:0}),
+    ]);
+    if(products.length!==ids.length||documents?.results?.length!==ids.length)return false;
+    const positive=row=>row&&Number.isFinite(Number(row.priceMin))&&Number(row.priceMin)>0&&String(row.status||'active').toLowerCase()==='active';
+    const productById=new Map(products.map(row=>[String(row.id).split('/').pop(),row]));
+    const documentById=new Map(documents.results.map(row=>[String(row.id).split('/').pop(),row]));
+    return ids.every(id=>positive(productById.get(id))&&positive(documentById.get(id))&&documentById.get(id).shop===spec.shop);
+  }catch{return false;}
+}
 export async function getCollectionHeadVersion(spec){const version=await readCollectionHeadVersion(spec);return version&&!await headProofs.blocked(spec,version)?version:null;}
 export const rememberCollectionHead=headProofs.remember;
 export const compareCollectionHead=headProofs.compare;
@@ -72,7 +117,7 @@ const preparation = createCollectionPreparation({ redis, queue: collectionRankin
   prepareDirect:spec=>spec.allowIncompleteMarketPrice?null:prepareCollectionFromFacts(spec),dependencies:createCollectionDependencies(redis),scores:createCollectionSalesDependencies(redis),
   loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
-  revalidateSaved:true,
+  revalidateSaved:true,readPinReorderSource,verifyNewPins,
   observe:event=>{console.info('CFP: collection preparation',JSON.stringify({...event,at:Date.now()}));recordPreparationEvent(event).catch(()=>{});},
 });
 const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);

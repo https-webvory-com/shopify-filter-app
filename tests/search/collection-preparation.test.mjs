@@ -51,6 +51,77 @@ test('changed rules, pins, stock, data epochs and private contexts cannot reuse 
  }
 });
 
+test('a verified same-pin reorder serves a new sequence immediately with the worker paused',async()=>{
+ const f=fixture();
+ const oldPins=['pin','boost'];
+ const old={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,
+   orderedIds:['pin','boost','ordinary'],pinnedIds:oldPins,
+   pinningRule:{id:'rule',products:oldPins.map(id=>({id}))}};
+ assert.equal((await f.service.get(old,{warmup:true,precompute:true})).status,'ready');
+ assert.ok(f.values.has(preparationKey(old)));
+ f.values.set(preparationRevisionKey(old.shop),'1');
+ const next={...old,revision:'1',pinnedIds:['boost','pin'],
+   pinningRule:{id:'rule',products:[{id:'boost'},{id:'pin'}]}};
+ const noWorker=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,
+   prepare:async()=>{throw Error('full scan must not run');},
+   readPinReorderSource:async()=>old});
+ const ready=await noWorker.get(next);
+ assert.deepEqual(ready,{status:'ready',ids:['boost','pin','ordinary'],metadata:f.result.metadata});
+ assert.equal(f.builds(),1);
+ assert.equal(f.queued.length,0);
+ assert.deepEqual((await noWorker.get(old)).status,'pending');
+});
+
+test('adding a product already in the complete ranking moves it into the pin prefix without a worker',async()=>{
+ const f=fixture();
+ const old={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,
+   orderedIds:['pin','boost','ordinary'],pinnedIds:['pin'],
+   pinningRule:{id:'rule',products:[{id:'pin'}]}};
+ assert.equal((await f.service.get(old,{warmup:true,precompute:true})).status,'ready');
+ f.values.set(preparationRevisionKey(old.shop),'1');
+ const next={...old,revision:'1',pinnedIds:['pin','ordinary'],
+   pinningRule:{id:'rule',products:[{id:'pin'},{id:'ordinary'}]}};
+ const noWorker=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,
+   prepare:async()=>{throw Error('full scan must not run');},readPinReorderSource:async()=>old,verifyNewPins:async()=>true});
+ const ready=await noWorker.get(next);
+ assert.deepEqual(ready.ids,['pin','ordinary','boost']);
+ assert.equal(f.queued.length,0);
+});
+
+test('a first rule with 42 eligible pins derives from the verified unpinned ranking',async()=>{
+ const f=fixture();
+ f.result.ids=Array.from({length:50},(_,index)=>String(index+1));
+ f.result.metadata={};
+ const old={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,
+   orderedIds:[...f.result.ids],pinnedIds:[],pinningRule:null};
+ assert.equal((await f.service.get(old,{warmup:true,precompute:true})).status,'ready');
+ assert.ok(f.values.has(preparationKey(old)));
+ f.values.set(preparationRevisionKey(old.shop),'1');
+ const pins=Array.from({length:42},(_,index)=>String(50-index));
+ const next={...old,revision:'1',pinnedIds:pins,pinningRule:{id:'new-rule',products:pins.map(id=>({id}))}};
+ const noWorker=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,
+   prepare:async()=>{throw Error('full scan must not run');},readPinReorderSource:async()=>old,verifyNewPins:async()=>true});
+ const ready=await noWorker.get(next);
+ assert.equal(ready.status,'ready');
+ assert.deepEqual(ready.ids.slice(0,42),pins);
+ assert.deepEqual(ready.ids.slice(42),['1','2','3','4','5','6','7','8']);
+ assert.equal(f.queued.length,0);
+});
+
+test('an unverified added pin waits for normal preparation',async()=>{
+ const f=fixture();
+ const old={...f.spec,collectionId:'1',retainForIdle:true,needsShopifyOrder:true,
+   orderedIds:['pin','boost','ordinary'],pinnedIds:['pin'],pinningRule:{id:'rule',products:[{id:'pin'}]}};
+ await f.service.get(old,{warmup:true,precompute:true});
+ f.values.set(preparationRevisionKey(old.shop),'1');
+ const next={...old,revision:'1',pinnedIds:['pin','ordinary'],
+   pinningRule:{id:'rule',products:[{id:'pin'},{id:'ordinary'}]}};
+ const service=createCollectionPreparation({redis:f.redis,queue:f.queue,now:f.now,
+   prepare:async()=>{throw Error('unexpected scan');},readPinReorderSource:async()=>old});
+ assert.equal((await service.get(next)).status,'pending');
+ assert.equal(f.queued.length,1);
+});
+
 test('exact legacy rankings can be reused without extending the source product freshness window',async()=>{
  const f=fixture();f.spec={...f.spec,collectionId:'1',retainForIdle:true};
  f.values.set(preparationKey(f.spec),JSON.stringify({...f.result,productRevision:'0',preparedAt:100000}));

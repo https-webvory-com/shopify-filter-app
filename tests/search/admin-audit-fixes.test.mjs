@@ -9,7 +9,8 @@ async function loadAction(file, prisma, invalidateShop = async () => {}) {
   const source = await fs.readFile(`app/routes/${file}`, 'utf8');
   const ast = ts.createSourceFile('route.jsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
   const declaration = ast.statements.flatMap(s => ts.isVariableStatement(s) ? [...s.declarationList.declarations] : []).find(d => d.name.getText(ast) === 'action');
-  const expression = declaration.initializer.getText(ast).replace('const { invalidateShop } = await import("../services/shopCache.server");', '');
+  const expression = declaration.initializer.getText(ast).replace('const { invalidateShop } = await import("../services/shopCache.server");', '')
+    .replaceAll("await import('../services/collectionPreparation.server.js')", '({getCollectionPreparationRevision:async()=>"0",rememberCollectionPinReorder:async()=>false,rememberCollectionPinCreation:async()=>false})');
   return vm.runInNewContext(`(${expression})`, {prisma, invalidateShop, Response,
     data: (body, init) => Response.json(body, init), redirect: location => new Response(null, {status:302, headers:{Location:location}}),
     authenticate:{admin:async()=>({session:{shop}})}});

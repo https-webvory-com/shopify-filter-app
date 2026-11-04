@@ -101,15 +101,20 @@ export const action = async ({ request, params }) => {
       products: JSON.parse(productsJSON),
     };
 
-    let savedRule;
+    let savedRule, pinReorderBefore, pinReorderRevision;
     if (ruleId === "new") {
       if (!Array.isArray(data.products) || !data.products.length || (!applyToAll && (!Array.isArray(data.collections) || !data.collections.length))) {
         return Response.json({ error: "Select at least one product and a collection, or All collections." }, { status: 400 });
       }
+      const {getCollectionPreparationRevision}=await import('../services/collectionPreparation.server.js');
+      pinReorderRevision=await getCollectionPreparationRevision(shop);
       savedRule = await prisma.pinnedProductRule.create({ data });
     } else {
       const original = await prisma.pinnedProductRule.findFirst({ where: { id: ruleId, shop, ruleType: 'collection' } });
       if (!original) return Response.json({ error: "Pinning rule not found." }, { status: 404 });
+      const {getCollectionPreparationRevision}=await import('../services/collectionPreparation.server.js');
+      pinReorderBefore=original;
+      pinReorderRevision=await getCollectionPreparationRevision(shop);
       if (original && (Boolean(original.applyToAll) !== applyToAll || JSON.stringify(original.collections || []) !== JSON.stringify(data.collections))) {
         data.collectionSortKey = null;
         data.collectionSortPosition = null;
@@ -120,6 +125,12 @@ export const action = async ({ request, params }) => {
       });
     }
     await invalidateShop(shop);
+    if(pinReorderRevision!==undefined){
+      const {getCollectionPreparationRevision,rememberCollectionPinReorder,rememberCollectionPinCreation}=await import('../services/collectionPreparation.server.js');
+      const currentRevision=await getCollectionPreparationRevision(shop);
+      if(pinReorderBefore)await rememberCollectionPinReorder(shop,pinReorderBefore,savedRule,pinReorderRevision,currentRevision);
+      else await rememberCollectionPinCreation(shop,savedRule,pinReorderRevision,currentRevision);
+    }
     return redirect("/app/collections/pinning");
   }
 

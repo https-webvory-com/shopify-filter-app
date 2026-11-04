@@ -11,11 +11,14 @@ async function route(file) {
     create:async args=>mutations.push(args),
     findFirst:async()=>({shop:'fixture.myshopify.com',name:'Pins',status:true,applyToAll:false,collections:['Collection'],products:[],collectionSortKey:'[99]',collectionSortPosition:7}),
   };
-  const source=(await fs.readFile(file,'utf8')).replace('await import("../services/shopCache.server")','require("../services/shopCache.server")');
+  const source=(await fs.readFile(file,'utf8'))
+    .replace('await import("../services/shopCache.server")','require("../services/shopCache.server")')
+    .replaceAll("await import('../services/collectionPreparation.server.js')","require('../services/collectionPreparation.server.js')");
   const ctx={module:{exports:{}},exports:{},Response,console,require:name=>{
     if(name==='../shopify.server')return {authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})}};
     if(name==='../db.server')return {__esModule:true,default:{pinnedProductRule:model}};
     if(name==='../services/shopCache.server')return {invalidateShop:async shop=>invalidations.push(shop)};
+    if(name==='../services/collectionPreparation.server.js')return {getCollectionPreparationRevision:async()=>String(invalidations.length),rememberCollectionPinReorder:async()=>false,rememberCollectionPinCreation:async()=>false};
     if(name==='react-router')return {redirect:()=>({redirect:true})};
     return {};
   }};
