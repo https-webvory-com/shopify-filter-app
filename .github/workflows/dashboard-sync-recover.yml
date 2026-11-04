@@ -1,10 +1,10 @@
-name: Resume saved audit price backfill
+name: Cancel full product sync for India price repair
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  resume:
+  cancel:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -17,30 +17,30 @@ jobs:
           script: |
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
             import {Queue} from 'bullmq';
             const db=new PrismaClient();
             const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
             if(!endpoint.password&&process.env.REDIS_PASSWORD)endpoint.password=process.env.REDIS_PASSWORD;
-            const connection={host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})};
-            const queue=new Queue('productSyncQueue',{connection});
-            const shop='thedressoutlet.myshopify.com';
+            const redis=new Redis(endpoint.toString());
+            const queue=new Queue('productSyncQueue',{connection:{host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})}});
+            const shop='thedressoutlet.myshopify.com',jobId='42c1d24d-640c-4f12-8f0f-ebede467a927';
             try{
-              const saved=await db.syncJob.findFirst({where:{shop,kind:'BULK_PRODUCTS'},orderBy:{createdAt:'desc'}});
-              if(saved?.status==='IN_PROGRESS')console.log('AUDIT_PRICE_RESUME',JSON.stringify({result:'already-running',id:saved.id,processed:saved.productsProcessed}));
-              else {
-                if(saved?.id!=='95b11260-a2bb-4603-993c-0fb4f285f443'||saved.status!=='FAILED'||saved.productsProcessed<7080||!saved.cursor||!saved.lastError?.includes('service could not be reached'))throw Error('Saved price checkpoint changed; inspect before retry');
-                const queued=await queue.getJob(saved.id);
-                const state=queued?await queued.getState():'missing';
-                if(!['failed','completed','missing','waiting','delayed','active','prioritized'].includes(state))throw Error('Unexpected queue state '+state);
-                await db.syncJob.update({where:{id:saved.id},data:{status:'IN_PROGRESS',lastError:null,retryCount:0}});
-                try{
-                  if(state==='failed')await queued.retry('failed',{resetAttemptsMade:true,resetAttemptsStarted:true});
-                  else if(state==='completed'||state==='missing'){
-                    if(state==='completed')await queued.remove();
-                    await queue.add('SYNC_PRODUCTS',{shop,syncJobId:saved.id},{jobId:saved.id,attempts:10,backoff:{type:'fixed',delay:15000}});
-                  }
-                }catch(error){await db.syncJob.update({where:{id:saved.id},data:{status:'FAILED',lastError:saved.lastError}});throw error;}
-                console.log('AUDIT_PRICE_RESUME',JSON.stringify({result:'queued',id:saved.id,processed:saved.productsProcessed,priorQueueState:state}));
+              const saved=await db.syncJob.findUnique({where:{id:jobId}});
+              if(!saved||saved.shop!==shop||saved.kind!=='BULK_PRODUCTS'||saved.productsProcessed!==0||!['IN_PROGRESS','CANCELLED'].includes(saved.status))throw Error('Full-sync job changed; inspect before cancellation');
+              await redis.set(`marketPriceBackfill:${shop}:IN`,'cancelled','EX',86400);
+              let removed=false,state='missing';
+              for(let attempt=0;attempt<60;attempt++){
+                const item=await queue.getJob(jobId);
+                state=item?await item.getState():'missing';
+                if(!item){removed=true;break;}
+                if(['waiting','delayed','prioritized','failed','completed'].includes(state)){
+                  try{await item.remove();removed=true;break;}catch{}
+                }
+                await new Promise(resolve=>setTimeout(resolve,1000));
               }
-            }finally{await db.$disconnect();await queue.close();}
+              if(!removed)throw Error('Full-sync queue job is still active; retry cancellation');
+              await db.syncJob.update({where:{id:jobId},data:{status:'CANCELLED',lastError:'Cancelled for India-only market price repair'}});
+              console.log('AUDIT_FULL_SYNC_CANCELLED',JSON.stringify({id:jobId,processed:saved.productsProcessed,queueState:state}));
+            }finally{await queue.close();redis.disconnect();await db.$disconnect();}
             NODE
