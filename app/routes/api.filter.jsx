@@ -696,12 +696,20 @@ export const loader = async ({ request, context }) => {
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : [])];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
-    const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual";
-    const cardsOnly=useRankedCollectionPagination&&isPublicCollectionCards(request);
     // Bestselling retains pins and merchandising; other selected sorts may override them.
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
+    // For a pure customer sort, Meilisearch can page the sorted collection
+    // directly. Membership-changing rules still require the complete ranking.
+    const directSort = sortOverPinning && sortOverMerchandising &&
+      ['title-ascending','title-asc','title-descending','title-desc',
+        'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy) &&
+      !activeRule?.ruleGroups?.length && !activeRule?.collectionLegacyConditions?.length &&
+      (activeRule?.conditions || []).every(condition =>
+        ['Include','Boost','Pin','Dynamic'].includes(condition.action));
+    const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual" && !directSort;
+    const cardsOnly=useRankedCollectionPagination&&isPublicCollectionCards(request);
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if(parsedQuery?.skuProductIds?.length){const eligible=new Set(parsedQuery.skuProductIds);activePinnedList=activePinnedList.filter(id=>eligible.has(String(id).split('/').pop()));}
     if(marketEligible)activePinnedList=activePinnedList.filter(id=>marketEligible.has(String(id).split('/').pop()));
@@ -759,7 +767,7 @@ export const loader = async ({ request, context }) => {
       indexUid: "products",
       q: tier1SearchQuery,
       filter: tier1Filter,
-      limit: useCollectionPagination ? 0 : limit,
+      limit: useCollectionPagination && !directSort ? 0 : limit,
       offset: (page - 1) * limit,
       attributesToRetrieve: [
         "id", "title", "handle", "vendor", "productType",
@@ -1136,6 +1144,8 @@ export const loader = async ({ request, context }) => {
           if(cardsOnly||cardSnapshot){responsePageFingerprint=collectionPageFingerprint(result.hits);responsePreviewFingerprint=collectionPageFingerprint(result.hits.slice(0,5));}
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
+        } else if (directSort) {
+          result = { hits: tier1Res.hits || [], total: facetRes?.totalHits ?? tier1Res.totalHits ?? tier1Res.estimatedTotalHits ?? 0 };
         } else {
           result = await fetchCollectionPage(meiliClient.index("products"), {
             page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve, orderedIds: collectionBestSellingIds,
@@ -1245,7 +1255,7 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
-    const finalProducts = collectionRankingApplied || searchRankingApplied ? allMatchedProducts : applyMerchandisingRules(
+    const merchandisedProducts = collectionRankingApplied || searchRankingApplied ? allMatchedProducts : applyMerchandisingRules(
       allMatchedProducts,
       activeRule,
       sortBy,
@@ -1253,6 +1263,9 @@ export const loader = async ({ request, context }) => {
       mergedValues,
       { ...globalSettings, preserveCollectionBestSellingOrder: collectionBestSellingApplied },
     );
+    // The engine owns the complete sort across pages. Keep per-card rule
+    // presentation, but do not let a page-local JavaScript sort move ties.
+    const finalProducts = directSort ? allMatchedProducts : merchandisedProducts;
 
     // ── 12. Paginate results ───────────────────────────────────────────
     const totalCount = collectionPageTotal ?? ((facetRes?.totalHits ?? facetRes?.estimatedTotalHits ?? meiliRes.estimatedTotalHits ?? 0) + totalPinned);

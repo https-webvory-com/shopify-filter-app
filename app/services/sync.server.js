@@ -331,13 +331,19 @@ export async function runBulkProductSync(jobId, shop, admin) {
   const flushPending = async () => {
     if (!pending.length) return;
     const ready = pending.splice(0);
+    // This setting is shared by the whole batch; avoid a database read for
+    // every product in a full catalog import.
+    const wantsLocations = Boolean(await prisma.filterGroupItem.findFirst({
+      where: { isEnabled: true, filterType: 'inventory_locations', filterGroup: { shop } },
+      select: { id: true },
+    }));
     // Keep the JSONL stream bounded while independent product/variant writes
     // proceed together. A checkpoint is published only after every write and
     // the matching search documents have been verified.
     for (let offset = 0; offset < ready.length; offset += 4) {
       const group = ready.slice(offset, offset + 4);
       const settled = await Promise.allSettled(group.map(async ({ product }) =>
-        await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true })));
+        await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations })));
       const failure = settled.find(result => result.status === 'rejected');
       if (failure) throw failure.reason;
       settled.forEach(result => {
@@ -1178,7 +1184,7 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
 }
 
 // Bulk JSONL and webhook reads share the same DB/index write contract.
-export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false } = {}) {
+export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false, wantsLocations } = {}) {
 
   const shouldDelete = !isStorefrontProduct(product);
 
@@ -1209,7 +1215,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   // ✅ Run DB upsert and build Meilisearch doc in parallel from Shopify data
   // No need to re-read from Postgres — we have all the data from the API response
   await completeProductCollections(admin, product);
-  await hydrateProductFilterFacts(product,admin,prisma,shop);
+  await hydrateProductFilterFacts(product,admin,prisma,shop,{wantsLocations});
 
   const available = product.variants.nodes.some((v) => v.availableForSale);
   const prices = product.variants.nodes.map((v) => parseFloat(v.price));

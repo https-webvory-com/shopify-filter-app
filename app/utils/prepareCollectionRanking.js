@@ -3,13 +3,7 @@ import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFa
 
 export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
-  // Customer-selected price order must be numerically exact for this shop.
-  // Keep its SoBooster-matched default collection order and rule membership;
-  // only price sorts let the requested price outrank pins and score tiers.
-  const exactPriceSort=spec.shop==='thedressoutlet.myshopify.com'&&
-    ['price-ascending','price-asc','price-descending','price-desc'].includes(spec.sortBy);
-  const sortSettings=exactPriceSort?{...spec.globalSettings,prioritizeSortOverPinning:true,
-    prioritizeSortOverMerchandising:true}:spec.globalSettings;
+  const sortSettings=spec.globalSettings;
   const missingMarketPriceIds = new Set();
   const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;
   let sourceOutsideIds=native?[]:null;

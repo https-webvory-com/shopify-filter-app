@@ -64,7 +64,7 @@ test('market prices survive the bounded variant hydration path',async()=>{
   assert.deepEqual(result.ids,['2','1']);
 });
 
-test('this shop gives explicit India price order priority without changing default ranking settings',async()=>{
+test('India price order honors saved pin and merchandising priority settings',async()=>{
   const docs=[
     {id:'1',priceMin:20,marketPriceMin_IN:2000},
     {id:'2',priceMin:26,marketPriceMin_IN:2600},
@@ -77,13 +77,13 @@ test('this shop gives explicit India price order priority without changing defau
   const comparison=(a,b)=>a.priceMin-b.priceMin;
   const result=await prepareCollectionRanking(spec,{index:{search:async()=>({hits:docs,totalHits:4})},prisma:{},
     arrange:(products,_rule,_sort,_pins,_merged,applied)=>{
-      assert.equal(applied.prioritizeSortOverPinning,true);
-      assert.equal(applied.prioritizeSortOverMerchandising,true);
+      assert.equal(applied.prioritizeSortOverPinning,false);
+      assert.equal(applied.prioritizeSortOverMerchandising,false);
       return products.sort(comparison);
     },
     comparator:(_sort,_pins,applied)=>{
-      assert.equal(applied.prioritizeSortOverPinning,true);
-      assert.equal(applied.prioritizeSortOverMerchandising,true);
+      assert.equal(applied.prioritizeSortOverPinning,false);
+      assert.equal(applied.prioritizeSortOverMerchandising,false);
       return comparison;
     }});
   assert.deepEqual(result.ids,['1','3','2','4']);

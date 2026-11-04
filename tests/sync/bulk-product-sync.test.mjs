@@ -10,9 +10,9 @@ const draft = { id: 'gid://shopify/Product/2', status: 'DRAFT', publishedAt: nul
 
 async function fixture({ indexFails = false, bulkProducts = [active, draft], payloadFails = null, delayMs = 0 } = {}) {
   const writes = [], indexed = [], checks = [];
-  let inFlight = 0, maxConcurrent = 0;
+  let inFlight = 0, maxConcurrent = 0, locationReads = 0;
   const job = { id: 'bulk-job', shop, kind: 'BULK_PRODUCTS', status: 'IN_PROGRESS', cursor: 'gid://shopify/BulkOperation/7', productsProcessed: 0 };
-  const prisma = { syncJob: {
+  const prisma = { filterGroupItem: { findFirst: async () => { locationReads++; return null; } }, syncJob: {
     findUnique: async () => job,
     update: async ({ data }) => { writes.push(data); Object.assign(job, data); return job; },
   } };
@@ -32,7 +32,7 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     .replace("await import('./shopifyBulkIndex.server.js')", 'bulk')
     .replace("await import('./shopifyBulkCatalog.server.js')", 'audit')
     .replace("await import('./orders.server.js')", 'orders')
-    .replace("await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true })", 'await fakePayload(product)')
+    .replace("await syncProductPayload(shop, admin, product.id, product, { retrySearchErrors: true, deferIndex: true, wantsLocations })", 'await fakePayload(product)')
     .replaceAll('await autoSeedOptionFilters(shop)', 'await pretendSeed(shop)')
     .replaceAll('await updateMeiliSettings(shop, { throwOnError: true })', 'await pretendSettings(shop)');
   const mocks = {
@@ -61,7 +61,8 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     },
     pretendSeed: async () => {}, pretendSettings: async () => {}, console: { log() {} }, process: { env: {} } };
   vm.runInNewContext((await transform(source, { format: 'cjs' })).code, ctx);
-  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), job, writes, indexed, checks, maxConcurrent: () => maxConcurrent };
+  return { run: () => ctx.module.exports.runBulkProductSync(job.id, shop, {}), job, writes, indexed, checks,
+    maxConcurrent: () => maxConcurrent, locationReads: () => locationReads };
 }
 
 test('bulk sync commits complete batches, excludes drafts, verifies both stores and completes', async () => {
@@ -87,6 +88,7 @@ test('bulk sync runs four product writes at once and advances only after verifie
   const f = await fixture({ bulkProducts, delayMs: 5 });
   await f.run();
   assert.equal(f.maxConcurrent(), 4);
+  assert.equal(f.locationReads(), 1);
   assert.equal(f.indexed.length, 20);
   assert.equal(f.job.productsProcessed, 20);
   const failed = await fixture({ bulkProducts, delayMs: 5, payloadFails: bulkProducts[8].id });

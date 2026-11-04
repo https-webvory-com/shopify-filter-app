@@ -9,7 +9,7 @@ async function query(admin,source,variables) {
   return response.data;
 }
 const variantFields=`id sku price compareAtPrice inventoryQuantity availableForSale image { url } selectedOptions { name value } inventoryItem { id measurement { weight { value unit } } }`;
-export async function hydrateProductFilterFacts(product,admin,database,shop) {
+export async function hydrateProductFilterFacts(product,admin,database,shop,{wantsLocations}={}) {
   // The explicit rating lookup remains complete even beyond the general
   // metafield connection's first page, and preserves an explicit deletion.
   if(Object.hasOwn(product,'ratingMetafield')){
@@ -40,7 +40,7 @@ export async function hydrateProductFilterFacts(product,admin,database,shop) {
   }
   if(!variants.some(v=>v.inventoryItem))return;
   if(page)product.variants.pageInfo=page;
-  const wantsLocations=await database.filterGroupItem.findFirst({where:{isEnabled:true,filterType:'inventory_locations',filterGroup:{shop}},select:{id:true}});
+  wantsLocations ??= await database.filterGroupItem.findFirst({where:{isEnabled:true,filterType:'inventory_locations',filterGroup:{shop}},select:{id:true}});
   const locations=new Map();
   if(wantsLocations){
     const items=[...new Set(variants.map(v=>v.inventoryItem?.id).filter(Boolean))];

@@ -32,9 +32,10 @@ export function variantMarketPrices(variant, countries) {
     // entire market-price backfill.
     const compare = Number.isFinite(rawCompare) && rawCompare >= 0 && value.compareAtPrice.currencyCode === currency
       ? rawCompare : null;
-    if (!Number.isFinite(price) || price < 0 || !CURRENCY.test(currency || '')) {
-      throw Error(`Incomplete contextual price for ${country}`);
-    }
+    // Shopify can omit a country's selling price for an individual variant.
+    // Keep the product and other countries; the complete-coverage proof will
+    // reject this country's price sort until the gap is resolved.
+    if (!Number.isFinite(price) || price < 0 || !CURRENCY.test(currency || '')) continue;
     prices[country] = { price, compareAtPrice: compare, currency };
   }
   return prices;

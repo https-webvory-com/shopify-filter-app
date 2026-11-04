@@ -73,7 +73,10 @@ async function collectionRoute(settings) {
   const select = options => {
     const products = matching(options.filter).map(p => ({ ...p }));
     const sort = options.sort?.[0];
-    products.sort((a,b) => sort === "priceMin:asc" ? a.priceMin-b.priceMin : b.bestSellingScore-a.bestSellingScore);
+    products.sort((a,b) => sort === "priceMin:asc" ? a.priceMin-b.priceMin :
+      sort === "title:asc" ? a.title.localeCompare(b.title) :
+      sort === "title:desc" ? b.title.localeCompare(a.title) :
+      sort === "createdAt:asc" ? a.createdAt-b.createdAt : b.bestSellingScore-a.bestSellingScore);
     return { hits: products.slice(options.offset || 0, (options.offset || 0) + (options.limit ?? 25)), totalHits: products.length, estimatedTotalHits: products.length, facetDistribution: {} };
   };
   const index = { search: async (_q, options) => select(options), getDocument: async id => ({ ...byId.get(id) }) };
@@ -140,6 +143,19 @@ test("priority ON respects price sorting and filtered collection membership", as
   const filtered=await load("page=1&tag[]=TopFormal&sortBy=best-selling");
   assert.equal(filtered.totalCount,10);
   assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[1,10,9,8,7,6,5,4,3,2]);
+});
+
+test('title sort pages directly when both priorities override ordering-only rules',async()=>{
+  const captureQueries=[];
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,captureQueries});
+  const first=await load('page=1&sortBy=title-ascending');
+  const second=await load('page=2&sortBy=title-ascending');
+  const names=[...first.products,...second.products].map(product=>product.title);
+  assert.equal(first.debug.collectionRankingStatus,'inactive');
+  assert.equal(first.totalCount,180);
+  assert.equal(new Set(names).size,50);
+  assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b)));
+  assert.ok(captureQueries.some(query=>query.sort?.[0]==='title:asc'&&query.limit===25));
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {
