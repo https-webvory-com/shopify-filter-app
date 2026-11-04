@@ -1,0 +1,37 @@
+name: Inspect Sexy Dresses merchandising
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 3m
+          script: |
+            set -eu
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            const db=new PrismaClient();
+            const shop='thedressoutlet.myshopify.com',id='410076618';
+            const target='sexy dresses';
+            const matches=rule=>{
+              if(rule.collectionIds?.some(value=>String(value).split('/').pop()===id))return true;
+              if(rule.collectionSortKey){try{if(JSON.parse(rule.collectionSortKey).some(value=>String(value).split('/').pop()===id))return true;}catch{}}
+              return rule.collections?.some(value=>String(value).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()===target);
+            };
+            try{
+              const collection=await db.collection.findFirst({where:{shop,id:'gid://shopify/Collection/'+id},select:{id:true,title:true,handle:true}});
+              console.log('SEXY_COLLECTION',JSON.stringify(collection));
+              const rules=await db.merchandisingRule.findMany({where:{shop,status:true,ruleType:'collection'},include:{conditions:true},orderBy:{createdAt:'desc'}});
+              for(const rule of rules.filter(rule=>matches(rule)||!rule.collections?.length&&!rule.collectionIds?.length))console.log('SEXY_RULE',JSON.stringify({id:rule.id,name:rule.name,ordinal:rule.ordinal,collections:rule.collections,collectionIds:rule.collectionIds,countries:rule.countries,locales:rule.locales,customerTags:rule.customerTags,startDate:rule.startDate,endDate:rule.endDate,conditions:rule.conditions.map(({action,field,value,operator,operand,minValue,maxValue,dateValue})=>({action,field,value,operator,operand,minValue,maxValue,dateValue}))}));
+              const pins=await db.pinnedProductRule.findMany({where:{shop,status:true,ruleType:'collection',applyToAll:false},orderBy:{createdAt:'desc'}});
+              for(const rule of pins.filter(matches)){const products=typeof rule.products==='string'?JSON.parse(rule.products):rule.products;console.log('SEXY_PIN',JSON.stringify({id:rule.id,name:rule.name,collections:rule.collections,collectionSortKey:rule.collectionSortKey,products:Array.isArray(products)?products.map(({id,title,position})=>({id,title,position})):products}));}
+            }finally{await db.$disconnect();}
+            NODE
