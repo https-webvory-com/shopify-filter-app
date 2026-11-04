@@ -28,7 +28,10 @@ jobs:
               const counts=await queue.getJobCounts('active','waiting','delayed','failed','completed','prioritized');
               const active=await queue.getJobs(['active'],0,10);
               const waiting=await queue.getJobs(['waiting','prioritized'],0,50);
-              console.log('PRICE_RANKING_QUEUE',JSON.stringify({counts,active:active.map(j=>({id:j.id,name:j.name,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy,priority:j.opts?.priority,processedOn:j.processedOn})),waiting:waiting.map(j=>({id:j.id,name:j.name,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy,priority:j.opts?.priority})).filter(j=>j.sort?.startsWith('price')||j.priority<=1).slice(0,25)}));
+              const rankedIds=await redis.zrange('bull:collectionRankingQueueV2:prioritized',0,25,'WITHSCORES');
+              const head=await Promise.all(rankedIds.filter((_,i)=>i%2===0).map(async id=>{const j=await queue.getJob(id);return{id,name:j?.name,shop:j?.data?.spec?.shop,sort:j?.data?.spec?.sortBy,priority:j?.opts?.priority}}));
+              const revision=await redis.get('collectionPreparationRevision:thedressoutlet.myshopify.com');
+              console.log('PRICE_RANKING_QUEUE',JSON.stringify({counts,revision,active:active.map(j=>({id:j.id,name:j.name,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy,priority:j.opts?.priority,processedOn:j.processedOn})),head,waiting:waiting.map(j=>({id:j.id,name:j.name,shop:j.data?.spec?.shop,sort:j.data?.spec?.sortBy,priority:j.opts?.priority})).filter(j=>j.sort?.startsWith('price')||j.priority<=1).slice(0,25)}));
             }finally{await queue.close();redis.disconnect();}
             NODE
             docker logs --since 10m --tail 100 shopify-filter-sync-worker 2>&1 | grep -E 'collection preparation|Collection ranking|Ranking Queue|India price|error|Error' | tail -n 35 || true
