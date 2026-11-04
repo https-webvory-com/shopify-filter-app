@@ -42,7 +42,7 @@ export function initProductSyncWorker() {
   if (!global.__productSyncWorker) {
     global.__productSyncWorker = new Worker("productSyncQueue", processProductSyncJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },
-      concurrency: 1,
+      concurrency: 2,
       lockDuration: 60000,
       maxStalledCount: 5,
     });
