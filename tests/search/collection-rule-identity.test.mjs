@@ -83,6 +83,24 @@ test('classic collection sold-out exclusions use purchasability, preserving quan
  assert.equal(m.applyMerchandisingRules([{id:'quantity',inventoryTotal:3,available:true}],range,'best-selling').length,0);
  assert.ok(collectionRankingFields([condition],'best-selling').includes('available'));
 });
+test('exact sold-out ranking uses indexed availability and only hydrates missing booleans',async()=>{
+ const m=await service(),docs=[
+  {id:'1',priceMin:10,available:true},
+  {id:'2',priceMin:20,available:false},
+  {id:'3',priceMin:30,available:true},
+ ];
+ const index={search:async(_q,options)=>({hits:docs.slice(options.offset,options.offset+options.limit),estimatedTotalHits:docs.length})};
+ const groups=[];
+ const prisma={variant:{groupBy:async query=>{groups.push(query);return[{productId:'gid://shopify/Product/3',_sum:{inventory:0}}];}}};
+ const spec={shop:'fixture',query:{q:'',filter:[]},rule:{collectionTagMatching:'exact',conditions:[{action:'Exclude',field:'Available',minValue:'-999',maxValue:'0'}]},
+  sortBy:'price-ascending',needsShopifyOrder:false,pinnedIds:[],pinningRule:null,globalSettings:{},mergedValues:[]};
+ const deps={index,prisma,arrange:m.applyMerchandisingRules,comparator:m.createMerchandisingComparator};
+ assert.deepEqual((await prepareCollectionRanking(spec,deps)).ids,['1','3']);
+ assert.equal(groups.length,0);
+ delete docs[2].available;
+ assert.deepEqual((await prepareCollectionRanking(spec,deps)).ids,['1']);
+ assert.deepEqual(groups[0].where.productId.in,['gid://shopify/Product/3']);
+});
 test('target persistence rejects cross-shop IDs and ambiguous titles and preserves unchanged retired bindings',async()=>{
  const prisma={collection:{findMany:async({where})=>{assert.equal(where.shop,'owner');return[{id:id(1),title:'New Arrivals'},{id:id(2),title:'New Arrivals'}];}}};
  assert.deepEqual(await resolveCollectionTargets(prisma,'owner',['New Arrivals'],[id(2)]),{collections:['New Arrivals'],collectionIds:[id(2)]});

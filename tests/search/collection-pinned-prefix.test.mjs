@@ -45,3 +45,16 @@ test('pin counts around page boundaries preserve exactly the canonical first pag
  const prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps),full=await prepareCollectionRanking(f.spec,f.deps);
  assert.deepEqual(prefix.ids,full.ids.slice(0,25));
 });
+test('price sorting can show a complete saved-pin first page while the full order builds',async()=>{
+ const f=fixture(),pins=f.docs.slice(0,40).reverse().map(p=>({id:'gid://shopify/Product/'+p.id}));
+ f.spec={...f.spec,sortBy:'price-ascending',needsShopifyOrder:false,orderedIds:null,
+  pinnedIds:pins.map(p=>p.id),pinningRule:{products:pins},globalSettings:{prioritizeSortOverPinning:false,prioritizeSortOverMerchandising:false}};
+ const prefix=await prepareCollectionPinnedPrefix(f.spec,f.deps);
+ const full=await prepareCollectionRanking(f.spec,f.deps);
+ assert.equal(prefix.ids.length,25);
+ assert.deepEqual(prefix.ids,full.ids.slice(0,25));
+ assert.deepEqual(f.counts().batches,1);
+ const override={...f.spec,globalSettings:{...f.spec.globalSettings,prioritizeSortOverPinning:true}};
+ assert.equal(await prepareCollectionPinnedPrefix(override,f.deps),null);
+ assert.equal(await prepareCollectionPinnedPrefix({...f.spec,pinnedIds:f.spec.pinnedIds.slice(0,24)},f.deps),null);
+});

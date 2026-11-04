@@ -1,12 +1,15 @@
 import {readRankedCollectionPage} from './rankedCollectionPage.js';
 import {prepareCollectionRanking} from './prepareCollectionRanking.js';
 
-// Explicit product pins precede every merchandising tier in native best-selling
-// mode. Prove only that fixed prefix; never infer unpinned positions or totals.
+// Explicit product pins precede every merchandising tier when pin priority is
+// enabled. Prove only that fixed prefix; never infer unpinned positions or totals.
 export async function prepareCollectionPinnedPrefix(spec,{index,prisma,arrange,comparator,batchOwner=index,onDecline=()=>{}}){
  const decline=reason=>{onDecline(reason);return null;};
  if(spec.retainForIdle!==true)return decline('private-or-filtered-context');
- if(spec.needsShopifyOrder!==true||!['best-selling','bestselling'].includes(spec.sortBy))return decline('unsupported-sort');
+ const native=['best-selling','bestselling'].includes(spec.sortBy)&&spec.needsShopifyOrder===true;
+ const pricePins=['price-ascending','price-descending'].includes(spec.sortBy)&&spec.needsShopifyOrder!==true&&
+  spec.globalSettings?.prioritizeSortOverPinning!==true&&spec.pinnedIds?.length>=25;
+ if(!native&&!pricePins)return decline('unsupported-sort');
  if(!Array.isArray(spec.pinnedIds)||!spec.pinnedIds.length)return decline('insufficient-eligible-pins');
  let pins;try{pins=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;}catch{return decline('malformed-pins');}
  if(!Array.isArray(pins)||pins.some(p=>!/^gid:\/\/shopify\/Product\/\d+$/.test(p?.id||'')))return decline('malformed-pins');
@@ -22,7 +25,7 @@ export async function prepareCollectionPinnedPrefix(spec,{index,prisma,arrange,c
  // unproven documents require the complete canonical path instead.
  if(page.hits.some(p=>p.shop!==spec.shop||String(p.status).toUpperCase()!=='ACTIVE'||!p.title||!p.handle))return decline('unproven-current-product');
  if(page.hits.some(p=>p.priceMin==null||p.priceMin===''||!Number.isFinite(Number(p.priceMin))))return decline('unknown-base-price');
- if(page.hits.some(p=>Number(p.priceMin)<=0))return decline('nonpositive-leading-pin-price');
+ if(native&&page.hits.some(p=>Number(p.priceMin)<=0))return decline('nonpositive-leading-pin-price');
  const bounded={search:async(_query,{offset=0,limit=1000}={})=>({hits:page.hits.slice(offset,offset+limit),estimatedTotalHits:page.hits.length})};
  const value=await prepareCollectionRanking({...spec,pinnedIds:selected.map(id=>'gid://shopify/Product/'+id)},{index:bounded,prisma,arrange,comparator});
  if(JSON.stringify(value.ids)!==JSON.stringify(selected))return decline('canonical-pin-order-differs');

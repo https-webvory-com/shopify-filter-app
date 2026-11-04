@@ -1000,7 +1000,9 @@ export const loader = async ({ request, context }) => {
       : needsShopifyOrder
       ? await getCollectionBestSellingState(shop, resolvedCollectionId, { warmup: context?.rankingWarmup === true }) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
-    const canPreviewPins=cardsOnly&&url.searchParams.get('responseProfile')==='collection-preview-v1'&&acceptsCollectionPinnedPrefix(request)&&!context?.rankingWarmup&&activePinnedList.length>0;
+    const fastPricePinHead=fastCards&&priceSortSelected&&!sortOverPinning&&activePinnedList.length>=25;
+    const canPreviewPins=(cardsOnly&&url.searchParams.get('responseProfile')==='collection-preview-v1'&&acceptsCollectionPinnedPrefix(request)||fastPricePinHead)&&
+      !context?.rankingWarmup&&activePinnedList.length>0;
     const missingNativeOrder=needsShopifyOrder&&!Array.isArray(collectionBestSellingIds);
     // Age alone must not block browsing. A complete last-good Shopify snapshot
     // remains the ranking source while its durable refresh runs in the worker.
@@ -1616,11 +1618,20 @@ export const loader = async ({ request, context }) => {
       cfpCards:{version:2,preview:true,search:true},
       debug:{variantEligibilityMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
-    if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
-      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters},
+    if(fastCards){
+      if(pinnedPrefix){
+        if(await getCollectionHeadVersion(preparedSpec)!==pinnedPrefixVersion||
+          !await rememberCollectionHead(preparedSpec,pinnedPrefixVersion,rankingSession.ids))
+          return data({products:[],totalCount:0,debug:{collectionRankingStatus:'pending'}},{status:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'1'}});
+        reportCollectionHead(preparedSpec,'proven','price-sort-explicit-pins');
+      }
+      return data({products,totalCount:pinnedPrefix?null:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
+      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters,
+        ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
       debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+    }
 
     // ── 15. Price range counts (from Meilisearch hits) ────────────────
     const priceFilter = activeGroupFilters

@@ -62,7 +62,18 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
       }
       if (spec.needsShopifyOrder) await hydrateCollectionPrices(products, prisma.product, spec.shop);
       if (spec.rule?.conditions?.some(c => c.field === 'SKU')) await hydrateCollectionSkus(resolveFact?products.filter(p=>p._rankingPinPlaceholder):products, prisma.variant, spec.shop);
-      if (spec.rule?.conditions?.some(c => c.field?.toLowerCase() === 'available')) await hydrateCollectionInventory(products, prisma.variant);
+      const availabilityConditions=(spec.rule?.conditions||[]).filter(c=>c.field?.toLowerCase()==='available');
+      if(availabilityConditions.length){
+        // The exact sold-out exclusion uses product.available before inventory.
+        // Indexed booleans prove that decision without an inventory query for
+        // every product in a large collection. Numeric stock rules still need
+        // the original inventory totals.
+        const booleanOnly=spec.rule?.collectionTagMatching==='exact'&&availabilityConditions.every(c=>{
+          const min=c.minValue??c.value,max=c.maxValue??c.value2;
+          return c.action==='Exclude'&&Number(min)<=0&&Number(max)===0;
+        });
+        await hydrateCollectionInventory(booleanOnly?products.filter(p=>typeof p.available!=='boolean'):products,prisma.variant);
+      }
     },
     arrange: products => {
       const ranked = arrange(products, spec.rule, spec.sortBy, spec.pinningRule, spec.mergedValues,

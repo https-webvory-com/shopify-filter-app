@@ -59,7 +59,7 @@ if(name==='../utils/collectionPinnedPrefix.js')return pinnedPrefix;if(name==='..
 
 async function collectionRoute(settings) {
   const docs = Array.from({ length: 180 }, (_, i) => ({
-    id: String(i + 1), title: "Dress " + (i + 1), handle: "dress-" + (i + 1), status: "ACTIVE",
+    id: String(i + 1), shop:settings.shop||'fixture.myshopify.com', title: "Dress " + (i + 1), handle: "dress-" + (i + 1), status: "ACTIVE",
     tags: i < 10 ? ["TopFormal"] : [], collections: ["gid://shopify/Collection/1"],
     bestSellingScore: i + 1, trendingScore: 0, createdAt: i + 1,
     images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], available:true, priceMin: i + 1, priceMax: i + 1,
@@ -81,10 +81,11 @@ async function collectionRoute(settings) {
       sort === "createdAt:asc" ? a.createdAt-b.createdAt : b.bestSellingScore-a.bestSellingScore);
     return { hits: products.slice(options.offset || 0, (options.offset || 0) + (options.limit ?? 25)), totalHits: products.length, estimatedTotalHits: products.length, facetDistribution: {} };
   };
-  const index = { search: async (_q, options) => select(options), getDocument: async id => ({ ...byId.get(id) }) };
+  const index = { search: async (_q, options) => select(options), getDocument: async id => ({ ...byId.get(id) }),
+    getDocuments:async options=>{const ids=JSON.parse(options.filter.slice(6));return {results:ids.map(id=>byId.get(id)).filter(Boolean),total:ids.length};} };
   const meili = { index: () => index, multiSearch: async ({ queries }) => { settings.captureQueries?.push(...queries); return { results: queries.map(select) }; } };
   const service = await loadModule("app/services/merchandising.server.js", {});
-  const pins = { products: ["1", "175"].map(id => ({ id: "gid://shopify/Product/" + id })) };
+  const pins = { products: (settings.pinIds||["1", "175"]).map(id => ({ id: "gid://shopify/Product/" + id })) };
   const rule = settings.rule || { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const cache = new Map();
   const route = await loadModule("app/routes/api.filter.jsx", {
@@ -95,6 +96,11 @@ async function collectionRoute(settings) {
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
     "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
+    ...(settings.pendingPreparation?{"../services/collectionPreparation.server.js":{
+      getCollectionPreparationRevision:async()=> '1',registerCollectionWarmup:async()=>{},getPreparedCollectionRanking:async()=>({status:'pending'}),
+      getCollectionHeadVersion:async()=> 'a'.repeat(64),rememberCollectionHead:async()=>true,
+      reportCollectionHead:()=>{},compareCollectionHead:async()=>null,
+    }}:{}),
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return settings;
       if (key.startsWith("mergedValues:")) return [];
@@ -197,6 +203,21 @@ test('verified US price sort returns the first page directly with both prioritie
   assert.equal(second.totalCount,179);
   assert.deepEqual(second.products.slice(0,2).map(p=>Number(p.id.split('/').pop())),[27,28]);
   assert.ok(captureQueries.some(query=>query.sort?.[0]==='priceMin:asc'&&query.limit===25));
+});
+
+test('a priority change shows the exact first 25 price-sort pins while the full ranking is pending',async()=>{
+  const pinIds=Array.from({length:40},(_,i)=>String(180-i));
+  const options={shop:'thedressoutlet.myshopify.com',prioritizeSortOverPinning:false,
+    prioritizeSortOverMerchandising:false,pinIds};
+  const pending=await collectionRoute({...options,pendingPreparation:true});
+  const early=await pending('page=1&sortBy=price-ascending&country=US&responseProfile=fast-cards-v1');
+  assert.equal(early.cfpCards?.prefix,true,JSON.stringify(early));
+  assert.equal(early.rankingToken,null);
+  assert.equal(early.totalCount,null);
+  assert.deepEqual(early.products.map(p=>p.id),pinIds.slice(0,25).map(id=>'gid://shopify/Product/'+id));
+  const ready=await collectionRoute(options);
+  const complete=await ready('page=1&sortBy=price-ascending&country=US');
+  assert.deepEqual(early.products.map(p=>p.id),complete.products.map(p=>p.id));
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {
