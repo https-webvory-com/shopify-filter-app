@@ -502,6 +502,7 @@ export const loader = async ({ request, context }) => {
 
     // ── 6. Build Meilisearch sort ──────────────────────────────────────
     const priceSortSelected=['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy);
+    const exactPriceSortVersion=priceSortSelected&&shop==='thedressoutlet.myshopify.com'?2:null;
     const sortCountry=String(country||'').toUpperCase();
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? (marketPriceSortRequested?verifiedMarketPriceSort:await marketPriceIntentReady(shop,sortCountry)):false;
@@ -920,7 +921,7 @@ export const loader = async ({ request, context }) => {
     let searchRankingApplied = false;
     let searchRankingMode = null;
     const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
-    const rankingFingerprint = priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}:${partialMarketPriceSort?'partial':'complete'}` : baseRankingFingerprint;
+    const rankingFingerprint = `${priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}:${partialMarketPriceSort?'partial':'complete'}` : baseRankingFingerprint}${exactPriceSortVersion?`:price-order-v${exactPriceSortVersion}`:''}`;
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
     if(marketVersion&&useRankedCollectionPagination&&url.searchParams.has('rankingToken')&&!rankingSession)return data({error:'Country availability changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
@@ -984,6 +985,7 @@ export const loader = async ({ request, context }) => {
         ...(userHasFilters&&marketIds?{marketFilterIndex}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         ...(priceSortField?{priceSortField}:{}),
+        ...(exactPriceSortVersion?{priceSortVersion:exactPriceSortVersion}:{}),
         ...(partialMarketPriceSort?{allowIncompleteMarketPrice:true}:{}),
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
