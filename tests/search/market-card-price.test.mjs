@@ -9,8 +9,8 @@ function fixture(templateName = 'collection', settings = {}) {
  const row={children:[],replaceChildren(){this.children=[];},append(e){this.children.push(e);}};
  const image={children:[],append(e){this.children.push(e);}};
  let href='https://shop.test/products/dress?variant=2';
- const card={querySelector(selector){if(selector.includes('price-row'))return row;if(selector.includes('__link'))return {href};if(selector.includes('__image-container'))return image;return null;}};
- const context={templateName,window:{Shopify:{currency:{active:'INR'}},cfpSearchSettings:settings},location:{origin:'https://shop.test'},URL,Intl,document:{createElement:()=>({style:{},textContent:''})}};
+ const card={dataset:{},querySelector(selector){if(selector.includes('price-row'))return row;if(selector.includes('__link'))return {href};if(selector.includes('__image-container'))return image;return null;},querySelectorAll(){return [];}};
+ const context={templateName,globalSettings:{},activeFilters:{options:{}},priceSortedVariant:()=>null,window:{Shopify:{currency:{active:'INR'}},cfpSearchSettings:settings},location:{origin:'https://shop.test'},URL,Intl,document:{createElement:()=>({style:{},textContent:''})}};
  vm.runInNewContext(helper,context);
  return {card,row,image,update:context.window.cfpUpdateMarketCardPrice,setCurrency:code=>{context.window.Shopify.currency.active=code;},select:id=>{href='https://shop.test/products/dress?variant='+id;}};
 }

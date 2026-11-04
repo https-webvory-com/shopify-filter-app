@@ -58,10 +58,12 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
       externalChanged=!current||current!==entry.externalRevision;}
    }
    const catalogChanged=catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at||externalChanged;
-   // The last complete page remains shopper-usable while its replacement is
-   // prepared. Background probes must still reject it and finish publication.
-   // Country stock has a stricter freshness contract and cannot use this path.
-   if(stockChanged&&!stockStaleAllowed||entry.configuration==null&&readConfigurationRevision){
+   // A saved merchandising or pin change must take effect on the next visit.
+   // Serving the old publication here hides the current admin order.
+   const ruleChanged=configurationChanged||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at;
+   // Product/catalog changes can keep the last complete page briefly while a
+   // replacement is prepared; country stock follows its separate freshness limit.
+   if(ruleChanged||stockChanged&&!stockStaleAllowed||entry.configuration==null&&readConfigurationRevision){
     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});

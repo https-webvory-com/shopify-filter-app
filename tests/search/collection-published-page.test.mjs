@@ -71,15 +71,14 @@ test('a scoped catalog change serves old cards while requiring a complete replac
  f.advance(1);await f.publish();
  assert.equal((await f.store.get(f.request(),{probe:true}))?.headers.get('X-CFP-Collection-Cards'),'published');
 });
-test('a country rule edit refreshes only that market while old cards remain visible',async()=>{
+test('a country rule edit rejects old cards only in that market',async()=>{
  let usMarker=0;
  const f=fixture({readMarketRuleInvalidatedAt:async(_shop,country)=>country==='US'?usMarker:0});
  await f.publish({request:f.request({country:'US',limit:'50',responseProfile:'collection-cards-v1'})});
  await f.publish();
  usMarker=f.now();
  assert.equal((await f.store.get(f.request())).status,200);
- const us=await(await f.store.get(f.request({country:'US'}))).json();
- assert.equal(us.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request({country:'US'})),null);
  assert.equal(await f.store.get(f.request({country:'US',limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
  assert.equal((await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}))?.status,200);
 });
@@ -234,15 +233,14 @@ test('published cards decline safely when current settings cannot be read',async
  const f=fixture({readGlobalSettings:async()=>{throw Error('unavailable');}});await f.publish();assert.equal(await f.store.get(f.request()),null);
 });
 
-test('new visits retain old pin and merchandising cards while prioritizing a replacement',async()=>{
+test('new visits reject old pin and merchandising cards while prioritizing a replacement',async()=>{
  let revision='one';const f=fixture({readConfigurationRevision:async()=>revision});await f.publish({configuration:'one'});
  const first=await(await f.store.get(f.request())).json();revision='two';const hits=[];
- const stale=await(await f.store.get(f.request(),{onHit:value=>hits.push(value)})).json();
- assert.equal(stale.cfpCards.refreshDue,true);
+ assert.equal(await f.store.get(f.request(),{onHit:value=>hits.push(value)}),null);
  await Promise.resolve();assert.equal(hits.length,1);assert.equal(hits[0].refreshDue,true);
  assert.equal(await f.store.get(f.request(),{probe:true}),null);
  const second=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
- assert.equal(second.status,200);
+ assert.equal(second.status,409);
  f.advance(1);await f.publish({configuration:'two'});assert.equal((await f.store.get(f.request())).status,200);
 });
 

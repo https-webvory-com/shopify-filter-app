@@ -50,9 +50,9 @@ test("unmatched and bury rules do not select a variant", () => {
 
 test("the card selects the API variant and creates its matching product link", async () => {
   const source = await fs.readFile("extensions/theme-extension/assets/collectionFilterPro.js", "utf8");
-  const selection = source.slice(source.indexOf("        if ((!matchedVariant || product.searchColor) && product.selectedVariantId"), source.indexOf("        // Fallback: If no matched variant"));
+  const selection = source.slice(source.indexOf("        if ((!matchedVariant || product.searchColor) && product.selectedVariantId"), source.indexOf("        let customImage = null;"));
   const link = source.slice(source.indexOf("          const activeVariantId ="), source.indexOf("          const activeVariantId =") + source.slice(source.indexOf("          const activeVariantId =")).indexOf("\n        }"));
-  const card = { product: { handle: "pinned-dress", selectedVariantId: "gid://shopify/ProductVariant/black", variants: product.variantPrices }, matchedVariant: null, matchedVariantId: null, variantImg: null, activeIndex: 0, colorsArray: [["Blue", { variantId: "blue" }]], productUrl: "/products/pinned-dress?variant=green" };
+  const card = { product: { handle: "pinned-dress", selectedVariantId: "gid://shopify/ProductVariant/black", variants: product.variantPrices }, matchedVariant: null, matchedVariantId: null, variantImg: null, activeIndex: 0, colorsArray: [["Blue", { variantId: "blue" }]], productUrl: "/products/pinned-dress?variant=green",activeFilters:{options:{}},priceSortedVariant:()=>null };
   vm.runInNewContext(selection + link, card);
   assert.equal(card.matchedVariantId, "black");
   assert.equal(card.variantImg, "black.jpg");
