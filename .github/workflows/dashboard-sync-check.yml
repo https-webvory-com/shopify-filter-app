@@ -1,35 +1,53 @@
-name: Read-only India price repair status
+name: Prepare Formal Dresses price sort from saved data
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  status:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 3m
+          command_timeout: 15m
           script: |
             set -eu
-            docker exec shopify-filter-sync-worker sh -c 'tail -n 12 /tmp/india-price-backfill.log'
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import meiliClient from './app/services/meiliClient.server.js';
-            const db=new PrismaClient();
+            docker exec -i shopify-filter-app sh -c 'cat > /tmp/cfp-json-loader.mjs' <<'LOADER'
+            import {readFile} from 'node:fs/promises';
+            export async function load(url,context,nextLoad){
+              if(url.endsWith('.json'))return {format:'module',shortCircuit:true,source:'export default '+await readFile(new URL(url),'utf8')+';'};
+              return nextLoad(url,context);
+            }
+            LOADER
+            docker exec -i shopify-filter-app node --experimental-loader /tmp/cfp-json-loader.mjs --input-type=module <<'NODE'
+            import Redis from 'ioredis';
+            import {REDIS_URL} from './app/services/redisConnection.server.js';
+            const redis=global.__redis=new Redis(REDIS_URL);
+            await redis.ping();
+            const {collectionRankingQueue:queue}=await import('./app/services/queue.server.js');
+            const {processCollectionPreparation}=await import('./app/services/collectionPreparation.server.js');
+            const {default:db}=await import('./app/db.server.js');
             try{
               const shop='thedressoutlet.myshopify.com';
-              const rows=await db.$queryRaw`SELECT COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`;
-              console.log('INDIA_PRICE_COVERAGE',JSON.stringify(rows[0]));
-              const missing=await db.$queryRaw`SELECT v."id" AS "variantId",p."id" AS "productId",p."title",v."available",EXISTS(SELECT 1 FROM "ProductCollection" pc WHERE pc."productId"=p."id" AND pc."collectionId"='gid://shopify/Collection/408926666') AS "inProm" FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active' AND v."marketPrices" -> 'IN' ->> 'price' IS NULL LIMIT 20`;
-              console.log('INDIA_PRICE_MISSING',JSON.stringify(missing));
-              const index=meiliClient.index('products');
-              const base=[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'"];
-              const [all,priced]=await Promise.all([index.search('',{filter:base,hitsPerPage:1,page:1,attributesToRetrieve:[]}),index.search('',{filter:[...base,'marketPriceMin_IN EXISTS'],hitsPerPage:1,page:1,attributesToRetrieve:[]})]);
-              console.log('INDIA_PRICE_INDEX',JSON.stringify({all:all.totalHits,priced:priced.totalHits}));
-            }finally{await db.$disconnect();}
+              const collection=await db.collection.findFirst({where:{shop,handle:'formal-dresses'},select:{id:true}});
+              if(!collection)throw Error('Formal Dresses collection unavailable');
+              const ids=await redis.zrange('bull:collectionRankingQueueV2:prioritized',0,100);
+              const jobs=(await Promise.all(ids.map(id=>queue.getJob(id)))).filter(Boolean);
+              for(const country of ['US','IN']){
+                const chosen=jobs.find(job=>{
+                  const spec=job.data?.spec;
+                  return job.name==='COLLECTION_RANKING_PREPARE'&&spec?.shop===shop&&spec.collectionId===collection.id&&
+                    spec.sortBy==='price-ascending'&&(country==='IN'?String(spec.priceSortField||'').endsWith('_IN'):!spec.priceSortField);
+                });
+                if(!chosen){console.log('FORMAL_PRICE_JOB_MISSING',country);continue;}
+                console.log('FORMAL_PRICE_PREPARE_START',JSON.stringify({country,jobId:chosen.id,collectionId:collection.id}));
+                const result=await processCollectionPreparation(chosen.data);
+                console.log('FORMAL_PRICE_PREPARE_RESULT',JSON.stringify({country,...result}));
+              }
+            }finally{await queue.close();redis.disconnect();await db.$disconnect();}
+            process.exit(0);
             NODE
