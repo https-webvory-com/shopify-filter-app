@@ -46,12 +46,19 @@ try {
     await global.__refreshConnectedMarketPriceCoverage();
   }catch(error){console.error('CFP market price coverage unavailable:',error.name);}finally{checkingMarketPrices=false;}};
   const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
+  let expiringAnalytics=false;
+  const expireAnalytics=async()=>{if(expiringAnalytics||shuttingDown)return;expiringAnalytics=true;try{
+    const {expireSearchAnalytics}=await import('../app/services/searchAnalytics.server.js');
+    await expireSearchAnalytics();
+  }catch(error){console.error('CFP analytics retention unavailable:',error.name);}finally{expiringAnalytics=false;}};
+  const analyticsTimer=setInterval(expireAnalytics,86400000);analyticsTimer.unref();
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(warmupTimer);
     clearInterval(membershipTimer);
     clearInterval(catalogAuditTimer);
+    clearInterval(analyticsTimer);
     clearInterval(marketPriceTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
@@ -62,6 +69,7 @@ try {
   void warm();
   void audit();
   void catalogAudit();
+  void expireAnalytics();
   void checkMarketPrices();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });

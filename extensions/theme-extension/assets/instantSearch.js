@@ -52,6 +52,15 @@ document.addEventListener("DOMContentLoaded", async function () {
   };
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";
+  document.addEventListener('click', event => {
+    const card = event.target.closest('.cfp-search-result-card[data-cfp-product-id]');
+    const searchId = window.cfpActiveInstantSearchId;
+    if (!card || !searchId) return;
+    const details = { search_id: searchId, product_id: card.dataset.cfpProductId,
+      position: Number(card.dataset.cfpPosition) };
+    if (event.target.closest('a.cfp-search-product-card')) window.CfpAnalytics?.track('result_click', details);
+    else if (event.target.closest('.cfp-quick-view-btn')) window.CfpAnalytics?.track('quick_view', details);
+  });
 
 
   // Search caching must never replay products from before a merchant save.
@@ -776,6 +785,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   async function fetchDefaultView() {
+    window.cfpActiveInstantSearchId = null;
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const viewAll = document.getElementById('cfp-view-all-results');
     if (viewAll) viewAll.hidden = true;
@@ -936,6 +946,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if(CONFIG.enabled===false){closeModal();return;}
     if (mainInput.value.trim() !== query) return;
     if (query.length < CONFIG.minChars) {
+      window.cfpActiveInstantSearchId = null;
       document.getElementById('cfp-search-body').classList.remove('cfp-has-results');
       const viewAll = document.getElementById('cfp-view-all-results');
       if (viewAll) viewAll.hidden = true;
@@ -972,6 +983,14 @@ document.addEventListener("DOMContentLoaded", async function () {
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value.trim().toLowerCase() : "";
       if (currentQuery === trimmedQuery) {
+        const searchId = window.CfpAnalytics?.newSearchId?.();
+        if (searchId) {
+          window.CfpAnalytics?.track('search_query', { search_id: searchId, q: query,
+            hits: Number.isSafeInteger(productsData?.matchCount) ? productsData.matchCount :
+              (Number(productsData?.totalCount) || productsData?.products?.length || 0) });
+          if (!productsData?.products?.length) window.CfpAnalytics?.track('zero_result', { search_id: searchId });
+        }
+        window.cfpActiveInstantSearchId = searchId || null;
         
         // Did You Mean logic
         const dymContainer = document.getElementById("cfp-did-you-mean-container");
@@ -1193,7 +1212,7 @@ document.addEventListener("DOMContentLoaded", async function () {
        return raw;
     };
 
-    products.forEach((p) => {
+    products.forEach((p, productIndex) => {
       // 1. Identify Color Option Index
       let colorOptionIndex = -1;
       let parsedOptions = [];
@@ -1367,7 +1386,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
 
       html += `
-        <div class="cfp-product-card cfp-search-result-card" style="position:relative; width: 100%;">
+        <div class="cfp-product-card cfp-search-result-card" data-cfp-product-id="${instantEscapeHtml(p.id)}" data-cfp-position="${productIndex + 1}" style="position:relative; width: 100%;">
           <div class="cfp-search-product-image-wrapper" style="position: relative;">
             <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
               <div class="cfp-search-product-image-wrap">

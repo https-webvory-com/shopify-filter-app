@@ -933,6 +933,13 @@ if (typeof window.CfpQuickView === 'undefined') {
         added = true;
         // A completed older request must not close a newer product dialog.
         if (requestId !== this.productRequestId) return;
+        const searchId = opener?.getAttribute('data-cfp-quick-view-context') === 'instant-search'
+          ? window.cfpActiveInstantSearchId : window.cfpSearchAnalyticsId;
+        const listingId = searchId ? null : window.cfpListingAnalyticsId;
+        if (searchId || listingId) window.CfpAnalytics?.track('add_to_cart', {
+          ...(searchId ? { search_id: searchId } : { listing_id: listingId }),
+          product_id: product?.id, variant_id: variantId,
+        });
         if (status) status.textContent = 'Added to cart.';
         // Theme rendering is separate from purchase success: never invite a duplicate
         // purchase because a theme drawer failed after Shopify accepted the item.

@@ -20,6 +20,7 @@ export default function App() {
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/filters">Filters</s-link>
         <s-link href="/app/search">Search</s-link>
+        <s-link href="/app/analytics">Analytics</s-link>
         <s-link href="/app/collections">Collections</s-link>
         <s-link href="/app/settings">Settings</s-link>
         {/* <s-link href="/app/upgrade">Upgrade</s-link> */}

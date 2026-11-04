@@ -657,6 +657,7 @@ and complete widget markup so their download cannot block parsing the widget.{%-
 {{ 'quickView.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'moneyFormat.js' | asset_url }}" defer="defer"></script>
 <script src="{{ 'marketPricing.js' | asset_url }}" defer="defer"></script>
+<script src="{{ 'searchAnalytics.js' | asset_url }}" defer="defer"></script>
 {% if template.name == 'search' %}
 <script src="{{ 'searchSettings.js' | asset_url }}" defer="defer"></script>
 {% endif %}

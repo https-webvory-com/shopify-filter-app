@@ -48,6 +48,35 @@ model MarketAvailabilitySnapshot {
   @@id([shop, country])
 }
 
+model SearchAnalyticsEvent {
+  eventId           String   @id
+  shop              String
+  event             String
+  at                DateTime
+  receivedAt        DateTime @default(now())
+  anonId            String
+  sessionId         String?
+  searchId          String?
+  listingId         String?
+  market            String?
+  locale            String?
+  query             String?
+  filterKey         String?
+  filterValue       String?
+  hits              Int?
+  position          Int?
+  productId         String?
+  variantId         String?
+  ruleId            String?
+  experimentId      String?
+  experimentVariant String?
+
+  @@index([shop, at, event])
+  @@index([shop, searchId])
+  @@index([shop, experimentId, at])
+  @@index([at])
+}
+
 model Session {
   id                  String    @id
   shop                String
