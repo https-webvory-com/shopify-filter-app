@@ -734,7 +734,8 @@ export const loader = async ({ request, context }) => {
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
-    const directOrder=['title-ascending','title-asc','title-descending','title-desc',
+    const directPrice=priceSortSelected&&(savedUsBasePrice||marketSortReady&&!!priceSortField);
+    const directOrder=directPrice||['title-ascending','title-asc','title-descending','title-desc',
       'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy);
     const directExclusions=directOrder&&sortOverPinning&&sortOverMerchandising
       ?directSortExclusions(activeRule,pinnedIds):null;
@@ -748,9 +749,19 @@ export const loader = async ({ request, context }) => {
         return result.totalHits===0;
       },60);
     }catch{availableProof=false;}
+    let basePriceProof=true;
+    if(directExclusions!==null&&directPrice&&savedUsBasePrice)try{
+      basePriceProof=await getCached(`directSortBasePriceProof:${shop}`,async()=>{
+        const result=await meiliClient.index('products').search('',{
+          filter:[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'",'(priceMin NOT EXISTS OR priceMin IS NULL)'],
+          hitsPerPage:1,page:1,attributesToRetrieve:[],
+        });
+        return result.totalHits===0;
+      },60);
+    }catch{basePriceProof=false;}
     // Exact indexed exclusions retain membership and facets while the search
     // engine pages by title/date. Unsupported rules keep the full ranker.
-    const directSort = directExclusions!==null && availableProof &&
+    const directSort = directExclusions!==null && availableProof && basePriceProof &&
       (activeRule?.conditions || []).every(condition =>
         ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
     if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
@@ -1108,7 +1119,7 @@ export const loader = async ({ request, context }) => {
     // Ranked search owns its counts, facets and page retrieval. Do not run a
     // second ordinary search whose products would immediately be discarded.
     const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
-    if(cardsOnly||fastCards){
+    if(cardsOnly||fastCards&&!directSort){
       const result=await readRankedCollectionPage(meiliClient.index('products'),{
         ids:rankingSession.ids,page,limit:pinnedPrefix?rankingSession.ids.length:limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
       });
@@ -1118,12 +1129,12 @@ export const loader = async ({ request, context }) => {
       collectionRankingApplied=true;collectionRankingStatus='ready';collectionPaginationApplied=true;
       collectionBestSellingApplied=Array.isArray(collectionBestSellingIds);
     }
-    if (!needsRankedSearch&&(!cardsOnly&&!fastCards||context?.rankingCardsPrecompute===true&&limit===50)) {
+    if (!needsRankedSearch&&(!cardsOnly&&(!fastCards||directSort)||context?.rankingCardsPrecompute===true&&limit===50)) {
     try {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
       // not force exhaustive hit-count ranking merely to obtain facets.
-      const queryIndexes=queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
+      const queryIndexes=fastCards&&directSort?[0]:queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
       const searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
       const sharedSearchKey=isSearch&&searchCacheHeaders(request)['Cache-Control'].startsWith('public')
         ? 'searchPageBatch:'+shop+':'+JSON.stringify([country,url.searchParams.get('locale'),searchQueries]) : null;

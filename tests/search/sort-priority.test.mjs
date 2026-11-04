@@ -68,7 +68,7 @@ async function collectionRoute(settings) {
   const byId = new Map(docs.map(p => [p.id, p]));
   const matching = filter => {
     const text = JSON.stringify(filter);
-    return docs.filter(p => !text.includes('available NOT EXISTS') &&
+    return docs.filter(p => !text.includes('available NOT EXISTS') && !text.includes('priceMin NOT EXISTS') &&
       (!text.includes('NOT (id IN') || p.id!=='2') &&
       (!text.includes("TopFormal") || (text.includes("NOT (") ? !p.tags.length : p.tags.length)));
   };
@@ -178,6 +178,25 @@ test('exact stock and ID exclusions retain pin protection in direct title sort',
   assert.ok(!ids.includes('2'));
   assert.ok(captureQueries.some(query=>JSON.stringify(query.filter).includes('available = false')&&
     JSON.stringify(query.filter).includes('NOT (id IN')&&JSON.stringify(query.filter).includes('OR id IN')));
+});
+
+test('verified US price sort returns the first page directly with both priorities on',async()=>{
+  const captureQueries=[];
+  const rule={collectionTagMatching:'exact',conditions:[
+    {action:'Exclude',field:'Available',value:'-999',minValue:'-999',maxValue:'0'},
+    {action:'Exclude',field:'Id',value:'2'},
+  ]};
+  const load=await collectionRoute({shop:'thedressoutlet.myshopify.com',prioritizeSortOverPinning:true,
+    prioritizeSortOverMerchandising:true,rule,captureQueries});
+  const first=await load('page=1&sortBy=price-ascending&country=US&responseProfile=fast-cards-v1');
+  const second=await load('page=2&sortBy=price-ascending&country=US');
+  assert.equal(first.rankingToken,null);
+  assert.equal(first.cfpCards.preview,true);
+  assert.deepEqual(first.products.slice(0,3).map(p=>Number(p.id.split('/').pop())),[1,3,4]);
+  assert.equal(second.debug.collectionRankingStatus,'inactive');
+  assert.equal(second.totalCount,179);
+  assert.deepEqual(second.products.slice(0,2).map(p=>Number(p.id.split('/').pop())),[27,28]);
+  assert.ok(captureQueries.some(query=>query.sort?.[0]==='priceMin:asc'&&query.limit===25));
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {
