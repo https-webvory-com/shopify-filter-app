@@ -37,6 +37,7 @@ jobs:
               if(!collection)throw Error('Formal Dresses collection unavailable');
               const ids=await redis.zrange('bull:collectionRankingQueueV2:prioritized',0,100);
               const jobs=(await Promise.all(ids.map(id=>queue.getJob(id)))).filter(Boolean);
+              console.log('FORMAL_LOOKUP',JSON.stringify({collectionId:collection.id,priceJobs:jobs.filter(job=>job.data?.spec?.sortBy==='price-ascending').map(job=>({id:job.id,collectionId:job.data.spec.collectionId,priceSortField:job.data.spec.priceSortField,shop:job.data.spec.shop})).slice(0,12)}));
               for(const country of ['US','IN']){
                 const chosen=jobs.find(job=>{
                   const spec=job.data?.spec;
