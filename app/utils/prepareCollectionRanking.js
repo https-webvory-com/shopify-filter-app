@@ -3,6 +3,7 @@ import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFa
 
 export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
+  const missingMarketPriceIds = new Set();
   const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;
   let sourceOutsideIds=native?[]:null;
   const resolveFact=factProfile?collectionFactResolver(spec.rule,factProfile,spec.mergedValues):null;
@@ -14,7 +15,11 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
       : undefined;
   const withSortPrice=product=>{
     const price=Number(product[spec.priceSortField]);
-    if(!Number.isFinite(price)||price<0)throw Error('Incomplete market price sort index');
+    if(product[spec.priceSortField]==null||product[spec.priceSortField]===''||!Number.isFinite(price)||price<0){
+      if(!spec.allowIncompleteMarketPrice)throw Error('Incomplete market price sort index');
+      missingMarketPriceIds.add(String(product.id).split('/').pop());
+      return product;
+    }
     return {...product,priceMin:price};
   };
   const rankingIndex=spec.priceSortField?{...index,
@@ -46,6 +51,8 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     }}}:{}),
     compare: comparator?.(spec.sortBy,comparatorPins,{...spec.globalSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder}),
     hydrateRanking: async products => {
+      if(spec.allowIncompleteMarketPrice)for(const product of products)
+        if(product._rankingPinPlaceholder)missingMarketPriceIds.add(String(product.id).split('/').pop());
       if(loadFacts)await loadFacts(products.filter(product=>!product._rankingPinPlaceholder));
       if(resolveFact)for(const product of products){
         // Explicit pins not yet indexed retain their existing DB hydration path.
@@ -65,5 +72,10 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
       return ranked;
     },
   });
-  return { ids, metadata, ...(captureReuse?{sourceOutsideIds}:{}) };
+  // Keep products without a verified market price visible after all priced
+  // products. Their base prices must never interleave with market amounts.
+  const orderedIds=spec.allowIncompleteMarketPrice
+    ? [...ids.filter(id=>!missingMarketPriceIds.has(id)),...ids.filter(id=>missingMarketPriceIds.has(id))]
+    : ids;
+  return { ids:orderedIds, metadata, ...(captureReuse?{sourceOutsideIds}:{}) };
 }

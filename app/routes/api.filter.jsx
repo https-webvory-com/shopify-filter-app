@@ -93,8 +93,13 @@ export const loader = async ({ request, context }) => {
     const marketPriceSortRequested=['price-ascending','price-asc','price-descending','price-desc'].includes(requestedSort)
       && url.searchParams.get('isSearch')!=='true' && url.searchParams.get('collectionHandle')?.toLowerCase()!=='search'
       && !url.searchParams.get('q') && /^[A-Z]{2}$/.test(requestedCountry);
-    const verifiedMarketPriceSort=marketPriceSortRequested ? await marketPriceIntentReady(shop,requestedCountry) : null;
-    if(marketPriceSortRequested&&!verifiedMarketPriceSort&&url.searchParams.get('responseProfile')!=='collection-config-v1'){
+    // This merchant's primary Shopify currency is USD. Its US storefront uses
+    // the saved base variant prices; there is no separate US contextual column.
+    const savedUsBasePrice=marketPriceSortRequested&&shop==='thedressoutlet.myshopify.com'&&requestedCountry==='US';
+    const verifiedMarketPriceSort=marketPriceSortRequested&&!savedUsBasePrice ? await marketPriceIntentReady(shop,requestedCountry) : null;
+    if(marketPriceSortRequested&&!verifiedMarketPriceSort&&
+      !savedUsBasePrice&&(requestedCountry!=='IN'||shop!=='thedressoutlet.myshopify.com')&&
+      url.searchParams.get('responseProfile')!=='collection-config-v1'){
       const warmup=context?.rankingWarmup===true;
       return data({error:'Price sorting is preparing for this country. Please try again later.',priceSortStatus:'pending',
         ...(warmup?{debug:{collectionRankingStatus:'pending',marketPriceSortStatus:'pending'}}:{})},
@@ -498,8 +503,9 @@ export const loader = async ({ request, context }) => {
     const sortCountry=String(country||'').toUpperCase();
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? (marketPriceSortRequested?verifiedMarketPriceSort:await marketPriceIntentReady(shop,sortCountry)):false;
-    const priceSortField=marketSortReady
+    const priceSortField=priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? `market${globalSettings?.showOnlyInStock?'Available':''}PriceMin_${sortCountry}`:null;
+    const partialMarketPriceSort=!!priceSortField&&!marketSortReady;
     let meiliSort = null;
     switch (sortBy) {
       case "best-selling":
@@ -520,11 +526,11 @@ export const loader = async ({ request, context }) => {
         break;
       case "price-ascending":
       case "price-asc":
-        meiliSort = [`${priceSortField||'priceMin'}:asc`];
+        meiliSort = [`${marketSortReady?priceSortField:'priceMin'}:asc`];
         break;
       case "price-descending":
       case "price-desc":
-        meiliSort = [`${priceSortField||'priceMin'}:desc`];
+        meiliSort = [`${marketSortReady?priceSortField:'priceMin'}:desc`];
         break;
       case "created-descending":
       case "created-desc":
@@ -912,7 +918,7 @@ export const loader = async ({ request, context }) => {
     let searchRankingApplied = false;
     let searchRankingMode = null;
     const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
-    const rankingFingerprint = priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}` : baseRankingFingerprint;
+    const rankingFingerprint = priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}:${partialMarketPriceSort?'partial':'complete'}` : baseRankingFingerprint;
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
     if(marketVersion&&useRankedCollectionPagination&&url.searchParams.has('rankingToken')&&!rankingSession)return data({error:'Country availability changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
@@ -976,6 +982,7 @@ export const loader = async ({ request, context }) => {
         ...(userHasFilters&&marketIds?{marketFilterIndex}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         ...(priceSortField?{priceSortField}:{}),
+        ...(partialMarketPriceSort?{allowIncompleteMarketPrice:true}:{}),
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
@@ -1533,6 +1540,7 @@ export const loader = async ({ request, context }) => {
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
       mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:true},
+      ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
       debug:{variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 
@@ -1800,12 +1808,13 @@ export const loader = async ({ request, context }) => {
       totalCount:pinnedPrefix?null:totalCount,
       ...(pinnedPrefix?{collectionPinnedPrefix:true}:{}),
       contextualPricingApplied,
+      ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
       settings: activeGroupFilters || [],
       globalSettings,
       mergedValues,
       didYouMean,
       debug: {
-        ...(priceSortSelected?{priceSortSource:marketSortReady?'verified-market':'base-pending-market'}:{}),
+        ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
         collectionPaginationApplied,
         collectionRankingApplied,
         collectionRankingStatus:pinnedPrefix?'prefix-ready':collectionRankingStatus,

@@ -100,7 +100,7 @@ async function collectionRoute(settings) {
     "../shopify.server": {}, "../services/rateLimiter.server": { rateLimit: async () => true },
     "../utils/collectionPage.js": { fetchCollectionPage },
   });
-  return page => route.loader({ request: new Request("https://fixture.test/api/filter?shop=fixture.myshopify.com&collectionId=1&limit=25&" + page) });
+  return page => route.loader({ request: new Request("https://fixture.test/api/filter?shop="+(settings.shop||'fixture.myshopify.com')+"&collectionId=1&limit=25&" + page) });
 }
 
 for (const overPins of [false,true]) for (const overMerch of [false,true]) {
@@ -125,6 +125,13 @@ test("priority ON respects price sorting and filtered collection membership", as
   const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true});
   const price=await load("page=1&sortBy=price-ascending");
   assert.deepEqual(Array.from(price.products,p=>Number(p.id.split("/").pop())),Array.from({length:25},(_,i)=>i+1));
+  const inLoad=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,shop:'thedressoutlet.myshopify.com'});
+  const partial=await inLoad("page=1&sortBy=price-ascending&country=IN");
+  assert.equal(partial.priceSortSource,'partial-market');
+  assert.equal(partial.products.length,25,'missing market prices remain visible');
+  const us=await inLoad("page=1&sortBy=price-ascending&country=US");
+  assert.equal(us.priceSortSource,'saved-usd-base');
+  assert.deepEqual(Array.from(us.products,p=>Number(p.id.split('/').pop())),Array.from({length:25},(_,i)=>i+1));
   const filtered=await load("page=1&tag[]=TopFormal&sortBy=best-selling");
   assert.equal(filtered.totalCount,10);
   assert.deepEqual(Array.from(filtered.products,p=>Number(p.id.split("/").pop())),[1,10,9,8,7,6,5,4,3,2]);

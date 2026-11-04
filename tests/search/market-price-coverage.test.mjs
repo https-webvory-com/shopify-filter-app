@@ -38,12 +38,12 @@ test('price intent opens only after complete DB/index coverage and closes on cat
   assert.equal(await service.marketPriceIntentReady(shop, 'US'), false);
 });
 
-test('an observed country queues one scoped bulk price pass and retries after a conflicting sync', async () => {
-  const shop='fixture.myshopify.com', sets=new Map(), claims=new Set(), calls=[];
+test('an observed country reports incomplete prices without starting a full sync', async () => {
+  const shop='fixture.myshopify.com', sets=new Map();
   const redis={get:async()=>null,sadd:async(key,value)=>{
     if(!sets.has(key))sets.set(key,new Set());sets.get(key).add(value);
   },smembers:async key=>[...(sets.get(key)||[])],
-  set:async key=>claims.has(key)?null:(claims.add(key),'OK'),del:async key=>claims.delete(key)};
+  set:async()=>{throw Error('Unexpected automatic backfill')},del:async()=>{}};
   const db={$queryRaw:async()=>[{products:2,variants:4,priced:0}],
     marketStorefrontConnection:{findMany:async()=>[],findUnique:async()=>null}};
   const service=await loadModule('app/services/marketPriceCoverage.server.js',{
@@ -52,12 +52,7 @@ test('an observed country queues one scoped bulk price pass and retries after a 
     '../utils/shopCacheInvalidation.js':{productRevisionKey:()=> 'revision'},
   });
   await service.marketPriceIntentReady(shop,'IN');
-  const startSync=async(...args)=>{calls.push(args);return{message:'Bulk product index started in background'};};
-  await service.refreshConnectedMarketPriceCoverage({startSync});
-  await service.refreshConnectedMarketPriceCoverage({startSync});
-  assert.equal(calls.length,1);
-  assert.equal(calls[0][0],shop);assert.equal(calls[0][1].restart,true);
-  claims.clear();
-  await service.refreshConnectedMarketPriceCoverage({startSync:async()=>({message:'Product sync is already running'})});
-  assert.equal(claims.size,0,'a running old sync must not block the new country for six hours');
+  const results=await service.refreshConnectedMarketPriceCoverage();
+  assert.equal(results.length,1);
+  assert.equal(results[0].complete,false);
 });

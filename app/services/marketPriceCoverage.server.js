@@ -89,7 +89,7 @@ export async function refreshMarketPriceCoverage(shop, country) {
   return { shop, country, complete, products: row.products || 0, variants: row.variants || 0, priced: row.priced || 0 };
 }
 
-export async function refreshConnectedMarketPriceCoverage({startSync} = {}) {
+export async function refreshConnectedMarketPriceCoverage() {
   const connections = await prisma.marketStorefrontConnection.findMany({ select: { shop: true, countries: true } });
   const observedShops = await redis.smembers?.(observedShopsKey) || [];
   const shops = [...new Set([...connections.map(connection => connection.shop), ...observedShops])].filter(validShop);
@@ -99,25 +99,9 @@ export async function refreshConnectedMarketPriceCoverage({startSync} = {}) {
     try {
       const result = await refreshMarketPriceCoverage(shop, country);
       results.push(result);
-      if (!result.complete && result.products > 0) {
-        // A market first observed in a storefront request needs its own bulk
-        // price pass. The cooldown bounds repeated work if Shopify rejects it.
-        const claimed = await redis.set(`marketPriceBackfill:${shop}:${country}`, '1', 'EX', 21600, 'NX');
-        if (claimed === 'OK') {
-          try {
-            if (!startSync) {
-              const { startBulkProductSync } = await import('./sync.server.js');
-              startSync = startBulkProductSync;
-            }
-            const queued = await startSync(shop, { restart: true });
-            if (queued.message === 'Product sync is already running')
-              await redis.del(`marketPriceBackfill:${shop}:${country}`);
-          } catch (error) {
-            await redis.del(`marketPriceBackfill:${shop}:${country}`);
-            throw error;
-          }
-        }
-      }
+      // Price coverage is observed here. Rebuilding the entire catalog for a
+      // missing country price is an explicit merchant operation, not a timer
+      // side effect; shoppers can use the saved-price partial ranking meanwhile.
     } catch (error) { console.error('Market price coverage unavailable:', shop, country, error.name); }
   }
   return results;

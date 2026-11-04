@@ -65,10 +65,11 @@ function seededWarmups(shop) {
 }
 
 const preparation = createCollectionPreparation({ redis, queue: collectionRankingQueue, prepare: async spec =>{
-  const value=await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null) || await prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true });
+  const value=(spec.allowIncompleteMarketPrice?null:await prepareCollectionFromFacts(spec,{populate:true}).catch(()=>null)) ||
+    await prepareCollectionRanking(spec, { index: meiliClient.index('products'), prisma, arrange: applyMerchandisingRules, comparator:createMerchandisingComparator,captureReuse:true });
   await compareCollectionHead(spec,value);return value;
 },
-  prepareDirect:prepareCollectionFromFacts,dependencies:createCollectionDependencies(redis),scores:createCollectionSalesDependencies(redis),
+  prepareDirect:spec=>spec.allowIncompleteMarketPrice?null:prepareCollectionFromFacts(spec),dependencies:createCollectionDependencies(redis),scores:createCollectionSalesDependencies(redis),
   loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,
   validateReuse:(spec,value)=>validateCollectionReuse(meiliClient.index('products'),spec,value),
   revalidateSaved:true,

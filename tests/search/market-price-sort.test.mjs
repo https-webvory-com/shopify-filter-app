@@ -1,27 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import vm from 'node:vm';
-import { transform } from 'esbuild';
 import { prepareCollectionRanking } from '../../app/utils/prepareCollectionRanking.js';
 
-test('shopper price sort waits for complete country prices before serving saved cards',async()=>{
-  let cardReads=0;
-  const source=(await transform(await fs.readFile('app/routes/api.filter.jsx','utf8'),{loader:'jsx',format:'cjs'})).code;
-  const mocks={
-    'react-router':{data:(value,init)=>Response.json(value,init)},
-    '../services/rateLimiter.server':{rateLimit:async()=>true},
-    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>false},
-    '../services/collectionCards.server.js':{getPreparedCollectionCards:async()=>{cardReads++;return Response.json({products:[{priceMin:1}]});}},
-  };
-  const context={module:{exports:{}},exports:{},URL,Response,console,require:name=>({__esModule:true,...(mocks[name]||{})})};
-  vm.runInNewContext(source,context);
-  const request=new Request('https://fixture/api/filter?shop=fixture.myshopify.com&collectionHandle=prom-dresses&country=IN&sortBy=price-ascending&responseProfile=collection-v2');
-  const response=await context.module.exports.loader({request});
-  assert.equal(response.status,503);
-  assert.equal((await response.json()).priceSortStatus,'pending');
-  assert.equal(response.headers.get('retry-after'),'60');
-  assert.equal(cardReads,0,'a stale saved base-price page must not bypass the country proof');
+test('partial India prices sort priced products first and keep missing products visible',async()=>{
+  const docs=[
+    {id:'1',priceMin:20,marketAvailablePriceMin_IN:2600},
+    {id:'2',priceMin:10},
+    {id:'3',priceMin:30,marketAvailablePriceMin_IN:2000},
+    {id:'4',priceMin:40,marketAvailablePriceMin_IN:null},
+  ];
+  const index={search:async(_q,options)=>({hits:docs.slice(options.offset,options.offset+options.limit),totalHits:docs.length})};
+  for(const [sortBy,expected] of [['price-ascending',['3','1','2','4']],['price-descending',['1','3','4','2']]]){
+    const spec={shop:'fixture.myshopify.com',sortBy,priceSortField:'marketAvailablePriceMin_IN',allowIncompleteMarketPrice:true,
+      query:{indexUid:'products',q:'',filter:[]},pinnedIds:[],globalSettings:{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true}};
+    const result=await prepareCollectionRanking(spec,{index,prisma:{},arrange:products=>products,
+      comparator:()=>sortBy==='price-ascending'?(a,b)=>a.priceMin-b.priceMin:(a,b)=>b.priceMin-a.priceMin});
+    assert.deepEqual(result.ids,expected);
+  }
 });
 
 test('complete market price ranking orders the full ID list without changing storefront base prices',async()=>{
