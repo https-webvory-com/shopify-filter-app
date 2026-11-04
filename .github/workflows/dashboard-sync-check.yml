@@ -59,7 +59,7 @@ jobs:
                   for await(const line of readline.createInterface({input:Readable.fromWeb(download.body),crlfDelay:Infinity})){
                     if(!line.trim())continue;
                     const row=JSON.parse(line);
-                    if(!row.__parentId){root++;productId=row.id;if(root>job.productsProcessed+5)break;continue;}
+                    if(!row.__parentId){root++;productId=row.id;if(root>job.productsProcessed+40)break;continue;}
                     if(root<=job.productsProcessed||!String(row.id||'').startsWith('gid://shopify/ProductVariant/'))continue;
                     const value=row.cfpMarket_IN;
                     if(!value?.price?.amount||!value?.price?.currencyCode||value.compareAtPrice&&(!value.compareAtPrice.amount||value.compareAtPrice.currencyCode!==value.price.currencyCode)){
