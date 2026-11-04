@@ -1,51 +1,28 @@
-name: Prepare India price sort from saved data
+name: Read-only India price repair status
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  prepare:
+  status:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 15m
+          command_timeout: 3m
           script: |
             set -eu
-            docker exec -i shopify-filter-app sh -c 'cat > /tmp/cfp-json-loader.mjs' <<'LOADER'
-            import {readFile} from 'node:fs/promises';
-            export async function load(url,context,nextLoad){
-              if(url.endsWith('.json'))return {format:'module',shortCircuit:true,source:'export default '+await readFile(new URL(url),'utf8')+';'};
-              return nextLoad(url,context);
-            }
-            LOADER
-            docker exec -i shopify-filter-app node --experimental-loader /tmp/cfp-json-loader.mjs --input-type=module <<'NODE'
-            import Redis from 'ioredis';
-            import {REDIS_URL} from './app/services/redisConnection.server.js';
-            // Connect before importing the server module so its startup cache
-            // listener does not run for this one-off preparation process.
-            const redis=global.__redis=new Redis(REDIS_URL);
-            await redis.ping();
-            const {collectionRankingQueue:queue}=await import('./app/services/queue.server.js');
-            const {processCollectionPreparation}=await import('./app/services/collectionPreparation.server.js');
+            docker exec shopify-filter-sync-worker sh -c 'tail -n 12 /tmp/india-price-backfill.log'
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            const db=new PrismaClient();
             try{
-              const ids=await redis.zrange('bull:collectionRankingQueueV2:prioritized',0,30);
-              let chosen;
-              for(const id of ids){
-                const job=await queue.getJob(id),spec=job?.data?.spec;
-                if(job?.name==='COLLECTION_RANKING_PREPARE'&&spec?.shop==='thedressoutlet.myshopify.com'&&
-                    spec.sortBy==='price-ascending'&&String(spec.priceSortField||'').endsWith('_IN')&&
-                    String(spec.collectionId||'').split('/').pop()==='408926666'){chosen=job;break;}
-              }
-              if(!chosen)throw Error('Queued India Prom Dresses price ranking unavailable');
-              console.log('INDIA_PRICE_PREPARE_START',JSON.stringify({jobId:chosen.id,collectionId:chosen.data.spec.collectionId,sort:chosen.data.spec.sortBy}));
-              const result=await processCollectionPreparation(chosen.data);
-              console.log('INDIA_PRICE_PREPARE_RESULT',JSON.stringify(result));
-              if(result?.superseded)throw Error('India price ranking was superseded; retry shopper request');
-            }finally{await queue.close();redis.disconnect();}
-            process.exit(0);
+              const shop='thedressoutlet.myshopify.com';
+              const rows=await db.$queryRaw`SELECT COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`;
+              console.log('INDIA_PRICE_COVERAGE',JSON.stringify(rows[0]));
+            }finally{await db.$disconnect();}
             NODE
