@@ -15,10 +15,12 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 3m
           script: |
+            set -eu
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import Redis from 'ioredis';
             import {Queue} from 'bullmq';
-            const endpoint=new URL(process.env.REDIS_URL);
+            const endpoint=new URL(process.env.REDIS_URL || 'redis://184.72.37.227:6379');
+            if(!endpoint.password&&process.env.REDIS_PASSWORD)endpoint.password=process.env.REDIS_PASSWORD;
             const connection={host:endpoint.hostname,port:Number(endpoint.port||6379),...(endpoint.password?{password:decodeURIComponent(endpoint.password)}:{})};
             const redis=new Redis(connection);
             const queue=new Queue('collectionRankingQueueV2',{connection});
