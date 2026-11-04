@@ -19,10 +19,17 @@ jobs:
             docker exec shopify-filter-sync-worker sh -c 'tail -n 12 /tmp/india-price-backfill.log'
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
+            import meiliClient from './app/services/meiliClient.server.js';
             const db=new PrismaClient();
             try{
               const shop='thedressoutlet.myshopify.com';
               const rows=await db.$queryRaw`SELECT COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NOT NULL)::integer AS priced FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active'`;
               console.log('INDIA_PRICE_COVERAGE',JSON.stringify(rows[0]));
+              const missing=await db.$queryRaw`SELECT v."id" AS "variantId",p."id" AS "productId",p."title",v."available",EXISTS(SELECT 1 FROM "ProductCollection" pc WHERE pc."productId"=p."id" AND pc."collectionId"='gid://shopify/Collection/408926666') AS "inProm" FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" WHERE p."shop"=${shop} AND lower(p."status")='active' AND v."marketPrices" -> 'IN' ->> 'price' IS NULL LIMIT 20`;
+              console.log('INDIA_PRICE_MISSING',JSON.stringify(missing));
+              const index=meiliClient.index('products');
+              const base=[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'"];
+              const [all,priced]=await Promise.all([index.search('',{filter:base,hitsPerPage:1,page:1,attributesToRetrieve:[]}),index.search('',{filter:[...base,'marketPriceMin_IN EXISTS'],hitsPerPage:1,page:1,attributesToRetrieve:[]})]);
+              console.log('INDIA_PRICE_INDEX',JSON.stringify({all:all.totalHits,priced:priced.totalHits}));
             }finally{await db.$disconnect();}
             NODE
