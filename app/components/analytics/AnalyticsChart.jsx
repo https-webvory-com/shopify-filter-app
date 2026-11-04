@@ -22,6 +22,7 @@ export default function AnalyticsChart({ chart, keys, rows, group, tab }) {
   const maximum = stepSize * 4;
   const width = 960, height = 310, left = 45, top = 15, plotWidth = 895, plotHeight = 250;
   const x = index => left + (visible.length < 2 ? plotWidth / 2 : index * plotWidth / (visible.length - 1));
+  const pointX = (index, series) => visible.length === 1 ? x(index) + (series - (keys.length - 1) / 2) * 22 : x(index);
   const y = value => top + plotHeight * (1 - value / maximum);
   const exportSvg = () => saveFile(`analytics-${tab}.svg`,
     new XMLSerializer().serializeToString(document.querySelector('.cfp-chart-svg svg')), 'image/svg+xml');
@@ -62,13 +63,13 @@ export default function AnalyticsChart({ chart, keys, rows, group, tab }) {
           {group === 'day_of_week' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][Number(point.bucket)] : point.bucket}
         </text> : null)}
       {keys.map((key, series) => hidden.includes(key) ? null : <g key={key}>
-        {visible.length === 1 && <line x1={x(0)} x2={x(0)} y1={y(0)} y2={y(visible[0].values[key] || 0)}
+        {visible.length === 1 && <line x1={pointX(0, series)} x2={pointX(0, series)} y1={y(0)} y2={y(visible[0].values[key] || 0)}
           stroke={colors[series % colors.length]} strokeWidth="2.5" strokeLinecap="round" />}
         {visible.length > 1 && <polygon opacity="0.07" fill={colors[series % colors.length]}
           points={`${x(0)},${y(0)} ${visible.map((point, index) => `${x(index)},${y(point.values[key] || 0)}`).join(' ')} ${x(visible.length - 1)},${y(0)}`} />}
         <polyline fill="none" stroke={colors[series % colors.length]} strokeWidth="2.5" strokeLinejoin="round"
           points={visible.map((point, index) => `${x(index)},${y(point.values[key] || 0)}`).join(' ')} />
-        {visible.map((point, index) => <circle key={point.bucket} cx={x(index)} cy={y(point.values[key] || 0)} r="4" fill={colors[series % colors.length]} stroke="#fff" strokeWidth="1.5">
+        {visible.map((point, index) => <circle key={point.bucket} cx={pointX(index, series)} cy={y(point.values[key] || 0)} r="4" fill={colors[series % colors.length]} stroke="#fff" strokeWidth="1.5">
           <title>{`${labels.get(key) || key}: ${format(point.values[key] || 0)} on ${point.bucket}`}</title>
         </circle>)}
       </g>)}

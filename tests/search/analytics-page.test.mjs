@@ -43,4 +43,10 @@ test('analytics renders six reports with real table data, date controls and char
   assert.match(html, /aria-label="products chart"/);
   assert.match(html, /stroke="#6d28d9" stroke-width="2.5" stroke-linecap="round"/);
   assert.match(html, /Store insights/);
+  const singleDay = renderToStaticMarkup(React.createElement(chart.default, { tab: 'queries', group: 'day',
+    chart: [{ bucket: '2026-11-04', values: { first: 1, second: 1 } }],
+    keys: ['first', 'second'], rows: [{ key: 'first', label: 'First' }, { key: 'second', label: 'Second' }] }));
+  const markerX = [...singleDay.matchAll(/<circle[^>]*cx="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(markerX.length, 2);
+  assert.notEqual(markerX[0], markerX[1]);
 });
