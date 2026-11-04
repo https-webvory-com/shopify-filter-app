@@ -46,7 +46,8 @@ export async function createLoadingServer({redisLayer}={}) {
   const trace={facetQueries:0,hydrations:0,documentBatches:0,documentCalls:0,candidateBrowses:0,membershipBrowses:0};
   const makeDoc=(_,i)=>({id:String(i+1),shop,title:`Fixture dress ${i+1}`,handle:`dress-${i+1}`,status:'ACTIVE',
     tags:[`product-${i+1}`],vendor:'Fixture',productType:'Dress',collections:['gid://shopify/Collection/1'],collection_titles:['Fixture collection'],
-    bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,inventoryTotal:5,
+    bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,
+    marketPriceMin_US:i===2?0:i+1,marketAvailablePriceMin_US:i===2?0:i+1,inventoryTotal:5,
     images:[`/image/${i+1}.svg`],options:[{name:'Color',values:['Blue']}],
     variantPrices:[{id:String((i+1)*100),price:i===2?0:i+1,compareAtPrice:null,available:true,option1:'Blue',imageUrl:`/image/${i+1}.svg`}]});
   const docs=Array.from({length:30},makeDoc);
@@ -209,7 +210,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
-    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>false},
+    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
@@ -239,7 +240,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(updates.reset)state.realToolbar=false;
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
-        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;}
+        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
         if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields))Object.assign(byId.get(id),fields);
         if(updates.productVariants)for(const [id,variants]of Object.entries(updates.productVariants)){
@@ -302,7 +303,8 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       if(url.pathname.startsWith('/products/')){
         const id=url.pathname.match(/dress-(\d+)/)?.[1];const doc=byId.get(id);await new Promise(resolve=>setTimeout(resolve,state.priceDelay));
-        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({price_min:doc.priceMin*100,price_max:doc.priceMax*100,variants:doc.variantPrices.map(v=>({id:Number(v.id),price:(v.price??doc.priceMin)*100,compare_at_price:v.compareAtPrice==null?null:v.compareAtPrice*100}))}));return;
+        const nativeVariants=state.nativeVariants?.[id]||doc.variantPrices;
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify({price_min:doc.priceMin*100,price_max:doc.priceMax*100,variants:nativeVariants.map(v=>({id:Number(v.id),price:(v.price??doc.priceMin)*100,compare_at_price:v.compareAtPrice==null?null:v.compareAtPrice*100,available:v.available===true}))}));return;
       }
       if(url.pathname.startsWith('/image/')){
         await new Promise(resolve=>setTimeout(resolve,state.imageDelay));res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480"><rect width="360" height="480" fill="#b9cdee"/></svg>');return;

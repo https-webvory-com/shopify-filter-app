@@ -95,6 +95,35 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
+  await test('available price sort variants select the lowest price and hide sold-out swatches',async()=>{
+    await control({reset:true,productCount:25,hold:false,precompute:true,delay:0,priceDelay:0,imageDelay:0,
+      marketPriceReady:true,globalSettings:{showOnlyInStock:true},productFields:{'1':{priceMin:19,priceMax:29,marketPriceMin_US:19,marketAvailablePriceMin_US:19}},
+      productVariants:{'1':[
+        {id:'101',price:19,available:false,option1:'Navy',imageUrl:'/image/1.svg'},
+        {id:'102',price:19,available:true,option1:'Emerald',imageUrl:'/image/1.svg'},
+        {id:'103',price:29,available:true,option1:'Teal',imageUrl:'/image/1.svg'},
+      ]},nativeVariants:{'1':[
+        {id:'101',price:19,available:false},
+        {id:'102',price:29,available:true},
+        {id:'103',price:19,available:true},
+      ]}});
+    await navigate('?sort_by=price-ascending');
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");
+    const cardExpression=`[...document.querySelectorAll('.cfp-product-card__link')].find(link=>new URL(link.href).pathname==='/products/dress-1')?.closest('.cfp-product-card')`;
+    await wait(`${cardExpression}?.querySelector('.cfp-product-card__price')?.textContent?.includes('$19.00')`);
+    const card=await evaluate(`(()=>{const card=${cardExpression};return {href:card?.querySelector('.cfp-product-card__link')?.href,price:card?.querySelector('.cfp-product-card__price')?.textContent,colors:[...card?.querySelectorAll('.cfp-swatch-item')||[]].map(el=>el.dataset.cfpColor),active:card?.querySelector('.cfp-swatch-active')?.dataset.cfpColor};})()`);
+    assert.match(card.href,/variant=103/);
+    assert.match(card.price,/19\.00/);
+    assert.deepEqual(card.colors,['Emerald','Teal']);
+    assert.equal(card.active,'Teal');
+    await evaluate(`${cardExpression}.querySelector('.cfp-swatch-item[data-cfp-color="Emerald"]').click()`);
+    const selected=await evaluate(`(()=>{const card=${cardExpression};return {href:card.querySelector('.cfp-product-card__link').href,price:card.querySelector('.cfp-product-card__price').textContent,active:card.querySelector('.cfp-swatch-active')?.dataset.cfpColor};})()`);
+    assert.match(selected.href,/variant=102/);
+    assert.match(selected.price,/29\.00/);
+    assert.equal(selected.active,'Emerald');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+
   await test('compare-at and image sale badge follow separate live theme tags',async()=>{
     await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['show compare price']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");

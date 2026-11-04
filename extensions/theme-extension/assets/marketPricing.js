@@ -46,6 +46,7 @@
               if (!marketVariant || !Number.isFinite(marketVariant.price)) throw new Error('Variant price unavailable');
               variant.price = marketVariant.price / 100;
               variant.compareAtPrice = marketVariant.compare_at_price == null ? null : marketVariant.compare_at_price / 100;
+              variant.available = marketVariant.available === true;
             }
             product._marketPricingApplied = true;
             product._marketPricingUnavailable = false;

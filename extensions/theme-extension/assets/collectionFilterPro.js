@@ -1274,13 +1274,56 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   window.addEventListener('load',syncWishlistProducts,{once:true});
 
   let marketRenderVersion = 0;
+  function priceSortedVariant(variants) {
+    const direction = ['price-ascending','price-asc'].includes(activeFilters.sortBy) ? 1 :
+      ['price-descending','price-desc'].includes(activeFilters.sortBy) ? -1 : 0;
+    if (!direction) return null;
+    return (variants || []).filter(v => v.available === true && Number.isFinite(Number(v.price)))
+      .reduce((best, variant) => !best || direction * (Number(variant.price) - Number(best.price)) < 0 ? variant : best, null);
+  }
   function updateMarketCardPrice(card, product) {
     if (!card || !product || product._marketPricingUnavailable) return;
     card._cfpMarketProduct = product;
     const row = card.querySelector('.cfp-product-card__price-row');
     if (!row) return;
     const href = card.querySelector('.cfp-product-card__link')?.href;
-    const selected = href ? new URL(href, location.origin).searchParams.get('variant') : null;
+    let selected = href ? new URL(href, location.origin).searchParams.get('variant') : null;
+    const options = Array.isArray(product.options) ? product.options : [];
+    const colorIndex = Array.isArray(options) ? options.findIndex(option => /^colou?r$/i.test(option.name || '')) : -1;
+    const colorKey = `option${colorIndex + 1}`;
+    if (globalSettings?.showOnlyInStock && colorIndex >= 0) {
+      const availableColors = new Set((product.variants || []).filter(v => v.available === true).map(v => v[colorKey]));
+      card.querySelectorAll('.cfp-swatch-item').forEach(swatch => {
+        if (!availableColors.has(swatch.dataset.cfpColor)) swatch.remove();
+      });
+      const swatches = [...card.querySelectorAll('.cfp-swatch-item')];
+      swatches.forEach((swatch, index) => swatch.classList.toggle('cfp-swatch-hidden', index >= 5));
+      const more = card.querySelector('.cfp-swatch-more');
+      if (more) {
+        const extra = Math.max(0, swatches.length - 5);
+        if (extra) more.textContent = `+${extra}`;
+        else more.remove();
+      }
+    }
+    if (!card.dataset.cfpUserSelectedVariant &&
+        Object.values(activeFilters.options || {}).every(values => !values?.length)) {
+      const sorted = priceSortedVariant(product.variants);
+      const sortedId = sorted && String(sorted.id).split('/').pop();
+      if (sortedId && sortedId !== selected) {
+        selected = sortedId;
+        card.querySelectorAll('.cfp-product-card__link').forEach(link => { link.href = `/products/${product.handle}?variant=${sortedId}`; });
+        const color = colorIndex >= 0 ? sorted[colorKey] : null;
+        card.querySelectorAll('.cfp-swatch-item').forEach(swatch =>
+          swatch.classList.toggle('cfp-swatch-active', swatch.dataset.cfpColor === color));
+        const primary = card.querySelector('.cfp-product-card__image--primary');
+        if (primary && sorted.imageUrl) {
+          primary.removeAttribute('srcset');
+          const image = new URL(sorted.imageUrl, location.origin);
+          image.searchParams.set('width', '360');
+          primary.src = image.toString();
+        }
+      }
+    }
     const variant = product.variants?.find(v => String(v.id).split('/').pop() === selected);
     const amount = variant?.price ?? product.priceMin;
     const compare = variant ? variant.compareAtPrice : product.variants?.[0]?.compareAtPrice;
@@ -1520,10 +1563,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             }
         }
 
-        // Fallback: If no matched variant from filters (or no filters applied),
-        // try to select the first AVAILABLE variant so the PDP doesn't load a sold-out option by default.
+        if (Object.values(activeFilters.options || {}).every(values => !values?.length)) {
+            const sorted = priceSortedVariant(product.variants);
+            if (sorted) {
+                matchedVariant = sorted;
+                matchedVariantId = String(sorted.id).split('/').pop();
+                variantImg = sorted.imageUrl || null;
+            }
+        }
+
+        // Explicit price sort selects the available variant that determines the
+        // card's position. Otherwise retain the first available default.
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
-            const firstAvailable = product.variants.find(v => v.available === true);
+            const firstAvailable = priceSortedVariant(product.variants) || product.variants.find(v => v.available === true);
             if (firstAvailable) {
                 matchedVariant = firstAvailable;
                 matchedVariantId = firstAvailable.id ? firstAvailable.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : null;
@@ -1683,6 +1735,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         product.variants.forEach(v => {
+          if (globalSettings?.showOnlyInStock && v.available !== true) return;
           const colorName = v[optionKey];
           const vImg = v.imageUrl || (typeof v.image === 'string' ? v.image : v.image?.url || v.image?.src || null);
           if (colorName) {
@@ -1820,9 +1873,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
              `;
 
              swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}"
+                  data-cfp-color="${escapeCardHtml(colorName)}"
                   data-tooltip="${escapeCardHtml(colorName)}"
                   onclick="event.preventDefault(); 
                            const card = this.closest('.cfp-product-card');
+                           card.dataset.cfpUserSelectedVariant = 'true';
                            const pImg = card.querySelector('.cfp-product-card__image--primary');
                            if (pImg) { pImg.removeAttribute('srcset'); pImg.src=${cardScriptString(getResizedImageUrl(data.imgUrl, '600x'))}; }
                            ${secondaryImgJS.replace(/\n/g, ' ')}
