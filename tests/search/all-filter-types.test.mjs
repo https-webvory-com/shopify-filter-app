@@ -91,6 +91,11 @@ test('actual API supports every categorical type plus exact disjoint price range
   const url=new URL('http://fixture/api/filter?shop=headless-fixture.myshopify.com&collectionHandle=fixture&sortBy=manual&page=1&limit=25');
   const read=async()=>{const response=await f.load(new Request(url));assert.equal(response.status,200);return response.json();};
   let body=await read();assert.equal(body.totalCount,30);assert.equal(body.facets.priceRanges.ranges[0].count,10);assert.equal(body.facets.priceRanges.ranges[1].count,11);
+  definitions.at(-1).displayMode='Range';f.facetRequests.length=0;
+  body=await read();assert.equal(body.facets.priceRanges.ranges.length,0);
+  assert.equal(f.facetRequests.some(query=>query.filter?.some(value=>typeof value==='string'&&value.includes('priceMin >= 20'))),false);
+  delete definitions.at(-1).displayMode;
+  body=await read();assert.equal(body.facets.priceRanges.ranges[0].count,10,'saved filters without displayMode default to List');
   const params=[['vendor[]','Acme'],['type[]','Coat'],['tags[]','Featured'],['collection[]','Special'],['title[]','Fixture dress 1'],['options[Color][]','Red'],['options[Size][]','S'],['options[Slot][]','Morning'],['metafields[custom.fabric][]','Silk']];
   for(const [key,value]of params){url.search='?shop=headless-fixture.myshopify.com&collectionHandle=fixture&sortBy=manual&page=1&limit=25';url.searchParams.set(key,value);body=await read();assert.equal(body.totalCount,1,key);assert.equal(body.products[0].title,'Fixture dress 1');}
   url.searchParams.delete('metafields[custom.fabric][]');url.searchParams.set('price[]','0:10');url.searchParams.append('price[]','20:Infinity');body=await read();assert.equal(body.totalCount,21);assert.equal(body.facets.priceRanges.ranges[0].count,10);assert.equal(body.facets.priceRanges.ranges[1].count,11);assert.ok(body.products.every(p=>p.priceMin<=10||p.priceMin>=20));

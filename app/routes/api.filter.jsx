@@ -356,6 +356,7 @@ export const loader = async ({ request, context }) => {
       resolvedGroup;
     const activeGroupFilters = await resolveCollectionNavigation(savedGroupFilters?.map(normalizeProductTitleFilter) || null,
       titles => getCached(`collectionNavigation:${shop}:${JSON.stringify(titles)}`, () => prisma.collection.findMany({where:{shop,title:{in:titles}},select:{title:true,handle:true}})));
+    const configurationReadyMs=Date.now()-startTime;
 
     // Stable bootstrap data has its own browser validator and never waits for
     // rankings, facets or product hydration. Updated clients request it in parallel.
@@ -882,7 +883,9 @@ export const loader = async ({ request, context }) => {
     }
     const priceCountQueryStart=queries.length;
     const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
-    let configuredPrices=[];try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
+    // Slider bounds come from priceMin facet stats. Saved list ranges are
+    // irrelevant in Range mode and can trigger costly variant-price scans.
+    let configuredPrices=[];if(String(priceSettings?.displayMode||'List').toLowerCase()==='list')try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
     const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
     const priceEligibleIds=hideUnavailable?await Promise.all(priceCountRanges.map(range=>
@@ -904,6 +907,7 @@ export const loader = async ({ request, context }) => {
     let extraCounts={};
     let saleCounts = {};
     if(isSearch)for(const query of queries)query._cfpSearchSurface=true;
+    const queryReadyMs=Date.now()-startTime;
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
     if (useRankedCollectionPagination && !context?.rankingWarmup) {
@@ -1545,7 +1549,7 @@ export const loader = async ({ request, context }) => {
     if(fastCards)return data({products,totalCount:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
       mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
-      debug:{variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
+      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 
     // ── 15. Price range counts (from Meilisearch hits) ────────────────
@@ -1555,7 +1559,7 @@ export const loader = async ({ request, context }) => {
         )
       : null;
     let priceRangesConfig = [];
-    if (priceFilter?.config) {
+    if (priceFilter?.config && String(priceFilter.displayMode||'List').toLowerCase()==='list') {
       try {
         const configObj =
           typeof priceFilter.config === "string"
@@ -1617,6 +1621,7 @@ export const loader = async ({ request, context }) => {
     }
     const exactNormalizedCounts = new Map();
     const duplicateGroups = [...normalizedGroups.entries()].filter(([, group]) => group.raw.length > 1);
+    const normalizedCountStarted=Date.now();
     if (duplicateGroups.length) {
       try {
         const countQueries = duplicateGroups.map(([, group]) => ({ indexUid: 'products', q: textSearchQuery,
@@ -1632,6 +1637,7 @@ export const loader = async ({ request, context }) => {
         console.error('CFP: Exact normalized facet counts unavailable:', error.name);
       }
     }
+    const normalizedCountMs=Date.now()-normalizedCountStarted;
     const addNormalizedCount = (destination, field, type, raw, count) => {
       const canonical = getTargetValue(type, raw);
       const key = `${field}\u0000${canonical}`;
@@ -1853,7 +1859,11 @@ export const loader = async ({ request, context }) => {
           isPinned: pinnedIds.includes(p.id)
         })),
         timing: {
+          configurationReadyMs,
+          queryReadyMs,
           meiliMs: meiliTime,
+          normalizedCountMs,
+          normalizedCountQueries:duplicateGroups.length,
           totalMs,
           variantEligibilityMs,
           rankingPreparationMs,
