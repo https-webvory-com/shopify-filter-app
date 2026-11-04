@@ -52,10 +52,21 @@ document.addEventListener("DOMContentLoaded", async function () {
   };
 
   const shopDomain = window.Shopify ? window.Shopify.shop : "";
+  function commitInstantSearch() {
+    const searchId = window.cfpActiveInstantSearchId;
+    const query = window.cfpActiveInstantSearchQuery;
+    if (!searchId || !query || window.cfpCommittedInstantSearchId === searchId) return;
+    if (!window.CfpAnalytics?.track('search_query', { search_id: searchId, q: query,
+      hits: window.cfpActiveInstantSearchHits || 0 })) return;
+    window.cfpCommittedInstantSearchId = searchId;
+    if (window.cfpActiveInstantSearchHits === 0)
+      window.CfpAnalytics.track('zero_result', { search_id: searchId });
+  }
   document.addEventListener('click', event => {
     const card = event.target.closest('.cfp-search-result-card[data-cfp-product-id]');
     const searchId = window.cfpActiveInstantSearchId;
     if (!card || !searchId) return;
+    commitInstantSearch();
     const details = { search_id: searchId, product_id: card.dataset.cfpProductId,
       position: Number(card.dataset.cfpPosition) };
     if (event.target.closest('a.cfp-search-product-card')) window.CfpAnalytics?.track('result_click', details);
@@ -576,6 +587,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     mainInput.addEventListener("input", (e) => {
       const query = e.target.value.trim();
       clearTimeout(debounceTimer);
+      window.cfpActiveInstantSearchId = null;
+      window.cfpActiveInstantSearchQuery = null;
 
       if (!query) {
         fetchDefaultView();
@@ -985,12 +998,12 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (currentQuery === trimmedQuery) {
         const searchId = window.CfpAnalytics?.newSearchId?.();
         if (searchId) {
-          window.CfpAnalytics?.track('search_query', { search_id: searchId, q: query,
-            hits: Number.isSafeInteger(productsData?.matchCount) ? productsData.matchCount :
-              (Number(productsData?.totalCount) || productsData?.products?.length || 0) });
-          if (!productsData?.products?.length) window.CfpAnalytics?.track('zero_result', { search_id: searchId });
+          window.CfpAnalytics?.track('autocomplete_impression', { search_id: searchId });
         }
         window.cfpActiveInstantSearchId = searchId || null;
+        window.cfpActiveInstantSearchQuery = searchId ? query : null;
+        window.cfpActiveInstantSearchHits = Number.isSafeInteger(productsData?.matchCount) ? productsData.matchCount :
+          (Number(productsData?.totalCount) || productsData?.products?.length || 0);
         
         // Did You Mean logic
         const dymContainer = document.getElementById("cfp-did-you-mean-container");

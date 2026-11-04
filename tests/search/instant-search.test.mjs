@@ -11,6 +11,7 @@ import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
 import { createHash } from 'node:crypto';
 
 const source=await fs.readFile('extensions/theme-extension/assets/instantSearch.js','utf8');
+const analytics=source.slice(source.indexOf('  function commitInstantSearch'),source.indexOf("  document.addEventListener('click', event => {"));
 const helpers=source.slice(source.indexOf('  // Search caching'),source.indexOf('  // UI Elements'));
 const search=source.slice(source.indexOf('  async function performSearch'),source.indexOf('  function renderCollections'));
 const defaults=source.slice(source.indexOf('  async function fetchDefaultView'),source.indexOf('  function renderRecentSearches'));
@@ -22,9 +23,22 @@ function fixture(store=storage()){
  const calls=[];const elements=new Map();
  const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'blue dress',style:{},classList:{add(){},remove(){}},addEventListener(){}});return elements.get(id);};
  const context={applySearchDisplaySettings(){},renderPages(){},closeModal(){},sessionStorage:store,Date,URL,location:{href:'https://shop.test/'},window:{Shopify:{country:'US',currency:{active:'USD'},locale:'en'}},document:{getElementById:element},mainInput:element('cfp-main-search-input'),shopDomain:'fixture',CONFIG:{apiUrl:'https://api.test/api/search',productLimit:6},console:{error(){}},renderRecentSearches(){},renderLoading:flag=>calls.push(['loading',flag]),renderCollections:()=>calls.push(['collections']),renderProducts:async()=>calls.push(['products']),renderSuggestions:suggestions=>calls.push(['suggestions',Array.from(suggestions)]),fetch:async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')?{products:[{title:'Blue dress'}],suggestions:['Blue formal dress']}:{resources:{results:{collections:[]}}}})};
- vm.createContext(context);vm.runInContext(helpers+search+defaults,context);
+ vm.createContext(context);vm.runInContext(analytics+helpers+search+defaults,context);
  return {context,calls,element,store};
 }
+test('instant typing records autocomplete, then counts only the engaged query',async()=>{
+ const f=fixture(),events=[];
+ f.context.window.CfpAnalytics={newSearchId:(()=>{let id=0;return()=>`search_${++id}`;})(),
+   track:(event,details)=>{events.push({event,...details});return true;}};
+ f.context.mainInput.value='best party';
+ await f.context.performSearch('best party');
+ f.context.mainInput.value='best party dress';
+ await f.context.performSearch('best party dress');
+ assert.deepEqual(events.map(row=>row.event),['autocomplete_impression','autocomplete_impression']);
+ f.context.commitInstantSearch();
+ f.context.commitInstantSearch();
+ assert.deepEqual(events.filter(row=>row.event==='search_query').map(row=>row.q),['best party dress']);
+});
 test('quota errors never suppress successful live products and suggestions',async()=>{
  const store=storage();store.setItem=()=>{throw Object.assign(Error('full'),{name:'QuotaExceededError'});};
  const f=fixture(store);await f.context.performSearch('blue dress');
