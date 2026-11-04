@@ -254,19 +254,20 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle, c
       where: {
         shop,
         status: true,
+        ruleType: "collection",
         applyToAll: true,
       },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  // Find all collection-level pinning rules for this shop
+  // A collection-specific rule takes precedence; an All Collections rule is
+  // the fallback for every other collection, not just the "all" page.
   const allRules = await prisma.pinnedProductRule.findMany({
     where: {
       shop,
       status: true,
       ruleType: "collection",
-      applyToAll: false, // Ensure we don't accidentally match the 'all' rule
     },
     orderBy: { createdAt: "desc" },
   });
@@ -275,6 +276,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle, c
   const targetHandle = targetLower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
   const specificRule = allRules.find((r) => {
+    if (r.applyToAll) return false;
     // The importer already preserves source target IDs in collectionSortKey.
     // Prefer those IDs; titles are only a fallback for legacy/manual rules.
     if (r.collectionSortKey) {
@@ -295,7 +297,7 @@ export async function getActivePinningRuleForCollection(shop, collectionTitle, c
     });
   });
 
-  return specificRule || null;
+  return specificRule || allRules.find((r) => r.applyToAll) || null;
 }
 
 export async function getActivePinningRuleForSearch(

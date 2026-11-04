@@ -24,6 +24,14 @@ test('pin target IDs choose the correct saved list despite identical titles',asy
  const legacy=await service([],[{id:'manual',collections:['Navy Dresses'],products:[]}]);
  assert.equal((await legacy.getActivePinningRuleForCollection('fixture','Navy Dresses',id(3))).id,'manual');
 });
+test('All Collections product pins apply to ordinary collections unless a specific rule exists',async()=>{
+ const m=await service([],[
+  {id:'all',applyToAll:true,collections:[],products:[{id:'global-pin'}]},
+  {id:'formal',applyToAll:false,collections:['Formal Dresses'],products:[{id:'formal-pin'}]},
+ ]);
+ assert.equal((await m.getActivePinningRuleForCollection('fixture','Prom Dresses',id(1))).id,'all');
+ assert.equal((await m.getActivePinningRuleForCollection('fixture','Formal Dresses',id(2))).id,'formal');
+});
 test('unverified Boost arithmetic retains legacy precedence instead of blindly treating list order as rank priority',async()=>{
  const rules=[{id:'colour',collections:['Red Dresses'],ordinal:109,conditions:[{action:'Boost',field:'Tags',value:'Red'}]},
  {id:'formal',collections:['Red Dresses','Formal Dresses'],ordinal:3,conditions:[{action:'Dynamic',field:'Tags',value:'BestFormal',operator:'Set',operand:'1000'}]}];
