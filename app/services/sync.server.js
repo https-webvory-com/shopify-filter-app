@@ -10,7 +10,7 @@ import { syncErrorMessage, productSyncJobWhere } from "../utils/syncError.js";
 import { searchIndexProjection, SEARCH_FILTER_FIELDS } from '../utils/searchIndexProjection.js';
 import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
 import {scheduleSearchIndexProducts} from './searchIndex.server.js';
-import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices } from '../utils/marketPricingIndex.js';
+import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices, variantPriceRange } from '../utils/marketPricingIndex.js';
 import { allMarketPriceCountries, marketPriceCountriesForShop } from './marketPriceCoverage.server.js';
 import { withHeldEmbeddingsForIndex } from '../utils/embeddingHold.js';
 
@@ -707,9 +707,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       // and parallelize DB upserts + Meili push for speed
       const meiliDocs = products.map((p) => {
         const available = p.variants.nodes.some((v) => v.availableForSale);
-        const prices = p.variants.nodes.map((v) => parseFloat(v.price));
-        const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
-        const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
+        const { min: priceMin, max: priceMax } = variantPriceRange(p.variants.nodes);
 
         const formattedOptions = {};
         p.options.forEach((opt) => {
@@ -901,9 +899,7 @@ export async function smartUpsertProduct(shop, product, prismaClient, {collectio
     values: opt.values,
   }));
 
-  const prices = product.variants.nodes.map((v) => parseFloat(v.price));
-  const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
-  const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
+  const { min: priceMin, max: priceMax } = variantPriceRange(product.variants.nodes);
   const imageUrls = product.images.nodes.map((img) => img.url);
 
   // ✅ OPTIMIZATION: Use short, focused transactions instead of one giant transaction
@@ -1243,9 +1239,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   await hydrateProductFilterFacts(product,admin,prisma,shop,{wantsLocations});
 
   const available = product.variants.nodes.some((v) => v.availableForSale);
-  const prices = product.variants.nodes.map((v) => parseFloat(v.price));
-  const priceMin = prices.length > 0 ? Math.min(...prices) : 0;
-  const priceMax = prices.length > 0 ? Math.max(...prices) : 0;
+  const { min: priceMin, max: priceMax } = variantPriceRange(product.variants.nodes);
 
   const formattedOptions = {};
   product.options.forEach((opt) => {

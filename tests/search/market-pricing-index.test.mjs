@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { marketCountries, contextualPricingFields, variantMarketPrices, productMarketPriceRanges,
-  productMarketPriceIndexFields } from '../../app/utils/marketPricingIndex.js';
+  productMarketPriceIndexFields, variantPriceRange } from '../../app/utils/marketPricingIndex.js';
 import { searchIndexProjection } from '../../app/utils/searchIndexProjection.js';
 
 test('market pricing fields are deduplicated, deterministic and safe for Shopify GraphQL',()=>{
@@ -48,4 +48,15 @@ test('market price sorting uses the cheapest available variant while retaining t
   assert.equal(projected.marketPriceMin_IN,2000);
   assert.equal(projected.marketAvailablePriceMin_IN,2400);
   assert.equal(projected.availablePriceMin,24);
+});
+
+test('base collection sort price ignores sold-out variants when a purchasable variant exists',()=>{
+  const variants=[
+    {price:102,availableForSale:true},
+    {price:36,availableForSale:false},
+    {price:36,availableForSale:false},
+  ];
+  assert.deepEqual(variantPriceRange(variants),{min:102,max:102});
+  assert.deepEqual(variantPriceRange([{price:36,availableForSale:false},{price:102,availableForSale:false}]),{min:36,max:102});
+  assert.deepEqual(variantPriceRange([{price:36},{price:102}]),{min:36,max:102});
 });

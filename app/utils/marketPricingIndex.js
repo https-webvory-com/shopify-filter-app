@@ -41,6 +41,17 @@ export function variantMarketPrices(variant, countries) {
   return prices;
 }
 
+// Use the lowest purchasable variant as the product's collection sort price.
+// If every variant is sold out (or an older record has no availability data),
+// retain the historical all-variant range as a fallback.
+export function variantPriceRange(variants = []) {
+  const rows = Array.isArray(variants) ? variants : [];
+  const available = rows.filter(variant => variant?.available === true || variant?.availableForSale === true);
+  const candidates = available.length ? available : rows;
+  const prices = candidates.map(variant => Number.parseFloat(variant?.price)).filter(Number.isFinite);
+  return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : { min: 0, max: 0 };
+}
+
 export function productMarketPriceRanges(variants, countries) {
   const ranges = {};
   for (const country of marketCountries(countries)) {
