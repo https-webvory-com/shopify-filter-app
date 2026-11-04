@@ -18,7 +18,13 @@ jobs:
             set -eu
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
+            import {REDIS_URL} from './app/services/redisConnection.server.js';
+            import {publishedCollectionKey} from './app/utils/collectionPublishedPage.js';
+            import {decodePreparation} from './app/utils/collectionPreparationPayload.js';
+            import {catalogPublicationInvalidatedAtKey,marketRuleInvalidatedAtKey} from './app/utils/shopCacheInvalidation.js';
             const db=new PrismaClient();
+            const redis=new Redis(REDIS_URL);
             const shop='thedressoutlet.myshopify.com',id='410076618';
             const target='sexy dresses';
             const matches=rule=>{
@@ -33,5 +39,11 @@ jobs:
               for(const rule of rules.filter(rule=>matches(rule)||!rule.collections?.length&&!rule.collectionIds?.length))console.log('SEXY_RULE',JSON.stringify({id:rule.id,name:rule.name,ordinal:rule.ordinal,collections:rule.collections,collectionIds:rule.collectionIds,countries:rule.countries,locales:rule.locales,customerTags:rule.customerTags,startDate:rule.startDate,endDate:rule.endDate,conditions:rule.conditions.map(({action,field,value,operator,operand,minValue,maxValue,dateValue})=>({action,field,value,operator,operand,minValue,maxValue,dateValue}))}));
               const pins=await db.pinnedProductRule.findMany({where:{shop,status:true,ruleType:'collection',applyToAll:false},orderBy:{createdAt:'desc'}});
               for(const rule of pins.filter(matches)){const products=typeof rule.products==='string'?JSON.parse(rule.products):rule.products;console.log('SEXY_PIN',JSON.stringify({id:rule.id,name:rule.name,collections:rule.collections,collectionSortKey:rule.collectionSortKey,products:Array.isArray(products)?products.map(({id,title,position})=>({id,title,position})):products}));}
-            }finally{await db.$disconnect();}
+              const url='https://aisearchfilter.webvory.com/api/filter?collectionHandle=sexy-dresses&country=IN&limit=25&locale=en&page=1&responseProfile=collection-preview-v1&shop='+shop+'&sortBy=best-selling';
+              const key=publishedCollectionKey(new Request(url));
+              const raw=await redis.get(key);
+              const entry=raw?decodePreparation(raw):null;
+              const [revision,catalog,market]=await redis.mget('collectionPreparationRevision:'+shop,catalogPublicationInvalidatedAtKey(shop,'gid://shopify/Collection/'+id),marketRuleInvalidatedAtKey(shop,'IN'));
+              console.log('SEXY_PUBLICATION',JSON.stringify({key,exists:!!entry,at:entry?.at,configuration:entry?.configuration,currentRevision:revision,catalogInvalidatedAt:catalog,marketRuleInvalidatedAt:market,firstIds:entry?.ids?.slice(0,8)}));
+            }finally{redis.disconnect();await db.$disconnect();}
             NODE
