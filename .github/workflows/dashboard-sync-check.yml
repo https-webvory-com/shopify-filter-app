@@ -1,4 +1,4 @@
-name: Prepare US price sort from saved data
+name: Prepare India price sort from saved data
 on:
   workflow_dispatch:
 permissions:
@@ -38,14 +38,14 @@ jobs:
               for(const id of ids){
                 const job=await queue.getJob(id),spec=job?.data?.spec;
                 if(job?.name==='COLLECTION_RANKING_PREPARE'&&spec?.shop==='thedressoutlet.myshopify.com'&&
-                    spec.sortBy==='price-ascending'&&!spec.priceSortField&&
+                    spec.sortBy==='price-ascending'&&String(spec.priceSortField||'').endsWith('_IN')&&
                     String(spec.collectionId||'').split('/').pop()==='408926666'){chosen=job;break;}
               }
-              if(!chosen)throw Error('Queued US Prom Dresses price ranking unavailable');
-              console.log('US_PRICE_PREPARE_START',JSON.stringify({jobId:chosen.id,collectionId:chosen.data.spec.collectionId,sort:chosen.data.spec.sortBy}));
+              if(!chosen)throw Error('Queued India Prom Dresses price ranking unavailable');
+              console.log('INDIA_PRICE_PREPARE_START',JSON.stringify({jobId:chosen.id,collectionId:chosen.data.spec.collectionId,sort:chosen.data.spec.sortBy}));
               const result=await processCollectionPreparation(chosen.data);
-              console.log('US_PRICE_PREPARE_RESULT',JSON.stringify(result));
-              if(result?.superseded)throw Error('US price ranking was superseded; retry shopper request');
+              console.log('INDIA_PRICE_PREPARE_RESULT',JSON.stringify(result));
+              if(result?.superseded)throw Error('India price ranking was superseded; retry shopper request');
             }finally{await queue.close();redis.disconnect();}
             process.exit(0);
             NODE
