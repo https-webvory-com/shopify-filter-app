@@ -34,11 +34,11 @@ jobs:
                 if(country==='US')prices=data.products.map(p=>Number(p.priceMin));
                 else {
                   const ids=data.products.map(p=>String(p.id).split('/').pop());
-                  const field=data.globalSettings?.showOnlyInStock?'marketAvailablePriceMin_IN':'marketPriceMin_IN';
-                  const docs=await meiliClient.index('products').search('',{filter:[`shop = ${JSON.stringify(shop)}`,`id IN [${ids.map(JSON.stringify).join(',')}]`],hitsPerPage:25,page:1,attributesToRetrieve:['id',field]});
+                  const field='marketAvailablePriceMin_IN';
+                  const docs=await meiliClient.index('products').search('',{filter:[`shop = ${JSON.stringify(shop)}`,`id IN [${ids.map(JSON.stringify).join(',')}]`],hitsPerPage:25,page:1,attributesToRetrieve:['id',field,'marketPriceMin_IN']});
                   const byId=new Map(docs.hits.map(doc=>[String(doc.id),doc[field]]));
                   prices=ids.map(id=>Number(byId.get(id)));
-                  console.log('FORMAL_PRICE_FIELD',JSON.stringify({country,field,showOnlyInStock:data.globalSettings?.showOnlyInStock}));
+                  console.log('FORMAL_PRICE_FIELD',JSON.stringify({country,field,showOnlyInStock:data.globalSettings?.showOnlyInStock,ids,base:ids.map(id=>docs.hits.find(doc=>String(doc.id)===id)?.marketPriceMin_IN)}));
                 }
                 console.log('FORMAL_PRICE_ORDER',JSON.stringify({country,source:data.priceSortSource,total:data.totalCount,first:prices[0],last:prices.at(-1),allPriced:prices.every(Number.isFinite),ascending:prices.every((price,i)=>i===0||price>=prices[i-1]),prices}));
               }
