@@ -33,6 +33,6 @@ jobs:
               ]);
               const queued=job?await queue.getJob(job.id):null;
               const active=await queue.getJobs(['active'],0,4);
-              console.log('AUDIT_PRICE_STATUS',JSON.stringify({job,coverage:counts[0],proofReady:!!proof,queue:queued?{state:await queued.getState(),attemptsMade:queued.attemptsMade,processedOn:queued.processedOn,finishedOn:queued.finishedOn}:null,activeJobs:active.map(item=>({id:item.id,name:item.name,processedOn:item.processedOn}))}));
+              console.log('AUDIT_PRICE_STATUS',JSON.stringify({job,coverage:counts[0],proofReady:!!proof,queue:queued?{state:await queued.getState(),attemptsMade:queued.attemptsMade,processedOn:queued.processedOn,finishedOn:queued.finishedOn}:null,activeJobs:active.map(item=>({id:item.id,name:item.name,shop:item.data?.shop,processedOn:item.processedOn}))}));
             }finally{await queue.close();await db.$disconnect();redis.disconnect();}
             NODE
