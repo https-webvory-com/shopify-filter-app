@@ -1,54 +1,44 @@
-name: Prepare Formal Dresses price sort from saved data
+name: Verify Formal Dresses market price order
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  prepare:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 15m
+          command_timeout: 3m
           script: |
             set -eu
-            docker exec -i shopify-filter-app sh -c 'cat > /tmp/cfp-json-loader.mjs' <<'LOADER'
-            import {readFile} from 'node:fs/promises';
-            export async function load(url,context,nextLoad){
-              if(url.endsWith('.json'))return {format:'module',shortCircuit:true,source:'export default '+await readFile(new URL(url),'utf8')+';'};
-              return nextLoad(url,context);
-            }
-            LOADER
-            docker exec -i shopify-filter-app node --experimental-loader /tmp/cfp-json-loader.mjs --input-type=module <<'NODE'
-            import Redis from 'ioredis';
-            import {REDIS_URL} from './app/services/redisConnection.server.js';
-            const redis=global.__redis=new Redis(REDIS_URL);
-            await redis.ping();
-            const {collectionRankingQueue:queue}=await import('./app/services/queue.server.js');
-            const {processCollectionPreparation}=await import('./app/services/collectionPreparation.server.js');
-            const {default:db}=await import('./app/db.server.js');
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            import meiliClient from './app/services/meiliClient.server.js';
+            const db=new PrismaClient();
+            const shop='thedressoutlet.myshopify.com',collection='gid://shopify/Collection/409248522';
             try{
-              const shop='thedressoutlet.myshopify.com';
-              const collection=await db.collection.findFirst({where:{shop,handle:'formal-dresses'},select:{id:true}});
-              if(!collection)throw Error('Formal Dresses collection unavailable');
-              const ids=await redis.zrange('bull:collectionRankingQueueV2:prioritized',0,100);
-              const jobs=(await Promise.all(ids.map(id=>queue.getJob(id)))).filter(Boolean);
-              console.log('FORMAL_LOOKUP',JSON.stringify({collectionId:collection.id,priceJobs:jobs.filter(job=>job.data?.spec?.sortBy==='price-ascending').map(job=>({id:job.id,collectionId:job.data.spec.collectionId,priceSortField:job.data.spec.priceSortField,shop:job.data.spec.shop})).slice(0,12)}));
+              const missing=await db.$queryRaw`SELECT COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NULL)::integer AS missing FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" JOIN "ProductCollection" pc ON pc."productId"=p."id" WHERE p."shop"=${shop} AND lower(p."status")='active' AND pc."collectionId"=${collection}`;
+              console.log('FORMAL_IN_PRICE_COVERAGE',JSON.stringify(missing[0]));
               for(const country of ['US','IN']){
-                const chosen=jobs.find(job=>{
-                  const spec=job.data?.spec;
-                  return job.name==='COLLECTION_RANKING_PREPARE'&&spec?.shop===shop&&spec.collectionId===collection.id&&
-                    spec.sortBy==='price-ascending'&&(country==='IN'?String(spec.priceSortField||'').endsWith('_IN'):!spec.priceSortField);
-                });
-                if(!chosen){console.log('FORMAL_PRICE_JOB_MISSING',country);continue;}
-                console.log('FORMAL_PRICE_PREPARE_START',JSON.stringify({country,jobId:chosen.id,collectionId:collection.id}));
-                const result=await processCollectionPreparation(chosen.data);
-                console.log('FORMAL_PRICE_PREPARE_RESULT',JSON.stringify({country,...result}));
+                const url=new URL('https://aisearchfilter.webvory.com/api/filter');
+                for(const [key,value] of Object.entries({shop,country,locale:'en',collectionHandle:'formal-dresses',sortBy:'price-ascending',page:'1',limit:'25',responseProfile:'collection-v2'}))url.searchParams.set(key,value);
+                const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
+                const data=await response.json();
+                if(response.status!==200||!Array.isArray(data.products)||data.products.length!==25)throw Error(country+' sorted page unavailable');
+                let prices;
+                if(country==='US')prices=data.products.map(p=>Number(p.priceMin));
+                else {
+                  const ids=data.products.map(p=>String(p.id).split('/').pop());
+                  const docs=await meiliClient.index('products').search('',{filter:[`shop = ${JSON.stringify(shop)}`,`id IN [${ids.map(JSON.stringify).join(',')}]`],hitsPerPage:25,page:1,attributesToRetrieve:['id','marketPriceMin_IN']});
+                  const byId=new Map(docs.hits.map(doc=>[String(doc.id),doc.marketPriceMin_IN]));
+                  prices=ids.map(id=>Number(byId.get(id)));
+                }
+                console.log('FORMAL_PRICE_ORDER',JSON.stringify({country,source:data.priceSortSource,total:data.totalCount,first:prices[0],last:prices.at(-1),allPriced:prices.every(Number.isFinite),ascending:prices.every((price,i)=>i===0||price>=prices[i-1]),prices}));
               }
-            }finally{await queue.close();redis.disconnect();await db.$disconnect();}
-            process.exit(0);
+            }finally{await db.$disconnect();}
             NODE
