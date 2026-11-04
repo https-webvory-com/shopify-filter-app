@@ -1,10 +1,10 @@
-name: Verify Formal Dresses market price order
+name: Inspect Sexy Dresses merchandising
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  verify:
+  inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -18,29 +18,20 @@ jobs:
             set -eu
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
-            import meiliClient from './app/services/meiliClient.server.js';
             const db=new PrismaClient();
-            const shop='thedressoutlet.myshopify.com',collection='gid://shopify/Collection/409248522';
+            const shop='thedressoutlet.myshopify.com',id='410076618';
+            const target='sexy dresses';
+            const matches=rule=>{
+              if(rule.collectionIds?.some(value=>String(value).split('/').pop()===id))return true;
+              if(rule.collectionSortKey){try{if(JSON.parse(rule.collectionSortKey).some(value=>String(value).split('/').pop()===id))return true;}catch{}}
+              return rule.collections?.some(value=>String(value).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()===target);
+            };
             try{
-              const missing=await db.$queryRaw`SELECT COUNT(v."id")::integer AS variants,COUNT(v."id") FILTER (WHERE v."marketPrices" -> 'IN' ->> 'price' IS NULL)::integer AS missing FROM "Variant" v JOIN "Product" p ON p."id"=v."productId" JOIN "ProductCollection" pc ON pc."productId"=p."id" WHERE p."shop"=${shop} AND lower(p."status")='active' AND pc."collectionId"=${collection}`;
-              console.log('FORMAL_IN_PRICE_COVERAGE',JSON.stringify(missing[0]));
-              for(const country of ['US','IN']){
-                const url=new URL('https://aisearchfilter.webvory.com/api/filter');
-                for(const [key,value] of Object.entries({shop,country,locale:'en',collectionHandle:'formal-dresses',sortBy:'price-ascending',page:'1',limit:'25',responseProfile:'collection-v2'}))url.searchParams.set(key,value);
-                const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
-                const data=await response.json();
-                if(response.status!==200||!Array.isArray(data.products)||data.products.length!==25)throw Error(country+' sorted page unavailable');
-                let prices;
-                if(country==='US')prices=data.products.map(p=>Number(p.priceMin));
-                else {
-                  const ids=data.products.map(p=>String(p.id).split('/').pop());
-                  const field='marketAvailablePriceMin_IN';
-                  const docs=await meiliClient.index('products').search('',{filter:[`shop = ${JSON.stringify(shop)}`,`id IN [${ids.map(JSON.stringify).join(',')}]`],hitsPerPage:25,page:1,attributesToRetrieve:['id',field,'marketPriceMin_IN']});
-                  const byId=new Map(docs.hits.map(doc=>[String(doc.id),doc[field]]));
-                  prices=ids.map(id=>Number(byId.get(id)));
-                  console.log('FORMAL_PRICE_FIELD',JSON.stringify({country,field,showOnlyInStock:data.globalSettings?.showOnlyInStock,ids,base:ids.map(id=>docs.hits.find(doc=>String(doc.id)===id)?.marketPriceMin_IN)}));
-                }
-                console.log('FORMAL_PRICE_ORDER',JSON.stringify({country,source:data.priceSortSource,total:data.totalCount,first:prices[0],last:prices.at(-1),allPriced:prices.every(Number.isFinite),ascending:prices.every((price,i)=>i===0||price>=prices[i-1]),prices}));
-              }
+              const collection=await db.collection.findFirst({where:{shop,id:'gid://shopify/Collection/'+id},select:{id:true,title:true,handle:true}});
+              console.log('SEXY_COLLECTION',JSON.stringify(collection));
+              const rules=await db.merchandisingRule.findMany({where:{shop,status:true,ruleType:'collection'},include:{conditions:true},orderBy:{createdAt:'desc'}});
+              for(const rule of rules.filter(rule=>matches(rule)||!rule.collections?.length&&!rule.collectionIds?.length))console.log('SEXY_RULE',JSON.stringify({id:rule.id,name:rule.name,ordinal:rule.ordinal,collections:rule.collections,collectionIds:rule.collectionIds,countries:rule.countries,locales:rule.locales,customerTags:rule.customerTags,startDate:rule.startDate,endDate:rule.endDate,conditions:rule.conditions.map(({action,field,value,operator,operand,minValue,maxValue,dateValue})=>({action,field,value,operator,operand,minValue,maxValue,dateValue}))}));
+              const pins=await db.pinnedProductRule.findMany({where:{shop,status:true,ruleType:'collection',applyToAll:false},orderBy:{createdAt:'desc'}});
+              for(const rule of pins.filter(matches)){const products=typeof rule.products==='string'?JSON.parse(rule.products):rule.products;console.log('SEXY_PIN',JSON.stringify({id:rule.id,name:rule.name,collections:rule.collections,collectionSortKey:rule.collectionSortKey,products:Array.isArray(products)?products.map(({id,title,position})=>({id,title,position})):products}));}
             }finally{await db.$disconnect();}
             NODE
