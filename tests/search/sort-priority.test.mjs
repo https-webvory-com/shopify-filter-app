@@ -62,13 +62,15 @@ async function collectionRoute(settings) {
     id: String(i + 1), title: "Dress " + (i + 1), handle: "dress-" + (i + 1), status: "ACTIVE",
     tags: i < 10 ? ["TopFormal"] : [], collections: ["gid://shopify/Collection/1"],
     bestSellingScore: i + 1, trendingScore: 0, createdAt: i + 1,
-    images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], priceMin: i + 1, priceMax: i + 1,
+    images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], available:true, priceMin: i + 1, priceMax: i + 1,
     variantPrices: [{ id: String(i + 1) + "01", option1: "Black", available: true, price: i + 1, imageUrl: "black.jpg" }],
   }));
   const byId = new Map(docs.map(p => [p.id, p]));
   const matching = filter => {
     const text = JSON.stringify(filter);
-    return docs.filter(p => !text.includes("TopFormal") || (text.includes("NOT (") ? !p.tags.length : p.tags.length));
+    return docs.filter(p => !text.includes('available NOT EXISTS') &&
+      (!text.includes('NOT (id IN') || p.id!=='2') &&
+      (!text.includes("TopFormal") || (text.includes("NOT (") ? !p.tags.length : p.tags.length)));
   };
   const select = options => {
     const products = matching(options.filter).map(p => ({ ...p }));
@@ -83,7 +85,7 @@ async function collectionRoute(settings) {
   const meili = { index: () => index, multiSearch: async ({ queries }) => { settings.captureQueries?.push(...queries); return { results: queries.map(select) }; } };
   const service = await loadModule("app/services/merchandising.server.js", {});
   const pins = { products: ["1", "175"].map(id => ({ id: "gid://shopify/Product/" + id })) };
-  const rule = { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
+  const rule = settings.rule || { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const cache = new Map();
   const route = await loadModule("app/routes/api.filter.jsx", {
     testParsedQuery: settings.testParsedQuery,
@@ -156,6 +158,26 @@ test('title sort pages directly when both priorities override ordering-only rule
   assert.equal(new Set(names).size,50);
   assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b)));
   assert.ok(captureQueries.some(query=>query.sort?.[0]==='title:asc'&&query.limit===25));
+});
+
+test('exact stock and ID exclusions retain pin protection in direct title sort',async()=>{
+  const captureQueries=[];
+  const conditions=[
+    {action:'Boost',field:'Tags',value:'TopFormal'},
+    {action:'Exclude',field:'Available',value:'-999',minValue:'-999',maxValue:'0'},
+    {action:'Exclude',field:'Id',value:'2'},
+  ];
+  const rule={conditions,ruleGroups:[{conditions}],collectionTagMatching:'exact'};
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,rule,captureQueries});
+  const first=await load('page=1&sortBy=title-ascending');
+  const second=await load('page=2&sortBy=title-ascending');
+  const ids=[...first.products,...second.products].map(p=>p.id.split('/').pop());
+  assert.equal(first.debug.collectionRankingStatus,'inactive');
+  assert.equal(first.totalCount,179);
+  assert.equal(new Set(ids).size,50);
+  assert.ok(!ids.includes('2'));
+  assert.ok(captureQueries.some(query=>JSON.stringify(query.filter).includes('available = false')&&
+    JSON.stringify(query.filter).includes('NOT (id IN')&&JSON.stringify(query.filter).includes('OR id IN')));
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {

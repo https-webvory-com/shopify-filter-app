@@ -44,6 +44,37 @@ import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js'
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
+// Only exclusions with an exact indexed equivalent may use direct sorted pages.
+// Saved pins remain eligible because the collection ranker protects them from
+// Exclude rules even when their positions do not outrank the selected sort.
+function directSortExclusions(rule, pinnedIds) {
+  const protectedIds=[...new Set((pinnedIds||[]).map(id=>String(id).split('/').pop()))]
+    .filter(id=>/^\d+$/.test(id));
+  const keepPins=protectedIds.length?` OR id IN ${JSON.stringify(protectedIds)}`:'';
+  const filters=[];
+  for(const condition of rule?.conditions||[]) {
+    if(condition.action!=='Exclude')continue;
+    let match;
+    if(['Id','ID','id'].includes(condition.field)) {
+      let value=condition.value||'';
+      if(typeof value!=='string')return null;
+      if(/^[\[{]/.test(value))try{const parsed=JSON.parse(value);value=Array.isArray(parsed)?parsed.join(','):typeof parsed==='string'?parsed:value;}catch{}
+      const ids=value.split(',').map(id=>id.replace(/[\[\]"']/g,'').trim().split('/').pop());
+      if(!ids.length||ids.some(id=>!/^\d+$/.test(id)))return null;
+      match=`id IN ${JSON.stringify([...new Set(ids)])}`;
+    } else if(condition.field==='Available'&&rule.collectionTagMatching==='exact') {
+      const lower=condition.minValue??condition.value;
+      const upper=condition.maxValue??condition.value2;
+      const min=lower==null||lower===''?-Infinity:Number(lower);
+      const max=upper==null||upper===''?Infinity:Number(upper);
+      if(!(min<=0&&max===0))return null;
+      match='available = false';
+    } else return null;
+    filters.push(`(NOT (${match})${keepPins})`);
+  }
+  return filters;
+}
+
 /**
  * Storefront Filtering API — OPTIMIZED
  *
@@ -503,7 +534,10 @@ export const loader = async ({ request, context }) => {
 
     // ── 6. Build Meilisearch sort ──────────────────────────────────────
     const priceSortSelected=['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy);
-    const exactPriceSortVersion=priceSortSelected&&shop==='thedressoutlet.myshopify.com'?2:null;
+    // The previous version cached price sequences with a forced priority
+    // override. A new identity prevents those 24-hour records from surviving
+    // after the saved settings become authoritative.
+    const exactPriceSortVersion=priceSortSelected&&shop==='thedressoutlet.myshopify.com'?3:null;
     const sortCountry=String(country||'').toUpperCase();
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? (marketPriceSortRequested?verifiedMarketPriceSort:await marketPriceIntentReady(shop,sortCountry)):false;
@@ -700,14 +734,26 @@ export const loader = async ({ request, context }) => {
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
-    // For a pure customer sort, Meilisearch can page the sorted collection
-    // directly. Membership-changing rules still require the complete ranking.
-    const directSort = sortOverPinning && sortOverMerchandising &&
-      ['title-ascending','title-asc','title-descending','title-desc',
-        'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy) &&
-      !activeRule?.ruleGroups?.length && !activeRule?.collectionLegacyConditions?.length &&
+    const directOrder=['title-ascending','title-asc','title-descending','title-desc',
+      'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy);
+    const directExclusions=directOrder&&sortOverPinning&&sortOverMerchandising
+      ?directSortExclusions(activeRule,pinnedIds):null;
+    let availableProof=true;
+    if(directExclusions?.some(filter=>filter.includes('available = false')))try{
+      availableProof=await getCached(`directSortAvailableProof:${shop}`,async()=>{
+        const result=await meiliClient.index('products').search('',{
+          filter:[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'",'(available NOT EXISTS OR available IS NULL)'],
+          hitsPerPage:1,page:1,attributesToRetrieve:[],
+        });
+        return result.totalHits===0;
+      },60);
+    }catch{availableProof=false;}
+    // Exact indexed exclusions retain membership and facets while the search
+    // engine pages by title/date. Unsupported rules keep the full ranker.
+    const directSort = directExclusions!==null && availableProof &&
       (activeRule?.conditions || []).every(condition =>
-        ['Include','Boost','Pin','Dynamic'].includes(condition.action));
+        ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
+    if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual" && !directSort;
     const cardsOnly=useRankedCollectionPagination&&isPublicCollectionCards(request);
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
