@@ -62,7 +62,7 @@ async function fixture() {
 }
 
 test('head versions cover rules, pins, market, stock revisions, schedules and native order without reading a full ranking',async()=>{
- const f=await fixture(),shop='fixture.myshopify.com',spec={shop,collectionId:'gid://shopify/Collection/123',revision:'3',orderRevision:'native-1',sortBy:'best-selling',query:{country:'IN',locale:'en'},pinnedIds:['1','2','3','4','5']};
+ const f=await fixture(),shop='fixture.myshopify.com',spec={shop,collectionId:'gid://shopify/Collection/123',revision:'3',needsShopifyOrder:true,orderRevision:'native-1',sortBy:'best-selling',query:{country:'IN',locale:'en'},pinnedIds:['1','2','3','4','5']};
  for(const [key,value]of [[`collectionPreparationRevision:${shop}`,'3'],[`collectionRankingDataRevision:${shop}:all`,'0'],[`collectionRankingDataRevision:${shop}:123`,'0'],[`collectionLoadingGeneration:${shop}`,'generation'],[`collectionOrderSnapshot:${shop}:gid://shopify/Collection/123`,JSON.stringify({revision:'native-1',ids:[]})]])f.snapshots.set(key,value);
  const baseline=await f.getCollectionHeadVersion(spec);assert.match(baseline,/^[a-f0-9]{64}$/);
  for(const other of [{...spec,pinnedIds:['9']},{...spec,rule:{conditions:[{action:'Boost',field:'Tags',value:'New'}]}},{...spec,query:{country:'US',locale:'en'}}])assert.notEqual(await f.getCollectionHeadVersion(other),baseline);
@@ -70,6 +70,10 @@ test('head versions cover rules, pins, market, stock revisions, schedules and na
  f.schedules.push({id:'scheduled',startDate:new Date(Date.now()+60000),endDate:null});assert.notEqual(await f.getCollectionHeadVersion(spec),baseline);f.schedules.length=0;
  f.snapshots.set(`collectionPreparationRevision:${shop}`,'4');assert.equal(await f.getCollectionHeadVersion(spec),null);f.snapshots.set(`collectionPreparationRevision:${shop}`,'3');
  f.snapshots.set(`collectionOrderSnapshot:${shop}:gid://shopify/Collection/123`,JSON.stringify({revision:'native-2',ids:[]}));assert.equal(await f.getCollectionHeadVersion(spec),null);
+ const priceSpec={...spec,sortBy:'price-descending',needsShopifyOrder:false,orderRevision:null};
+ const priceVersion=await f.getCollectionHeadVersion(priceSpec);assert.match(priceVersion,/^[a-f0-9]{64}$/);
+ f.snapshots.set(`collectionOrderSnapshot:${shop}:gid://shopify/Collection/123`,'obsolete native order');
+ assert.equal(await f.getCollectionHeadVersion(priceSpec),priceVersion,'price pins do not depend on the native best-selling snapshot');
  assert.equal(f.writes.length,0);assert.equal(f.scans(),0);
 });
 

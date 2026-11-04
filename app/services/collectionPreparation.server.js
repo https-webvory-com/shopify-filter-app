@@ -32,8 +32,9 @@ async function readCollectionHeadVersion(spec){
     redis.mget(`collectionPreparationRevision:${shop}`,`collectionRankingDataRevision:${shop}:all`,`collectionRankingDataRevision:${shop}:${id}`,`collectionLoadingGeneration:${shop}`,`collectionProductContentRevision:${shop}:all`,`collectionProductContentRevision:${shop}:${id}`,`collectionOrderSnapshot:${shop}:gid://shopify/Collection/${id}`),
     prisma.merchandisingRule.findMany({where:{shop,status:true,ruleType:'collection',OR:[{startDate:{not:null}},{endDate:{not:null}}]},select:{id:true,startDate:true,endDate:true},orderBy:{id:'asc'}}),
   ]);
-  let order;if(values[6]!=null)try{order=JSON.parse(values[6]);}catch{return null;}
-  if(!values[3]||String(values[0]??'0')!==spec.revision||(order?.revision??null)!==(spec.orderRevision??null))return null;
+  let order;if(spec.needsShopifyOrder&&values[6]!=null)try{order=JSON.parse(values[6]);}catch{return null;}
+  if(!values[3]||String(values[0]??'0')!==spec.revision||
+    spec.needsShopifyOrder&&(order?.revision??null)!==(spec.orderRevision??null))return null;
   const time=Date.now(),schedule=schedules.map(rule=>{const start=rule.startDate==null?null:new Date(rule.startDate).getTime(),end=rule.endDate==null?null:new Date(rule.endDate).getTime();return [rule.id,start,end,(start==null||time>=start)&&(end==null||time<=end)];});
   const counters=values.slice(0,6).map((value,index)=>index===3?value:String(value??'0'));
   return createHash('sha256').update(JSON.stringify([1,preparationKey(spec),...counters,order?.revision??null,schedule])).digest('hex');
