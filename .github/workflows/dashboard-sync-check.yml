@@ -49,6 +49,9 @@ jobs:
             docker inspect --format 'WEB_STATE {{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}' shopify-filter-app
             docker ps -a --format 'CONTAINER {{.ID}} {{.Names}} {{.Status}}'
             docker top shopify-filter-sync-worker
+            docker top shopify-filter-app
+            docker stats --no-stream --format 'RECOVERY_CONTAINER {{.Name}} {{.MemUsage}} {{.CPUPerc}}' shopify-filter-app
+            docker exec shopify-filter-app sh -c 'echo RECOVERY_MEMORY; cat /sys/fs/cgroup/memory.events; cat /sys/fs/cgroup/memory.current'
             docker exec shopify-filter-sync-worker sh -c 'echo WORKER_CGROUP_MEMORY; cat /sys/fs/cgroup/memory.events; cat /sys/fs/cgroup/memory.max'
             docker exec shopify-filter-sync-worker sh -c 'echo SALES_LOG_BYTES; wc -c /tmp/cfp-sales-sync-us.log; echo SALES_LOG_TAIL; tail -n 20 /tmp/cfp-sales-sync-us.log'
             docker exec shopify-filter-sync-worker sh -c 'echo SALES_LOG_EVENTS; grep -E "OrdersSync|Error|Killed|heap|FATAL" /tmp/cfp-sales-sync-us.log | tail -n 35'
