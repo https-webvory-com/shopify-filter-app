@@ -3,6 +3,26 @@ import assert from "node:assert/strict";
 import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
 import { loadModule } from './helpers/search-ranking.mjs';
 
+test('edited multiword synonym branches retain filters, facets and pagination without stale alternatives',async()=>{
+ let replacement='white dress';const calls=[];
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:'private-owner',_cfpSynonymQueries:[replacement]}))},
+  './meiliClient.server':{default:{multiSearch:async request=>{calls.push(JSON.parse(JSON.stringify(request)));return {hits:[{id:'white',_federation:{indexUid:'private-owner'}}],estimatedTotalHits:22,facetDistribution:{color:{White:22}}};}}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider},
+ });
+ const scope={filter:["shop = 'owner.myshopify.com'","status = 'ACTIVE'"],sort:['priceMin:asc'],offset:10,limit:5,facets:['color']};
+ const result=await service.keywordSearch('mani',scope);
+ assert.deepEqual(calls[0].queries.map(q=>q.q),['mani','white dress']);
+ for(const q of calls[0].queries){assert.deepEqual(q.filter,scope.filter);assert.deepEqual(q.sort,scope.sort);assert.equal(q.matchingStrategy,'all');assert.equal(q.offset,undefined);assert.equal(q._cfpSynonymQueries,undefined);}
+ assert.equal(calls[0].federation.offset,10);assert.equal(calls[0].federation.limit,5);
+ assert.deepEqual(calls[0].federation.facetsByIndex,{'private-owner':['color']});
+ assert.equal(result.hits[0]._federation,undefined);assert.equal(result.estimatedTotalHits,22);
+ replacement='blue dress';await service.semanticSearch('mani',scope);
+ assert.deepEqual(calls[1].queries.map(q=>q.q),['mani','blue dress']);
+ await assert.rejects(service.searchPageBatch([{q:'mani',page:1,hitsPerPage:1}],false),/compatible search ranking/);
+});
+
 test('single-word junk returns no products and multiword queries relax only after an empty strict pass', async () => {
   const calls = [];
   const service = await loadModule('app/services/semanticSearch.server.js', {

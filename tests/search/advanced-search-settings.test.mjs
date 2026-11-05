@@ -129,6 +129,16 @@ test('default search settings build a private index when a shop has synonyms',as
  assert.equal(unrelated.uid,'products');
 });
 
+test('synonym query branches are bounded by words and isolated to the owner',async()=>{
+ const f=await fixture(settings({}),[product(1)],true);
+ const own=await f.service.prepareConfiguredSearchQueries([{q:'gown',filter:[`shop = "${shop}"`]}]);
+ assert.deepEqual(plain(own[0]._cfpSynonymQueries),['dress']);
+ const unrelated=await f.service.prepareConfiguredSearchQueries([{q:'gown',filter:[`shop = "${other}"`]}]);
+ assert.equal(unrelated[0]._cfpSynonymQueries,undefined);
+ const partial=await f.service.prepareConfiguredSearchQueries([{q:'gownish',filter:[`shop = "${shop}"`]}]);
+ assert.equal(partial[0]._cfpSynonymQueries,undefined);
+});
+
 test('legacy shared synonyms clear only after every owning shop has a complete private index',async()=>{
  const f=await fixture(settings({}),[product(1),product(2,other)],true);
  const first=await f.service.reconcileLegacySynonymIndexes();

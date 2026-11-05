@@ -103,9 +103,10 @@ export async function getSearchIndexContext(shop){
  return getCached('searchIndexContext:'+shop+':'+revision,async()=>{
   const row=await prisma.searchSetting.findUnique({where:{shop}});if(!row)return {uid:'products',settings:null,custom:false};
   const desired=validateSearchSettings(row.config),active=stateOf(row).active;
+  const synonymRules=await prisma.synonym.findMany({where:{shop,isActive:true},select:{word:true,synonyms:true}});
   // A partial build never replaces a complete serving index.
-  if(active?.uid&&active.config){const prepared=validateSearchSettings(active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},custom:true,revision};}
-  return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,custom:false,revision};
+  if(active?.uid&&active.config){const prepared=validateSearchSettings(active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},custom:true,revision,synonymRules};}
+  return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,custom:false,revision,synonymRules};
  },15);
 }
 export function searchQueryShop(query){
@@ -123,7 +124,19 @@ export async function prepareConfiguredSearchQueries(queries){
   let next=context?.custom?configuredSearchOptions(query,context.settings):{...query,...(context?.settings?{matchingStrategy:context.settings.broadMatch?'last':'all'}:{})};
   if(context?.custom&&context.settings.smartSkuSearch&&isProductCodeQuery(query.q)&&enabledSearchFields(context.settings).some(f=>f.key==='sku'))next={...next,q:String(query.q).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''),attributesToSearchOn:['cfpSkuNormalized'],_cfpSmartSku:true};
   if(context?.settings?.broadMatch===false||context?.custom&&!enabledSearchFields(context.settings).length)next={...next,_cfpSemanticDisabled:true};
-  const {_cfpSearchSurface,...clean}=next;prepared.push({...clean,indexUid:context?.uid||query.indexUid||'products'});
+  const alternatives=new Set();
+  if(!next._cfpSmartSku&&query.q?.trim())for(const rule of context?.synonymRules||[]){
+   const terms=[rule.word,...rule.synonyms.split(',')].map(t=>t.trim().toLowerCase()).filter(Boolean);
+   for(const term of terms){
+    const escaped=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const pattern=new RegExp('(^|[^\\p{L}\\p{N}_])'+escaped+'(?=$|[^\\p{L}\\p{N}_])','giu');
+    if(!pattern.test(next.q))continue;
+    for(const replacement of terms)if(replacement!==term){pattern.lastIndex=0;alternatives.add(next.q.replace(pattern,(_match,prefix)=>prefix+replacement));}
+   }
+  }
+  alternatives.delete(next.q);
+  if(alternatives.size>32)throw Error('Too many matching synonym alternatives');
+  const {_cfpSearchSurface,...clean}=next;prepared.push({...clean,indexUid:context?.uid||query.indexUid||'products',...(alternatives.size?{_cfpSynonymQueries:[...alternatives]}:{})});
  }
  return prepared;
 }
