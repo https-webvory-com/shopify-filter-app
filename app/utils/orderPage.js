@@ -1,8 +1,9 @@
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function readOrderPage(admin, query, cursor, wait = pause) {
+export async function readOrderPage(adminOrFactory, query, cursor, wait = pause) {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
+      const admin = typeof adminOrFactory === 'function' ? await adminOrFactory() : adminOrFactory;
       const response = await admin.graphql(query, { variables: { cursor } });
       if (response.ok === false) throw Error(`Shopify orders HTTP ${response.status}`);
       const json = await response.json();
@@ -16,7 +17,7 @@ export async function readOrderPage(admin, query, cursor, wait = pause) {
         throw Error('Incomplete Shopify orders page');
       return json.data.orders;
     } catch (error) {
-      const retryable = error.retryable || /HTTP (429|500|502|503|504)|throttl|timeout|fetch failed|ECONNRESET|ETIMEDOUT/i.test(error.message);
+      const retryable = error.retryable || /HTTP (401|429|500|502|503|504)|401 Unauthorized|throttl|timeout|fetch failed|ECONNRESET|ETIMEDOUT/i.test(error.message);
       if (!retryable || attempt === 4) throw error;
       await wait(Math.min(30000, 2000 * 2 ** attempt));
     }

@@ -23,6 +23,26 @@ test('historical order scans cannot replace a known complete catalog with a part
   assert.doesNotThrow(() => validateOrderScanCount(0, null));
 });
 
+test('order pagination reacquires an expiring Admin client and retries a 401 on the same cursor', async () => {
+  const cursors = [], delays = [];
+  let clientCount = 0;
+  const freshClient = async () => {
+    const number = ++clientCount;
+    return { graphql: async (_query, options) => {
+      cursors.push(options.variables.cursor);
+      if (number === 1) throw Error('Received an error response (401 Unauthorized) from Shopify');
+      return { ok: true, json: async () => ({ data: { orders: {
+        nodes: [{ id: 'order-2' }], pageInfo: { hasNextPage: false, endCursor: 'end' },
+      } } }) };
+    } };
+  };
+  const page = await readOrderPage(freshClient, 'query', 'saved', ms => { delays.push(ms); });
+  assert.equal(clientCount, 2);
+  assert.deepEqual(cursors, ['saved', 'saved']);
+  assert.deepEqual(delays, [2000]);
+  assert.equal(page.nodes[0].id, 'order-2');
+});
+
 test('order pagination rejects incomplete or non-retryable responses', async () => {
   await assert.rejects(readOrderPage({ graphql: async () => ({ ok: true,
     json: async () => ({ data: { orders: { nodes: [] } } }) }) }, 'query', null),

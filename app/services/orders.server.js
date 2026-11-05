@@ -97,7 +97,9 @@ export async function syncHistoricalOrders(shop) {
         }
       `;
 
-      const page = await readOrderPage(admin, query, cursor);
+      // An all-time scan can outlive an expiring Shopify offline token. Resolve
+      // the client on each page so the app's session helper can refresh it.
+      const page = await readOrderPage(async () => (await unauthenticated.admin(shop)).admin, query, cursor);
       const orders = page.nodes;
       const pageInfo = page.pageInfo;
       if (pageInfo.hasNextPage && (!pageInfo.endCursor || pageInfo.endCursor === cursor))
