@@ -23,6 +23,7 @@ jobs:
             import {publishedCollectionKey} from './app/utils/collectionPublishedPage.js';
             import {decodePreparation} from './app/utils/collectionPreparationPayload.js';
             import {collectionSnapshotStorageText} from './app/utils/collectionLoadingSnapshots.js';
+            import meili from './app/services/meiliClient.server.js';
             const shop='thedressoutlet.myshopify.com';
             const handles=['formal-dresses','beach-wedding-guest-dresses','cocktail-dresses'];
             const db=new PrismaClient();
@@ -43,6 +44,19 @@ jobs:
               const synonyms=await db.synonym.findMany({where:{shop},select:{createdAt:true},orderBy:{createdAt:'desc'},take:5});
               const searchSettings=await db.searchSetting.findUnique({where:{shop},select:{updatedAt:true}});
               console.log('SEARCH_UPDATES',JSON.stringify({synonyms,searchSettings}));
+              const shortProm=await db.collection.findFirst({where:{shop,handle:'prom-short-dresses'},select:{id:true,handle:true,title:true}});
+              const filterGroups=await db.filterGroup.findMany({where:{shop},select:{id:true,name:true,status:true,isDefault:true,collections:{select:{collectionId:true,collectionTitle:true,pageType:true}},filters:{select:{label:true,filterType:true,filterKey:true,isEnabled:true}}}});
+              console.log('SHORT_PROM',JSON.stringify(shortProm));
+              console.log('FILTER_GROUPS',JSON.stringify(filterGroups));
+              console.log('SAVED_SYNONYMS',JSON.stringify(await db.synonym.findMany({where:{shop},select:{word:true,synonyms:true,isActive:true}})));
+              const searchConfig=(await db.searchSetting.findUnique({where:{shop},select:{config:true}}))?.config;
+              const activeUid=searchConfig?._index?.active?.uid;
+              console.log('SEARCH_INDEX',JSON.stringify({phase:searchConfig?._index?.phase,activeUid}));
+              for(const uid of [...new Set(['products',activeUid].filter(Boolean))]){
+                const dictionary=await meili.index(uid).getSynonyms();
+                const result=await meili.index(uid).search('test',{filter:[`shop = '${shop}'`,`status = 'ACTIVE'`],limit:3,matchingStrategy:'all',attributesToRetrieve:['id','title']});
+                console.log('INDEX_PROOF',JSON.stringify({uid,synonymCount:Object.keys(dictionary).length,test:dictionary.test,shortDress:dictionary['short dress'],testHits:result.hits?.map(hit=>({id:hit.id,title:hit.title})),estimatedTotalHits:result.estimatedTotalHits}));
+              }
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
