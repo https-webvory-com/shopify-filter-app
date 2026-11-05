@@ -57,6 +57,11 @@ jobs:
                 const result=await meili.index(uid).search('test',{filter:[`shop = '${shop}'`,`status = 'ACTIVE'`],limit:3,matchingStrategy:'all',attributesToRetrieve:['id','title']});
                 console.log('INDEX_PROOF',JSON.stringify({uid,synonymCount:Object.keys(dictionary).length,synonymKeys:Object.keys(dictionary).slice(0,10),test:dictionary.test,shortDress:dictionary['short dress'],testHits:result.hits?.map(hit=>({id:hit.id,title:hit.title})),estimatedTotalHits:result.estimatedTotalHits}));
               }
+              try {
+                const filter=[`shop = '${shop}'`,`status = 'ACTIVE'`];
+                const federated=await meili.multiSearch({queries:[{indexUid:'products',q:'test',filter,matchingStrategy:'all',attributesToRetrieve:['id','title'],federationOptions:{weight:2}},{indexUid:'products',q:'short dress',filter,matchingStrategy:'all',attributesToRetrieve:['id','title']}],federation:{offset:0,limit:10}});
+                console.log('FEDERATED_SYNONYM_PROOF',JSON.stringify({keys:Object.keys(federated),count:federated.estimatedTotalHits??federated.totalHits,hits:federated.hits?.map(hit=>({id:hit.id,title:hit.title,source:hit._federation?.queriesPosition}))}));
+              } catch(error) {console.log('FEDERATED_SYNONYM_ERROR',JSON.stringify({name:error.name,code:error.code,message:error.message?.slice(0,200)}));}
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
