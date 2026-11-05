@@ -67,6 +67,11 @@ jobs:
                 const federated=await meili.multiSearch({queries:[{indexUid:'products',q:'test',filter,matchingStrategy:'all'},{indexUid:'products',q:'short dress',filter,matchingStrategy:'all'}],federation:{offset:0,limit:0,facetsByIndex:{products:['vendor']},mergeFacets:{maxValuesPerFacet:10}}});
                 console.log('FEDERATED_FACETS_PROOF',JSON.stringify({keys:Object.keys(federated),count:federated.estimatedTotalHits??federated.totalHits,facetKeys:Object.keys(federated.facetDistribution||{}),vendorCount:Object.keys(federated.facetDistribution?.vendor||{}).length,facetsByIndexKeys:Object.keys(federated.facetsByIndex||{})}));
               } catch(error) {console.log('FEDERATED_FACETS_ERROR',JSON.stringify({name:error.name,code:error.code,message:error.message?.slice(0,200)}));}
+              try {
+                const filter=[`shop = '${shop}'`,`status = 'ACTIVE'`];
+                const exact=await meili.multiSearch({queries:[{indexUid:'products',q:'test',filter,matchingStrategy:'all'},{indexUid:'products',q:'short dress',filter,matchingStrategy:'all'}],federation:{page:1,hitsPerPage:0}});
+                console.log('FEDERATED_EXACT_PROOF',JSON.stringify({keys:Object.keys(exact),totalHits:exact.totalHits,estimatedTotalHits:exact.estimatedTotalHits,hitsPerPage:exact.hitsPerPage,page:exact.page}));
+              } catch(error) {console.log('FEDERATED_EXACT_ERROR',JSON.stringify({name:error.name,code:error.code,message:error.message?.slice(0,200)}));}
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
