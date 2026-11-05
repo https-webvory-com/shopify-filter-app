@@ -430,15 +430,18 @@ try{
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('.cfp-order-error')");
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('filtered collection gets cards and facets in one request',async()=>{
+  await test('filtered collection shows cards before slow facets finish',async()=>{
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Designer',config:{}}];
     await control({reset:true,delay:100,facetDelay:1800,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});await navigate();
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    await wait("document.querySelector('#cfp-sidebar input[name=vendor]')");
     await control({apiDelay:800});
     const before=await getState();
     await evaluate("const input=document.querySelector('input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
     await wait("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length===25");
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-skeleton-image')).animationName"),'cfpSkeletonGlassShimmer');
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelectorAll('.cfp-product-card--preview').length>0");
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price-row').length"),25);
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25 && !document.querySelector('#cfp-sidebar.cfp-loading')");
     assert.equal(await evaluate("document.querySelectorAll('#cfp-products-container .cfp-skeleton-card').length"),0);
     assert.equal(await evaluate("document.querySelectorAll('.cfp-product-card__price-row').length"),25,'filtered cards must include price rows');
@@ -446,8 +449,8 @@ try{
     assert.equal(await evaluate("[...document.querySelectorAll('.cfp-product-card__link')].some(link=>link.href.includes('variant='))"),true);
     await wait("[...document.querySelectorAll('.cfp-product-card__price')].some(price=>price.textContent.includes('$'))");
     const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
-    assert.equal(requests.filter(request=>request.status===200).length,1,JSON.stringify(requests));
-    assert.ok(requests.every(request=>request.profile==='collection-v1'));
+    assert.equal(requests.filter(request=>request.status===200&&request.profile==='fast-cards-v1').length,1,JSON.stringify(requests));
+    assert.equal(requests.filter(request=>request.status===200&&request.profile==='collection-facets-v1').length,1,JSON.stringify(requests));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('variant-dependent merchandising preserves global order and selected images across small batches',async()=>{
@@ -727,7 +730,7 @@ try{
     const after=await getState(),sizeCards=await cards();
     assert.equal(after.trace.membershipBrowses-blue.trace.membershipBrowses,1,'Size L should query only the Blue ID set');
     assert.equal(after.trace.candidateBrowses,blue.trace.candidateBrowses,'Size L should skip a full candidate browse');
-    assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='collection-v1'&&r.membershipParent&&r.status===200));
+    assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(sizeCards,[...Array.from({length:13},(_,i)=>String(29-i*2)),'1','3']);
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {blueResults:30,sizeResults:15,visible:15,membershipBrowses:1,workerPaused:true};
@@ -742,7 +745,7 @@ try{
     const after=await getState();
     assert.equal(after.trace.membershipBrowses-before.trace.membershipBrowses,1);
     assert.equal(after.trace.candidateBrowses,before.trace.candidateBrowses);
-    assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='collection-v1'&&r.membershipParent&&r.status===200));
+    assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('legacy Color and Size groups use popularity and natural size order; explicit alphabetical stays available',async()=>{

@@ -1074,7 +1074,7 @@ export const loader = async ({ request, context }) => {
         headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
     }
 
-    if(fastCards&&resolvedCollectionId&&!customerTagsStr){
+    if(useRankedCollectionPagination&&resolvedCollectionId&&!customerTagsStr){
       membershipProof=await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
         marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
         orderRevision:collectionBestSellingState.revision});

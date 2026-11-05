@@ -842,8 +842,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
-      if(templateName!=='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1&&
-          ['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy))
+      if(templateName!=='search'&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
+          (hasSelectedFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)))
         queryParams.set('responseProfile','fast-cards-v1');
       if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
