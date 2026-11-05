@@ -48,6 +48,12 @@ try {
     await global.__refreshConnectedMarketPriceCoverage();
   }catch(error){console.error('CFP market price coverage unavailable:',error.name);}finally{checkingMarketPrices=false;}};
   const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
+  let reconcilingSynonyms=false;
+  const reconcileSynonyms=async()=>{if(reconcilingSynonyms||shuttingDown)return;reconcilingSynonyms=true;try{
+    const {reconcileLegacySynonymIndexes}=await import('../app/services/searchIndex.server.js');
+    await reconcileLegacySynonymIndexes();
+  }catch(error){console.error('CFP synonym migration unavailable:',error.name);}finally{reconcilingSynonyms=false;}};
+  const synonymTimer=setInterval(reconcileSynonyms,60000);synonymTimer.unref();
   let expiringAnalytics=false;
   const expireAnalytics=async()=>{if(expiringAnalytics||shuttingDown)return;expiringAnalytics=true;try{
     const {expireSearchAnalytics}=await import('../app/services/searchAnalytics.server.js');
@@ -62,6 +68,7 @@ try {
     clearInterval(catalogAuditTimer);
     clearInterval(analyticsTimer);
     clearInterval(marketPriceTimer);
+    clearInterval(synonymTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
     process.exit(0);
@@ -73,6 +80,7 @@ try {
   void catalogAudit();
   void expireAnalytics();
   void checkMarketPrices();
+  void reconcileSynonyms();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });
   console.error("CFP: Background worker startup failed:", error.message);

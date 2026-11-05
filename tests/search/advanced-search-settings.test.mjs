@@ -81,12 +81,13 @@ test('selected metafields, delimiters and response whitelist do not expose index
 async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({length:23},(_,i)=>product(i+1)),activeSynonym=false){
  const rows=new Map([[shop,{shop,config:plain(config),updatedAt:1}]]),cache=new Map(),indexes=new Map(),jobs=[],calls=[];
  let clock=1,task=0,fail=false;
- const redis={get:async key=>cache.get(key)??null,incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));}};
- const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async()=>activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
+ const redis={get:async key=>cache.get(key)??null,set:async(key,value)=>cache.set(key,value),del:async key=>cache.delete(key),incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));}};
+ const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,upsert:async({where,create})=>{if(!rows.has(where.shop))rows.set(where.shop,{...create,updatedAt:++clock});return rows.get(where.shop);},updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async({distinct}={})=>distinct?activeSynonym?[{shop}]:[]:activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
- const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{code:'index_not_found'});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
+ let sharedSynonyms={gown:['dress']};
+ const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{code:'index_not_found'});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{getTask:async()=>({status:'succeeded'}),waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
   getSettings:async()=>({filterableAttributes:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
-  updateSettings:async value=>{calls.push(['settings',uid,value]);return queued();},updateSynonyms:queued,
+  updateSettings:async value=>{calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
   deleteAllDocuments:async()=>{indexes.get(uid).clear();calls.push(['clear',uid]);return queued();},
   addDocuments:async docs=>{for(const p of docs)indexes.get(uid).set(String(p.id),plain(p));return queued();},
   deleteDocuments:async ids=>{for(const id of ids)indexes.get(uid).delete(String(id));return queued();},
@@ -126,6 +127,19 @@ test('default search settings build a private index when a shop has synonyms',as
  assert.equal(own.custom,true);
  assert.equal(f.indexes.get(own.uid).size,1);
  assert.equal(unrelated.uid,'products');
+});
+
+test('legacy shared synonyms clear only after every owning shop has a complete private index',async()=>{
+ const f=await fixture(settings({}),[product(1),product(2,other)],true);
+ const first=await f.service.reconcileLegacySynonymIndexes();
+ assert.equal(first.pending,1);
+ assert.equal(first.scheduled,1);
+ assert.equal(f.calls.some(call=>call[0]==='synonyms'&&call[1]==='products'),false);
+ await f.drain();
+ const last=await f.service.reconcileLegacySynonymIndexes();
+ assert.equal(last.pending,0);
+ assert.deepEqual(plain(f.calls.find(call=>call[0]==='synonyms'&&call[1]==='products')[2]),{});
+ assert.equal((await f.service.getSearchIndexContext(other)).uid,'products');
 });
 
 test('failed preparation retains a complete serving index and never publishes a partial one',async()=>{

@@ -59,6 +59,39 @@ export async function scheduleSearchIndex(shop){
  await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested},'search-build-'+hash([shop,requested,build.offset]));
  if(previous.build?.uid!==build.uid)await retireSearchIndexes(shop,[previous.build?.uid]);
 }
+// Move previously saved synonym owners off the shared index in bounded batches.
+// The shared dictionary is cleared only after every owner has a complete
+// private index, so a worker restart cannot strand a merchant mid-migration.
+export async function reconcileLegacySynonymIndexes(){
+ const owners=await prisma.synonym.findMany({where:{isActive:true},distinct:['shop'],select:{shop:true}});
+ let pending=0,scheduled=0;
+ for(const {shop} of owners){
+  if(!validShop(shop))continue;
+  const row=await prisma.searchSetting.findUnique({where:{shop}}),state=stateOf(row);
+  if(state.active?.uid)continue;
+  pending++;
+  if(scheduled>=10||state.build&&state.phase!=='failed')continue;
+  await prisma.searchSetting.upsert({where:{shop},create:{shop,config:DEFAULT_SEARCH_SETTINGS},update:{}});
+  await scheduleSearchIndex(shop);
+  scheduled++;
+ }
+ if(!pending){
+  const taskKey='legacySharedSynonymResetTask';
+  const priorUid=await redis.get(taskKey);
+  if(priorUid){
+   const prior=await client.tasks.getTask(Number(priorUid));
+   if(prior.status==='failed'){await redis.del(taskKey);throw Error('Shared synonym cleanup failed: '+(prior.error?.code||'unknown'));}
+   if(prior.status!=='succeeded')return {owners:owners.length,pending,scheduled,cleanupPending:true};
+   await redis.del(taskKey);
+  }
+  const shared=client.index('products');
+  if(Object.keys(await shared.getSynonyms()).length){
+   const task=await shared.updateSynonyms({});
+   await redis.set(taskKey,String(task.taskUid),'EX',86400);
+  }
+ }
+ return {owners:owners.length,pending,scheduled};
+}
 export async function getSearchIndexStatus(shop){
  const state=stateOf(await prisma.searchSetting.findUnique({where:{shop}}));
  return {phase:state.phase||'default',processed:state.processed||0,total:state.total??null,error:state.error?'Search index preparation failed. Save again to retry.':null,active:!!state.active,updatedAt:state.updatedAt||null};
@@ -147,7 +180,7 @@ export async function processSearchIndexJob(data){
   const sourceRevision=await redis.get(sourceRevisionKey(shop))||'0';
   const sourceTask=await redis.get(sourceTaskKey(shop));if(sourceTask!=null)await wait({taskUid:Number(sourceTask)});
   if(build.sourceRevision!==sourceRevision){await wait(await index.deleteAllDocuments());build.offset=0;build.sourceRevision=sourceRevision;}
-  const response=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)}`,offset:build.offset,limit:20});
+  const response=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)}`,offset:build.offset,limit:requiresCustomSearchIndex(config)?20:100});
   if(!Array.isArray(response.results)||!Number.isSafeInteger(response.total))throw Error('Incomplete source catalog response');
   const docs=response.results.filter(p=>p.shop===shop&&p.status==='ACTIVE');
   if(docs.length){const enriched=await enrich(shop,docs,config);await wait(await index.addDocuments(await withHeldEmbeddingsForIndex(index,enriched.map(doc=>projectConfiguredSearchDocument(doc,config)))));}
