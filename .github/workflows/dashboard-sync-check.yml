@@ -6,7 +6,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
@@ -22,6 +22,20 @@ jobs:
             try {
               const recentTasks=await meiliClient.tasks.getTasks({limit:100,indexUids:['products']});
               console.log('SALES_INDEX_TASKS',JSON.stringify(recentTasks.results?.slice(0,60).map(task=>({uid:task.uid,status:task.status,type:task.type,enqueuedAt:task.enqueuedAt}))));
+              let lastId='',checked=0,mismatches=0;
+              for(;;){
+                const rows=await db.product.findMany({where:{shop:'thedressoutlet.myshopify.com',id:{gt:lastId}},orderBy:{id:'asc'},take:250,select:{id:true,bestSellingScore:true,trendingScore:true}});
+                if(!rows.length)break;
+                const ids=rows.map(row=>row.id.split('/').pop());
+                const page=await meiliClient.index('products').getDocuments({filter:'id IN '+JSON.stringify(ids),fields:['id','shop','bestSellingScore','trendingScore'],limit:ids.length,offset:0});
+                const indexed=new Map((page.results||[]).map(row=>[String(row.id),row]));
+                for(let i=0;i<rows.length;i++){
+                  const row=rows[i],doc=indexed.get(ids[i]);
+                  if(!doc||doc.shop!=='thedressoutlet.myshopify.com'||Math.abs(Number(doc.bestSellingScore)-row.bestSellingScore)>0.001||Math.abs(Number(doc.trendingScore)-row.trendingScore)>0.001)mismatches++;
+                }
+                checked+=rows.length;lastId=rows.at(-1).id;
+              }
+              console.log('SALES_SCORE_VERIFY',JSON.stringify({checked,mismatches}));
               const salesSession=await db.session.findUnique({where:{id:'offline_thedressoutlet.myshopify.com'},select:{expires:true,refreshTokenExpires:true,refreshToken:true,scope:true}});
               console.log('SALES_SESSION_STATUS',JSON.stringify({expires:salesSession?.expires,refreshTokenExpires:salesSession?.refreshTokenExpires,hasRefreshToken:!!salesSession?.refreshToken,hasReadAllOrders:salesSession?.scope?.split(',').includes('read_all_orders')}));
               for(const shop of ['thedressoutlet.myshopify.com','thedressoutletuk.myshopify.com','another-shpyfy-store.myshopify.com']){
