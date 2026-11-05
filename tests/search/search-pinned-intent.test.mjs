@@ -13,6 +13,9 @@ test('explicit pins obey applied country price and size intent on one variant', 
   assert.equal(pinnedProductMatchesAppliedIntent({ ...product, variants: [
     { option1: '16W', marketPrices: { US: { price: '75' } } },
   ] }, parsed), true);
+  assert.equal(pinnedProductMatchesAppliedIntent({ ...product, variants: [
+    { option1: '16W', available: false, marketPrices: { US: { price: '75' } } },
+  ] }, parsed), false);
   assert.equal(pinnedProductMatchesAppliedIntent(product, { ...parsed,
     appliedIntent: { size: false, price: false, country: 'US' } }), true);
 });

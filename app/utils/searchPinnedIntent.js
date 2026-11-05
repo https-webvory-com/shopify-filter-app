@@ -11,6 +11,7 @@ export function pinnedProductMatchesAppliedIntent(product, parsedQuery) {
   const requestedSize = parsedQuery.intent?.size;
   const constraint = parsedQuery.intent?.price;
   return product.variants?.some(variant => {
+    if (applied.price && variant.available === false) return false;
     if (applied.size && (sizePosition < 0 ||
       String(variant[`option${sizePosition + 1}`] || '').toUpperCase() !== requestedSize)) return false;
     if (!applied.price) return true;

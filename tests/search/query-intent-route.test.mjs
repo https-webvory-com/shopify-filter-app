@@ -24,7 +24,7 @@ test('instant search applies explicit market price and size only with serving pr
     '../services/merchandising.server': { getActivePinningRuleForSearch: async () => null,
       getActiveRuleForSearch: async () => null },
     '../services/meiliClient.server': { __esModule: true, default: { index: () => ({
-      getFilterableAttributes: async () => ['marketPriceMin_US', 'option_Size'],
+      getFilterableAttributes: async () => ['marketAvailablePriceMin_US', 'option_Size'],
     }) } },
     '../services/filterSettings.server': { getFilterGlobalSettings: async () => ({}) },
     '../services/shopCache.server': { getCached: async (_key, read) => read() },
@@ -50,13 +50,13 @@ test('instant search applies explicit market price and size only with serving pr
   let result = await context.module.exports.loader({ request: new Request(url) });
   assert.equal(result.status, 200);
   assert.equal(calls[0].query, 'red prom dress');
-  assert.ok(calls[0].filter.includes('marketPriceMin_US < 100'));
+  assert.ok(calls[0].filter.includes('marketAvailablePriceMin_US < 100'));
   assert.ok(calls[0].filter.includes('option_Size = "16W"'));
   assert.equal((await result.json()).queryIntent.price.max, 100);
   priceReady = false;
   result = await context.module.exports.loader({ request: new Request(url) });
   assert.equal(result.status, 200);
   assert.equal(calls[1].query, 'red prom dress under 100 size 16w');
-  assert.ok(!calls[1].filter.some(value => value.includes('marketPriceMin_US')));
+  assert.ok(!calls[1].filter.some(value => value.includes('marketAvailablePriceMin_US')));
   assert.equal((await result.json()).queryIntent.price, null);
 });

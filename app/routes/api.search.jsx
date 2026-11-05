@@ -78,7 +78,7 @@ export const loader = async ({ request }) => {
     if (intent?.price || intent?.size || intent?.sortHint || /price-(?:ascending|descending)/.test(sortBy || '')) {
       const fields = await getCached(`searchFilterableFields:${searchContext.uid}`, () =>
         meiliClient.index(searchContext.uid).getFilterableAttributes(), 60).catch(() => []);
-      const priceField = /^[A-Z]{2}$/.test(country) ? `marketPriceMin_${country}` : null;
+      const priceField = /^[A-Z]{2}$/.test(country) ? `marketAvailablePriceMin_${country}` : null;
       if (searchContext.uid === 'products' && priceField && fields.includes(priceField) &&
           await marketPriceIntentReady(shop, country))
         marketPriceField = priceField;
