@@ -91,7 +91,7 @@ test('production saved-card visit hook records its market and queues one promote
  const request=new Request('https://api.test/api/filter?shop='+shop+'&collectionHandle=one&country=IN&locale=en&page=1&limit=25&responseProfile=collection-preview-v1');
  const visit={request,entry:{shop,collectionId:'1',external:false},prepared:{preparedAt:Date.now(),productRevision:'0'},state:{products:'1',globalProducts:'0'}};
  await f.registerCollectionCardVisit(visit);await f.registerCollectionCardVisit(visit);
- const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);assert.equal(jobs[0][1],'COLLECTION_RANKING_CATALOG');assert.equal(jobs[0][3].priority,5);
+ const jobs=f.writes.filter(w=>w[0]==='queue');assert.equal(jobs.length,1);assert.equal(jobs[0][1],'COLLECTION_RANKING_CATALOG');assert.equal(jobs[0][3].priority,1);
  assert.equal(jobs[0][2].record.collectionId,'1');assert.equal(new URL(jobs[0][2].record.url).searchParams.get('country'),'IN');
  assert.equal(f.writes.filter(w=>w[0]==='load').length,0);assert.ok(f.writes.some(w=>w[0]==='add'));
 });

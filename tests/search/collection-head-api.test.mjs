@@ -20,12 +20,12 @@ test('two public filters use exact direct preparation with a paused worker and r
  }finally{f.dispose();}
 });
 
-test('pinned cards default to the original first variant across prefix, canonical, saved and published paths',async()=>{
+test('pinned cards default to the original first variant across canonical, saved and published paths',async()=>{
  const f=await fixture();try{
   const variants=id=>[{id:String(id*100),option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:String(id*100+1),option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:10}];
   await f.control({reset:true,hold:true,productCount:30,colorRule:true,pinList:['1'],cardSnapshots:true,productVariants:{'1':variants(1),'30':variants(30)}});
   const assertFirst=p=>{assert.equal(p.selectedVariantId,'100');assert.equal(p.variants[0].option1,'Green');assert.equal(p.variants[0].available,false);assert.equal(p.variants[0].imageUrl,'/image/green.svg');assert.equal(p.pinnedProductImage,'/image/1.svg');assert.equal(p.images[0],'/image/1.svg');assert.equal(p.merchandisingImage,'/image/1.svg');};
-  const head=await f.get();assert.equal(head.header,'prefix');assertFirst(head.data.products[0]);
+  const pending=await f.get();assert.equal(pending.status,202);assert.equal(pending.data.products.length,0);
   await f.control({precompute:true});
   const full=await f.get({responseProfile:'collection-v1'});assertFirst(full.data.products[0]);
   assert.equal(full.data.products.find(p=>p.id.endsWith('/30')).selectedVariantId,'3001');
@@ -38,28 +38,29 @@ test('pinned cards default to the original first variant across prefix, canonica
   assert.equal(filtered.data.products.find(p=>p.id.endsWith('/1')).pinnedProductImage,undefined);
  }finally{f.dispose();}
 });
-test('a cold prefix bypasses a paused ranking backlog and hands off to complete canonical pagination without gaps',async()=>{
+test('cold pinned collections wait for complete canonical pagination without gaps',async()=>{
  const f=await fixture();try{
   await f.control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],imageDelay:0,priceDelay:0});
-  const head=await f.get();assert.equal(head.status,200);assert.equal(head.header,'prefix');assert.equal(head.data.cfpCards.prefix,true);assert.equal(head.data.totalCount,null);assert.equal(head.data.rankingToken,null);assert.equal(head.data.debug.collectionRankingStatus,'prefix-ready');
-  const ids=head.data.products.map(p=>p.id);assert.deepEqual(ids,['1','2','4','5','6','7'].map(id=>'gid://shopify/Product/'+id));
-  const before=await f.state();assert.equal(before.state.builds,0);assert.ok(before.headEvents.some(e=>e.event==='head-proven'));
+  const head=await f.get();assert.equal(head.status,202);assert.equal(head.data.products.length,0);
+  const ids=['1','2','4','5','6','7'].map(id=>'gid://shopify/Product/'+id);
+  const before=await f.state();assert.equal(before.state.builds,0);
   assert.equal((await f.get({responseProfile:'collection-v1'})).status,202);
   await f.control({precompute:true});const full=await f.get({responseProfile:'collection-v1'});assert.equal(full.status,200);assert.ok(full.data.rankingToken);
   assert.deepEqual(full.data.products.slice(0,ids.length).map(p=>p.id),ids);
   const page2=await f.get({responseProfile:'collection-v1',page:'2',rankingToken:full.data.rankingToken});assert.equal(page2.status,200);
   const all=[...full.data.products,...page2.data.products].map(p=>p.id);assert.equal(all.length,30);assert.equal(new Set(all).size,30);
-  assert.ok((await f.state()).headEvents.some(e=>e.event==='head-comparison-match'));
+  assert.equal((await f.state()).headEvents.some(e=>e.event==='head-proven'),false);
  }finally{f.dispose();}
 });
-test('invalid leading pins are skipped identically, while a free leading pin declines instead of guessing replacements',async()=>{
+test('invalid leading pins are skipped by complete ranking, while cold previews stay empty',async()=>{
  const f=await fixture();try{
   await f.control({reset:true,hold:true,pinList:['1','2','4','5','6','7','8','9','10','11','12']});
   for(const id of ['1','2','4','5','6','7'])await f.control({archive:id});
-  const head=await f.get();assert.equal(head.status,200);assert.deepEqual(head.data.products.map(p=>p.id),['8','9','10','11','12'].map(id=>'gid://shopify/Product/'+id));
+  const head=await f.get();assert.equal(head.status,202);assert.equal(head.data.products.length,0);
+  await f.control({precompute:true});const full=await f.get({responseProfile:'collection-v1'});assert.equal(full.status,200);assert.deepEqual(full.data.products.slice(0,5).map(p=>p.id),['8','9','10','11','12'].map(id=>'gid://shopify/Product/'+id));
   await f.control({reset:true,hold:true,pinList:['1','3','4','5','6','7']});
   const free=await f.get();assert.equal(free.status,202);assert.equal(free.data.products.length,0);
-  assert.ok((await f.state()).headEvents.some(e=>e.event==='head-declined'));
+  assert.equal((await f.state()).headEvents.some(e=>e.event==='head-proven'),false);
  }finally{f.dispose();}
 });
 
@@ -69,15 +70,15 @@ test('old clients and q=0 cannot receive an unsupported partial prefix',async()=
   for(const accept of ['application/json','application/x-cfp-pinned-prefix-v1, application/json','application/x-cfp-pinned-prefix-v2, application/json','application/x-cfp-pinned-prefix-v3;q=0, application/json']){
    const response=await f.get({},accept);assert.equal(response.status,202);assert.equal(response.data.products.length,0);
   }
-  assert.equal((await f.get()).header,'prefix');
+  assert.equal((await f.get()).status,202);
  }finally{f.dispose();}
 });
 
-test('a proven pin head does not depend on a native-order build or a working full-ranking queue',async()=>{
+test('missing order or ranking never exposes a pinned-only result',async()=>{
  const f=await fixture();try{
   for(const scenario of [{orderMissing:true},{rankingFailure:'failed'},{rankingFailure:'throw'}]){
    await f.control({reset:true,hold:true,pinList:['1','2','4','5','6','7'],...scenario});
-   const head=await f.get();assert.equal(head.status,200,JSON.stringify(scenario));assert.equal(head.header,'prefix');assert.equal(head.data.products.length,6);assert.equal(head.data.debug.collectionBestSellingStatus,'prefix-ready');
+   const head=await f.get();assert.ok([202,503].includes(head.status),JSON.stringify(scenario));assert.equal(head.data.products?.length??0,0);
    assert.equal((await f.state()).state.builds,0);
   }
  }finally{f.dispose();}
@@ -87,11 +88,12 @@ test('forty pins keep a complete 25-card first page and the remaining fifteen le
  const f=await fixture();try{
   const pins=Array.from({length:41},(_,i)=>String(i+1)).filter(id=>id!=='3');
   await f.control({reset:true,hold:true,productCount:70,pinList:pins,cardSnapshots:true});
+  const cold=await f.get();assert.equal(cold.status,202);assert.equal(cold.data.products.length,0);
+  assert.equal((await f.state()).state.builds,0);
+  await f.control({precompute:true});const full=await f.get({responseProfile:'collection-v1'});
   const head=await f.get();assert.equal(head.status,200);assert.equal(head.data.products.length,25);
   assert.equal(head.data.cfpCards.preview,false);assert.ok(head.data.products.every(p=>Array.isArray(p.variants)&&p.variants.length&&p.priceMin!=null));
   assert.deepEqual(head.data.products.map(p=>p.id),pins.slice(0,25).map(id=>'gid://shopify/Product/'+id));
-  assert.equal((await f.state()).state.builds,0);
-  await f.control({precompute:true});const full=await f.get({responseProfile:'collection-v1'});
   const second=await f.get({responseProfile:'collection-v1',page:'2',rankingToken:full.data.rankingToken});
   assert.deepEqual(full.data.products.map(p=>p.id),head.data.products.map(p=>p.id));
   assert.deepEqual(second.data.products.slice(0,15).map(p=>p.id),pins.slice(25).map(id=>'gid://shopify/Product/'+id));

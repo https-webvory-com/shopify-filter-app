@@ -206,19 +206,17 @@ test('verified US price sort returns the first page directly with both prioritie
   assert.ok(captureQueries.some(query=>query.sort?.[0]==='priceMin:asc'&&query.limit===25));
 });
 
-test('a priority change shows the exact first 25 price-sort pins while the full ranking is pending',async()=>{
+test('a priority change waits for full ranking before showing the first 25 price-sort pins',async()=>{
   const pinIds=Array.from({length:40},(_,i)=>String(180-i));
   const options={shop:'thedressoutlet.myshopify.com',prioritizeSortOverPinning:false,
     prioritizeSortOverMerchandising:false,pinIds};
   const pending=await collectionRoute({...options,pendingPreparation:true});
   const early=await pending('page=1&sortBy=price-ascending&country=US&responseProfile=fast-cards-v1');
-  assert.equal(early.cfpCards?.prefix,true,JSON.stringify(early));
-  assert.equal(early.rankingToken,null);
-  assert.equal(early.totalCount,null);
-  assert.deepEqual(early.products.map(p=>p.id),pinIds.slice(0,25).map(id=>'gid://shopify/Product/'+id));
+  assert.equal(early.debug.collectionRankingStatus,'pending');
+  assert.equal(early.products.length,0);
   const ready=await collectionRoute(options);
   const complete=await ready('page=1&sortBy=price-ascending&country=US');
-  assert.deepEqual(early.products.map(p=>p.id),complete.products.map(p=>p.id));
+  assert.deepEqual(complete.products.map(p=>p.id),pinIds.slice(0,25).map(id=>'gid://shopify/Product/'+id));
 });
 
 for (const overPins of [false, true]) for (const overMerch of [false, true]) {

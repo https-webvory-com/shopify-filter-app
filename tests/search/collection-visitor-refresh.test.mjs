@@ -32,7 +32,7 @@ test('changed saved rankings schedule one canonical context ahead of the catalog
   if(reason==='external'){f.input.entry.external=true;f.input.prepared.reusableDataRevision='0:0:0';f.input.state.globalProducts='1';}
   await Promise.all([f.run(f.input),f.run(f.input)]);
   assert.equal(f.added.length,1,reason);const job=f.added[0];
-  assert.equal(job.name,'COLLECTION_RANKING_CATALOG');assert.equal(job.opts.priority,5);
+  assert.equal(job.name,'COLLECTION_RANKING_CATALOG');assert.equal(job.opts.priority,1);
   assert.equal(job.data.record.collectionId,'1');const url=new URL(job.data.record.url);
   assert.equal(url.searchParams.get('collectionId'),'1');assert.equal(url.searchParams.has('collectionHandle'),false);
   assert.equal(url.searchParams.has('responseProfile'),false);assert.equal(url.searchParams.get('country'),'IN');
@@ -40,7 +40,7 @@ test('changed saved rankings schedule one canonical context ahead of the catalog
 });
 test('existing catalog jobs are promoted without duplication or demotion and active jobs are left alone',async()=>{
  const f=fixture();f.advance(480000);f.input.state.products='1';await f.run(f.input);const job=f.added[0];
- job.opts.priority=10;await f.run(f.input);assert.equal(job.opts.priority,5);assert.equal(f.added.length,1);
+ job.opts.priority=10;await f.run(f.input);assert.equal(job.opts.priority,1);assert.equal(f.added.length,1);
  job.opts.priority=1;await f.run(f.input);assert.equal(job.opts.priority,1);
  job.opts.priority=10;job.state='active';await f.run(f.input);assert.equal(job.opts.priority,10);
  job.state='completed';await f.run(f.input);assert.equal(f.added.length,2);

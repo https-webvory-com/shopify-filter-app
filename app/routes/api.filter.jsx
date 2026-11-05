@@ -1034,9 +1034,9 @@ export const loader = async ({ request, context }) => {
       : needsShopifyOrder
       ? await getCollectionBestSellingState(shop, resolvedCollectionId, { warmup: context?.rankingWarmup === true }) : { ids: null, status: "inactive" };
     const collectionBestSellingIds = collectionBestSellingState.ids;
-    const fastPricePinHead=fastCards&&priceSortSelected&&!sortOverPinning&&activePinnedList.length>=25;
-    const canPreviewPins=(cardsOnly&&url.searchParams.get('responseProfile')==='collection-preview-v1'&&acceptsCollectionPinnedPrefix(request)||fastPricePinHead)&&
-      !context?.rankingWarmup&&activePinnedList.length>0;
+    // A pinned-only head makes a cold collection appear populated, then shifts
+    // to the full canonical result seconds later. Wait for complete cards.
+    const canPreviewPins=false;
     const missingNativeOrder=needsShopifyOrder&&!Array.isArray(collectionBestSellingIds);
     // Age alone must not block browsing. A complete last-good Shopify snapshot
     // remains the ranking source while its durable refresh runs in the worker.

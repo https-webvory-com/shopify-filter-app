@@ -14,7 +14,7 @@ export function createCollectionVisitorRefresh({queue,register,now=Date.now}){
   const salesChanged=prepared.salesDependencies&&prepared.salesDependencies.revision!==state.salesProducts;
   if(prepared.productRevision===state.products&&!externalChanged&&!salesChanged&&Number.isFinite(prepared.preparedAt))return;
   }
-  const priority=5,jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
+  const priority=1,jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
   let job=await queue.getJob(jobId);
   if(job){
    const status=await job.getState();
