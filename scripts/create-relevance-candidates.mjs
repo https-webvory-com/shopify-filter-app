@@ -12,7 +12,10 @@ if (queries.length !== 200 || queries.some(row => !row.store || !row.query))
   throw Error('Expected 200 store-specific draft queries');
 const shops = { UK: 'thedressoutletuk.myshopify.com', US: 'thedressoutlet.myshopify.com' };
 const shopFor = row => row.shop || shops[row.store];
-const countryFor = row => row.country || (['UK', 'US'].includes(row.store) ? row.store : '');
+const countryFor = row => {
+  const country = row.country || (row.store === 'UK' ? 'GB' : row.store === 'US' ? 'US' : '');
+  return country === 'UK' ? 'GB' : country;
+};
 if (queries.some(row => !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopFor(row) || '')))
   throw Error('Each draft query needs a valid Shopify shop domain');
 if (queries.some(row => countryFor(row) && !/^[A-Z]{2}$/.test(countryFor(row))))

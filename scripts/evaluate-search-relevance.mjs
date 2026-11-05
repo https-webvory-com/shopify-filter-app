@@ -12,7 +12,8 @@ for (const row of rows) {
   const url = new URL('/api/search', base);
   const shop = row.shop || stores[row.store];
   url.searchParams.set('shop', shop);
-  const country = row.country || (['UK', 'US'].includes(row.store) ? row.store : null);
+  const rawCountry = row.country || (row.store === 'UK' ? 'GB' : row.store === 'US' ? 'US' : null);
+  const country = rawCountry === 'UK' ? 'GB' : rawCountry;
   if (country) url.searchParams.set('country', country);
   url.searchParams.set('q', row.query);
   url.searchParams.set('limit', row.requiredRelevantHits ? '100' : '10');

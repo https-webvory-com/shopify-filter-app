@@ -6,7 +6,7 @@ if (!ukSitemap || !usSitemap) throw Error('Usage: node scripts/create-relevance-
 const decode = value => value.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 const specs = [
-  { store: 'UK', shop: 'thedressoutletuk.myshopify.com', country: 'UK',
+  { store: 'UK', shop: 'thedressoutletuk.myshopify.com', country: 'GB',
     host: 'thedressoutlet.co.uk', file: ukSitemap },
   { store: 'US', shop: 'thedressoutlet.myshopify.com', country: 'US',
     host: 'www.thedressoutlet.com', file: usSitemap },

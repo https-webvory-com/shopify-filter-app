@@ -6,7 +6,7 @@ This draft applies only to these dress stores. For another merchant, create a se
 
 Recreate this draft with `node scripts/create-relevance-draft.mjs path/to/uk-collections.xml path/to/us-collections.xml`. The two XML files are public Shopify collection sitemaps, and the checked-in draft records each source collection URL.
 
-`scripts/create-relevance-candidates.mjs` accepts a query CSV with `store`, `shop`, `country`, and `query` columns for other merchants. For the US/UK draft, `store` supplies the country automatically. Candidate generation and evaluation send that country to the API, so market price and availability checks use the intended shopper context. It refuses to overwrite an output CSV once any `reviewed_grade` has been entered.
+`scripts/create-relevance-candidates.mjs` accepts a query CSV with `store`, `shop`, `country`, and `query` columns for other merchants. For the US/UK draft, `store` supplies the country automatically: `US` for the US store and Shopify's `GB` country code for the UK store. Legacy `UK` country entries are sent as `GB`. Candidate generation and evaluation send that country to the API, so market price and availability checks use the intended shopper context. It refuses to overwrite an output CSV once any `reviewed_grade` has been entered.
 
 The candidate sheet includes product handles and response prices to help review. These are clues, not proof of a requested variant's color, size, price, or current availability; check the product in the same shopper country before grading those cases. `candidate_source=fallback` identifies independently discovered relevant candidates and leaves `result_rank` blank because they were not returned for the original query.
 

@@ -30,8 +30,9 @@ const golden = queries.map(query => {
     throw Error(`At least one relevant product must be reviewed for ${key(query)}`);
   if (expectedZero && Object.values(grades).some(grade => grade > 0))
     throw Error(`Zero-result query has relevant products: ${key(query)}`);
+  const rawCountry = rows[0].country || query.country || (query.store === 'UK' ? 'GB' : query.store === 'US' ? 'US' : undefined);
   return { store: query.store, shop: rows[0].shop,
-    country: rows[0].country || query.country || (['UK', 'US'].includes(query.store) ? query.store : undefined),
+    country: rawCountry === 'UK' ? 'GB' : rawCountry,
     query: query.query, grades,
     ...(expectedZero ? { expectedZero: true } : {}),
     ...(query.required_relevant_hits ? { requiredRelevantHits: Number(query.required_relevant_hits) } : {}) };
