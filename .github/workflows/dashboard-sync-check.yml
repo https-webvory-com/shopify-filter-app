@@ -20,7 +20,7 @@ jobs:
             const db=new PrismaClient();
             try {
               for(const shop of ['thedressoutlet.myshopify.com','thedressoutletuk.myshopify.com','another-shpyfy-store.myshopify.com']){
-                const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
+                const rows=await db.syncJob.findMany({where:{shop,kind:{in:['PRODUCTS','BULK_PRODUCTS']}},orderBy:{createdAt:'desc'},take:5,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,createdAt:true,completedAt:true,updatedAt:true,lastError:true}});
                 for(const row of rows)console.log('SYNC_JOB',JSON.stringify({...row,shop,lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));
                 const orderRows=await db.syncJob.findMany({where:{shop,OR:[{kind:'ORDERS'},{kind:null,totalProducts:null}]},orderBy:{createdAt:'desc'},take:3,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,createdAt:true,completedAt:true,updatedAt:true,lastError:true}});
                 for(const row of orderRows)console.log('ORDER_SYNC_JOB',JSON.stringify({...row,shop,lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));
