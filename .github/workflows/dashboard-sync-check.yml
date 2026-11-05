@@ -55,7 +55,7 @@ jobs:
               for(const uid of [...new Set(['products',activeUid].filter(Boolean))]){
                 const dictionary=await meili.index(uid).getSynonyms();
                 const result=await meili.index(uid).search('test',{filter:[`shop = '${shop}'`,`status = 'ACTIVE'`],limit:3,matchingStrategy:'all',attributesToRetrieve:['id','title']});
-                console.log('INDEX_PROOF',JSON.stringify({uid,synonymCount:Object.keys(dictionary).length,test:dictionary.test,shortDress:dictionary['short dress'],testHits:result.hits?.map(hit=>({id:hit.id,title:hit.title})),estimatedTotalHits:result.estimatedTotalHits}));
+                console.log('INDEX_PROOF',JSON.stringify({uid,synonymCount:Object.keys(dictionary).length,synonymKeys:Object.keys(dictionary).slice(0,10),test:dictionary.test,shortDress:dictionary['short dress'],testHits:result.hits?.map(hit=>({id:hit.id,title:hit.title})),estimatedTotalHits:result.estimatedTotalHits}));
               }
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
