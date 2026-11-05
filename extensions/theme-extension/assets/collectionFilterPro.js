@@ -15,6 +15,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let topBar = null;
   let overlay = null;
   let triggerBtn = null;
+  let filtersReady = false;
   let closeBtn = null;
   let applyBtn = null;
   let clearBtn = null;
@@ -1130,7 +1131,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.classList.remove('cfp-desktop-like-mobile');
 
     if (triggerBtn) {
-      if (mobile && settings.mobileFilterLayout === 'horizontal-scrolling') {
+      if (!filtersReady || mobile && settings.mobileFilterLayout === 'horizontal-scrolling') {
         triggerBtn.classList.add('is-hidden');
         triggerBtn.style.setProperty('display', 'none', 'important');
         triggerBtn.setAttribute('aria-expanded', 'false');
@@ -2801,6 +2802,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
 
     const hasFilters = horizontalPills.length > 0;
+    filtersReady = true;
     document.body.classList.toggle('cfp-no-filters', !hasFilters);
     if (!hasFilters) closeSidebar();
     const groupsContainer = body.querySelector('#cfp-sidebar__filter-groups');
@@ -2930,6 +2932,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
       }
+    }
+
+    if (triggerBtn && hasFilters && getEffectiveLayout() === 'drawer' && !isMobileHorizontalFilterLayout()) {
+      triggerBtn.classList.remove('is-hidden');
+      triggerBtn.style.setProperty('display', 'inline-flex', 'important');
     }
 
     // Restore inner scroll areas
