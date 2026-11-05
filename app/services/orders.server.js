@@ -1,6 +1,8 @@
 import prisma from "../db.server.js";
 import { unauthenticated } from "../shopify.server.js";
 import meiliClient from "./meiliClient.server.js";
+import { replaceSalesMetrics } from './salesMetrics.server.js';
+import { readOrderPage, validateOrderScanCount } from '../utils/orderPage.js';
 
 /**
  * Syncs ALL historical orders (all-time) for the shop and updates bestSellingScore metrics.
@@ -19,6 +21,11 @@ export async function syncHistoricalOrders(shop) {
     }
   });
   const jobId = job.id;
+  const heartbeat = setInterval(() => {
+    prisma.syncJob.updateMany({ where: { id: jobId, status: 'IN_PROGRESS' }, data: { updatedAt: new Date() } })
+      .catch(error => console.error(`OrdersSync [${jobId}]: Heartbeat failed:`, error.name));
+  }, 60000);
+  heartbeat.unref?.();
 
   try {
     const { admin } = await unauthenticated.admin(shop);
@@ -90,18 +97,11 @@ export async function syncHistoricalOrders(shop) {
         }
       `;
 
-      const response = await admin.graphql(query, {
-        variables: { cursor },
-      });
-
-      const json = await response.json();
-      if (json.errors) {
-        console.error("OrdersSync: GraphQL Errors:", JSON.stringify(json.errors, null, 2));
-        break;
-      }
-
-      const orders = json.data?.orders?.nodes || [];
-      const pageInfo = json.data?.orders?.pageInfo;
+      const page = await readOrderPage(admin, query, cursor);
+      const orders = page.nodes;
+      const pageInfo = page.pageInfo;
+      if (pageInfo.hasNextPage && (!pageInfo.endCursor || pageInfo.endCursor === cursor))
+        throw Error('Shopify orders pagination did not advance');
       pageCount++;
 
       if (pageCount % 10 === 0) {
@@ -195,6 +195,10 @@ export async function syncHistoricalOrders(shop) {
       cursor = pageInfo?.endCursor || null;
     }
 
+    const previousComplete = await prisma.syncJob.findFirst({ where: {
+      shop, kind: 'ORDERS', status: 'COMPLETED', id: { not: jobId },
+    }, orderBy: { createdAt: 'desc' }, select: { productsProcessed: true } });
+    validateOrderScanCount(processedOrders, previousComplete?.productsProcessed);
     console.log(`OrdersSync [${jobId}]: Fetched ALL ${processedOrders} orders across ${pageCount} pages. Updating ${Object.keys(productAggregations).length} products...`);
 
     // Update job status to show we're now in the DB update phase
@@ -207,65 +211,7 @@ export async function syncHistoricalOrders(shop) {
       }
     });
 
-    // Reset metrics for all products before applying fresh aggregations
-    await prisma.product.updateMany({
-      where: { shop },
-      data: {
-        unitsLifetime: 0,
-        unitsSold60Days: 0,
-        unitsSold7Days: 0,
-        grossRevenue: 0.0,
-        orderCount: 0,
-        bestSellingScore: 0.0,
-        trendingScore: 0.0,
-      }
-    });
-
-    // Update Prisma and calculate scores using LIFETIME data
-    let updatedCount = 0;
-    const productIds = Object.keys(productAggregations);
-
-    // Process in batches of 50 for efficiency
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < productIds.length; i += BATCH_SIZE) {
-      const batch = productIds.slice(i, i + BATCH_SIZE);
-
-      await Promise.all(batch.map(async (productId) => {
-        const stats = productAggregations[productId];
-
-        const product = await prisma.product.findUnique({
-          where: { id: productId },
-          select: { id: true }
-        });
-
-        if (!product) return;
-
-        const scores = calculateProductScores(
-          stats.unitsLifetime,   // Use lifetime units for bestSellingScore
-          stats.unitsSold7Days,
-          stats.revenueLifetime, // Use lifetime revenue for bestSellingScore
-          stats.orderCount
-        );
-
-        await prisma.product.update({
-          where: { id: productId },
-          data: {
-            unitsLifetime: stats.unitsLifetime,
-            unitsSold60Days: stats.unitsSold60Days,
-            unitsSold7Days: stats.unitsSold7Days,
-            grossRevenue: stats.revenueLifetime,
-            orderCount: stats.orderCount,
-            bestSellingScore: scores.bestSellingScore,
-            trendingScore: scores.trendingScore,
-          }
-        });
-        updatedCount++;
-      }));
-
-      if ((i / BATCH_SIZE) % 10 === 0 && i > 0) {
-        console.log(`OrdersSync [${jobId}]: Updated ${updatedCount} products so far...`);
-      }
-    }
+    const updatedCount = await replaceSalesMetrics(shop, productAggregations);
 
     console.log(`OrdersSync [${jobId}]: Updated ${updatedCount} products with ALL-TIME order metrics.`);
 
@@ -279,6 +225,8 @@ export async function syncHistoricalOrders(shop) {
         status: "COMPLETED",
         productsProcessed: processedOrders,
         totalProducts: null,
+        completedAt: new Date(),
+        lastError: null,
       }
     });
 
@@ -288,9 +236,11 @@ export async function syncHistoricalOrders(shop) {
     // Mark job as FAILED
     await prisma.syncJob.update({
       where: { id: jobId },
-      data: { status: "FAILED" }
+      data: { status: "FAILED", lastError: String(error.message || error.name).replace(/https?:\/\/\S+/g, '[url]').slice(0, 500) }
     }).catch(() => {}); // Ignore if DB is also down
     return false;
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 
@@ -381,5 +331,6 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
     console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);
   } catch (error) {
     console.error("OrdersSync: Failed to push scores to Meilisearch:", error);
+    throw error;
   }
 }

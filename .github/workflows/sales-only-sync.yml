@@ -1,0 +1,18 @@
+name: Run US sales data sync only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker exec -d shopify-filter-sync-worker sh -c 'node scripts/run-sales-only.mjs thedressoutlet.myshopify.com > /tmp/cfp-sales-sync-us.log 2>&1'
+            echo SALES_ONLY_PROCESS_STARTED

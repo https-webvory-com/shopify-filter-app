@@ -37,11 +37,11 @@ test('sales score changes invalidate ranking versions only after every index bat
  assert.deepEqual(JSON.parse(JSON.stringify(f.calls.at(-2))),['scope','fixture.myshopify.com',['gid://shopify/Product/1']]);
 });
 test('failed score indexing cannot publish a successful ranking invalidation event',async()=>{
- const f=fixture({failed:true}),work=f.run();await new Promise(resolve=>setImmediate(resolve));f.release();await work;
+ const f=fixture({failed:true}),work=f.run();await new Promise(resolve=>setImmediate(resolve));f.release();await assert.rejects(work,/Some sales-score indexing tasks failed/);
  assert.equal(f.calls.some(c=>c[0]==='invalidate'),false);assert.equal(f.calls.some(c=>c[0]==='error'),true);
 });
 
 test('partially successful sales-score writes still invalidate the ranking inputs that changed',async()=>{
- const f=fixture({partial:true}),work=f.run();await new Promise(resolve=>setImmediate(resolve));f.release();await work;
+ const f=fixture({partial:true}),work=f.run();await new Promise(resolve=>setImmediate(resolve));f.release();await assert.rejects(work,/Some sales-score indexing tasks failed/);
  assert.equal(f.calls.filter(c=>c[0]==='invalidate').length,1);assert.equal(f.calls.some(c=>c[0]==='error'),true);
 });
