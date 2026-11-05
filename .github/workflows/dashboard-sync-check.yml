@@ -19,6 +19,8 @@ jobs:
             import {PrismaClient} from '@prisma/client';
             const db=new PrismaClient();
             try {
+              const salesSession=await db.session.findUnique({where:{id:'offline_thedressoutlet.myshopify.com'},select:{expires:true,refreshTokenExpires:true,refreshToken:true,scope:true}});
+              console.log('SALES_SESSION_STATUS',JSON.stringify({expires:salesSession?.expires,refreshTokenExpires:salesSession?.refreshTokenExpires,hasRefreshToken:!!salesSession?.refreshToken,hasReadAllOrders:salesSession?.scope?.split(',').includes('read_all_orders')}));
               for(const shop of ['thedressoutlet.myshopify.com','thedressoutletuk.myshopify.com','another-shpyfy-store.myshopify.com']){
                 const rows=await db.syncJob.findMany({where:{shop,kind:{in:['PRODUCTS','BULK_PRODUCTS']}},orderBy:{createdAt:'desc'},take:5,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,createdAt:true,completedAt:true,updatedAt:true,lastError:true}});
                 for(const row of rows)console.log('SYNC_JOB',JSON.stringify({...row,shop,lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));
@@ -29,4 +31,5 @@ jobs:
             NODE
             docker inspect --format 'WEB_STATE {{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}' shopify-filter-app
             docker ps -a --format 'CONTAINER {{.ID}} {{.Names}} {{.Status}}'
+            docker exec shopify-filter-sync-worker tail -n 15 /tmp/cfp-sales-sync-us.log
             docker logs --since 2026-11-04T12:00:00Z --tail 10000 shopify-filter-app 2>&1 | grep -E 'OrdersSync|Orders sync' | tail -100
