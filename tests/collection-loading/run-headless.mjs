@@ -46,6 +46,23 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('saved filters are usable before a delayed product response finishes',async()=>{
+    await control({reset:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,
+      independentFilters:true,globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});
+    await control({publishFirst50:true});
+    await control({apiDelay:5000});
+    await navigate();
+    await wait("document.querySelectorAll('#cfp-sidebar input[type=checkbox]').length>0&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",3000);
+    const filtersMs=await evaluate("performance.getEntriesByName('cfp-filters-ready')[0]?.startTime");
+    assert.ok(filtersMs<1000,'filters were not ready under one second: '+filtersMs);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-drawer-trigger-btn')).display!=='none'&&document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width>0"),true);
+    assert.equal((await cards()).length,0);
+    await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();document.querySelector('#cfp-sidebar input[type=checkbox]').click();document.querySelector('#cfp-apply-btn').click()");
+    await wait("new URLSearchParams(location.search).get('option_Color')==='Blue'");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",20000);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {filtersMs,productDelayMs:5000,liveTiming:false};
+  });
   await test('review stars initialize on dynamic cards and Load more',async()=>{
     const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.reviewsIoStore='fixture-store';window.reviewCalls=[];window.ratingSnippet=(selector,settings)=>{reviewCalls.push({selector,store:settings.store,count:document.querySelectorAll('.ruk_rating_snippet').length});};`});
     try{

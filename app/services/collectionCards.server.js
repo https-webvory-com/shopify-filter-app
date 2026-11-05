@@ -46,6 +46,7 @@ const store=createCollectionCardStore({redis,readState:createCardStateReader(red
  makeMembershipProof:(spec,collectionId)=>collectionMembershipProof({shop:spec.shop,collectionId,configuration:spec.revision,marketVersion:spec.marketAvailabilityVersion,rule:spec.rule,pinningRule:spec.pinningRule,mergedValues:spec.mergedValues,globalSettings:spec.globalSettings,orderRevision:spec.orderRevision}),
 });
 export const getPreparedCollectionCards=store.get;
+export const getPreparedCollectionFilters=(request,options)=>publishedPages.get(request,{...options,filtersOnly:true});
 export const beginPreparedCollectionCards=options=>{
  if(!options.spec)return store.begin(options);
  const canonicalKey=preparationKey(options.spec);

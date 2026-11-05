@@ -238,7 +238,7 @@ export async function createLoadingServer({redisLayer}={}) {
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset)state.realToolbar=false;
+        if(updates.reset){state.realToolbar=false;state.independentFilters=false;}
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;}
@@ -269,11 +269,17 @@ export async function createLoadingServer({redisLayer}={}) {
         await new Promise(resolve=>setTimeout(resolve,state.themeDelay||0));res.setHeader('Content-Type','text/javascript');res.end("document.addEventListener('DOMContentLoaded',()=>{window.pageDataMap={};});");return;
       }
       if(url.pathname.startsWith('/assets/')){
-        const name=url.pathname.split('/').pop();if(!['collectionWidget.js','collectionFilterPro.min.js','collectionFilterPro.css','marketPricing.js','collectionLoading.min.js','collectionPreviewStream.min.js'].includes(name)){res.writeHead(404).end();return;}
+        const name=url.pathname.split('/').pop();if(!['collectionFilters.js','collectionWidget.js','collectionFilterPro.min.js','collectionFilterPro.css','marketPricing.js','collectionLoading.min.js','collectionPreviewStream.min.js'].includes(name)){res.writeHead(404).end();return;}
         if(name==='collectionFilterPro.css'&&state.cssDelay)await new Promise(resolve=>setTimeout(resolve,state.cssDelay));
         if(name==='collectionFilterPro.min.js'&&state.assetDelay)await new Promise(resolve=>setTimeout(resolve,state.assetDelay));
         if(name==='collectionLoading.min.js'&&state.headDelay)await new Promise(resolve=>setTimeout(resolve,state.headDelay));
         res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');let asset=await fs.readFile('extensions/theme-extension/assets/'+name,'utf8');asset=asset.replaceAll('https://aisearchfilter.webvory.com','http://127.0.0.1:'+server.address().port);res.end(asset);return;
+      }
+      if(url.pathname==='/api/collection-filters'){
+        const canonical=new URL(url);canonical.pathname='/api/filter';canonical.searchParams.set('responseProfile','collection-v1');
+        const saved=await published.get(new Request(canonical),{filtersOnly:true});
+        const response=saved||Response.json({cfpFilters:{version:1,status:'pending'}},{status:202});
+        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());return;
       }
       if(url.pathname==='/api/filter'){
         if(url.searchParams.get('responseProfile')!=='collection-config-v1')requestStarts.push({sort:url.searchParams.get('sortBy'),startedAt:Date.now()});
@@ -313,6 +319,7 @@ export async function createLoadingServer({redisLayer}={}) {
       if(url.pathname.startsWith('/collections/')||url.pathname==='/search'){if(state.htmlDelay)await new Promise(r=>setTimeout(r,state.htmlDelay));res.setHeader('Content-Type','text/html');let body=observedHtml.replace('<style>body','<style>*,*::before,*::after{box-sizing:border-box}body')
         .replace('class="cfp-v1-app-container"',`class="cfp-v1-app-container" style="--cfp-cols-desktop:${state.desktopColumns??4};--cfp-cols-mobile:${state.mobileColumns??2}"`)
         .replace('columns_desktop:4,columns_mobile:2',`columns_desktop:${state.desktopColumns??4},columns_mobile:${state.mobileColumns??2}`);
+        if(state.independentFilters)body=body.replace('</head>','<script src="/assets/collectionFilters.js"></script></head>');
         if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
         if(url.pathname==='/search')body=body.replace('data-search-terms="purple prom dress"','data-search-terms="'+String(url.searchParams.get('q')||'')+'"');
         if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));

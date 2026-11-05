@@ -5,6 +5,7 @@ import {encodePreparation,decodePreparation} from './collectionPreparationPayloa
 import {hasUsableProductTitleFacets} from './productTitleFilter.js';
 import {hasUsableCollectionNavigation} from './collectionNavigation.js';
 import {isPublicCollectionCards,collectionCardsResponse,acceptsPublishedCollectionPage,collectionCardPresentationVersion} from './collectionCards.js';
+import {visibleCollectionFacets} from './collectionBootstrap.js';
 
 export function publishedCollectionKey(request){
  const url=new URL(request.url),page=url.searchParams.get('page');
@@ -25,8 +26,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   Array.isArray(entry.payload.products)&&entry.payload.products.length===Math.min(50,entry.ids.length)&&
   entry.payload.products.every((p,i)=>String(p.id).split('/').pop()===entry.ids[i]&&p.title&&p.handle)&&
   entry.payload.settings&&entry.payload.facets&&hasUsableExtraFacets(entry.payload)&&hasUsableSaleFacets(entry.payload)&&hasUsableProductTitleFacets(entry.payload)&&hasUsableCollectionNavigation(entry.payload);
- async function get(request,{onHit,marketAvailabilityVersion=null,allowStaleMarket=false,probe=false}={}){
-  const key=publishedCollectionKey(request);if(!key||!probe&&!acceptsPublishedCollectionPage(request))return null;
+ async function get(request,{onHit,marketAvailabilityVersion=null,allowStaleMarket=false,probe=false,filtersOnly=false}={}){
+  const key=publishedCollectionKey(request);if(!key||!probe&&!filtersOnly&&!acceptsPublishedCollectionPage(request))return null;
   const params=new URL(request.url).searchParams,shop=params.get('shop'),page=Number(params.get('page')),token=params.get('rankingToken');
   if(!probe&&params.get('limit')!=='25'||probe&&!['25','50'].includes(params.get('limit'))||page===2&&!/^[a-f0-9-]{36}$/.test(token||''))return null;
   try{
@@ -88,6 +89,15 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    // Background coverage checks need the same proof as a shopper, without
    // creating a browsing session or rewriting the saved publication.
    if(probe)return new Response(null,{status:200,headers:{'X-CFP-Collection-Cards':'published'}});
+   // Read already-computed collection-wide filters without creating a product
+   // session, hydrating cards, scanning the index or waiting for ranking.
+   if(filtersOnly){const text=JSON.stringify({settings:entry.payload.settings,mergedValues:entry.payload.mergedValues||[],globalSettings,
+    facets:visibleCollectionFacets(entry.payload.facets,entry.payload.settings),totalCount:entry.payload.totalCount,
+    cfpFilters:{version:1,publishedAt:entry.at,refreshDue}});
+    const etag='"'+createHash('sha256').update(text).digest('hex')+'"';
+    const match=request.headers.get('If-None-Match')?.split(',').some(value=>value.trim().replace(/^W\//,'')===etag);
+    return new Response(match?null:text,{status:match?304:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache, must-revalidate','Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'ETag, X-CFP-Collection-Filters',ETag:etag,'X-CFP-Collection-Filters':'published'}});
+   }
    const session=await createSession(request,entry,{ids:entry.ids,metadata:entry.metadata});
    if(page===2&&session.token!==token)return null;
    // One immutable copy per shared ranking token keeps page two on the same

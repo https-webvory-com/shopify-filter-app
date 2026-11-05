@@ -34,6 +34,25 @@ test('published first page retains a complete membership proof for the first fil
  assert.equal(f.lastSession().membershipProof,proof);
 });
 
+test('saved filters load from durable publication without product sessions and reject incompatible scopes',async()=>{
+ const f=fixture({readConfigurationRevision:async()=> '1'});
+ f.payload.settings=[{isEnabled:true,filterType:'option',filterKey:'Color'}];
+ await f.publish({configuration:'1'});f.values.clear();
+ const before=f.values.size;
+ const response=await f.store.get(f.request(),{filtersOnly:true});
+ assert.equal(response.status,200);const saved=await response.json();
+ assert.equal(saved.totalCount,70);assert.equal(saved.facets.options.Color[0].count,70);
+ assert.equal(saved.products,undefined);assert.equal(saved.rankingToken,undefined);
+ assert.equal(f.sessionCalls(),0);assert.equal(f.values.size,before);
+ const conditional=new Request(f.request().url,{headers:{'If-None-Match':response.headers.get('ETag')}});
+ assert.equal((await f.store.get(conditional,{filtersOnly:true})).status,304);
+ assert.equal(f.sessionCalls(),0);
+ for(const changes of [{shop:'other.myshopify.com'},{country:'US'},{customer_tags:'VIP'},{'options[Color][]':'Red'}])
+  assert.equal(await f.store.get(f.request(changes),{filtersOnly:true}),null);
+ await f.publish({configuration:'0'});f.values.clear();
+ assert.equal(await f.store.get(f.request(),{filtersOnly:true}),null);
+});
+
 test('older option counts refresh in the background while saved cards remain visible',async()=>{
  const f=fixture();f.payload.globalSettings.hideUnavailableVariantsWhenSelected=true;
  await f.publish();

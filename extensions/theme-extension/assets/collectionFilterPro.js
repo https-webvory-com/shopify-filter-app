@@ -510,6 +510,26 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     return {...payload, ...decode(cfpTransport.metadata)};
   }
   const collectionConfigurationCache = new Map();
+  function startIndependentCollectionFilters(params,signal){
+    if(templateName==='search'||filtersReady)return;
+    const read=()=>{
+      if(signal.aborted||!window.cfpLoadSavedFilters)return;
+      const identity=value=>{const query=new URLSearchParams(value);for(const key of ['responseProfile','page','limit'])query.delete(key);query.sort();return query.toString();};
+      const early=window._cfpSavedFilters;
+      const promise=early&&identity(early.params)===identity(params)?early.promise:window.cfpLoadSavedFilters(params,signal);
+      Promise.resolve(promise).then(saved=>{
+        if(signal.aborted||filtersReady||saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets)return;
+        globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
+        window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
+        cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=saved.totalCount;
+        renderFilterSidebar(saved.settings,saved.facets,saved.totalCount);
+        renderBreadcrumbs();updateActiveCountBadge();sidebar.classList.remove('cfp-loading');
+        performance.mark?.('cfp-filters-ready');
+      }).catch(()=>{});
+    };
+    if(window.cfpLoadSavedFilters)read();
+    else window.addEventListener('cfp-saved-filters-ready',read,{once:true,signal});
+  }
   async function fetchCollectionConfiguration(requestUrl, signal) {
     if (!requestUrl.includes('responseProfile=collection-v2')) return null;
     const url = new URL(requestUrl);
@@ -815,6 +835,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
       const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+      if(!isLoadMore&&!hasSelectedFilters&&activeFilters.page===1)startIndependentCollectionFilters(queryParams,fetchSignal);
       if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
         queryParams.set('responseProfile','collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
@@ -846,7 +867,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       displayUrl.searchParams.delete('rankingToken');
       window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
-      sidebar.classList.add('cfp-loading');
+      if(!filtersReady||hasSelectedFilters)sidebar.classList.add('cfp-loading');
         let cachedBrowserResult = null;
         if (!isLoadMore) {
           renderSkeleton();
