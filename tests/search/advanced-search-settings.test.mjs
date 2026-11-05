@@ -87,7 +87,7 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  let sharedSynonyms={gown:['dress']};
  const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{cause:{code:'index_not_found'}});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{getTask:async()=>({status:'succeeded'}),waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
   getSettings:async()=>({filterableAttributes:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
-  updateSettings:async value=>{calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
+  updateSettings:async value=>{assert.deepEqual(Object.keys(value.typoTolerance).filter(key=>!['enabled','minWordSizeForTypos','disableOnWords','disableOnAttributes'].includes(key)),[]);calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
   deleteAllDocuments:async()=>{indexes.get(uid).clear();calls.push(['clear',uid]);return queued();},
   addDocuments:async docs=>{for(const p of docs)indexes.get(uid).set(String(p.id),plain(p));return queued();},
   deleteDocuments:async ids=>{for(const id of ids)indexes.get(uid).delete(String(id));return queued();},
