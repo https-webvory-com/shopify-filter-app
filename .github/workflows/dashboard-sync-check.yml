@@ -37,6 +37,9 @@ jobs:
               const settings=await db.filterGlobalSetting.findUnique({where:{shop},select:{updatedAt:true,showFilterOptionsWithOneItem:true,showOnlyInStock:true,prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true}});
               const groups=await db.filterGroup.findMany({where:{shop},select:{name:true,updatedAt:true},orderBy:{updatedAt:'desc'},take:3});
               console.log('CONFIG_UPDATES',JSON.stringify({settings,groups}));
+              const pins=await db.pinnedProductRule.findMany({where:{shop},select:{updatedAt:true,applyToAll:true},orderBy:{updatedAt:'desc'},take:3});
+              const rules=await db.merchandisingRule.findMany({where:{shop},select:{updatedAt:true,ruleType:true,countries:true},orderBy:{updatedAt:'desc'},take:3});
+              console.log('RULE_UPDATES',JSON.stringify({pins,rules}));
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
