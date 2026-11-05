@@ -33,6 +33,7 @@ jobs:
               const collections=await db.collection.findMany({where:{shop,handle:{in:handles}},select:{id:true,handle:true}});
               const allPublished=await db.collectionLoadingSnapshot.count({where:{shop,kind:'published',expiresAt:{gt:new Date()}}});
               console.log('PUBLICATION_TOTAL',allPublished);
+              console.log('CONFIG_REVISION',JSON.stringify({revision:await redis.get(`collectionPreparationRevision:${shop}`),invalidatedAt:await redis.get(`collectionConfigurationInvalidatedAt:${shop}`)}));
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
@@ -45,7 +46,7 @@ jobs:
                 const rankJob=await ranking.getJob(rankId);
                 const orderJob=await order.getJob(`collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collection.id)}`);
                 const configRevision=await redis.get(`collectionPreparationRevision:${shop}`);
-                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>{const entry=decodePreparation(collectionSnapshotStorageText(row.payload));return {at:row.validatedAt,expires:row.expiresAt,size:row.size,usAlias:row.aliases.includes(publishedKey),configurationMatches:String(entry.configuration)===String(configRevision),marketVersion:entry.marketAvailabilityVersion??null,cardVersion:entry.cardPresentationVersion,products:entry.payload?.products?.length,facets:!!entry.payload?.facets};}),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),priority:rankJob.priority??rankJob.opts.priority,attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
+                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>{const entry=decodePreparation(collectionSnapshotStorageText(row.payload));return {at:row.validatedAt,expires:row.expiresAt,size:row.size,usAlias:row.aliases.includes(publishedKey),configuration:entry.configuration,currentConfiguration:configRevision,marketVersion:entry.marketAvailabilityVersion??null,cardVersion:entry.cardPresentationVersion,products:entry.payload?.products?.length,facets:!!entry.payload?.facets};}),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),priority:rankJob.priority??rankJob.opts.priority,attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
               }
               console.log('QUEUE_COUNTS',JSON.stringify({ranking:await ranking.getJobCounts('active','waiting','prioritized','delayed','failed'),order:await order.getJobCounts('active','waiting','prioritized','delayed','failed')}));
             } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
