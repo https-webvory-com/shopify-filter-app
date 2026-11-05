@@ -40,6 +40,9 @@ jobs:
               const pins=await db.pinnedProductRule.findMany({where:{shop},select:{updatedAt:true,applyToAll:true},orderBy:{updatedAt:'desc'},take:3});
               const rules=await db.merchandisingRule.findMany({where:{shop},select:{updatedAt:true,ruleType:true,countries:true},orderBy:{updatedAt:'desc'},take:3});
               console.log('RULE_UPDATES',JSON.stringify({pins,rules}));
+              const synonyms=await db.synonym.findMany({where:{shop},select:{createdAt:true},orderBy:{createdAt:'desc'},take:5});
+              const searchSettings=await db.searchSetting.findUnique({where:{shop},select:{updatedAt:true}});
+              console.log('SEARCH_UPDATES',JSON.stringify({synonyms,searchSettings}));
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
                 const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
