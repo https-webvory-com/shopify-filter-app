@@ -1,0 +1,38 @@
+name: Read-only filter and synonym audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
+            import {PrismaClient} from '@prisma/client';
+            import meili from './app/services/meiliClient.server.js';
+            const db=new PrismaClient();
+            const shop='thedressoutlet.myshopify.com';
+            try {
+              const collection=await db.collection.findFirst({where:{shop,handle:'prom-short-dresses'},select:{id:true,handle:true,title:true}});
+              const groups=await db.filterGroup.findMany({where:{shop},select:{id:true,name:true,status:true,isDefault:true,collections:{select:{collectionId:true,collectionTitle:true,pageType:true}},filters:{select:{label:true,filterType:true,filterKey:true,isEnabled:true}}}});
+              console.log('COLLECTION',JSON.stringify(collection));
+              console.log('GROUPS',JSON.stringify(groups));
+              const synonyms=await db.synonym.findMany({where:{shop},select:{word:true,synonyms:true,isActive:true}});
+              console.log('SAVED_SYNONYMS',JSON.stringify(synonyms));
+              const setting=await db.searchSetting.findUnique({where:{shop},select:{config:true}});
+              const index=setting?.config?._index;
+              console.log('SEARCH_INDEX',JSON.stringify({phase:index?.phase,activeUid:index?.active?.uid,buildUid:index?.build?.uid}));
+              for(const uid of [...new Set(['products',index?.active?.uid].filter(Boolean))]){
+                const synonymMap=await meili.index(uid).getSynonyms();
+                const result=await meili.index(uid).search('test',{filter:[`shop = '${shop}'`,`status = 'ACTIVE'`],limit:3,matchingStrategy:'all',attributesToRetrieve:['id','title']});
+                console.log('INDEX_PROOF',JSON.stringify({uid,synonymCount:Object.keys(synonymMap).length,test:synonymMap.test,shortDress:synonymMap['short dress'],testHits:result.hits?.map(hit=>({id:hit.id,title:hit.title})),estimatedTotalHits:result.estimatedTotalHits}));
+              }
+            } finally {await db.$disconnect();}
+            NODE
