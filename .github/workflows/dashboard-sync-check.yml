@@ -27,3 +27,5 @@ jobs:
               }
             }finally{await db.$disconnect();}
             NODE
+            docker inspect --format 'WEB_STATE {{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}' shopify-filter-app
+            docker logs --since 2026-11-04T12:00:00Z --tail 10000 shopify-filter-app 2>&1 | grep -E 'OrdersSync|Orders sync' | tail -100
