@@ -353,8 +353,8 @@ export const loader = async ({ request, context }) => {
             const formattedId = resolvedCollectionId.includes("gid://")
               ? resolvedCollectionId
               : `gid://shopify/Collection/${resolvedCollectionId}`;
-            const coll = await prisma.collection.findUnique({
-              where: { id: formattedId },
+            const coll = await prisma.collection.findFirst({
+              where: { id: formattedId, shop },
               select: { id: true, title: true,handle:true },
             });
             if (coll) {
@@ -397,6 +397,27 @@ export const loader = async ({ request, context }) => {
               include: { filters: { orderBy: { order: "asc" } } },
             });
             if (assignedGroup) activeGroupFilters = assignedGroup.filters;
+            else if (resolvedCollectionTitle) {
+              // Older group editors saved a collection title as a pseudo ID.
+              // Resolve it only when the title identifies one collection in
+              // this shop; duplicate titles cannot safely share that mapping.
+              const titleCount = await prisma.collection.count({
+                where: { shop, title: resolvedCollectionTitle },
+              });
+              if (titleCount === 1) {
+                const legacyGroup = await prisma.filterGroup.findFirst({
+                  where: {
+                    shop,
+                    status: true,
+                    collections: {
+                      some: { collectionId: `gid://shopify/Collection/${resolvedCollectionTitle}` },
+                    },
+                  },
+                  include: { filters: { orderBy: { order: "asc" } } },
+                });
+                if (legacyGroup) activeGroupFilters = legacyGroup.filters;
+              }
+            }
           }
 
           if (!activeGroupFilters) {

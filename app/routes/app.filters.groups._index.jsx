@@ -168,6 +168,19 @@ export const action = async ({ request }) => {
       formData.get("selectedCollections") || "[]",
     );
 
+    if (groupType === "collections" && selectedCollections.length) {
+      const ids = selectedCollections.map((collection) => collection.id);
+      const valid = await prisma.collection.findMany({
+        where: { shop, id: { in: ids } },
+        select: { id: true, title: true },
+      });
+      const byId = new Map(valid.map((collection) => [collection.id, collection]));
+      if (ids.length !== new Set(ids).size || ids.some((id) => !byId.has(id))) {
+        return { success: false, error: "Select a valid collection from this store.", intent };
+      }
+      selectedCollections.splice(0, selectedCollections.length, ...ids.map((id) => byId.get(id)));
+    }
+
     const existingGroup = await prisma.filterGroup.findFirst({
       where: { shop, name: { equals: name, mode: "insensitive" } },
     });

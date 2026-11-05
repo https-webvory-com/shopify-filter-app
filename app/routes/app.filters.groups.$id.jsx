@@ -65,17 +65,16 @@ export const loader = async ({ request, params }) => {
 
   // Option names will be derived from the fast options SQL below
 
-  let shopifyCollections = [];
+  const shopifyCollections = await prisma.collection.findMany({
+    where: { shop },
+    select: { id: true, title: true },
+    orderBy: { title: "asc" },
+  });
   let shopifyLocations = [];
   try {
     const graphqlQuery = await admin.graphql(`
       #graphql
       query {
-        collections(first: 50, query: "published_status:published") {
-          nodes {
-            title
-          }
-        }
         locations(first: 250, includeInactive: true) {
           nodes {
             id
@@ -103,9 +102,6 @@ export const loader = async ({ request, params }) => {
       }
     `);
     const graphqlData = await graphqlQuery.json();
-    shopifyCollections =
-      graphqlData?.data?.collections?.nodes?.map((c) => c.title).sort() || [];
-
     const allLocsMap = new Map();
     // Add regular locations
     graphqlData?.data?.locations?.nodes?.forEach((l) => {
@@ -313,6 +309,19 @@ export const action = async ({ request, params }) => {
     const selectedCollections = JSON.parse(
       formData.get("selectedCollections") || "[]",
     );
+
+    if (groupType === "collections" && selectedCollections.length) {
+      const ids = selectedCollections.map((collection) => collection.id);
+      const valid = await prisma.collection.findMany({
+        where: { shop, id: { in: ids } },
+        select: { id: true, title: true },
+      });
+      const byId = new Map(valid.map((collection) => [collection.id, collection]));
+      if (ids.length !== new Set(ids).size || ids.some((id) => !byId.has(id))) {
+        return { success: false, error: "Select a valid collection from this store.", intent };
+      }
+      selectedCollections.splice(0, selectedCollections.length, ...ids.map((id) => byId.get(id)));
+    }
 
     const existingGroup = await prisma.filterGroup.findFirst({
       where: {
@@ -636,22 +645,24 @@ export default function FilterGroupDetail() {
     : "collections";
   const initialSelectedColls = group.collections
     .filter((c) => c.pageType === "collection" && c.collectionId !== "__all__")
-    .map((c) => ({ id: c.collectionId, title: c.collectionTitle }));
+    .map((c) => {
+      const exact = shopifyCollections.find((collection) => collection.id === c.collectionId);
+      const titleMatches = shopifyCollections.filter((collection) => collection.title === c.collectionTitle);
+      return exact || (titleMatches.length === 1 ? titleMatches[0] : { id: c.collectionId, title: c.collectionTitle });
+    });
 
   const [groupType, setGroupType] = useState(initialGroupType);
   const [selectedColls, setSelectedColls] = useState(initialSelectedColls);
   const [showCollDropdown, setShowCollDropdown] = useState(false);
   const [searchColl, setSearchColl] = useState("");
   const filteredCollections = shopifyCollections.filter((c) =>
-    c.toLowerCase().includes(searchColl.toLowerCase()),
+    c.title.toLowerCase().includes(searchColl.toLowerCase()),
   );
 
-  const handleToggleCollection = (title) => {
-    // Generate a pseudo-ID like shopify uses (or just use title)
-    const id = `gid://shopify/Collection/${title}`;
+  const handleToggleCollection = ({ id, title }) => {
     setSelectedColls((prev) =>
-      prev.find((c) => c.title === title)
-        ? prev.filter((c) => c.title !== title)
+      prev.find((c) => c.id === id)
+        ? prev.filter((c) => c.id !== id)
         : [...prev, { id, title }],
     );
   };
@@ -1715,11 +1726,11 @@ export default function FilterGroupDetail() {
                           </div>
                           {filteredCollections.map((c) => {
                             const isSelected = selectedColls.some(
-                              (sc) => sc.title === c,
+                              (sc) => sc.id === c.id,
                             );
                             return (
                               <div
-                                key={c}
+                                key={c.id}
                                 onClick={() => handleToggleCollection(c)}
                                 style={{
                                   padding: "8px 12px",
@@ -1738,7 +1749,7 @@ export default function FilterGroupDetail() {
                                   checked={isSelected}
                                   readOnly
                                 />
-                                {c}
+                                {c.title}
                               </div>
                             );
                           })}
