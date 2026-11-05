@@ -5,6 +5,7 @@ import prisma from "../db.server";
 import { resolveSearchColor, colorSearchFilter } from "../utils/searchColor.js";
 import {isProductCodeQuery,skuSearchWhere} from '../utils/skuSearch.js';
 import {getSearchIndexContext} from './searchIndex.server.js';
+import { extractQueryIntent } from '../utils/queryIntent.js';
 
 export async function initializeParserCache(shop) {
   if (!shop) throw new Error("Query parser requires a shop");
@@ -26,6 +27,7 @@ export async function initializeParserCache(shop) {
 
 export async function parseQuery(query, shop) {
   if (!query || typeof query !== 'string') return null;
+  const intent = extractQueryIntent(query);
 
   const context=await getSearchIndexContext(shop);
   const searchable=context.settings?.fields.filter(f=>f.search&&f.weight>0);
@@ -34,7 +36,7 @@ export async function parseQuery(query, shop) {
       const rows=await prisma.product.findMany({where:skuSearchWhere(shop,query),select:{id:true}});
       return rows.map(row=>String(row.id).split('/').pop());
     },15);
-    if(ids.length)return {originalQuery:query,remainingQuery:'',hasFilters:false,filters:{colors:[],vendors:[],types:[]},
+    if(ids.length)return {originalQuery:query,remainingQuery:'',hasFilters:false,filters:{colors:[],vendors:[],types:[]},intent,
       queryColorWords:[],colorIntent:{requested:[],values:[]},colorFilter:null,skuProductIds:ids};
   }
 
@@ -100,6 +102,7 @@ export async function parseQuery(query, shop) {
   return {
     originalQuery: query,
     remainingQuery,
+    intent,
     hasFilters: detectedColors.length > 0 || detectedVendors.length > 0 || detectedTypes.length > 0 || queryColorWords.length > 0,
     filters: {
       colors: detectedColors,

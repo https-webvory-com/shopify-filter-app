@@ -86,7 +86,8 @@ test('parser facets and color aliases are isolated by shop',async()=>{
     './shopCache.server.js':{getCached:async(_key,fetch)=>fetch()},
     '../db.server':{default:{mergedValue:{findMany:async({where})=>where.shop==='shop-a'?[{filterType:'Color',targetValue:'Blue',sourceValues:['Navy']}]:[]}}},
     '../utils/searchColor.js':color,
-    '../utils/skuSearch.js':skuSearch
+    '../utils/skuSearch.js':skuSearch,
+    '../utils/queryIntent.js':{extractQueryIntent:()=>null}
     ,'./searchIndex.server.js':{getSearchIndexContext:async()=>({settings:null})}
   };
   const context={module:{exports:{}},exports:{},console,require:name=>({__esModule:true,...mocks[name]})};

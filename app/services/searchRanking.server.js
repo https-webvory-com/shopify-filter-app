@@ -7,6 +7,7 @@ import { selectSearchColorVariant } from '../utils/searchColor.js';
 import { hydrateCollectionInventory, hydrateCollectionSkus } from '../utils/rankedCollectionPage.js';
 import { rankNativeSearchPage } from './nativeSearchPage.server.js';
 import {isProductCodeQuery,productMatchesCode} from '../utils/skuSearch.js';
+import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 
 const gid = id => `gid://shopify/Product/${String(id).split('/').pop()}`;
 const variants = rows => (rows || []).map(v => ({ ...v,
@@ -98,6 +99,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     }
   }
   const eligible = products.filter(p => {
+    if (pinIds.includes(p.id) && !pinnedProductMatchesAppliedIntent(p, parsedQuery)) return false;
     if(parsedQuery?.skuProductIds?.length&&!parsedQuery.skuProductIds.includes(String(p.id).split('/').pop()))return false;
     if(isProductCodeQuery(query)&&pinIds.includes(p.id)&&!productMatchesCode(p,query))return false;
     if (p.status && String(p.status).toLowerCase() !== 'active') return false;

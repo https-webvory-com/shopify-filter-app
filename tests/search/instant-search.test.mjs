@@ -195,7 +195,7 @@ test('the search endpoint supplies product suggestions using shop-filtered activ
   '../services/rateLimiter.server':{rateLimit:async()=>true},
   '../services/semanticSearch.server':{semanticSearch:async(_query,options)=>{assert.ok(options.filter.includes("shop = 'fixture'"));assert.ok(options.filter.includes("status = 'ACTIVE'"));return {estimatedTotalHits:42,hits:[{id:'1',title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue']}],variantPrices:[],tags:[]}]};}},
  };
- const context={module:{exports:{}},exports:{},URL,Response,setTimeout,console,require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};if(!(name in mocks))throw Error(name);return mocks[name];}};
+   const context={module:{exports:{}},exports:{},URL,Response,setTimeout,console,require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../services/marketPriceCoverage.server.js')return {marketPriceIntentReady:async()=>false};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext(code,context);
  const response=await context.module.exports.loader({request:new Request('https://fixture/api/search?shop=fixture&q=blue%20dress')});
  assert.equal(response.status,200);

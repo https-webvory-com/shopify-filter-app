@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { searchCacheHeaders } from '../utils/searchCachePolicy.js';
 import {getSearchIndexContext,configuredSuggestions} from '../services/searchIndex.server.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
+import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
 /**
  * API Endpoint: /api/search (Mapped to /apps/filter/search via App Proxy)
  * Method: GET
@@ -58,11 +59,9 @@ export const loader = async ({ request }) => {
     const bootstrapMs = Date.now() - startedAt;
     let organicProducts = [];
 
-    // -- TIER 1: NLP Intent Extraction (DISABLED) --
-    // const aiExtracted = await extractFiltersFromQuery(searchQuery);
-    const aiExtracted = { clean_query: searchQuery, min_price: null, max_price: null, attributes: {} };
-    const cleanSearchQuery = parsedQuery?.skuProductIds?.length ? '' : parsedQuery?.colorIntent?.requested.length
-      ? parsedQuery.colorQuery : typeof aiExtracted.clean_query === 'string' ? aiExtracted.clean_query : searchQuery;
+    const intent = parsedQuery?.intent;
+    let cleanSearchQuery = parsedQuery?.skuProductIds?.length ? '' : searchQuery;
+    let effectiveSort = sortBy || null;
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
     if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
@@ -73,22 +72,39 @@ export const loader = async ({ request }) => {
       meiliFilters.push(`available = true`);
     }
 
-    if (aiExtracted.min_price !== undefined && aiExtracted.min_price !== null) {
-        meiliFilters.push(`priceMin >= ${aiExtracted.min_price}`);
+    const country = String(url.searchParams.get('country') || '').toUpperCase();
+    const appliedIntent = { price: false, size: false, country };
+    let marketPriceField = null;
+    if (intent?.price || intent?.size || intent?.sortHint || /price-(?:ascending|descending)/.test(sortBy || '')) {
+      const fields = await getCached(`searchFilterableFields:${searchContext.uid}`, () =>
+        meiliClient.index(searchContext.uid).getFilterableAttributes(), 60).catch(() => []);
+      const priceField = /^[A-Z]{2}$/.test(country) ? `marketPriceMin_${country}` : null;
+      if (searchContext.uid === 'products' && priceField && fields.includes(priceField) &&
+          await marketPriceIntentReady(shop, country))
+        marketPriceField = priceField;
+      if (intent?.price && marketPriceField) {
+        if (intent.price.min != null) meiliFilters.push(`${marketPriceField} >= ${intent.price.min}`);
+        if (intent.price.max != null)
+          meiliFilters.push(`${marketPriceField} ${intent.price.maxExclusive ? '<' : '<='} ${intent.price.max}`);
+        appliedIntent.price = true;
+      }
+      const sizeField = fields.find(field => /^option_size$/i.test(field));
+      if (intent?.size && sizeField) {
+        meiliFilters.push(`${sizeField} = ${JSON.stringify(intent.size)}`);
+        appliedIntent.size = true;
+      }
+      if (!sortBy && intent?.sortHint && marketPriceField) effectiveSort = intent.sortHint;
     }
-    if (aiExtracted.max_price !== undefined && aiExtracted.max_price !== null) {
-        meiliFilters.push(`priceMin <= ${aiExtracted.max_price}`);
-    }
-
-    // Dynamically apply any extra attributes (size, color, material etc)
-    if (aiExtracted.attributes && typeof aiExtracted.attributes === 'object') {
-        for (const [key, value] of Object.entries(aiExtracted.attributes)) {
-            if (!value) continue;
-            // Map keys like "size" to Meilisearch attribute "option_Size" (capitalized)
-            const facetName = `option_${key.charAt(0).toUpperCase() + key.slice(1).toLowerCase()}`;
-            // Add to meilisearch filter with case-insensitive match assumption
-            meiliFilters.push(`${facetName} = '${value}'`);
-        }
+    if (parsedQuery) parsedQuery.appliedIntent = appliedIntent;
+    if (!parsedQuery?.skuProductIds?.length && intent &&
+        (!intent.price || appliedIntent.price) && (!intent.size || appliedIntent.size) &&
+        (!intent.sortHint || effectiveSort === intent.sortHint)) cleanSearchQuery = intent.residualQuery;
+    if (parsedQuery?.colorIntent?.requested.length) {
+      // The color variant filter makes the detected color word redundant in text retrieval.
+      const colorWords = parsedQuery.colorIntent.queryWords || parsedQuery.colorIntent.requested;
+      for (const word of colorWords) cleanSearchQuery = cleanSearchQuery
+        .replace(new RegExp(`(^|\\s)${String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'ig'), ' ');
+      cleanSearchQuery = cleanSearchQuery.replace(/\s+/g, ' ').trim();
     }
 
     const rawSuggestionLimit = url.searchParams.get('suggestionLimit');
@@ -110,18 +126,18 @@ export const loader = async ({ request }) => {
         attributesToRetrieve: INSTANT_SEARCH_INDEX_FIELDS,
     };
 
-    if (sortBy) {
-        if (sortBy === 'price-ascending') {
-            meiliSearchParams.sort = ['priceMin:asc'];
-        } else if (sortBy === 'price-descending') {
-            meiliSearchParams.sort = ['priceMin:desc'];
-        } else if (sortBy === 'title-ascending') {
+    if (effectiveSort) {
+        if (effectiveSort === 'price-ascending') {
+            meiliSearchParams.sort = [`${marketPriceField || 'priceMin'}:asc`];
+        } else if (effectiveSort === 'price-descending') {
+            meiliSearchParams.sort = [`${marketPriceField || 'priceMin'}:desc`];
+        } else if (effectiveSort === 'title-ascending') {
             meiliSearchParams.sort = ['title:asc'];
-        } else if (sortBy === 'title-descending') {
+        } else if (effectiveSort === 'title-descending') {
             meiliSearchParams.sort = ['title:desc'];
-        } else if (sortBy === 'created-ascending') {
+        } else if (effectiveSort === 'created-ascending') {
             meiliSearchParams.sort = ['createdAt:asc'];
-        } else if (sortBy === 'created-descending') {
+        } else if (effectiveSort === 'created-descending') {
             meiliSearchParams.sort = ['createdAt:desc'];
         }
     }
@@ -129,13 +145,13 @@ export const loader = async ({ request }) => {
     // 2. Fetch Active Pinning Rule
 
     const rankingKey = `searchInstantRanking:${shop}:${createHash('sha256').update(JSON.stringify([
-      cleanSearchQuery, meiliSearchParams, sortBy, limit, parsedQuery?.colorIntent,
+      cleanSearchQuery, meiliSearchParams, effectiveSort, limit, parsedQuery?.colorIntent,
       parsedQuery?.skuProductIds, url.searchParams.get('country') || '', url.searchParams.get('locale') || '',
       url.searchParams.get('customer_tags') || '',
     ])).digest('hex')}`;
     const ranking = pinningRule || merchandisingRule
       ? await getCached(rankingKey, async () => rankSearchResults({
-        shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy },
+        shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy: effectiveSort },
         rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
         mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
       }), 60, { maxBytes: 2_000_000 }) : null;
@@ -254,6 +270,9 @@ export const loader = async ({ request }) => {
       query: query,
       totalCount: activeResults.length,
       matchCount: Math.max(activeResults.length, Number(ranking?.total ?? meiliRes.totalHits ?? meiliRes.estimatedTotalHits) || 0),
+      queryIntent: intent ? { price: appliedIntent.price ? intent.price : null,
+        size: appliedIntent.size ? intent.size : null,
+        sortHint: effectiveSort === intent.sortHint ? intent.sortHint : null } : null,
       pinnedCount: activeResults.filter(p => p.isPinned).length,
       products: activeResults.map(p=>instantSearchCard(publicSearchProduct(p,searchContext.settings))),
       suggestions: suggestions,

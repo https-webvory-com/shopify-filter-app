@@ -231,6 +231,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if(name==='../utils/collectionFilterMembership.js')return {};
     if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
+    if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};
     if (name === "../utils/facetNormalization.js") return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};

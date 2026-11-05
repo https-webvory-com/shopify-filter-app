@@ -211,6 +211,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
     '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true},
+    '../utils/searchPinnedIntent.js':{pinnedProductMatchesAppliedIntent:()=>true},
   };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');

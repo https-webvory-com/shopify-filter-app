@@ -1,6 +1,7 @@
 import {extraFilterTypes,extraSelections,readExtraProductFacts,extraIdsFilter,extraFilterChoices} from '../utils/extraProductFilters.js';
 import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,saleIdsFilter} from '../utils/percentSaleFilter.js';
 import { selectSearchColorVariant } from "../utils/searchColor.js";
+import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import { spellingCorrection } from "../utils/spellingCorrection.js";
 import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
@@ -277,8 +278,36 @@ export const loader = async ({ request, context }) => {
       }
     }
     
-    const textSearchQuery=parsedQuery?.skuProductIds?.length?'':isSearch && parsedQuery?.colorIntent?.requested.length
-      ? parsedQuery.colorQuery : searchQuery;
+    const intent = isSearch ? parsedQuery?.intent : null;
+    const intentFilters = [];
+    const appliedIntent = { price: false, size: false, country: String(country || '').toUpperCase() };
+    if (intent?.price || intent?.size) {
+      const fields = await getCached('searchFilterableFields:products', () =>
+        meiliClient.index('products').getFilterableAttributes(), 60).catch(() => []);
+      const priceField = /^[A-Z]{2}$/.test(appliedIntent.country)
+        ? `marketPriceMin_${appliedIntent.country}` : null;
+      if (intent.price && priceField && fields.includes(priceField) &&
+          await marketPriceIntentReady(shop, appliedIntent.country)) {
+        if (intent.price.min != null) intentFilters.push(`${priceField} >= ${intent.price.min}`);
+        if (intent.price.max != null)
+          intentFilters.push(`${priceField} ${intent.price.maxExclusive ? '<' : '<='} ${intent.price.max}`);
+        appliedIntent.price = true;
+      }
+      const sizeField = fields.find(field => /^option_size$/i.test(field));
+      if (intent.size && sizeField) {
+        intentFilters.push(`${sizeField} = ${JSON.stringify(intent.size)}`);
+        appliedIntent.size = true;
+      }
+    }
+    if (parsedQuery) parsedQuery.appliedIntent = appliedIntent;
+    const useResidual = intent && (!intent.price || appliedIntent.price) &&
+      (!intent.size || appliedIntent.size) && !intent.sortHint;
+    let textSearchQuery = parsedQuery?.skuProductIds?.length ? '' : useResidual ? intent.residualQuery : searchQuery;
+    if (isSearch && parsedQuery?.colorIntent?.requested.length) {
+      if (!useResidual) textSearchQuery = parsedQuery.colorQuery;
+      else for (const word of parsedQuery.colorIntent.queryWords || parsedQuery.colorIntent.requested)
+        textSearchQuery = textSearchQuery.replace(new RegExp(`(^|\\s)${String(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`, 'ig'), ' ').replace(/\s+/g, ' ').trim();
+    }
     // Search results describe every product matching the shopper's words.
     // Parsing "cocktail dress" as a product type must not hide products whose
     // title matches but whose Shopify product type differs.
@@ -727,7 +756,7 @@ export const loader = async ({ request, context }) => {
       }
     }
 
-    const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : [])];
+    const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []), ...intentFilters];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
     // Bestselling retains pins and merchandising; other selected sorts may override them.
@@ -786,9 +815,11 @@ export const loader = async ({ request, context }) => {
       }
       const validPins = await prisma.product.findMany({
         where: { shop, status: { equals: "active", mode: "insensitive" }, id: { in: activePinnedList }, ...pinCollectionScope, ...(globalSettings?.showOnlyInStock&&!marketEligible ? { variants: { some: { available: true } } } : {}) },
-        select: parsedQuery?.colorIntent?.requested.length ? { id: true, options: true, variants: true } : { id: true },
+        select: parsedQuery?.colorIntent?.requested.length || appliedIntent.price || appliedIntent.size
+          ? { id: true, options: true, variants: true } : { id: true },
       });
       const validIds = new Set(validPins.filter(product => {
+        if (!pinnedProductMatchesAppliedIntent(product, parsedQuery)) return false;
         if (!parsedQuery?.colorIntent?.requested.length) return true;
         const variant = selectSearchColorVariant(product, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         return variant && (!globalSettings?.showOnlyInStock || variant.available !== false);
@@ -971,7 +1002,10 @@ export const loader = async ({ request, context }) => {
     }
     let extraCounts={};
     let saleCounts = {};
-    if(isSearch)for(const query of queries)query._cfpSearchSurface=true;
+    if(isSearch)for(const query of queries) {
+      query._cfpSearchSurface=true;
+      if (intentFilters.length) query.filter = [...new Set([...(query.filter || []), ...intentFilters])];
+    }
     const queryReadyMs=Date.now()-startTime;
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
@@ -1615,6 +1649,7 @@ export const loader = async ({ request, context }) => {
     // ── 14. Did-you-mean suggestion ────────────────────────────────────
     const didYouMean = spellingCorrection(searchQuery, meiliRes.hits, meiliRes.semanticHitCount);
     if(fastSearchCards)return data({products,totalCount,mergedValues,globalSettings,didYouMean,
+      queryIntent:intent?{price:appliedIntent.price?intent.price:null,size:appliedIntent.size?intent.size:null}:null,
       cfpCards:{version:2,preview:true,search:true},
       debug:{variantEligibilityMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
@@ -1903,7 +1938,8 @@ export const loader = async ({ request, context }) => {
       settings: activeGroupFilters || [],
       globalSettings,
       mergedValues,
-      didYouMean,
+        didYouMean,
+        ...(isSearch?{queryIntent:intent?{price:appliedIntent.price?intent.price:null,size:appliedIntent.size?intent.size:null}:null}:{}),
       debug: {
         ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
         collectionPaginationApplied,

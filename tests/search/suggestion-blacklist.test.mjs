@@ -15,6 +15,7 @@ export async function load(file, mocks) {
   const {code} = await transform(await fs.readFile(file, 'utf8'), {loader:'jsx',format:'cjs'});
   const context = {module:{exports:{}},exports:{},URL,Response,setTimeout,console:{error(){}},require:name=>{
     if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),configuredSuggestions:async()=>null};
+    if(name==='../services/marketPriceCoverage.server.js')return {marketPriceIntentReady:async()=>false};
     if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:product=>product};
     if(name==='../utils/instantSearchCard.js')return {instantSearchCard,INSTANT_SEARCH_INDEX_FIELDS};
     if(name==='../utils/searchCachePolicy.js')return {searchCacheHeaders};

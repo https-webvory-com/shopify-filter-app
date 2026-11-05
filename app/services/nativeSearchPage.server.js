@@ -7,6 +7,7 @@ import { SEARCH_PROJECTION_VERSION, SEARCH_FILTER_FIELDS, searchExactToken, deco
 import { buildMeiliIncludeFilters, applyMerchandisingRules, selectMerchandisingVariant } from './merchandising.server';
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import {isProductCodeQuery,productMatchesCode} from '../utils/skuSearch.js';
+import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 
 const gid = id => 'gid://shopify/Product/' + String(id).split('/').pop();
 const normal = p => ({ ...p, id: gid(p.id),
@@ -75,6 +76,7 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
       if(parsedQuery?.skuProductIds?.length&&!parsedQuery.skuProductIds.includes(id.split('/').pop()))continue;
       if(p&&isProductCodeQuery(query)&&!productMatchesCode(p,query))continue;
       if (!p || (globalSettings.showOnlyInStock && !p.variants.some(v => v.available === true))) continue;
+      if (!pinnedProductMatchesAppliedIntent(p, parsedQuery)) continue;
       if (parsedQuery?.colorIntent?.requested.length) {
         const v = selectSearchColorVariant(p, parsedQuery.colorIntent.values, parsedQuery.colorIntent.requested);
         if (!v || (globalSettings.showOnlyInStock && v.available === false)) continue;

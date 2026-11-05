@@ -127,6 +127,7 @@ async function route(file,mocks){
    if(name==='../utils/marketRuleCountries.js')return marketRuleCountries;
    if(name==='../utils/merchandisingMarketInvalidation.js')return merchandisingMarketInvalidation;
     if (name === "../utils/searchColor.js") return searchColor;
+    if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};
     if (name === '../utils/facetNormalization.js') return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
     if (name === '../services/marketPriceCoverage.server.js') return {marketPriceIntentReady:async()=>false};
