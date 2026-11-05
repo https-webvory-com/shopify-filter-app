@@ -288,6 +288,8 @@ export function initWebhookWorker() {
     const {scheduleMembershipAudits} = await import('../services/collectionMembershipAudit.server.js');
     return scheduleMembershipAudits();
   };
+  global.__reconcileLegacySynonymIndexes = async () =>
+    (await import('../services/searchIndex.server.js')).reconcileLegacySynonymIndexes();
   if (!global.__collectionMembershipWorker) {
     global.__collectionMembershipWorker = new Worker('collectionMembershipQueueV1', async job => {
       if(job.name!=='VERIFY_COLLECTION_MEMBERSHIP')throw Error('Unknown membership audit job');

@@ -11,7 +11,8 @@ try {
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
     if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__searchIndexWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker &&
-        typeof global.__scheduleCatalogDriftAudits==='function' && typeof global.__refreshConnectedMarketPriceCoverage==='function') {
+        typeof global.__scheduleCatalogDriftAudits==='function' && typeof global.__refreshConnectedMarketPriceCoverage==='function' &&
+        typeof global.__reconcileLegacySynonymIndexes==='function') {
       workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__searchIndexWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker, global.__marketAvailabilityWorker];
       break;
     }
@@ -50,8 +51,7 @@ try {
   const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
   let reconcilingSynonyms=false;
   const reconcileSynonyms=async()=>{if(reconcilingSynonyms||shuttingDown)return;reconcilingSynonyms=true;try{
-    const {reconcileLegacySynonymIndexes}=await import('../app/services/searchIndex.server.js');
-    await reconcileLegacySynonymIndexes();
+    await global.__reconcileLegacySynonymIndexes();
   }catch(error){console.error('CFP synonym migration unavailable:',error.name);}finally{reconcilingSynonyms=false;}};
   const synonymTimer=setInterval(reconcileSynonyms,60000);synonymTimer.unref();
   let expiringAnalytics=false;
