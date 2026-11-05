@@ -19,6 +19,9 @@ jobs:
             import Redis from 'ioredis';
             import {Queue} from 'bullmq';
             import {redisConnectionOptions} from './app/services/redisConnection.server.js';
+            import {normalizeCollectionWarmup} from './app/utils/collectionPreparation.js';
+            import {publishedCollectionKey} from './app/utils/collectionPublishedPage.js';
+            import {decodePreparation} from './app/utils/collectionPreparationPayload.js';
             const shop='thedressoutlet.myshopify.com';
             const handles=['formal-dresses','beach-wedding-guest-dresses','cocktail-dresses'];
             const db=new PrismaClient();
@@ -31,13 +34,17 @@ jobs:
               console.log('PUBLICATION_TOTAL',allPublished);
               for(const collection of collections){
                 const number=collection.id.split('/').pop();
-                const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true},orderBy:{validatedAt:'desc'},take:5});
+                const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true,payload:true},orderBy:{validatedAt:'desc'},take:5});
                 const raw=await redis.get(`collectionOrderSnapshot:${shop}:${collection.id}`);
                 let snapshot=null;try{if(raw){const parsed=JSON.parse(raw);snapshot={count:parsed.ids?.length,ageSeconds:Math.round((Date.now()-parsed.updatedAt)/1000),revision:!!parsed.revision};}}catch{}
-                const rankId='ranking-catalog-'+(await import('node:crypto')).createHash('sha256').update(`https://ranking.internal/api/filter?shop=${shop}&country=US&locale=en&sortBy=best-selling&page=1&collectionId=${number}`).digest('hex');
+                const request=new URL(`https://ranking.internal/api/filter?shop=${shop}&country=US&locale=en&sortBy=best-selling&page=1&collectionId=${number}&limit=25&responseProfile=collection-preview-v1`);
+                const record=normalizeCollectionWarmup(shop,request.toString(),collection.id);
+                const rankId='ranking-catalog-'+(await import('node:crypto')).createHash('sha256').update(record.url).digest('hex');
+                const publishedKey=publishedCollectionKey(new Request(request));
                 const rankJob=await ranking.getJob(rankId);
                 const orderJob=await order.getJob(`collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collection.id)}`);
-                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>({at:row.validatedAt,expires:row.expiresAt,size:row.size,aliases:row.aliases.length})),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
+                const configRevision=await redis.get(`collectionPreparationRevision:${shop}`);
+                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>{const entry=decodePreparation(row.payload.toString());return {at:row.validatedAt,expires:row.expiresAt,size:row.size,usAlias:row.aliases.includes(publishedKey),configurationMatches:String(entry.configuration)===String(configRevision),marketVersion:entry.marketAvailabilityVersion??null,cardVersion:entry.cardPresentationVersion,products:entry.payload?.products?.length,facets:!!entry.payload?.facets};}),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),priority:rankJob.priority??rankJob.opts.priority,attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
               }
               console.log('QUEUE_COUNTS',JSON.stringify({ranking:await ranking.getJobCounts('active','waiting','prioritized','delayed','failed'),order:await order.getJobCounts('active','waiting','prioritized','delayed','failed')}));
             } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
