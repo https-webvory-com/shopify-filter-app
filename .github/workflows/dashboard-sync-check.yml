@@ -17,15 +17,13 @@ jobs:
             docker ps --format '{{.Names}} {{.Status}}'
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
-            import {Queue} from 'bullmq';
-            import {redisOptions,webhookQueue} from './app/services/queue.server.js';
-            const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
+            const db=new PrismaClient();
             try {
               for(const shop of ['thedressoutlet.myshopify.com','thedressoutletuk.myshopify.com','another-shpyfy-store.myshopify.com']){
                 const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
-                for(const row of rows){const queued=await queue.getJob(row.id);console.log('SYNC_JOB',JSON.stringify({...row,shop,queueState:queued?await queued.getState():'missing',lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));}
+                for(const row of rows)console.log('SYNC_JOB',JSON.stringify({...row,shop,lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));
                 const orderRows=await db.syncJob.findMany({where:{shop,OR:[{kind:'ORDERS'},{kind:null,totalProducts:null}]},orderBy:{createdAt:'desc'},take:3,select:{id:true,kind:true,status:true,productsProcessed:true,totalProducts:true,createdAt:true,completedAt:true,updatedAt:true,lastError:true}});
                 for(const row of orderRows)console.log('ORDER_SYNC_JOB',JSON.stringify({...row,shop,lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));
               }
-            }finally{await queue.close();await webhookQueue.close();await db.$disconnect();}
+            }finally{await db.$disconnect();}
             NODE
