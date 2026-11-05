@@ -38,6 +38,8 @@ try {
   const membershipTimer=setInterval(audit,60000);membershipTimer.unref();
   let catalogAuditing=false;
   const catalogAudit=async()=>{if(catalogAuditing||shuttingDown)return;catalogAuditing=true;try{
+    const {scheduleUnclassifiedSizeMappingRebuilds}=await import('../app/services/sizeMapping.server.js');
+    await scheduleUnclassifiedSizeMappingRebuilds().catch(error=>console.error('CFP size mapping backfill scheduler unavailable:',error.name));
     await global.__scheduleCatalogDriftAudits();
   }catch(error){console.error('CFP catalog drift scheduler unavailable:',error.name);}finally{catalogAuditing=false;}};
   const catalogAuditTimer=setInterval(catalogAudit,3600000);catalogAuditTimer.unref();

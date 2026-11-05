@@ -42,7 +42,8 @@ async function runner({failReady=false,missingWorkers=false,missingCountryWorker
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
-    .replace('await import("../build/server/index.js")','await loadBundle()');
+    .replace('await import("../build/server/index.js")','await loadBundle()')
+    .replace("await import('../app/services/sizeMapping.server.js')",'({scheduleUnclassifiedSizeMappingRebuilds:async()=>{}})');
   await vm.runInNewContext("(async()=>{\n"+source+"\n})()",ctx);
   return {files,calls,signals,timers};
 }
@@ -60,6 +61,7 @@ test('market price and catalog checks use bundled worker callbacks on startup an
  const f=await runner({catalogAudit:async()=>{catalog++;},marketCheck:async()=>{market++;}});
  assert.equal(catalog,1);assert.equal(market,1);
  assert.equal(f.timers[2].ms,3600000);assert.equal(f.timers[3].ms,120000);
+ await new Promise(resolve=>setImmediate(resolve));
  await f.timers[2].callback();await f.timers[3].callback();
  assert.equal(catalog,2);assert.equal(market,2);
 });

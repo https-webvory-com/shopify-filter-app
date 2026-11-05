@@ -11,6 +11,7 @@ import { searchIndexProjection, SEARCH_FILTER_FIELDS } from '../utils/searchInde
 import {withCollectionRuleFacts} from './collectionRuleFacts.server.js';
 import {scheduleSearchIndexProducts} from './searchIndex.server.js';
 import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices, variantPriceRange } from '../utils/marketPricingIndex.js';
+import { variantSizeEvidence } from '../utils/variantSize.js';
 import { allMarketPriceCountries, marketPriceCountriesForShop } from './marketPriceCoverage.server.js';
 import { withHeldEmbeddingsForIndex } from '../utils/embeddingHold.js';
 
@@ -892,8 +893,21 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
 }
 
 // Function for smart upserting — OPTIMIZED to use batch operations and avoid P2028 transaction timeouts
+const sizeMappingCache = new Map();
+export function invalidateSizeMappings(shop) { sizeMappingCache.delete(shop); }
+async function sizeMappingsForShop(shop, database) {
+  if (!database.sizeNumericMapping?.findMany) return [];
+  const cached = sizeMappingCache.get(shop);
+  if (cached && cached.until > Date.now()) return cached.value;
+  const value = await database.sizeNumericMapping.findMany({ where: { shop },
+    select: { sourceValue: true, sizeUsNumeric: true } });
+  sizeMappingCache.set(shop, { value, until: Date.now() + 30000 });
+  return value;
+}
+
 export async function smartUpsertProduct(shop, product, prismaClient, {collectionUpserts}={}) {
   const marketCountries = marketCountriesInVariants(product.variants.nodes);
+  const sizeMappings = await sizeMappingsForShop(shop, prismaClient);
   const optionsList = product.options.map((opt) => ({
     name: opt.name,
     values: opt.values,
@@ -947,6 +961,7 @@ export async function smartUpsertProduct(shop, product, prismaClient, {collectio
 
   // Prepare all variant data
   const variantData = product.variants.nodes.map((variant) => {
+    const sizeEvidence = variantSizeEvidence(product.options, variant.selectedOptions, sizeMappings);
     let option1 = null, option2 = null, option3 = null;
     variant.selectedOptions.forEach((selOpt) => {
       const optIndex = optionsList.findIndex((o) => o.name === selOpt.name);
@@ -964,6 +979,7 @@ export async function smartUpsertProduct(shop, product, prismaClient, {collectio
       inventory: variant.inventoryQuantity || 0,
       imageUrl: variant.image?.url || null,
       ...(marketCountries.length ? { marketPrices: variantMarketPrices(variant, marketCountries) } : {}),
+      ...sizeEvidence,
       option1,
       option2,
       option3,
@@ -983,6 +999,8 @@ export async function smartUpsertProduct(shop, product, prismaClient, {collectio
           inventory: v.inventory,
           imageUrl: v.imageUrl,
           ...(v.marketPrices ? { marketPrices: v.marketPrices } : {}),
+          sizeUsNumeric: v.sizeUsNumeric,
+          sizeMappingFlag: v.sizeMappingFlag,
           option1: v.option1,
           option2: v.option2,
           option3: v.option3,

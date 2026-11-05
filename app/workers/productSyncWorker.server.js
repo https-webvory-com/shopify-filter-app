@@ -4,6 +4,17 @@ import prisma from "../db.server.js";
 import { syncErrorMessage } from "../utils/syncError.js";
 
 export async function processProductSyncJob(job, token) {
+  if (job.name === 'SIZE_MAPPING_REBUILD') {
+    const { invalidateSizeMappings } = await import('../services/sync.server.js');
+    invalidateSizeMappings(job.data.shop);
+    const { rebuildSizeMappingPage } = await import('../services/sizeMapping.server.js');
+    const result = await rebuildSizeMappingPage(job);
+    if (!result.complete) {
+      await job.moveToDelayed(Date.now() + 100, token);
+      throw new DelayedError();
+    }
+    return result;
+  }
   if (job.name === 'CATALOG_DRIFT_AUDIT') {
     const { processCatalogDriftAudit } = await import('../services/catalogDriftAudit.server.js');
     const result = await processCatalogDriftAudit(job);

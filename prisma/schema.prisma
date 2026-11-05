@@ -150,6 +150,8 @@ model Variant {
   imageUrl       String?
   sku            String?
   marketPrices   Json?
+  sizeUsNumeric  Int?
+  sizeMappingFlag String?
   product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId, available])
@@ -157,6 +159,18 @@ model Variant {
   @@index([option2(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([option3(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+model SizeNumericMapping {
+  id            String   @id @default(cuid())
+  shop          String
+  sourceValue   String
+  sizeUsNumeric Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([shop, sourceValue])
+  @@index([shop])
 }
 
 model Collection {
