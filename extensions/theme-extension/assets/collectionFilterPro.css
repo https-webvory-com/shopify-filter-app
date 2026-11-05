@@ -758,15 +758,16 @@ facet-filters-form,
 .cfp-color-swatch--image input:checked ~ .cfp-swatch-circle::after {
   content: '\2713' !important;
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: auto !important;
+  right: 0 !important;
+  bottom: 0 !important;
   width: 20px;
   height: 20px;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #111;
+  background: #111 !important;
   color: #fff;
   font-size: 14px;
   font-weight: 700;
