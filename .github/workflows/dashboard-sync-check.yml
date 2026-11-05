@@ -30,7 +30,16 @@ jobs:
             const redis=new Redis(redisConnectionOptions);
             const ranking=new Queue('collectionRankingQueueV2',{connection:redisConnectionOptions});
             const order=new Queue('collectionOrderQueueV1',{connection:redisConnectionOptions});
+            const searchQueue=new Queue('searchIndexQueueV1',{connection:redisConnectionOptions});
             try {
+              for(const owner of ['collection-filter-pro.myshopify.com','thedressoutlet.myshopify.com']){
+                const state=(await db.searchSetting.findUnique({where:{shop:owner},select:{config:true}}))?.config?._index||{};
+                console.log('SEARCH_BUILD_STATE',JSON.stringify({shop:owner,phase:state.phase,error:state.error,processed:state.processed,total:state.total,buildQueue:state.build?.queue,buildOffset:state.build?.offset,active:!!state.active}));
+                for(const [lane,queue] of [['search',searchQueue],['ranking',ranking]]){
+                  const jobs=await queue.getJobs(['failed','active','waiting','prioritized'],0,100);
+                  console.log('SEARCH_BUILD_JOBS',JSON.stringify({shop:owner,lane,jobs:await Promise.all(jobs.filter(job=>job.data?.shop===owner&&job.name?.startsWith('SEARCH_INDEX')).slice(0,8).map(async job=>({name:job.name,state:await job.getState(),attempts:job.attemptsMade,reason:job.failedReason?.replace(/https?:\S+/g,'[url]').slice(0,220)})))}));
+                }
+              }
               const collections=await db.collection.findMany({where:{shop,handle:{in:handles}},select:{id:true,handle:true}});
               const allPublished=await db.collectionLoadingSnapshot.count({where:{shop,kind:'published',expiresAt:{gt:new Date()}}});
               console.log('PUBLICATION_TOTAL',allPublished);
@@ -94,6 +103,6 @@ jobs:
                 const first=await queue.getJobs(['prioritized'],0,0);
                 console.log('QUEUE_HEAD',JSON.stringify({name,active:active.map(job=>({name:job.name,ageSeconds:Math.round((Date.now()-(job.processedOn||job.timestamp))/1000),attempts:job.attemptsMade,collectionId:job.data?.record?.collectionId||job.data?.collectionId})),first:first.map(job=>({name:job.name,priority:job.priority??job.opts.priority,ageSeconds:Math.round((Date.now()-job.timestamp)/1000),collectionId:job.data?.record?.collectionId||job.data?.collectionId}))}));
               }
-            } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
+            } finally {await Promise.allSettled([ranking.close(),order.close(),searchQueue.close(),redis.quit(),db.$disconnect()]);}
             NODE
             docker logs --since 5m --tail 160 shopify-filter-sync-worker 2>&1 | grep -E 'collection preparation|Collection order|Collection publication|Periodic collection warmup|JSON|Error|error' | tail -40 || true
