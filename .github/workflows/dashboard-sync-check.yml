@@ -32,9 +32,18 @@ jobs:
             const order=new Queue('collectionOrderQueueV1',{connection:redisConnectionOptions});
             const searchQueue=new Queue('searchIndexQueueV1',{connection:redisConnectionOptions});
             try {
-              for(const owner of ['collection-filter-pro.myshopify.com','thedressoutlet.myshopify.com']){
+              for(const owner of ['collection-filter-pro.myshopify.com','thedressoutlet.myshopify.com','thedressoutletuk.myshopify.com']){
                 const state=(await db.searchSetting.findUnique({where:{shop:owner},select:{config:true}}))?.config?._index||{};
                 console.log('SEARCH_BUILD_STATE',JSON.stringify({shop:owner,phase:state.phase,error:state.error,processed:state.processed,total:state.total,buildQueue:state.build?.queue,buildOffset:state.build?.offset,active:!!state.active}));
+                const saved=await db.synonym.findMany({where:{shop:owner,isActive:true},select:{word:true,synonyms:true}});
+                const idx=meili.index(state.active?.uid||'products');
+                const dict=await idx.getSynonyms();
+                const stats=await idx.search('',{filter:[`shop = '${owner}'`,`status = 'ACTIVE'`],limit:0});
+                console.log('STORE_SEARCH_PROOF',JSON.stringify({shop:owner,private:!!state.active?.uid,catalogCount:stats.estimatedTotalHits,saved,synonymCount:Object.keys(dict).length}));
+                for(const rule of saved.slice(0,3)){
+                  const result=await idx.search(rule.word,{filter:[`shop = '${owner}'`,`status = 'ACTIVE'`],limit:3,matchingStrategy:'all',attributesToRetrieve:['id','title']});
+                  console.log('STORE_SYNONYM_PROOF',JSON.stringify({shop:owner,word:rule.word,configured:dict[rule.word.toLowerCase()],count:result.estimatedTotalHits,titles:result.hits.map(x=>x.title)}));
+                }
                 for(const [lane,queue] of [['search',searchQueue],['ranking',ranking]]){
                   const jobs=await queue.getJobs(['failed','active','waiting','prioritized'],0,100);
                   console.log('SEARCH_BUILD_JOBS',JSON.stringify({shop:owner,lane,jobs:await Promise.all(jobs.filter(job=>job.data?.shop===owner&&job.name?.startsWith('SEARCH_INDEX')).slice(0,8).map(async job=>({name:job.name,state:await job.getState(),attempts:job.attemptsMade,reason:job.failedReason?.replace(/https?:\S+/g,'[url]').slice(0,220)})))}));
