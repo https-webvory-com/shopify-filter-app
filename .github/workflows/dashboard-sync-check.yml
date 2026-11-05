@@ -1,4 +1,4 @@
-name: Inspect dashboard sync error
+name: Read-only collection readiness audit
 on:
   workflow_dispatch:
 permissions:
@@ -14,21 +14,31 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            docker ps --format '{{.Names}} {{.Status}}'
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';
+            import Redis from 'ioredis';
             import {Queue} from 'bullmq';
-            import {redisOptions,webhookQueue} from './app/services/queue.server.js';
-            import meiliClient from './app/services/meiliClient.server.js';
-            const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
+            import {redisConnectionOptions} from './app/services/redisConnection.server.js';
+            const shop='thedressoutlet.myshopify.com';
+            const handles=['formal-dresses','beach-wedding-guest-dresses','cocktail-dresses'];
+            const db=new PrismaClient();
+            const redis=new Redis(redisConnectionOptions);
+            const ranking=new Queue('collectionRankingQueueV2',{connection:redisConnectionOptions});
+            const order=new Queue('collectionOrderQueueV1',{connection:redisConnectionOptions});
             try {
-              const stats=await meiliClient.index('products').getStats();
-              const embedders=(await meiliClient.index('products').getSettings()).embedders || {};
-              const embeddingTask=await meiliClient.tasks.getTask(252811);
-              console.log('SEARCH_ENGINE_STATUS',JSON.stringify({documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,embedders:Object.keys(embedders),embeddingTask:embeddingTask.status,autoEmbeddingSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
-              for(const shop of ['thedressoutlet.myshopify.com','another-shpyfy-store.myshopify.com']){
-                const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
-                for(const row of rows){const queued=await queue.getJob(row.id);console.log('SYNC_JOB',JSON.stringify({...row,shop,queueState:queued?await queued.getState():'missing',lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));}
+              const collections=await db.collection.findMany({where:{shop,handle:{in:handles}},select:{id:true,handle:true}});
+              const allPublished=await db.collectionLoadingSnapshot.count({where:{shop,kind:'published',expiresAt:{gt:new Date()}}});
+              console.log('PUBLICATION_TOTAL',allPublished);
+              for(const collection of collections){
+                const number=collection.id.split('/').pop();
+                const rows=await db.collectionLoadingSnapshot.findMany({where:{shop,kind:'published',collectionId:{in:[collection.id,number]}},select:{aliases:true,validatedAt:true,expiresAt:true,size:true},orderBy:{validatedAt:'desc'},take:5});
+                const raw=await redis.get(`collectionOrderSnapshot:${shop}:${collection.id}`);
+                let snapshot=null;try{if(raw){const parsed=JSON.parse(raw);snapshot={count:parsed.ids?.length,ageSeconds:Math.round((Date.now()-parsed.updatedAt)/1000),revision:!!parsed.revision};}}catch{}
+                const rankId='ranking-catalog-'+(await import('node:crypto')).createHash('sha256').update(`https://ranking.internal/api/filter?shop=${shop}&country=US&locale=en&sortBy=best-selling&page=1&collectionId=${number}`).digest('hex');
+                const rankJob=await ranking.getJob(rankId);
+                const orderJob=await order.getJob(`collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collection.id)}`);
+                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>({at:row.validatedAt,expires:row.expiresAt,size:row.size,aliases:row.aliases.length})),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
               }
-            }finally{await queue.close();await webhookQueue.close();await db.$disconnect();}
+              console.log('QUEUE_COUNTS',JSON.stringify({ranking:await ranking.getJobCounts('active','waiting','prioritized','delayed','failed'),order:await order.getJobCounts('active','waiting','prioritized','delayed','failed')}));
+            } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
             NODE
