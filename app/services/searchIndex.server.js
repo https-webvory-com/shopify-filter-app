@@ -20,6 +20,7 @@ const sourceRevisionKey=shop=>'searchIndexSourceRevision:'+shop;
 const sourceTaskKey=shop=>'searchIndexSourceTask:'+shop;
 export const resetSearchIndexContext=shop=>redis.incr(revisionKey(shop));
 const wait=async task=>{const done=await client.tasks.waitForTask(task.taskUid,{timeout:120000,interval:250});if(done.status!=='succeeded')throw Error('Search index operation failed: '+(done.error?.code||done.status));return done;};
+const meiliErrorCode=error=>error?.cause?.code||error?.code;
 
 async function changeState(shop,change){
  for(let attempt=0;attempt<5;attempt++){
@@ -159,7 +160,7 @@ export async function processSearchIndexJob(data){
  if(data.retireUid){
   if(!data.retireUid.startsWith('cfp_search_'+hash(shop).slice(0,16)+'_'))throw Error('Search index tenant mismatch');
   const state=stateOf(row);if([state.active?.uid,state.build?.uid].includes(data.retireUid))return {retained:true};
-  try{await wait(await client.deleteIndex(data.retireUid));}catch(error){if(error.code!=='index_not_found')throw error;}
+  try{await wait(await client.deleteIndex(data.retireUid));}catch(error){if(meiliErrorCode(error)!=='index_not_found')throw error;}
   return {retired:true};
  }
  if(!row)return {skipped:true};
@@ -169,7 +170,7 @@ export async function processSearchIndexJob(data){
  const build=state.build,index=client.index(build.uid);
  try{
   if(!build.initialized){
-   try{await client.getIndex(build.uid);}catch(error){if(error.code!=='index_not_found')throw error;await wait(await client.createIndex(build.uid,{primaryKey:'id'}));}
+   try{await client.getIndex(build.uid);}catch(error){if(meiliErrorCode(error)!=='index_not_found')throw error;await wait(await client.createIndex(build.uid,{primaryKey:'id'}));}
    await wait(await index.updateSettings(await indexSettings(config)));
    const synonyms=await prisma.synonym.findMany({where:{shop,isActive:true}}),dictionary={};
    for(const row of synonyms){const terms=[row.word,...row.synonyms.split(',')].map(t=>t.trim().toLowerCase()).filter(Boolean);for(const term of terms)dictionary[term]=[...new Set([...(dictionary[term]||[]),...terms.filter(t=>t!==term)])];}
