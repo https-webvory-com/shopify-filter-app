@@ -321,6 +321,15 @@ export function initWebhookWorker() {
     global.__collectionRankingWorker.on('error', error => console.error('CFP Ranking Worker:', error.message));
     global.__collectionRankingWorker.on('failed', (job, error) => console.error('CFP Ranking Worker failed:', job?.id, error.message));
   }
+  if (!global.__searchIndexWorker) {
+    global.__searchIndexWorker = new Worker('searchIndexQueueV1', async job => {
+      if (!['SEARCH_INDEX_BUILD','SEARCH_INDEX_PRODUCTS','SEARCH_INDEX_RETIRE'].includes(job.name))
+        throw Error('Unknown search index job');
+      return (await import('../services/searchIndex.server.js')).processSearchIndexJob(job.data);
+    }, { connection: { ...redisOptions, maxRetriesPerRequest: null }, concurrency: 1 });
+    global.__searchIndexWorker.on('error', error => console.error('CFP Search Index Worker:', error.message));
+    global.__searchIndexWorker.on('failed', (job, error) => console.error('CFP Search index failed:', job?.id, error.message));
+  }
   if (!global.__webhookWorker) {
     global.__webhookWorker = new Worker("webhookQueue", processWebhookJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },

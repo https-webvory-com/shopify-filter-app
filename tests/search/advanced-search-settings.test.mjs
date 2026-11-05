@@ -100,7 +100,7 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const queue={getJob:async()=>null,add:async(name,data,options)=>jobs.push({name,data:plain(data),options:plain(options)})};
  const mocks={'node:crypto':{createHash,randomUUID},'../db.server.js':{__esModule:true,default:prisma},'./redis.server.js':{__esModule:true,default:redis},'./meiliClient.server.js':{__esModule:true,default:client},'./shopCache.server.js':{getCached:async(_key,read)=>read()},'../utils/searchSettings.js':schema,'../utils/searchConfiguration.js':configuration,'../utils/semanticSearch.js':semantic,'../utils/searchIndexExtras.js':{readSearchIndexExtras},'../utils/skuSearch.js':sku,'../utils/embeddingHold.js':{withHeldEmbeddingsForIndex:async(_index,docs)=>docs}};
  const source=(await fs.readFile('app/services/searchIndex.server.js','utf8')).replace("await import('./queue.server.js')",'injectedQueue');
- const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{collectionRankingQueue:queue},require:name=>{if(!(name in mocks))throw Error(name);return mocks[name];}};
+ const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{searchIndexQueue:queue},require:name=>{if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext((await transform(source,{format:'cjs'})).code,context);
  return {service:context.module.exports,rows,cache,indexes,jobs,calls,catalog,fail:()=>{fail=true;},async drain(){let count=0;while(jobs.length){const job=jobs.shift();if(job.name==='SEARCH_INDEX_RETIRE')continue;await context.module.exports.processSearchIndexJob(job.data);if(++count>20)throw Error('Unbounded worker');}}};
 }
@@ -140,6 +140,17 @@ test('legacy shared synonyms clear only after every owning shop has a complete p
  assert.equal(last.pending,0);
  assert.deepEqual(plain(f.calls.find(call=>call[0]==='synonyms'&&call[1]==='products')[2]),{});
  assert.equal((await f.service.getSearchIndexContext(other)).uid,'products');
+});
+
+test('migration moves unfinished search builds out of the collection ranking backlog',async()=>{
+ const f=await fixture(settings({}),[product(1)],true);
+ await f.service.scheduleSearchIndex(shop);
+ delete f.rows.get(shop).config._index.build.queue;
+ f.jobs.length=0;
+ const result=await f.service.reconcileLegacySynonymIndexes();
+ assert.equal(result.scheduled,1);
+ assert.equal(f.rows.get(shop).config._index.build.queue,'searchIndexQueueV1');
+ assert.equal(f.jobs[0].name,'SEARCH_INDEX_BUILD');
 });
 
 test('failed preparation retains a complete serving index and never publishes a partial one',async()=>{

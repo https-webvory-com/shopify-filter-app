@@ -23,7 +23,7 @@ if (!process.argv.includes('--child')) {
   const build = await import('../../build/server/index.js');
   globalThis.__startupRedis.emit('connect');
   await new Promise(resolve => setImmediate(resolve));
-  const names = ['__productSyncWorker','__webhookWorker','__collectionRankingWorker',
+  const names = ['__productSyncWorker','__webhookWorker','__collectionRankingWorker','__searchIndexWorker',
     '__collectionOrderWorker','__collectionMembershipWorker','__marketAvailabilityWorker'];
   if (process.env.CFP_WORKER_MODE === 'worker') {
     await Promise.all(names.map(name => {

@@ -41,7 +41,7 @@ async function runner({failReady=false,missingWorkers=false,missingCountryWorker
     once:(signal,callback)=>{signals[signal]=callback;},exit:code=>calls.push("exit:"+code)},
     fs:{rmSync:path=>files.delete(path),writeFileSync:(path,value)=>files.set(path,value)},delay:async()=>{},
     setInterval:(callback,ms)=>{const timer={callback,ms,stopped:false,unref(){}};timers.push(timer);return timer;},clearInterval:timer=>{timer.stopped=true;},
-    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__collectionOrderWorker=worker("order");ctx.global.__collectionMembershipWorker=worker("membership");if(!missingCountryWorker)ctx.global.__marketAvailabilityWorker=worker('country-stock');ctx.global.__schedulePublicCollectionWarmups=warmup;if(!missingScheduler){ctx.global.__scheduleCatalogDriftAudits=catalogAudit;ctx.global.__refreshConnectedMarketPriceCoverage=marketCheck;}}},
+    loadBundle:async()=>{assert.equal(ctx.process.env.CFP_WORKER_MODE,"worker");if(!missingWorkers){ctx.global.__productSyncWorker=worker("sync");ctx.global.__webhookWorker=worker("webhooks");ctx.global.__collectionRankingWorker=worker("ranking");ctx.global.__searchIndexWorker=worker("search-index");ctx.global.__collectionOrderWorker=worker("order");ctx.global.__collectionMembershipWorker=worker("membership");if(!missingCountryWorker)ctx.global.__marketAvailabilityWorker=worker('country-stock');ctx.global.__schedulePublicCollectionWarmups=warmup;if(!missingScheduler){ctx.global.__scheduleCatalogDriftAudits=catalogAudit;ctx.global.__refreshConnectedMarketPriceCoverage=marketCheck;}}},
   };
   const source=(await fs.readFile("scripts/run-background-worker.mjs","utf8"))
     .replace(/^import .*;\r?\n/gm,"")
@@ -51,7 +51,7 @@ async function runner({failReady=false,missingWorkers=false,missingCountryWorker
   return {files,calls,signals,timers};
 }
 test("worker readiness is published only after all Redis workers are ready",async()=>{
-  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking","ready:order","ready:membership","ready:country-stock"]);
+  const f=await runner();assert.deepEqual(f.calls,["ready:sync","ready:webhooks","ready:ranking","ready:search-index","ready:order","ready:membership","ready:country-stock"]);
   assert.equal(f.files.get("/tmp/cfp-background-worker.ready"),"42");
 });
 test("a failed worker startup reports failure and never publishes readiness",async()=>{

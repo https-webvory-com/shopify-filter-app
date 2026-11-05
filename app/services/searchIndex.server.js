@@ -31,10 +31,10 @@ async function changeState(shop,change){
  throw Error('Search settings changed during index preparation; retry.');
 }
 async function enqueue(name,data,id,priority=30,delay=0){
- const {collectionRankingQueue}=await import('./queue.server.js');
- const existing=await collectionRankingQueue.getJob(id);
+ const {searchIndexQueue}=await import('./queue.server.js');
+ const existing=await searchIndexQueue.getJob(id);
  if(existing){const state=await existing.getState();if(state==='failed'){await existing.retry('failed');return;}if(state!=='completed')return;await existing.remove();}
- await collectionRankingQueue.add(name,data,{jobId:id,priority,delay,attempts:5,backoff:{type:'exponential',delay:10000},removeOnComplete:true});
+ await searchIndexQueue.add(name,data,{jobId:id,priority,delay,attempts:5,backoff:{type:'exponential',delay:10000},removeOnComplete:true});
 }
 export async function retireSearchIndexes(shop,uids){
  if(!validShop(shop))return;
@@ -54,7 +54,7 @@ export async function scheduleSearchIndex(shop){
   await retireSearchIndexes(shop,[previous.active?.uid,previous.build?.uid]);return;
  }
  if(previous.active?.hash===requested){await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'ready',requested,build:null,error:null});return;}
- const build=previous.build?.hash===requested?previous.build:{uid:'cfp_search_'+hash(shop).slice(0,16)+'_'+randomUUID().replaceAll('-',''),hash:requested,offset:0,initialized:false};
+ const build=previous.build?.hash===requested?{...previous.build,queue:'searchIndexQueueV1'}:{uid:'cfp_search_'+hash(shop).slice(0,16)+'_'+randomUUID().replaceAll('-',''),hash:requested,offset:0,initialized:false,queue:'searchIndexQueueV1'};
  await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'queued',requested,build,error:null,processed:build.offset,queuedAt:Date.now()});
  await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested},'search-build-'+hash([shop,requested,build.offset]));
  if(previous.build?.uid!==build.uid)await retireSearchIndexes(shop,[previous.build?.uid]);
@@ -70,7 +70,7 @@ export async function reconcileLegacySynonymIndexes(){
   const row=await prisma.searchSetting.findUnique({where:{shop}}),state=stateOf(row);
   if(state.active?.uid)continue;
   pending++;
-  if(scheduled>=10||state.build&&state.phase!=='failed')continue;
+  if(scheduled>=10||state.build?.queue==='searchIndexQueueV1'&&state.phase!=='failed')continue;
   await prisma.searchSetting.upsert({where:{shop},create:{shop,config:DEFAULT_SEARCH_SETTINGS},update:{}});
   await scheduleSearchIndex(shop);
   scheduled++;

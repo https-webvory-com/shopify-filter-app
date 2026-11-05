@@ -37,6 +37,18 @@ if (!global.__collectionRankingQueue) {
 }
 export const collectionRankingQueue = global.__collectionRankingQueue;
 
+// Search index builds and product deltas have a separate bounded lane. A
+// collection recovery backlog must not delay a merchant's saved search rules.
+if (!global.__searchIndexQueue) {
+  global.__searchIndexQueue = new Queue('searchIndexQueueV1', {
+    connection: redisOptions,
+    defaultJobOptions: { attempts: 5, backoff: { type: 'exponential', delay: 10000 },
+      removeOnComplete: true, removeOnFail: { count: 1000, age: 86400 } },
+  });
+  global.__searchIndexQueue.on('error', error => console.error('CFP Search Index Queue:', error.message));
+}
+export const searchIndexQueue = global.__searchIndexQueue;
+
 // Shopify order snapshots unblock storefront pages. Never put them behind
 // catalog webhooks or full ranking scans, and keep retries durable.
 if (!global.__collectionOrderQueue) {
