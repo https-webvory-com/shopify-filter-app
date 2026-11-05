@@ -11,17 +11,6 @@ const BRAND = "#5B21B6";
 
 const cards = [
   {
-    id: "size-mapping",
-    title: "US Numeric Sizes",
-    tag: "Data Quality",
-    tagColor: BRAND,
-    description: "Review size coverage and map Shopify size labels to US numeric sizes.",
-    path: "/app/filters/size-mapping",
-    icon: <svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="1.8" d="M5 5h14v14H5zM8 12h8M12 8v8" /></svg>,
-    iconBg: BRAND,
-    accentColor: BRAND,
-  },
-  {
     id: "groups",
     title: "Filter Groups",
     tag: "Core Tool",
