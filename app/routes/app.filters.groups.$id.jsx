@@ -2861,7 +2861,7 @@ export default function FilterGroupDetail() {
         }}
         onSave={handleSaveFilterModal}
         initialData={editingFilterData}
-        shopifyCollections={shopifyCollections}
+        shopifyCollections={shopifyCollections.map(collection => collection.title)}
         storeData={storeData}
       />
     </s-page>
