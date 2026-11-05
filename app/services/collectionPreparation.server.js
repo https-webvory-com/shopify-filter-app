@@ -7,7 +7,7 @@ import { prepareCollectionRanking } from '../utils/prepareCollectionRanking.js';
 import { createCollectionPreparation, warmupContextsKey, warmupShopsKey, publicPreparationLimit, warmupRegistryLifetime, normalizeCollectionWarmup } from '../utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './collectionBestSelling.server.js';
-import configuredWarmups from '../config/collection-prewarm.json';
+import configuredWarmups from '../config/collection-prewarm.json' with {type:'json'};
 import {prepareCollectionFromFacts,scheduleCollectionFactRefresh} from './collectionRuleFacts.server.js';
 import {validateCollectionReuse} from '../utils/validateCollectionReuse.js';
 import {loadCollectionLoadingSnapshot,saveCollectionLoadingSnapshot} from './collectionLoadingSnapshots.server.js';
