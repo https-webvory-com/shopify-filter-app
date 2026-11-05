@@ -11,9 +11,22 @@ const withoutFallbackStopwords = query => String(query || '').split(/\s+/u)
 // also find terms in separate attributes (e.g. White color + Dress title).
 async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
   if(!_cfpSynonymQueries?.length)return meiliClient.index(indexUid).search(q,options);
-  // This engine supports federated offset pagination, but no exhaustive page
-  // counts. Let native ranking select its existing exhaustive compatible path.
-  if(options.page!=null||options.hitsPerPage!=null)throw Error('Synonym union requires compatible search ranking');
+  // Older engines lack federated page/count parameters. Count the deduplicated
+  // union through offset pages instead of passing unsupported parameters.
+  if(options.page!=null||options.hitsPerPage!=null){
+    const {page=1,hitsPerPage=20,offset:_offset,limit:_limit,...scope}=options;
+    const start=Math.max(0,page-1)*hitsPerPage,selected=[];let total=0,first;
+    for(let offset=0;;offset+=1000){
+      const result=await runQuery({indexUid,q,_cfpSynonymQueries,...scope,offset,limit:1000,...(offset?{facets:[],...(!(offset<start+hitsPerPage&&offset+1000>start)?{attributesToRetrieve:['id']}:{})}:{})});
+      first??=result;
+      for(let i=0;i<result.hits.length;i++)if(offset+i>=start&&offset+i<start+hitsPerPage)selected.push(result.hits[i]);
+      total+=result.hits.length;
+      if(result.hits.length<1000)break;
+      if(offset>=999000)throw Error('Synonym union exceeded exhaustive count budget');
+    }
+    const {limit,offset,estimatedTotalHits,...result}=first;
+    return {...result,hits:selected,totalHits:total,totalPages:hitsPerPage?Math.ceil(total/hitsPerPage):0,page,hitsPerPage};
+  }
   const {offset=0,limit=20,facets,...params}=options;
   const federation={offset,limit,...(facets?.length?{facetsByIndex:{[indexUid]:facets},mergeFacets:{maxValuesPerFacet:100000}}:{})};
   const result=await meiliClient.multiSearch({queries:[...new Set([q,..._cfpSynonymQueries])].map(text=>({indexUid,q:text,...params,matchingStrategy:'all'})),federation});

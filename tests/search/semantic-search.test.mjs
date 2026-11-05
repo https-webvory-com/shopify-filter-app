@@ -20,7 +20,29 @@ test('edited multiword synonym branches retain filters, facets and pagination wi
  assert.equal(result.hits[0]._federation,undefined);assert.equal(result.estimatedTotalHits,22);
  replacement='blue dress';await service.semanticSearch('mani',scope);
  assert.deepEqual(calls[1].queries.map(q=>q.q),['mani','blue dress']);
- await assert.rejects(service.searchPageBatch([{q:'mani',page:1,hitsPerPage:1}],false),/compatible search ranking/);
+ const counted=await service.searchPageBatch([{q:'mani',page:1,hitsPerPage:1}],false);
+ assert.equal(counted.results[0].totalHits,1);
+ assert.equal(counted.results[0].hits.length,1);
+ assert.equal(calls[2].federation.page,undefined);
+ assert.equal(calls[2].queries[0].page,undefined);
+});
+
+test('synonym page counts scan the complete union and retain fields beyond the first batch',async()=>{
+ const catalog=Array.from({length:2003},(_,i)=>({id:String(i),title:'White dress '+i})),calls=[];
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:'private-owner',_cfpSynonymQueries:['white dress']}))},
+  './meiliClient.server':{default:{multiSearch:async({queries,federation})=>{
+   calls.push(federation.offset);const idOnly=queries[0].attributesToRetrieve?.join(',')==='id';
+   return {hits:catalog.slice(federation.offset,federation.offset+federation.limit).map(p=>idOnly?{id:p.id}:p),estimatedTotalHits:9999,facetDistribution:{color:{White:2003}}};
+  }}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider},
+ });
+ const {results:[result]}=await service.searchPageBatch([{q:'mani',page:2,hitsPerPage:1001}],false);
+ assert.equal(result.totalHits,2003);assert.equal(result.hits.length,1001);
+ assert.equal(result.hits[0].title,'White dress 1001');assert.equal(result.hits.at(-1).title,'White dress 2001');
+ assert.deepEqual(calls,[0,1000,2000]);
+ assert.equal(result.facetDistribution.color.White,2003);
 });
 
 test('single-word junk returns no products and multiword queries relax only after an empty strict pass', async () => {
