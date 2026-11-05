@@ -54,5 +54,11 @@ jobs:
               console.log('QUEUE_COUNTS',JSON.stringify({ranking:await ranking.getJobCounts('active','waiting','prioritized','delayed','failed'),order:await order.getJobCounts('active','waiting','prioritized','delayed','failed')}));
               const failed=await order.getJobs(['failed'],0,9);
               console.log('ORDER_FAILURES',JSON.stringify(failed.map(job=>({attempts:job.attemptsMade,reason:job.failedReason?.replace(/https?:\S+/g,'[url]').slice(0,180)}))));
+              for(const [name,queue] of [['ranking',ranking],['order',order]]){
+                const active=await queue.getJobs(['active'],0,0);
+                const first=await queue.getJobs(['prioritized'],0,0);
+                console.log('QUEUE_HEAD',JSON.stringify({name,active:active.map(job=>({name:job.name,ageSeconds:Math.round((Date.now()-(job.processedOn||job.timestamp))/1000),attempts:job.attemptsMade,collectionId:job.data?.record?.collectionId||job.data?.collectionId})),first:first.map(job=>({name:job.name,priority:job.priority??job.opts.priority,ageSeconds:Math.round((Date.now()-job.timestamp)/1000),collectionId:job.data?.record?.collectionId||job.data?.collectionId}))}));
+              }
             } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
             NODE
+            docker logs --since 5m --tail 160 shopify-filter-sync-worker 2>&1 | grep -E 'collection preparation|Collection order|Collection publication|Periodic collection warmup|JSON|Error|error' | tail -40 || true
