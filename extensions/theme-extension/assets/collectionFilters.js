@@ -37,9 +37,9 @@
     prefetched.add(url.pathname);intentCount++;
     lastIntent=Date.now();start(decodeURIComponent(match[1]));
   }
-  document.addEventListener('pointerover',intent,{passive:true});
-  document.addEventListener('pointerdown',intent,{passive:true});
-  document.addEventListener('focusin',intent);
+  document.addEventListener('pointerover',intent,{passive:true,capture:true});
+  document.addEventListener('pointerdown',intent,{passive:true,capture:true});
+  document.addEventListener('focusin',intent,{capture:true});
   const match=location.pathname.match(/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?collections\/([^/]+)\/?$/i);
   if(match){
     const ctx=context();
