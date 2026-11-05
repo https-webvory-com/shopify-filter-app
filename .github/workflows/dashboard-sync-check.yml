@@ -64,7 +64,7 @@ jobs:
               } catch(error) {console.log('FEDERATED_SYNONYM_ERROR',JSON.stringify({name:error.name,code:error.code,message:error.message?.slice(0,200)}));}
               try {
                 const filter=[`shop = '${shop}'`,`status = 'ACTIVE'`];
-                const federated=await meili.multiSearch({queries:[{indexUid:'products',q:'test',filter,matchingStrategy:'all',facets:['vendor'],limit:0},{indexUid:'products',q:'short dress',filter,matchingStrategy:'all',facets:['vendor'],limit:0}],federation:{offset:0,limit:0,facetsByIndex:{products:['vendor']},mergeFacets:{maxValuesPerFacet:10}}});
+                const federated=await meili.multiSearch({queries:[{indexUid:'products',q:'test',filter,matchingStrategy:'all'},{indexUid:'products',q:'short dress',filter,matchingStrategy:'all'}],federation:{offset:0,limit:0,facetsByIndex:{products:['vendor']},mergeFacets:{maxValuesPerFacet:10}}});
                 console.log('FEDERATED_FACETS_PROOF',JSON.stringify({keys:Object.keys(federated),count:federated.estimatedTotalHits??federated.totalHits,facetKeys:Object.keys(federated.facetDistribution||{}),vendorCount:Object.keys(federated.facetDistribution?.vendor||{}).length,facetsByIndexKeys:Object.keys(federated.facetsByIndex||{})}));
               } catch(error) {console.log('FEDERATED_FACETS_ERROR',JSON.stringify({name:error.name,code:error.code,message:error.message?.slice(0,200)}));}
               for(const collection of collections){
