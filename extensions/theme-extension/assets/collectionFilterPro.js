@@ -2620,7 +2620,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                       gap = '8px';
                     }
 
-                    const bgStyle = isImageItem ? `background: #f8f9fa url('${colorValue}') center/contain no-repeat; border: 1px solid #e2e8f0 !important;` : `background:${colorValue || '#f8f9fa'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
+                    const bgStyle = isImageItem ? `background: #f8f9fa url('${colorValue}') center/contain no-repeat; border: 0 !important;` : `background:${colorValue || '#f8f9fa'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
 
                     const placeholderSvg = (!isImageItem && isGrid && !isColor) ? `
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
@@ -2639,7 +2639,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)} (${item.count})`)}">
+                      <label class="cfp-color-swatch ${isImageItem ? 'cfp-color-swatch--image' : ''} ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)} (${item.count})`)}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
@@ -2773,6 +2773,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (activeFilters.priceRanges.length > 0 || activeFilters.minPrice > 0 || (activeFilters.maxPrice < 999999 && activeFilters.maxPrice > 0)) activeCount = 1;
       } else if (type === 'availability') {
         activeCount = activeFilters.availability.length;
+      } else if (type === 'tag' || type === 'tags') {
+        activeCount = items.filter(item => activeArray.includes(item.value) || activeArray.includes(getCleanLabel('tag', item.value).cleanVal)).length;
       } else if (Array.isArray(activeArray)) {
         activeCount = activeArray.length;
       }
@@ -3038,7 +3040,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         e.preventDefault();
         const type = clearGroupBtn.getAttribute('data-type');
         const key = clearGroupBtn.getAttribute('data-key');
-        clearGroupFilter(type, key);
+        const group = clearGroupBtn.closest('.cfp-group, .cfp-horizontal-pill');
+        const selectedValues = group ? [...group.querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value) : [];
+        clearGroupFilter(type, key, selectedValues);
       }
     });
 
@@ -3605,7 +3609,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     fetchAndRenderData();
   }
 
-  function clearGroupFilter(type, key) {
+  function clearGroupFilter(type, key, selectedValues = []) {
     if (type==='weight') activeFilters.weightRanges=[];
     else if (type==='review_rating') activeFilters.ratingRanges=[];
     else if (type==='inventory_locations') activeFilters.locations=[];
@@ -3613,7 +3617,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     else if (type === 'vendor') activeFilters.vendors = [];
     else if (type === 'product_type') activeFilters.types = [];
     else if (type === 'collection') activeFilters.collections = [];
-    else if (type === 'tag' || type === 'tags') activeFilters.tags = [];
+    else if (type === 'tag' || type === 'tags') {
+      const selected = new Set(selectedValues.flatMap(value => activeFilters.tags.includes(value)
+        ? [value] : [value, getCleanLabel('tag', value).cleanVal]));
+      activeFilters.tags = activeFilters.tags.filter(value => !selected.has(value));
+    }
     else if (type === 'availability') activeFilters.availability = [];
     else if (type === 'title') activeFilters.titles = [];
     else if (type === 'price') {

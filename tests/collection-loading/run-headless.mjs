@@ -753,6 +753,27 @@ try{
       [...sizes].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
     return {automatic:true,explicitAlphabetical:true};
   });
+  await test('clearing one image tag group preserves other selected image groups',async()=>{
+    const groups=[['Sleeve Type','Sleeve:Long'],['Silhouette','Silhouette:Long'],['Neckline','Neckline:V']];
+    const settings=groups.map(([label,value],index)=>({id:`image-${index}`,isEnabled:true,filterType:'tag',filterKey:label,label,displayMode:'Swatch',
+      config:{prefix:value.split(':')[0]+':',multipleSelection:true,swatchConfig:{layout:'Grid',colors:{[value]:{type:'image',value:'/image/1.svg'}}}}}));
+    const productFields=Object.fromEntries(Array.from({length:8},(_,index)=>[String(index+1),{tags:groups.map(([,value])=>value)}]));
+    await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,noMerchandising:true,filterSettings:settings,
+      globalSettings:{showFilterOptionsWithOneItem:true},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    for(const [,value] of groups){
+      await evaluate(`(()=>{const input=[...document.querySelectorAll('#cfp-sidebar input[name="tag"]')].find(e=>e.value===${JSON.stringify(value)});input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    }
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input[name=tag]:checked').length"),3);
+    const visual=await evaluate("(()=>{const label=document.querySelector('#cfp-sidebar input[name=tag]:checked').closest('label');const circle=label.querySelector('.cfp-swatch-circle');return {image:label.classList.contains('cfp-color-swatch--image'),selected:label.classList.contains('cfp-color-swatch--selected'),checked:label.querySelector('input').checked,selector:label.matches('.cfp-color-swatch--image.cfp-color-swatch--selected'),border:getComputedStyle(circle).borderTopWidth,check:getComputedStyle(circle,'::after').content};})()");
+    assert.equal(visual.image,true);assert.equal(visual.border,'0px');assert.ok(visual.check.includes('✓'),JSON.stringify(visual));
+    await evaluate("document.querySelector('#cfp-sidebar .cfp-group[data-group=\"tag-Sleeve Type\"] .cfp-clear-group').click()");
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=tag]:checked')].map(e=>e.value).sort()"),
+      ['Silhouette:Long','Neckline:V'].sort());
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('saved Color hover count excludes sold-out variants while cards stay ready',async()=>{
     const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{}}];
     const productFields={
