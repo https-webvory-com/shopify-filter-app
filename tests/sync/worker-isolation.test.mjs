@@ -27,6 +27,9 @@ test("web server Redis connection never starts background job processors",async(
 test("dedicated worker starts both processors without clearing storefront caches",async()=>{
   assert.deepEqual(await redisRole("worker"),[["webhooks"],["sync"]]);
 });
+test("standalone sales jobs start no workers and do not clear storefront caches",async()=>{
+  assert.deepEqual(await redisRole("standalone"),[]);
+});
 test("local development retains its combined worker mode",async()=>{
   const calls=await redisRole(undefined);assert.ok(calls.some(([name])=>name==="sync"));assert.ok(calls.some(([name])=>name==="keys"));
 });

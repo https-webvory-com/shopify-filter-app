@@ -1,5 +1,8 @@
-import prisma from '../app/db.server.js';
-import { syncHistoricalOrders } from '../app/services/orders.server.js';
+// Resolve application modules only after setting the isolated process role.
+// Shared Redis modules otherwise start a second worker and keep this CLI alive.
+process.env.CFP_WORKER_MODE = 'standalone';
+const { default: prisma } = await import('../app/db.server.js');
+const { syncHistoricalOrders } = await import('../app/services/orders.server.js');
 
 const shop = process.argv[2];
 if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop || ''))
@@ -16,4 +19,6 @@ try {
   if (await syncHistoricalOrders(shop) !== true) process.exitCode = 1;
 } finally {
   await prisma.$disconnect();
+  global.__redis?.disconnect();
 }
+process.exit(process.exitCode || 0);

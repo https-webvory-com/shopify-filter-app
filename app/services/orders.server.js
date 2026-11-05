@@ -43,7 +43,7 @@ export async function syncHistoricalOrders(shop) {
     let pageCount = 0;
 
     // Using a map to aggregate data per product (all-time lifetime)
-    const productAggregations = {};
+    let productAggregations = {};
 
     // Calculate date thresholds for trending scores
     const now = new Date();
@@ -214,6 +214,7 @@ export async function syncHistoricalOrders(shop) {
     });
 
     const updatedCount = await replaceSalesMetrics(shop, productAggregations);
+    productAggregations = null; // Release scan totals before indexing the catalog.
 
     console.log(`OrdersSync [${jobId}]: Updated ${updatedCount} products with ALL-TIME order metrics.`);
 
@@ -272,34 +273,32 @@ export function calculateProductScores(unitsLifetime, unitsSold7Days, revenueLif
  */
 export async function pushScoresToMeili(shop, changedProductIds=null) {
   try {
-    // Fetch all products with their scores
-    const products = await prisma.product.findMany({
-      where: { shop,...(changedProductIds?{id:{in:[...new Set(changedProductIds)]}}:{}) },
-      select: {
-        id: true,
-        bestSellingScore: true,
-        trendingScore: true,
-      }
-    });
-
-    if (products.length === 0) return;
-
-    // Meilisearch uses numeric ID (last part of GID)
-    const meiliDocs = products.map(p => ({
-      id: p.id.includes("/") ? p.id.split("/").pop() : p.id,
-      bestSellingScore: p.bestSellingScore,
-      trendingScore: p.trendingScore,
-    }));
-
-    // Push in batches of 1000 to avoid timeouts
     const MEILI_BATCH = 1000;
+    const changedIds=changedProductIds?[...new Set(changedProductIds)]:null;
+    const meiliDocs=[]; // Retain only small changed-product batches for dependency proof.
     const scoreTasks=[];
-    for (let i = 0; i < meiliDocs.length; i += MEILI_BATCH) {
-      const batch = meiliDocs.slice(i, i + MEILI_BATCH);
+    let cursor=null,updatedCount=0;
+    for (;;) {
+      const products=await prisma.product.findMany({
+        where:{shop,...(changedIds?{id:{in:changedIds}}:{})},
+        ...(cursor?{cursor:{id:cursor},skip:1}:{}),
+        orderBy:{id:'asc'},take:MEILI_BATCH,
+        select:{id:true,bestSellingScore:true,trendingScore:true},
+      });
+      if(!products.length)break;
+      const batch=products.map(p=>({
+        id:p.id.includes('/')?p.id.split('/').pop():p.id,
+        bestSellingScore:p.bestSellingScore,trendingScore:p.trendingScore,
+      }));
+      if(changedIds&&changedIds.length<=2000)meiliDocs.push(...batch);
       const task=await meiliClient.index("products").updateDocuments(batch);
       if(task?.taskUid!=null)scoreTasks.push(task.taskUid);
-      console.log(`OrdersSync: Pushed batch ${Math.floor(i / MEILI_BATCH) + 1} to Meilisearch (${batch.length} products).`);
+      updatedCount+=batch.length;
+      console.log(`OrdersSync: Pushed batch ${Math.ceil(updatedCount / MEILI_BATCH)} to Meilisearch (${batch.length} products).`);
+      if(products.length<MEILI_BATCH)break;
+      cursor=products.at(-1).id;
     }
+    if(updatedCount===0)return;
 
     // Let Meili batch queued writes efficiently; bound completion polling.
     // Partial success still changes ranking inputs and must invalidate caches.
@@ -310,11 +309,11 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
     }
     if(succeeded||!scoreTasks.length){
       const {invalidateShop}=await import('./shopCache.server.js');
-      const memberships=await prisma.productCollection.findMany({where:{product:{shop},...(changedProductIds?{productId:{in:[...new Set(changedProductIds)]}}:{})},select:{collectionId:true},distinct:['collectionId']});
+      const memberships=await prisma.productCollection.findMany({where:{product:{shop},...(changedIds?{productId:{in:changedIds}}:{})},select:{collectionId:true},distinct:['collectionId']});
       // Use visible index tags, which may differ from a concurrent DB sync.
       // An unavailable/incomplete proof retains broad invalidation.
       let externalProof;const scoreIndex=meiliClient.index('products');
-      if(changedProductIds&&meiliDocs.length<=2000&&typeof scoreIndex.getDocuments==='function')try{
+      if(changedIds&&meiliDocs.length===updatedCount&&updatedCount<=2000&&typeof scoreIndex.getDocuments==='function')try{
         const tags=new Set(),ids=[];
         for(let offset=0;offset<meiliDocs.length;offset+=250){
           const wanted=new Set(meiliDocs.slice(offset,offset+250).map(p=>p.id));
@@ -330,7 +329,7 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
       await invalidateShop(shop,{kind:'scores',collectionIds:memberships.map(row=>row.collectionId),externalProof});
     }
     if(failed)throw Error('Some sales-score indexing tasks failed');
-    console.log(`OrdersSync: ✅ Pushed score updates to Meilisearch for ALL ${meiliDocs.length} products.`);
+    console.log(`OrdersSync: Pushed score updates to Meilisearch for ${updatedCount} products.`);
   } catch (error) {
     console.error("OrdersSync: Failed to push scores to Meilisearch:", error);
     throw error;
