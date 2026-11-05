@@ -239,7 +239,7 @@ export async function createLoadingServer({redisLayer}={}) {
     try{
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){state.realToolbar=false;state.independentFilters=false;}
+        if(updates.reset){state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;}
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;}
@@ -277,6 +277,7 @@ export async function createLoadingServer({redisLayer}={}) {
         res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');let asset=await fs.readFile('extensions/theme-extension/assets/'+name,'utf8');asset=asset.replaceAll('https://aisearchfilter.webvory.com','http://127.0.0.1:'+server.address().port);res.end(asset);return;
       }
       if(url.pathname==='/api/collection-filters'){
+        if(state.savedFilterDelay)await new Promise(resolve=>setTimeout(resolve,state.savedFilterDelay));
         const canonical=new URL(url);canonical.pathname='/api/filter';canonical.searchParams.set('responseProfile','collection-v1');
         const saved=await published.get(new Request(canonical),{filtersOnly:true});
         const response=saved||Response.json({cfpFilters:{version:1,status:'pending'}},{status:202});

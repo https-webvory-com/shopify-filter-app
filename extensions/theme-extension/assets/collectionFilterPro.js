@@ -511,14 +511,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   const collectionConfigurationCache = new Map();
   function startIndependentCollectionFilters(params,signal){
-    if(templateName==='search'||filtersReady)return;
+    if(templateName==='search'||filtersReady&&cfpLastSettings.length>0)return;
     const read=()=>{
       if(signal.aborted||!window.cfpLoadSavedFilters)return;
       const identity=value=>{const query=new URLSearchParams(value);for(const key of ['responseProfile','page','limit'])query.delete(key);query.sort();return query.toString();};
       const early=window._cfpSavedFilters;
       const promise=early&&identity(early.params)===identity(params)?early.promise:window.cfpLoadSavedFilters(params,signal);
       Promise.resolve(promise).then(saved=>{
-        if(signal.aborted||filtersReady||saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets)return;
+        if(signal.aborted||filtersReady&&cfpLastSettings.length>0||saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets)return;
         globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
         window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
         cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=saved.totalCount;
