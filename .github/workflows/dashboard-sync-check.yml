@@ -22,6 +22,7 @@ jobs:
             import {normalizeCollectionWarmup} from './app/utils/collectionPreparation.js';
             import {publishedCollectionKey} from './app/utils/collectionPublishedPage.js';
             import {decodePreparation} from './app/utils/collectionPreparationPayload.js';
+            import {collectionSnapshotStorageText} from './app/utils/collectionLoadingSnapshots.js';
             const shop='thedressoutlet.myshopify.com';
             const handles=['formal-dresses','beach-wedding-guest-dresses','cocktail-dresses'];
             const db=new PrismaClient();
@@ -44,7 +45,7 @@ jobs:
                 const rankJob=await ranking.getJob(rankId);
                 const orderJob=await order.getJob(`collection-order-${encodeURIComponent(shop)}-${encodeURIComponent(collection.id)}`);
                 const configRevision=await redis.get(`collectionPreparationRevision:${shop}`);
-                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>{const entry=decodePreparation(row.payload.toString());return {at:row.validatedAt,expires:row.expiresAt,size:row.size,usAlias:row.aliases.includes(publishedKey),configurationMatches:String(entry.configuration)===String(configRevision),marketVersion:entry.marketAvailabilityVersion??null,cardVersion:entry.cardPresentationVersion,products:entry.payload?.products?.length,facets:!!entry.payload?.facets};}),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),priority:rankJob.priority??rankJob.opts.priority,attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
+                console.log('COLLECTION_READY',JSON.stringify({handle:collection.handle,published:rows.map(row=>{const entry=decodePreparation(collectionSnapshotStorageText(row.payload));return {at:row.validatedAt,expires:row.expiresAt,size:row.size,usAlias:row.aliases.includes(publishedKey),configurationMatches:String(entry.configuration)===String(configRevision),marketVersion:entry.marketAvailabilityVersion??null,cardVersion:entry.cardPresentationVersion,products:entry.payload?.products?.length,facets:!!entry.payload?.facets};}),orderSnapshot:snapshot,rankJob:rankJob?{state:await rankJob.getState(),priority:rankJob.priority??rankJob.opts.priority,attempts:rankJob.attemptsMade,failedReason:rankJob.failedReason?.slice(0,160)}:null,orderJob:orderJob?{state:await orderJob.getState(),attempts:orderJob.attemptsMade,failedReason:orderJob.failedReason?.slice(0,160)}:null}));
               }
               console.log('QUEUE_COUNTS',JSON.stringify({ranking:await ranking.getJobCounts('active','waiting','prioritized','delayed','failed'),order:await order.getJobCounts('active','waiting','prioritized','delayed','failed')}));
             } finally {await Promise.allSettled([ranking.close(),order.close(),redis.quit(),db.$disconnect()]);}
