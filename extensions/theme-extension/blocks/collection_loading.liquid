@@ -12,7 +12,7 @@
     data-locale="{{ request.locale.iso_code | escape }}"
     data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}"
     data-customer-tags="{{ customer.tags | join: ',' | escape }}">
-  <script src="{{ 'collectionFilters.js' | asset_url }}" fetchpriority="high" async="async"></script>
+  {% render 'collection_filters_start' %}
   <script src="{{ 'collectionPreviewStream.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
   <script src="{{ 'collectionLoading.min.js' | asset_url }}" fetchpriority="high" async="async"></script>
   <script src="{{ 'collectionWidget.js' | asset_url }}" data-cfp-runtime="{{ 'collectionFilterPro.min.js' | asset_url }}" fetchpriority="high" async="async"></script>

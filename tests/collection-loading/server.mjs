@@ -225,6 +225,7 @@ export async function createLoadingServer({redisLayer}={}) {
     .replace(/{% if template.name == 'search' %}[\s\S]*?{% endif %}/g,'');
   const toolbarScript=liquid.slice(toolbarScriptStart,liquid.indexOf('</script>',toolbarScriptStart)+9);
   const loadingBlock=await fs.readFile('extensions/theme-extension/blocks/collection_loading.liquid','utf8');
+  const inlineFilters=(await fs.readFile('extensions/theme-extension/snippets/collection_filters_start.liquid','utf8')).replaceAll('https://aisearchfilter.webvory.com','http://127.0.0.1:PORT');
   const observedHtml=html.replace("pricesReady:cards.filter(c=>!c.innerText.includes('See product price')).length", "pricesReady:cards.filter(c=>c.querySelector('.cfp-product-card__price')&&!c.innerText.includes('See product price')).length").replaceAll('/assets/collectionFilterPro.js','/assets/collectionWidget.js');
   // Exercise the published block's actual async entry points, so this fixture
   // cannot pass with an async renderer that the extension never loads.
@@ -326,6 +327,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){
         body=body.replace('<link rel="stylesheet"','<meta name="cfp-collection-context" data-shop="'+shop+'" data-handle="fixture" data-country="US" data-locale="en" data-customer-logged-in="false" data-customer-tags="">'+headAsyncScripts+'<script defer src="/slow-theme.js"></script><link rel="stylesheet"')
+          .replace(headAsyncScripts,inlineFilters.replaceAll('127.0.0.1:PORT','127.0.0.1:'+server.address().port)+headAsyncScripts)
           .replace('<script src="/assets/marketPricing.js">','<span id="cfp-collection-ready" hidden></span><script defer src="/assets/marketPricing.js">')
           .replace('<script src="/assets/collectionWidget.js">','<script defer src="/assets/collectionWidget.js">');
         }if(state.early){const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+inline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}

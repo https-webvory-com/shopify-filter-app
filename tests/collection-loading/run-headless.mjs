@@ -48,7 +48,7 @@ try{
   const version=await send('Browser.getVersion');
   await test('saved filters are usable before a delayed product response finishes',async()=>{
     await control({reset:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,
-      independentFilters:true,globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});
+      headRenderer:true,globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});
     await control({publishFirst50:true});
     await control({apiDelay:5000});
     await navigate();

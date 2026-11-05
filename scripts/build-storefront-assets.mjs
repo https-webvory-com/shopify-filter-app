@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {transform} from 'esbuild';
 
 const assets='extensions/theme-extension/assets/';
-for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewStream']){
+for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewStream','collectionFilters']){
   const source=await fs.readFile(assets+name+'.js','utf8');
   const hash=createHash('sha256').update(source.replace(/\r\n/g,'\n')).digest('hex');
   const result=await transform(source,{minify:true,target:'es2020',legalComments:'none',charset:'utf8'});
@@ -11,5 +11,6 @@ for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewS
   await fs.writeFile(assets+name+'.min.js',output);
   if(name==='collectionLoading')await fs.writeFile('extensions/theme-extension/snippets/collection_loading_start.liquid','<script>'+output+'</script>\n');
   if(name==='collectionPreviewStream')await fs.writeFile('extensions/theme-extension/snippets/collection_stream_reader.liquid','<script>'+output+'</script>\n');
+  if(name==='collectionFilters')await fs.writeFile('extensions/theme-extension/snippets/collection_filters_start.liquid','<script>'+output+'</script>\n');
   console.log(name+': '+Buffer.byteLength(source)+' -> '+Buffer.byteLength(output)+' bytes');
 }

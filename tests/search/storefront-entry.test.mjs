@@ -55,7 +55,7 @@ test('registered extension JavaScript entry points remain below the 10000-byte b
  }
 });
 test('published minified assets are generated from current source and inline loader matches the external loader',async()=>{
- for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewStream']){
+ for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewStream','collectionFilters']){
   const source=await fs.readFile(base+'assets/'+name+'.js','utf8');
   const hash=createHash('sha256').update(source.replace(/\r\n/g,'\n')).digest('hex');
   const result=await transform(source,{minify:true,target:'es2020',legalComments:'none',charset:'utf8'});
@@ -63,5 +63,6 @@ test('published minified assets are generated from current source and inline loa
   assert.equal(await fs.readFile(base+'assets/'+name+'.min.js','utf8'),expected);
   if(name==='collectionLoading')assert.equal(await fs.readFile(base+'snippets/collection_loading_start.liquid','utf8'),'<script>'+expected+'</script>\n');
   if(name==='collectionPreviewStream')assert.equal(await fs.readFile(base+'snippets/collection_stream_reader.liquid','utf8'),'<script>'+expected+'</script>\n');
+  if(name==='collectionFilters')assert.equal(await fs.readFile(base+'snippets/collection_filters_start.liquid','utf8'),'<script>'+expected+'</script>\n');
  }
 });
