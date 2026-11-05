@@ -29,6 +29,9 @@ export function validateGoldenQueries(rows) {
   if (!Array.isArray(rows) || rows.length !== 200) throw Error('Golden set must contain exactly 200 judged queries');
   const seen = new Set();
   for (const row of rows) {
+    if (!row) throw Error('Golden query needs a Shopify shop or known store and query');
+    if (row.country != null && !/^[A-Z]{2}$/.test(row.country))
+      throw Error('Golden query country must be a two-letter uppercase code');
     if (!row || typeof row.query !== 'string' || !row.query.trim() ||
       !(typeof row.shop === 'string' && /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(row.shop) || ['US', 'UK'].includes(row.store)))
       throw Error('Golden query needs a Shopify shop or known store and query');

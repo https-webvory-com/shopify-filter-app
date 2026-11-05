@@ -12,8 +12,11 @@ if (queries.length !== 200 || queries.some(row => !row.store || !row.query))
   throw Error('Expected 200 store-specific draft queries');
 const shops = { UK: 'thedressoutletuk.myshopify.com', US: 'thedressoutlet.myshopify.com' };
 const shopFor = row => row.shop || shops[row.store];
+const countryFor = row => row.country || (['UK', 'US'].includes(row.store) ? row.store : '');
 if (queries.some(row => !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopFor(row) || '')))
   throw Error('Each draft query needs a valid Shopify shop domain');
+if (queries.some(row => countryFor(row) && !/^[A-Z]{2}$/.test(countryFor(row))))
+  throw Error('Each country must be a two-letter uppercase code');
 try {
   const existing = Papa.parse(await fs.readFile(output, 'utf8'), { header: true, skipEmptyLines: true });
   if (existing.errors.length) throw Error(`Invalid existing review CSV: ${existing.errors[0].message}`);
@@ -38,13 +41,15 @@ const propose = (query, product) => {
   return { grade, reason: `${matched}/${wanted.length} query terms in title; human review required` };
 };
 const csv = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-const records = [['store', 'shop', 'query', 'query_source', 'product_id', 'product_title',
-  'result_rank', 'candidate_grade', 'reviewed_grade', 'candidate_reason']];
+const records = [['store', 'shop', 'country', 'query', 'query_source', 'product_id', 'product_title',
+  'product_handle', 'product_type', 'response_price_min', 'candidate_source', 'result_rank',
+  'candidate_grade', 'reviewed_grade', 'candidate_reason']];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const search = async (shop, query, limit) => {
+const search = async (shop, query, limit, country) => {
   const url = new URL('/api/search', base);
   for (const [key, value] of Object.entries({ shop, q: query, limit: String(limit), suggestionLimit: '0' }))
     url.searchParams.set(key, value);
+  if (country) url.searchParams.set('country', country);
   for (let attempt = 0; attempt < 3; attempt++) {
     const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
     if (response.status === 429) { await sleep(2000 * (attempt + 1)); continue; }
@@ -58,19 +63,23 @@ const search = async (shop, query, limit) => {
 let completed = 0;
 for (const row of queries) {
   const shop = shopFor(row);
+  const country = countryFor(row);
   const isZero = row.expected_zero === 'yes';
-  const products = isZero ? [] : await search(shop, row.query, row.required_relevant_hits ? 100 : 10);
+  const products = isZero ? [] : await search(shop, row.query, row.required_relevant_hits ? 100 : 10, country);
+  const originalCount = products.length;
   if (!isZero && row.required_relevant_hits && products.length < 20) {
-    const fallback = await search(shop, row.query === 'promm dres' ? 'prom dress' : row.query, 30);
+    const fallback = await search(shop, row.query === 'promm dres' ? 'prom dress' : row.query, 30, country);
     const seen = new Set(products.map(product => product.id));
     for (const product of fallback) if (!seen.has(product.id)) { products.push(product); seen.add(product.id); }
   }
-  if (isZero || !products.length) records.push([row.store, shop, row.query, row.source, '', '', '', '', '',
+  if (isZero || !products.length) records.push([row.store, shop, country, row.query, row.source, '', '', '', '', '', '', '', '', '',
     isZero ? 'Expected zero results; verify suggestions' : 'No current results; review query']);
   else products.forEach((product, index) => {
     const proposal = propose(row.query, product);
-    records.push([row.store, shop, row.query, row.source, String(product.id || '').split('/').pop(),
-      product.title || '', index + 1, proposal.grade, '', proposal.reason]);
+    records.push([row.store, shop, country, row.query, row.source, String(product.id || '').split('/').pop(),
+      product.title || '', product.handle || '', product.productType || '', product.priceMin ?? '',
+      index < originalCount ? 'query' : 'fallback', index < originalCount ? index + 1 : '',
+      proposal.grade, '', proposal.reason]);
   });
   completed++;
   if (completed % 20 === 0) console.log(`Candidate queries prepared: ${completed}/200`);

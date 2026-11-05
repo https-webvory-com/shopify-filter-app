@@ -12,6 +12,8 @@ for (const row of rows) {
   const url = new URL('/api/search', base);
   const shop = row.shop || stores[row.store];
   url.searchParams.set('shop', shop);
+  const country = row.country || (['UK', 'US'].includes(row.store) ? row.store : null);
+  if (country) url.searchParams.set('country', country);
   url.searchParams.set('q', row.query);
   url.searchParams.set('limit', row.requiredRelevantHits ? '100' : '10');
   url.searchParams.set('suggestionLimit', row.expectedZero ? '5' : '0');
