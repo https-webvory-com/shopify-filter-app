@@ -45,16 +45,23 @@ for(const [file,intent,form,model] of [
   release();assert.equal((await pending).success,true);
 });
 
-test('synonyms wait for index completion before invalidating; failed tasks cannot report applied',async()=>{
-  for(const status of ['succeeded','failed']){
+test('synonyms only update the merchant index and schedule its preparation',async()=>{
+  for(const shouldFail of [false,true]){
     const events=[];
     const service=await loadModule('app/services/synonyms.server.js',{
-      '../db.server':{default:{synonym:{findMany:async()=>[{word:'gown',synonyms:'dress'}]}}},
-      './meiliClient.server':{default:{index:()=>({updateSynonyms:async()=>{events.push('queued');return {taskUid:7};}}),tasks:{waitForTask:async id=>{assert.equal(id,7);events.push('completed');return {status};}}}},
-      './shopCache.server':{invalidateShop:async()=>events.push('invalidated')},
+      '../db.server':{default:{synonym:{findMany:async()=>[{word:'gown',synonyms:'dress'}]},searchSetting:{upsert:async value=>events.push(['setting',value.where.shop])}}},
+      '../utils/searchSettings.js':{DEFAULT_SEARCH_SETTINGS:{fields:[]}},
+      './searchIndex.server.js':{
+        syncConfiguredSearchSynonyms:async(shop,dictionary)=>{events.push(['sync',shop,dictionary]);if(shouldFail)throw Error('Index failed');},
+        scheduleSearchIndex:async shop=>events.push(['schedule',shop]),
+      },
     });
-    assert.equal(await service.syncSynonymsToMeilisearch('fixture.myshopify.com'),status==='succeeded');
-    assert.deepEqual(events,status==='succeeded'?['queued','completed','invalidated']:['queued','completed']);
+    assert.equal(await service.syncSynonymsToMeilisearch('fixture.myshopify.com'),!shouldFail);
+    assert.deepEqual(JSON.parse(JSON.stringify(events)),shouldFail?[
+      ['setting','fixture.myshopify.com'],['sync','fixture.myshopify.com',{gown:['dress'],dress:['gown']}],
+    ]:[
+      ['setting','fixture.myshopify.com'],['sync','fixture.myshopify.com',{gown:['dress'],dress:['gown']}],['schedule','fixture.myshopify.com'],
+    ]);
   }
 });
 

@@ -37,7 +37,7 @@ async function serviceFixture() {
       findUnique: async ({ where }) => rows.get(where.shop) || null,
       upsert: async ({ where, create, update }) => rows.set(where.shop, rows.has(where.shop) ? { ...rows.get(where.shop), ...update } : create),
       deleteMany: async ({ where }) => rows.delete(where.shop),
-    } } }, '../utils/searchSettings.js': schema,
+    }, synonym: { findFirst: async () => null } } }, '../utils/searchSettings.js': schema,
   });
   return { rows, service };
 }

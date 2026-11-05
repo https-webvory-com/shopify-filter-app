@@ -1,5 +1,5 @@
 import prisma from '../db.server';
-import { validateSearchSettings } from '../utils/searchSettings.js';
+import { DEFAULT_SEARCH_SETTINGS, validateSearchSettings } from '../utils/searchSettings.js';
 import {requiresCustomSearchIndex} from '../utils/searchConfiguration.js';
 import {scheduleSearchIndex,resetSearchIndexContext,retireSearchIndexes} from './searchIndex.server.js';
 
@@ -20,6 +20,13 @@ export async function saveSearchSettings(shop, input) {
 
 export async function resetSearchSettings(shop) {
   const previous=await prisma.searchSetting.findUnique({where:{shop}});
+  const activeSynonym=await prisma.synonym.findFirst({where:{shop,isActive:true},select:{id:true}});
+  if(activeSynonym){
+    await prisma.searchSetting.upsert({where:{shop},create:{shop,config:DEFAULT_SEARCH_SETTINGS},update:{config:{...DEFAULT_SEARCH_SETTINGS,...(previous?.config?._index?{_index:previous.config._index}:{})}}});
+    await resetSearchIndexContext(shop);
+    await scheduleSearchIndex(shop);
+    return;
+  }
   await prisma.searchSetting.deleteMany({ where: { shop } });
   // The index-context cache is versioned separately from collection ranking.
   // Restoring search defaults never invalidates saved collection pages.

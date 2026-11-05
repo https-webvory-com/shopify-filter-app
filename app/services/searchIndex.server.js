@@ -13,6 +13,7 @@ import {withHeldEmbeddingsForIndex} from '../utils/embeddingHold.js';
 const validShop=shop=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop||'');
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 const identity=(shop,config)=>hash([shop,searchIndexConfiguration(config)]);
+const hasActiveSynonyms=async shop=>!!await prisma.synonym.findFirst({where:{shop,isActive:true},select:{id:true}});
 const stateOf=row=>row?.config?._index||{};
 const revisionKey=shop=>'searchIndexRevision:'+shop;
 const sourceRevisionKey=shop=>'searchIndexSourceRevision:'+shop;
@@ -48,7 +49,7 @@ export async function scheduleSearchIndex(shop){
  if(!validShop(shop))throw Error('Invalid shop');
  const row=await prisma.searchSetting.findUnique({where:{shop}});if(!row)return;
  const config=validateSearchSettings(row.config),requested=identity(shop,config),previous=stateOf(row);
- if(!requiresCustomSearchIndex(config)){
+ if(!requiresCustomSearchIndex(config)&&!await hasActiveSynonyms(shop)){
   await changeState(shop,(_state,current)=>identity(shop,current)!==requested?null:{phase:'ready',requested,active:null,processed:0,total:0});
   await retireSearchIndexes(shop,[previous.active?.uid,previous.build?.uid]);return;
  }

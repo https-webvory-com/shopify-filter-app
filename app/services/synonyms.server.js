@@ -1,7 +1,6 @@
 import prisma from "../db.server";
-import meiliClient from "./meiliClient.server";
-import { invalidateShop } from "./shopCache.server";
-import {syncConfiguredSearchSynonyms} from './searchIndex.server.js';
+import { DEFAULT_SEARCH_SETTINGS } from "../utils/searchSettings.js";
+import { scheduleSearchIndex, syncConfiguredSearchSynonyms } from "./searchIndex.server.js";
 
 /**
  * Fetch all synonyms for a shop and sync them to Meilisearch.
@@ -36,14 +35,15 @@ export async function syncSynonymsToMeilisearch(shop) {
       synonymDict[key] = Array.from(new Set(synonymDict[key]));
     }
 
-    console.log(`Syncing Synonyms for ${shop}:`, synonymDict);
-    
-    // Update Meilisearch
-    const task = await meiliClient.index("products").updateSynonyms(synonymDict);
-    const completed = await meiliClient.tasks.waitForTask(task.taskUid, { timeout: 60000, interval: 100 });
-    if (completed.status !== 'succeeded') throw new Error('Synonym indexing failed');
+    // Synonyms are index-wide. The shared products index contains all shops,
+    // so a merchant action must only update that merchant's private index.
+    if (activeSynonyms.length) await prisma.searchSetting.upsert({
+      where: { shop },
+      create: { shop, config: DEFAULT_SEARCH_SETTINGS },
+      update: {},
+    });
     await syncConfiguredSearchSynonyms(shop,synonymDict);
-    await invalidateShop(shop);
+    await scheduleSearchIndex(shop);
     return true;
   } catch (error) {
     console.error("Error syncing synonyms to Meilisearch:", error);

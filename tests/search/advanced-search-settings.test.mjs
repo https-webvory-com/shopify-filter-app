@@ -78,11 +78,11 @@ test('selected metafields, delimiters and response whitelist do not expose index
  assert.deepEqual(query.filter,['shop = "one.myshopify.com"']);
 });
 
-async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({length:23},(_,i)=>product(i+1))){
+async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({length:23},(_,i)=>product(i+1)),activeSynonym=false){
  const rows=new Map([[shop,{shop,config:plain(config),updatedAt:1}]]),cache=new Map(),indexes=new Map(),jobs=[],calls=[];
  let clock=1,task=0,fail=false;
  const redis={get:async key=>cache.get(key)??null,incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));}};
- const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async()=>[]}};
+ const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async()=>activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
  const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{code:'index_not_found'});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
   getSettings:async()=>({filterableAttributes:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
@@ -115,6 +115,17 @@ test('background preparation serves the previous index until every bounded batch
  assert.equal(f.rows.get(shop).config._index.phase,'ready');
  const otherContext=await f.service.getSearchIndexContext(other);assert.equal(otherContext.uid,'products');
  assert.equal(f.calls.find(c=>c[0]==='settings')[2].searchableAttributes[0],'cfp_field_000');
+});
+
+test('default search settings build a private index when a shop has synonyms',async()=>{
+ const f=await fixture(settings({}),[product(1),product(2,other)],true);
+ await f.service.scheduleSearchIndex(shop);
+ await f.drain();
+ const own=await f.service.getSearchIndexContext(shop);
+ const unrelated=await f.service.getSearchIndexContext(other);
+ assert.equal(own.custom,true);
+ assert.equal(f.indexes.get(own.uid).size,1);
+ assert.equal(unrelated.uid,'products');
 });
 
 test('failed preparation retains a complete serving index and never publishes a partial one',async()=>{
