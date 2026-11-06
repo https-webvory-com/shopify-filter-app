@@ -1209,7 +1209,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
     }
 
-    if (wasInline !== isInlineFilterLayout() || (isInlineFilterLayout() && sidebar?.getAttribute('aria-hidden') === 'true')) {
+    if (wasInline !== isInlineFilterLayout()) {
       if (layout !== 'vertical') closeSidebar();
     }
     if (mobile && settings.mobileFilterLayout === 'horizontal-scrolling') {
@@ -2846,7 +2846,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (horizontalContainer) {
       if (isHorizontalFilterLayout()) {
         const currentlyOpenPopover = document.querySelector('.cfp-horizontal-pill__popover.is-open');
-        const openGroup = currentlyOpenPopover?.closest('.cfp-horizontal-pill')?.getAttribute('data-group');
+        const openGroup = currentlyOpenPopover?.id;
         const openPopoverScrollArea = currentlyOpenPopover?.querySelector('.cfp-scroll-area');
         const openPopoverScrollTop = openPopoverScrollArea ? openPopoverScrollArea.scrollTop : 0;
 
@@ -2923,7 +2923,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         if (openGroup) {
-          const restoredPill = document.querySelector(`.cfp-horizontal-pill[data-group="${openGroup}"]`);
+          const restoredPill = document.getElementById(openGroup)?.closest('.cfp-horizontal-pill');
           if (restoredPill) {
             const pop = restoredPill.querySelector('.cfp-horizontal-pill__popover');
             const btn = restoredPill.querySelector('.cfp-horizontal-pill__btn');
@@ -3598,6 +3598,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
 
           // Fetch storefront updates in real-time (instant changes on desktop)
+          syncCheckboxSelections();
           renderBreadcrumbs();
           fetchAndRenderData();
         });
@@ -3611,6 +3612,46 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     } else {
       const idx = arr.indexOf(value);
       if (idx > -1) arr.splice(idx, 1);
+    }
+  }
+
+  // Selection feedback belongs to the current shopper state, not the next
+  // product/facet response. Also synchronize hidden copies in other layouts.
+  function syncCheckboxSelections() {
+    const valuesByName={availability:activeFilters.availability,vendor:activeFilters.vendors,
+      product_type:activeFilters.types,collection:activeFilters.collections,tag:activeFilters.tags,tags:activeFilters.tags,
+      title:activeFilters.titles,weight:activeFilters.weightRanges,review_rating:activeFilters.ratingRanges,
+      inventory_locations:activeFilters.locations,percent_sale:activeFilters.saleRanges,price:activeFilters.priceRanges};
+    for(const root of [sidebar,document.getElementById('cfp-horizontal-filters'),document.getElementById('cfp-horizontal-extra-filters')].filter(Boolean)){
+      for(const input of root.querySelectorAll('input[type="checkbox"]')){
+        const name=input.name;
+        const values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]:
+          name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]:null);
+        if(!values)continue;
+        const selected=values.includes(input.value)||((name==='tag'||name==='tags')&&values.includes(getCleanLabel('tag',input.value).cleanVal));
+        input.checked=selected;
+        input.closest('.cfp-color-swatch')?.classList.toggle('cfp-color-swatch--selected',selected);
+      }
+      for(const group of root.querySelectorAll('.cfp-group, .cfp-horizontal-pill')){
+        const first=group.querySelector('input[type="checkbox"]');if(!first)continue;
+        const selected=!!group.querySelector('input[type="checkbox"]:checked');
+        group.classList.toggle('has-active',selected);
+        const existing=group.querySelector('.cfp-clear-group');
+        if(!selected){existing?.remove();continue;}
+        if(existing)continue;
+        const horizontal=group.classList.contains('cfp-horizontal-pill');
+        const container=group.querySelector(horizontal?'.cfp-horizontal-pill__popover-header':'.cfp-group__toggle > div:last-child');
+        if(!container)continue;
+        const button=document.createElement(horizontal?'button':'span');
+        if(horizontal)button.type='button';
+        button.className='cfp-clear-group'+(horizontal?' cfp-horizontal-pill__popover-clear':'');
+        const name=first.name;
+        button.dataset.type=name.startsWith('option-')?'option':name.startsWith('metafield-')?'metafield':name;
+        button.dataset.key=name.startsWith('option-')?name.slice(7):name.startsWith('metafield-')?name.slice(10):'';
+        button.textContent='Clear';
+        if(!horizontal)button.style.cssText='color:#8c9196;font-size:13px;font-weight:400;margin-right:12px;cursor:pointer';
+        if(horizontal)container.append(button);else container.prepend(button);
+      }
     }
   }
 
@@ -3635,11 +3676,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       page: 1
     };
 
+    syncCheckboxSelections();
     renderBreadcrumbs();
-    const sidebarElement = document.getElementById('cfp-filter-sidebar');
-    if (sidebarElement) {
-      sidebarElement.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(cb => cb.checked = false);
-    }
     fetchAndRenderData();
   }
 

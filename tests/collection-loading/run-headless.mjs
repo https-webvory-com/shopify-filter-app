@@ -778,6 +778,77 @@ try{
       [...sizes].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
     return {automatic:true,explicitAlphabetical:true};
   });
+  await test('rapid image selection and clearing remain accurate before delayed responses',async()=>{
+    const fields=[['Length','Length:', ['Long','Short']],['Sleeve Type','Sleeve:', ['Long']],['Silhouette','Silhouette:', ['Long']]];
+    const filterSettings=fields.map(([label,prefix,values],i)=>({id:'rapid-'+i,isEnabled:true,filterType:'tag',filterKey:null,label,displayMode:'Swatch',
+      config:{prefix,multipleSelection:true,swatchConfig:{layout:'Grid',colors:Object.fromEntries(values.map(v=>[prefix+v,{type:'image',value:'/image/1.svg'}]))}}}));
+    const productFields=Object.fromEntries(Array.from({length:8},(_,i)=>[String(i+1),{tags:['Length:Long','Length:Short','Sleeve:Long','Silhouette:Long']}]));
+    await control({reset:true,productCount:8,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,
+      globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'drawer'},apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelector('#cfp-sidebar input[value=\"Length:Long\"]')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await control({apiDelay:2200});
+    const immediate=await evaluate(`(()=>{
+      const panel=document.getElementById('cfp-sidebar');document.getElementById('cfp-drawer-trigger-btn').click();
+      const choose=value=>[...panel.querySelectorAll('input[name=tag]')].find(x=>x.value===value).closest('label').click();
+      const state=()=>[...panel.querySelectorAll('input[name=tag]:checked')].map(x=>x.value).sort();
+      choose('Length:Long');choose('Length:Short');choose('Sleeve:Long');choose('Silhouette:Long');
+      const all=state();
+      choose('Length:Short');const unchecked=[...panel.querySelectorAll('input[name=tag]')].find(x=>x.value==='Length:Short');
+      const staleCheck=unchecked.closest('label').classList.contains('cfp-color-swatch--selected');
+      const sleeve=[...panel.querySelectorAll('.cfp-group')].find(g=>g.querySelector('input[value="Sleeve:Long"]'));
+      const clear=sleeve.querySelector('.cfp-clear-group');const clearAvailable=!!clear;clear?.click();
+      return {all,staleCheck,clearAvailable,remaining:state(),query:location.search};
+    })()`);
+    assert.deepEqual(immediate.all,['Length:Long','Length:Short','Silhouette:Long','Sleeve:Long'].sort());
+    assert.equal(immediate.staleCheck,false);assert.equal(immediate.clearAvailable,true);
+    assert.deepEqual(immediate.remaining,['Length:Long','Silhouette:Long'].sort());
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')",20000);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=tag]:checked')].map(x=>x.value).sort()"),immediate.remaining);
+    await evaluate("document.getElementById('cfp-clear-btn').click()");
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-color-swatch--selected').length"),0);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('saved price checkboxes clear independently of image selections',async()=>{
+    const filterSettings=[{id:'price',isEnabled:true,filterType:'price',label:'Price',displayMode:'List',config:{priceRanges:[{id:1,from:'0',to:'10',label:'{0} - {1}'},{id:2,from:'10',to:'',label:'From {0}'}]}},
+      {id:'length',isEnabled:true,filterType:'tag',label:'Length',displayMode:'Swatch',config:{prefix:'Length:',swatchConfig:{colors:{'Length:Long':{type:'image',value:'/image/1.svg'}}}}}];
+    const productFields=Object.fromEntries(Array.from({length:8},(_,i)=>[String(i+1),{tags:['Length:Long']}]));
+    await control({reset:true,productCount:8,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,
+      globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'drawer'},apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelector('#cfp-sidebar input[name=price]')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await control({apiDelay:1200});
+    await evaluate("document.querySelector('#cfp-sidebar input[name=tag]').closest('label').click();document.querySelector('#cfp-sidebar input[name=price]').closest('label').click()");
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),2);
+    await evaluate("document.querySelector('#cfp-sidebar input[name=price]').closest('.cfp-group').querySelector('.cfp-clear-group').click()");
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input[name=price]:checked').length"),0);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=tag]').checked"),true);
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')",20000);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=tag]').checked"),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('single-select image replacement and horizontal popover preserve current selection',async()=>{
+    const filterSettings=['Length','Sleeve'].map((label,i)=>({id:'single-'+i,isEnabled:true,filterType:'tag',filterKey:null,label,displayMode:'Swatch',
+      config:{prefix:label+':',multipleSelection:false,swatchConfig:{layout:'Grid',colors:{[label+':Long']:{type:'image',value:'/image/1.svg'},[label+':Short']:{type:'image',value:'/image/1.svg'}}}}}));
+    const productFields=Object.fromEntries(Array.from({length:8},(_,i)=>[String(i+1),{tags:['Length:Long','Length:Short','Sleeve:Long','Sleeve:Short']}]));
+    await control({reset:true,realToolbar:true,productCount:8,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,
+      globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'horizontal'},apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await evaluate("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn').click();document.querySelector('#cfp-h-pop-single-0-tag- input[value=\"Length:Long\"]').closest('label').click()");
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await control({apiDelay:1800});
+    const state=await evaluate(`(()=>{const roots=document.getElementById('cfp-horizontal-filters');
+      const choose=value=>[...roots.querySelectorAll('input')].find(x=>x.value===value).closest('label').click();
+      choose('Length:Short');const old=roots.querySelector('input[value="Length:Long"]');
+      const stale=old.checked||old.closest('label').classList.contains('cfp-color-swatch--selected');
+      const sleeve=roots.querySelector('#cfp-h-pop-single-1-tag-');sleeve.previousElementSibling.click();choose('Sleeve:Long');
+      sleeve.querySelector('.cfp-clear-group').click();
+      return {stale,selected:[...roots.querySelectorAll('input:checked')].map(x=>x.value),open:roots.querySelector('.cfp-horizontal-pill__popover.is-open')?.id};})()`);
+    assert.equal(state.stale,false);assert.deepEqual(state.selected,['Length:Short']);
+    assert.equal(state.open,'cfp-h-pop-single-1-tag-');
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')",20000);
+    assert.equal(await evaluate("document.querySelector('.cfp-horizontal-pill__popover.is-open')?.id"),'cfp-h-pop-single-1-tag-');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('clearing one image tag group preserves other selected image groups',async()=>{
     const groups=[['Sleeve Type','Sleeve:Long'],['Silhouette','Silhouette:Long'],['Neckline','Neckline:V']];
     const settings=groups.map(([label,value],index)=>({id:`image-${index}`,isEnabled:true,filterType:'tag',filterKey:label,label,displayMode:'Swatch',
