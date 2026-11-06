@@ -2638,7 +2638,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                       vWidth = '64px';
                       vHeight = '64px';
                       labelFlexDir = 'column';
-                      labelJustify = 'center';
+                      labelJustify = 'flex-start';
                       textAlign = 'center';
                       gap = '8px';
                     } else {

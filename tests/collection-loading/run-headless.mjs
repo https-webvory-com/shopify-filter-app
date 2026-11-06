@@ -46,6 +46,30 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('image filter labels align from the top and drawer Reset and Done remain visible',async()=>{
+    const names={Length:['Mini','Midi','Maxi','Floor Length'],Sleeve:['Cap Sleeve','Long Sleeve','Off The Shoulder','One Shoulder']};
+    const filterSettings=Object.entries(names).map(([label,values])=>({id:label,isEnabled:true,filterType:'tag',label,displayMode:'Swatch',config:{prefix:label+':',swatchConfig:{layout:'Grid',showLabel:true,colors:Object.fromEntries(values.map(value=>[label+':'+value,{type:'image',value:'/image/1.svg'}]))}}}));
+    const productFields=Object.fromEntries(Array.from({length:8},(_,i)=>[String(i+1),{tags:Object.entries(names).flatMap(([label,values])=>values.map(value=>label+':'+value))}]));
+    for(const width of [1440,390]){
+      await control({reset:true,productCount:8,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
+      const grids=await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].map(g=>{const cells=[...g.children];return {images:cells.map(e=>e.querySelector('.cfp-swatch-circle').getBoundingClientRect().top),labels:cells.map(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().top),visible:cells.every(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().height>0)}})");
+      assert.equal(grids.length,2);for(const grid of grids){assert.equal(grid.visible,true);assert.ok(Math.max(...grid.images)-Math.min(...grid.images)<1);assert.ok(Math.max(...grid.labels)-Math.min(...grid.labels)<1);}
+      assert.equal(await evaluate("document.querySelector('#cfp-clear-btn').textContent.trim()"),'Reset');
+      assert.equal(await evaluate("document.querySelector('#cfp-apply-btn').textContent.trim()"),'Done');
+      const footer=await evaluate("[...document.querySelectorAll('.cfp-sidebar__footer button')].map(e=>{const r=e.getBoundingClientRect();return {height:r.height,bottom:r.bottom,viewport:visualViewport.height}})");
+      assert.equal(footer.length,2);assert.ok(footer.every(r=>r.height>=40&&r.bottom<=r.viewport-12),JSON.stringify(footer));
+      await evaluate("document.querySelector('#cfp-sidebar input[value=\"Length:Mini\"]').click();document.querySelector('#cfp-sidebar input[value=\"Sleeve:Cap Sleeve\"]').click();document.querySelector('#cfp-clear-btn').click()");
+      assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),true);
+      await evaluate("document.querySelector('#cfp-sidebar input[value=\"Length:Mini\"]').click();document.querySelector('#cfp-apply-btn').click()");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),false);
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[value=\"Length:Mini\"]').checked"),true);
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')");assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('Price style defaults to checkboxes across stores and Size defaults to four configurable columns',async()=>{
     const bands=[{from:0,to:10,label:'{0} - {1}'},{from:10,to:'',label:'From {0}'}];
     const filterSettings=[{id:'price',isEnabled:true,filterType:'price',label:'Price',displayMode:'Range',config:{priceRanges:bands}},
