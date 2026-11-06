@@ -784,8 +784,11 @@ try{
       config:{prefix:value.split(':')[0]+':',multipleSelection:true,swatchConfig:{layout:'Grid',colors:{[value]:{type:'image',value:'/image/1.svg'}}}}}));
     const productFields=Object.fromEntries(Array.from({length:8},(_,index)=>[String(index+1),{tags:groups.map(([,value])=>value)}]));
     await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,noMerchandising:true,filterSettings:settings,
-      globalSettings:{showFilterOptionsWithOneItem:true},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+      globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'drawer'},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+    await evaluate("document.getElementById('cfp-drawer-trigger-btn').click()");
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].map(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length)"),[4,4,4]);
+    await evaluate("document.getElementById('cfp-close-btn').click()");
     for(const [,value] of groups){
       await evaluate(`(()=>{const input=[...document.querySelectorAll('#cfp-sidebar input[name="tag"]')].find(e=>e.value===${JSON.stringify(value)});input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");

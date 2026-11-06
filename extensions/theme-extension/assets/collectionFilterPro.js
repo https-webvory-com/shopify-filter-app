@@ -2569,6 +2569,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           const showLabel = swatchConf.showLabel !== false;
           const hasSearch = adv.desktopSearchBox;
           const swatchLayout = swatchConf.layout || 'List';
+          const imageGrid = !isColor && swatchLayout === 'Grid';
+          const gridStyle = imageGrid ? 'grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 8px !important; padding: 0 !important;' :
+            isColor ? `grid-template-columns: ${showLabel ? '1fr 1fr' : 'repeat(4, 1fr)'} !important; gap: 6px 8px !important; padding: 0 !important;` :
+            'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important; padding: 6px !important;';
 
           groupContent = `
             ${hasSearch ? `
@@ -2578,7 +2582,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-color-grid" style="padding: 6px !important; ${(!isColor || showLabel) ? 'grid-template-columns: 1fr 1fr !important; gap: 12px 8px !important;' : 'grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important;'}">
+              <div class="cfp-color-grid ${imageGrid ? 'cfp-color-grid--images' : isColor ? 'cfp-color-grid--colors' : ''}" style="${gridStyle}">
                 ${(() => {
 
                   return items.map((item, idx) => {
@@ -2655,7 +2659,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
 
                     const imageHtml=isImageItem?`<img class="cfp-swatch-image" src="${escapeCardHtml(colorValue)}" alt="" aria-hidden="true" decoding="async">`:placeholderSvg;
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: 6px ${labelFlexDir === 'row' ? '6px' : 'auto'} !important;">${imageHtml}</span>`;
+                    const visualMargin=isColor?'3px':`6px ${labelFlexDir === 'row' ? '6px' : 'auto'}`;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: ${visualMargin} !important;">${imageHtml}</span>`;
 
                     const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 

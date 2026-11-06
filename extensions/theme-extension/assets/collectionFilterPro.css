@@ -765,6 +765,8 @@ facet-filters-form,
   opacity: 0.45;
   transition: opacity 0.15s;
 }
+.cfp-color-grid--images .cfp-swatch-circle { max-width: 100% !important; }
+.cfp-group__content:has(.cfp-color-grid--colors) { padding-bottom: 4px; }
 .cfp-color-swatch--image:hover .cfp-swatch-image,
 .cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-image,
 .cfp-color-swatch--image input:checked ~ .cfp-swatch-circle .cfp-swatch-image,
