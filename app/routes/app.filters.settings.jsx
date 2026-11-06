@@ -196,24 +196,43 @@ function SettingBarColor({ value, onChange, disabled }) {
   const [custom, setCustom] = useState(!!value);
   const [draft, setDraft] = useState(value || '#ffffff');
   useEffect(() => { setCustom(!!value); setDraft(value || '#ffffff'); }, [value]);
+  const valid = /^#[0-9a-f]{6}$/i.test(draft);
+  const previewColor = valid ? draft : '#ffffff';
+  const rgb = [1,3,5].map(start => parseInt(previewColor.slice(start,start+2),16));
+  const previewText = rgb[0]*0.299 + rgb[1]*0.587 + rgb[2]*0.114 < 140 ? '#ffffff' : '#1e1b4b';
+  const presets = [['White','#ffffff'],['Cream','#fbf7f5'],['Light gray','#f4f6f8'],['Lavender','#f5f3ff'],['Navy','#1e1b4b'],['Black','#111111']];
+  const usePage = () => { setCustom(false); if (value) onChange(''); };
   return (
-    <div className="settings-row">
-      <div className="settings-text-col">
+    <div className="settings-row" style={{flexWrap:'wrap'}}>
+      <div className="settings-text-col" style={{minWidth:200}}>
         <p className="settings-label">Filter and sort bar background</p>
         <p className="settings-desc">Choose the background of the bar containing Filters and Bestselling. By default, it matches the surrounding page. Reload the storefront after saving.</p>
       </div>
-      <fieldset disabled={disabled} style={{border:0,padding:0,margin:0,display:'grid',gap:12,minWidth:200}}>
+      <fieldset disabled={disabled} style={{border:'1px solid #e5dfed',padding:16,margin:0,display:'grid',gap:14,width:300,maxWidth:'100%',minWidth:0,flex:'0 1 300px',borderRadius:12,background:'#fcfbfe',boxSizing:'border-box'}}>
         <select aria-label="Filter and sort bar background" value={custom ? 'custom' : 'page'} onChange={e => {
-          const next = e.target.value === 'custom'; setCustom(next); if (!next) onChange('');
-        }} style={{padding:10,border:'1px solid #c9cccf',borderRadius:8,background:'#fff'}}>
+          if (e.target.value === 'custom') setCustom(true); else usePage();
+        }} style={{padding:'10px 12px',border:'1px solid #d8d0e2',borderRadius:8,background:'#fff',font:'inherit',fontSize:13,width:'100%'}}>
           <option value="page">Page background (default)</option>
           <option value="custom">Custom color</option>
         </select>
-        {custom && <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <input type="color" aria-label="Bar background color" value={/^#[0-9a-f]{6}$/i.test(draft) ? draft : '#ffffff'} onChange={e => setDraft(e.target.value)} />
-          <input aria-label="Bar background hex color" value={draft} maxLength={7} onChange={e => setDraft(e.target.value)} style={{width:82,padding:8,border:'1px solid #c9cccf',borderRadius:6}} />
-          <button type="button" disabled={!/^#[0-9a-f]{6}$/i.test(draft) || draft.toLowerCase() === value} onClick={() => onChange(draft.toLowerCase())}>Apply</button>
-        </div>}
+        {!custom ? <p style={{margin:0,fontSize:12,color:'#766c82',lineHeight:1.6}}>Automatically matches the surrounding collection or search page.</p> : <>
+          <div style={{display:'flex',gap:12,alignItems:'center'}}>
+            <input type="color" aria-label="Bar background color" value={previewColor} onChange={e => setDraft(e.target.value)} style={{width:48,height:44,padding:3,border:'1px solid #d8d0e2',borderRadius:8,background:'#fff',cursor:'pointer',flexShrink:0}} />
+            <label style={{display:'grid',gap:5,minWidth:0,flex:1,fontSize:11,fontWeight:600,color:'#766c82'}}>HEX color
+              <span style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',border:'1px solid #d8d0e2',borderRadius:8,background:'#fff'}}>
+                <span aria-hidden="true" style={{color:'#94869e'}}>#</span>
+                <input aria-label="Bar background hex color" aria-invalid={!valid} value={draft.replace(/^#/,'')} maxLength={7} onChange={e => setDraft('#'+e.target.value.trim().replace(/^#/,''))} spellCheck={false} style={{width:'100%',minWidth:0,border:0,outline:0,font:'13px ui-monospace,monospace',background:'transparent',color:'#30253e'}} />
+              </span>
+            </label>
+          </div>
+          <div role="group" aria-label="Suggested background colors" style={{display:'flex',gap:9}}>
+            {presets.map(([name,color]) => <button key={color} type="button" aria-label={'Use '+name} aria-pressed={draft.toLowerCase() === color} title={name} onClick={() => setDraft(color)} style={{width:28,height:28,borderRadius:'50%',background:color,border:draft.toLowerCase() === color?'2px solid #7c3aed':'1px solid #d8d0e2',boxShadow:draft.toLowerCase() === color?'0 0 0 2px #ede9fe':'none',cursor:'pointer',padding:0}} />)}
+          </div>
+          <div aria-label="Filter bar color preview" style={{display:'flex',justifyContent:'space-between',padding:'14px 12px',border:'1px solid #e5dfed',borderRadius:8,background:previewColor,color:previewText,fontSize:12,fontWeight:600}}><span>Filters</span><span>Best selling⌄</span></div>
+          {!valid && <p role="alert" style={{margin:0,fontSize:12,color:'#b42318'}}>Enter a six-digit HEX color.</p>}
+          <button type="button" disabled={!valid || draft.toLowerCase() === value} onClick={() => onChange(draft.toLowerCase())} style={{padding:'10px 14px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',fontWeight:600,cursor:'pointer',opacity:!valid || draft.toLowerCase() === value?0.5:1}}>Apply color</button>
+          <button type="button" onClick={usePage} style={{border:0,padding:0,background:'none',color:'#6d5880',fontSize:12,textDecoration:'underline',cursor:'pointer'}}>Use page background</button>
+        </>}
       </fieldset>
     </div>
   );

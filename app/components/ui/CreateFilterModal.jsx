@@ -407,7 +407,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
           setDisplayMode("List");
         }
         
-        if (initialData.priceRanges) setPriceRanges(initialData.priceRanges.map(r => ({ ...r, from: r.from !== undefined ? r.from : (r.min || ""), to: r.to !== undefined ? r.to : (r.max || "") })));
+        if (initialData.priceRanges) setPriceRanges(initialData.priceRanges.map((r, index) => ({ ...r, id: r.id ?? 'price-' + index, from: r.from ?? r.min ?? "", to: r.to ?? r.max ?? "" })));
         if (initialData.saleRanges) setSaleRanges(initialData.saleRanges);
         if (initialData.weightRanges) setWeightRanges(initialData.weightRanges);
         if (initialData.reviewRanges) setReviewRanges(initialData.reviewRanges);
@@ -947,6 +947,22 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                 </div>
 
                 {/* Navigation Collections */}
+                {optionType !== 'stock_status' && !(displayMode === 'Range' && ['price','percent_sale','weight','review_rating'].includes(optionType)) && !navCollections && (
+                  <fieldset style={{border:'1px solid #e1e3e5',borderRadius:10,padding:16,margin:0}}>
+                    <legend style={{fontSize:14,fontWeight:600}}>Filter option search</legend>
+                    <p style={{fontSize:13,color:'#6d7175',margin:'0 0 12px'}}>Add or remove the search field inside this filter. It searches filter options, not products.</p>
+                    <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
+                      <label style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <input type="checkbox" checked={advanced.desktopSearchBox === true} onChange={e => setAdvanced({...advanced,desktopSearchBox:e.target.checked})} />
+                        Show option search on desktop
+                      </label>
+                      <label style={{display:'flex',gap:8,alignItems:'center'}}>
+                        <input type="checkbox" checked={advanced.mobileSearchBox === true} onChange={e => setAdvanced({...advanced,mobileSearchBox:e.target.checked})} />
+                        Show option search on mobile
+                      </label>
+                    </div>
+                  </fieldset>
+                )}
                 {optionType?.toLowerCase() === "collection" && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: navCollections ? "12px" : "0", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1133,6 +1149,14 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         </>
                       ) : (
                         <>
+                          {optionType === 'price' && <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+                            <div>
+                              <strong style={{fontSize:14}}>Price ranges</strong>
+                              <p style={{fontSize:12,color:'#6d7175',margin:'4px 0 0'}}>Add or remove checkbox bands for this filter group. Save with Update to apply your changes.</p>
+                            </div>
+                            <button type="button" onClick={() => setPriceRanges(ranges => [...ranges,{id:crypto.randomUUID(),label:'{0} - {1}',from:'',to:''}])} style={{padding:'8px 12px',border:'1px solid #5B21B6',borderRadius:8,background:'#fff',color:'#5B21B6',whiteSpace:'nowrap'}}>Add price range</button>
+                          </div>}
+                          {optionType === 'price' && priceRanges.length === 0 && <p role="status" style={{fontSize:13,color:'#6d7175'}}>No price ranges. Add a range to show Price checkboxes.</p>}
                           <div style={{ display: "flex", gap: "20px", color: "#6d7175", fontSize: "13px", fontWeight: "600" }}>
                             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "4px" }}>Label <TooltipIcon content="Format using {0} for From and {1} for To" /></div>
                             <div style={{ flex: 1 }}>From</div>
@@ -1147,6 +1171,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                         return (
                           <div key={range.id} style={{ display: "flex", gap: "20px", alignItems: "center", boxSizing: "border-box" }}>
                             <input 
+                              aria-label={`Range ${idx + 1} label`}
                               style={{ flex: 1, padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", color: "#5B21B6", fontSize: "13px", fontWeight: "500", width: "100%" }}
                               value={range.label}
                               onChange={(e) => {
@@ -1158,6 +1183,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
                               <Checkbox checked={range.from !== ""} onChange={() => {}} />
                               <input 
+                                aria-label={`Range ${idx + 1} minimum`}
                                 style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: "#ffffff", fontSize: "13px", fontWeight: "600", color: "#202223" }} 
                                 value={range.from} 
                                 onChange={(e) => {
@@ -1168,12 +1194,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                               />
                             </div>
                             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px" }}>
-                              <Checkbox checked={range.to !== ""} onChange={(val) => {
+                              <Checkbox aria-label={`Limit maximum for range ${idx + 1}`} checked={range.to !== ""} onChange={(val) => {
                                 const newRanges = [...ranges];
                                 newRanges[idx].to = val ? "10" : "";
                                 setRanges(newRanges);
                               }} />
                               <input 
+                                aria-label={`Range ${idx + 1} maximum`}
                                 style={{ width: "100%", padding: "8px 16px", borderRadius: "10px", border: "1px solid rgba(30, 27, 75, 0.12)", background: range.to !== "" ? "#ffffff" : "transparent", fontSize: "13px", color: "#202223", visibility: range.to !== "" ? "visible" : "hidden" }} 
                                 value={range.to} 
                                 onChange={(e) => {
@@ -1185,8 +1212,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             </div>
                             <div style={{ display: "flex", gap: "6px" }}>
                               <button 
+                                type="button"
+                                aria-label={`Add range after range ${idx + 1}`}
                                 onClick={() => {
-                                  const newId = Date.now();
+                                  const newId = crypto.randomUUID();
                                   setRanges([...ranges.slice(0, idx+1), { id: newId, label: "", from: "", to: "" }, ...ranges.slice(idx+1)]);
                                 }}
                                 style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #5B21B6", background: "#fff", color: "#5B21B6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: "18px" }}
@@ -1194,7 +1223,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                                 +
                               </button>
                               <button 
-                                onClick={() => setRanges(ranges.filter(r => r.id !== range.id))}
+                                type="button"
+                                aria-label={`Remove range ${idx + 1}`}
+                                title="Remove range"
+                                onClick={() => setRanges(ranges.filter((r, index) => index !== idx))}
                                 style={{ width: "38px", height: "38px", borderRadius: "8px", border: "1px solid #5B21B6", background: "#fff", color: "#5B21B6", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
                               >
                                 <svg viewBox="0 0 20 20" style={{ width: "16px", height: "16px", fill: "currentColor" }}><path d="M16 6H4a1 1 0 1 0 0 2h1v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8h1a1 1 0 1 0 0-2zM9 4a1 1 0 1 1 0-2h2a1 1 0 1 1 0 2H9zm2 12h2V8h-2v8zm-4 0h2V8H7v8z"/></svg>
@@ -1884,7 +1916,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             {layout === "top" && (
                               <div style={{ position: "absolute", top: "-6px", left: "20px", width: "10px", height: "10px", background: "#fff", borderTop: "1px solid #e1e3e5", borderLeft: "1px solid #e1e3e5", transform: "rotate(45deg)" }}></div>
                             )}
-                            {["vendor", "collection", "product_type", "tag", "color", "title", "inventory_locations", "size"].includes(optionType?.toLowerCase()) && advanced.desktopSearchBox && (
+                            {optionType !== 'stock_status' && advanced.desktopSearchBox && (
                               <div style={{ marginBottom: "12px", position: "relative" }}>
                                 <input 
                                   type="text" 
@@ -1979,7 +2011,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     }}>
                       {displayMode === "Range" ? renderSliderPreview(false, device) : (
                         <>
-                          {["vendor", "collection", "product_type", "tag", "color", "title", "inventory_locations"].includes(optionType?.toLowerCase()) && advanced.mobileSearchBox && (
+                          {optionType !== 'stock_status' && advanced.mobileSearchBox && (
                             <div style={{ marginBottom: "12px", position: "relative" }}>
                               <input 
                                 type="text" 

@@ -46,6 +46,110 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('toolbar color picker previews presets and hex input before applying or restoring page color',async()=>{
+    await send('Page.navigate',{url:origin+'/bar-color-admin'});
+    await wait("!!document.querySelector('select[aria-label=\"Filter and sort bar background\"]')");
+    await evaluate("const select=document.querySelector('select');select.value='custom';select.dispatchEvent(new Event('change',{bubbles:true}))");
+    await wait("!!document.querySelector('input[type=color]')");
+    await evaluate("document.querySelector('button[aria-label=\"Use Cream\"]').click()");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('[aria-label=\"Filter bar color preview\"]')).backgroundColor"),'rgb(251, 247, 245)');
+    assert.deepEqual(await evaluate('savedColors'),[]);
+    const typeHex=value=>evaluate(`(()=>{const input=document.querySelector('input[aria-label="Bar background hex color"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await typeHex('12');
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Apply color').disabled"),true);
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Bar background hex color\"]').getAttribute('aria-invalid')"),'true');
+    await typeHex('#a1b2c3');
+    await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Apply color').click()");
+    assert.deepEqual(await evaluate('savedColors'),['#a1b2c3']);
+    await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Use page background').click()");
+    assert.deepEqual(await evaluate('savedColors'),['#a1b2c3','']);
+    assert.equal(await evaluate("document.querySelector('select').value"),'page');
+  });
+  await test('vertical filters match the drawer width and surrounding section background',async()=>{
+    const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`document.addEventListener('DOMContentLoaded',()=>{const app=document.querySelector('.cfp-v1-app-container');const section=document.createElement('section');section.style.backgroundColor='#fbf7f5';app.before(section);section.append(app);document.body.style.backgroundColor='#ffffff';},{once:true});`});
+    try{
+      const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{}}];
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      const drawerWidth=await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width");assert.equal(drawerWidth,420);
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true,integrations:{filterBarBackgroundColor:'#111111'}},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),drawerWidth);
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).backgroundColor"),'rgb(251, 247, 245)');
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-sidebar__header')).backgroundColor"),'rgb(251, 247, 245)');
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-top-bar')).backgroundColor"),'rgb(17, 17, 17)');
+      for(const width of [900,390,1440]){
+        await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<769});await delay(350);
+        assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true);
+        if(width>768)assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),420);
+      }
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});}
+  });
+  await test('horizontal filters recover missing toolbar containers and remain usable when resized',async()=>{
+    const filterSettings=Array.from({length:8},(_,i)=>({id:'horizontal-'+i,isEnabled:true,filterType:'vendor',label:'Filter option group '+(i+1),displayMode:'List',config:{}}));
+    for(const realToolbar of [false,true]){
+      await control({reset:true,realToolbar,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'horizontal',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      assert.ok(await evaluate("document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill').length>0"),'horizontal options were hidden when optional markup was missing');
+      for(const width of [900,390,1440]){
+        await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<769});await delay(350);
+        if(width<769){await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),true);await evaluate("document.querySelector('#cfp-apply-btn').click()");continue;}
+        assert.ok(await evaluate("[...document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill__btn')].some(e=>e.getBoundingClientRect().width>0)"));
+        const extra=await evaluate("document.querySelectorAll('#cfp-horizontal-extra-filters .cfp-horizontal-pill').length");
+        if(extra){await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-horizontal-extra-filters')).display"),'flex');await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");}
+        assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true);
+      }
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
+  await test('filter editor adds and removes individual price bands and saves option search settings',async()=>{
+    await send('Page.navigate',{url:origin+'/filter-controls-admin'});
+    await wait("!!document.querySelector('input[aria-label=\"Range 1 minimum\"]')");
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Range 1 minimum\"]').value"),'0');
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Range 1 maximum\"]').value"),'0');
+    await evaluate("document.querySelector('button[aria-label=\"Remove range 1\"]').click()");
+    assert.equal(await evaluate("document.querySelectorAll('button[aria-label^=\"Remove range\"]').length"),1);
+    await evaluate("document.querySelector('button[aria-label=\"Remove range 1\"]').click()");
+    await wait("document.body.innerText.includes('No price ranges.')");
+    await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent==='Add price range').click()");
+    await wait("!!document.querySelector('input[aria-label=\"Range 1 minimum\"]')");
+    await evaluate(`(()=>{const input=document.querySelector('input[aria-label="Range 1 minimum"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0');input.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('input[aria-label="Limit maximum for range 1"]').click();for(const label of document.querySelectorAll('fieldset label'))if(label.textContent.includes('Show option search on desktop'))label.querySelector('input').click();})()`);
+    await evaluate(`(()=>{const input=document.querySelector('input[aria-label="Range 1 maximum"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'100');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate("[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='UPDATE').click()");
+    await wait("!!window.lastSaved");
+    const saved=await evaluate('window.lastSaved');assert.equal(saved.priceRanges.length,1);assert.equal(saved.priceRanges[0].from,'0');assert.equal(saved.priceRanges[0].to,'100');assert.equal(saved.advanced.desktopSearchBox,true);assert.equal(saved.advanced.mobileSearchBox,false);
+    await evaluate("document.querySelector('#reopen').click()");
+    await wait("document.querySelector('input[aria-label=\"Range 1 maximum\"]')?.value==='100'");
+    assert.equal(await evaluate("[...document.querySelectorAll('fieldset label')].find(e=>e.textContent.includes('Show option search on desktop')).querySelector('input').checked"),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('filter option search respects desktop and mobile switches including Price bands',async()=>{
+    for(const [desktop,mobile]of [[true,false],[false,true],[false,false]])for(const width of [1440,390]){
+      const advanced={desktopSearchBox:desktop,mobileSearchBox:mobile};
+      const filterSettings=[{id:'price',isEnabled:true,filterType:'price',label:'Price',displayMode:'List',config:{advanced,priceRanges:[{from:0,to:10,label:'{0} - {1}'},{from:10,to:20,label:'{0} - {1}'},{from:20,to:'',label:'From {0}'}]}},
+        {id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{advanced}},
+        {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',displayMode:'Box',config:{advanced}},
+        {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{advanced,swatchConfig:{colors:{Blue:'#0000ff'}}}}];
+      const productFields=Object.fromEntries(Array.from({length:24},(_,i)=>[String(i+1),{options:[{name:'Color',values:['Blue','Red']},{name:'Size',values:['S','M','L']}]}]));
+      await control({reset:true,productCount:24,precompute:true,filterSettings,productFields,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      const enabled=width<768?mobile:desktop;
+      assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-vendor-search').length"),enabled?4:0);
+      if(enabled){
+        await evaluate("window.priceFacetLookups=[];const fetchOriginal=window.fetch;window.fetch=(url,...args)=>{if(String(url).includes('/api/facet'))priceFacetLookups.push(String(url));return fetchOriginal(url,...args)};const input=document.querySelector('#cfp-sidebar input[data-input-name=price]');input.value='From';input.dispatchEvent(new Event('input',{bubbles:true}))");
+        await delay(500);
+        assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input[name=price]').length"),3);
+        assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-checkbox:not(.cfp-search-hidden) input[name=price]').length"),1);
+        assert.deepEqual(await evaluate('priceFacetLookups'),[]);
+        assert.equal((await cards()).length,24);
+      }
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('filter groups grow to fit all options with only the drawer scrolling',async()=>{
     const sleeves=Array.from({length:16},(_,i)=>'Sleeve:'+i);
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{advanced:{showMoreType:'Scrollbar',maxHeight:'80px'}}},

@@ -17,6 +17,7 @@
   --cfp-radius: 0px;
   --cfp-radius-sm: 0px;
   --cfp-sidebar-w: 350px;
+  --cfp-drawer-width: 420px;
   --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -799,8 +800,8 @@ facet-filters-form,
 }
 @media (min-width: 992px) {
   .cfp-drawer-layout #cfp-sidebar.cfp-sidebar {
-    width: min(420px, 90vw) !important;
-    max-width: min(420px, 90vw) !important;
+    width: min(var(--cfp-drawer-width), 90vw) !important;
+    max-width: min(var(--cfp-drawer-width), 90vw) !important;
   }
 }
 .cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle::after,
@@ -2791,9 +2792,9 @@ facet-filters-form,
     right: auto !important;
     bottom: auto !important;
     align-self: flex-start !important;
-    flex: 0 0 260px !important;
-    width: 260px !important;
-    max-width: 260px !important;
+    flex: 0 0 var(--cfp-drawer-width) !important;
+    width: var(--cfp-drawer-width) !important;
+    max-width: var(--cfp-drawer-width) !important;
     height: fit-content !important;
     max-height: calc(100vh - max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) - 20px) !important;
     z-index: 2 !important;
@@ -2805,7 +2806,7 @@ facet-filters-form,
     border-left: none !important;
     padding: 0 10px 20px 10px !important;
     margin: 0 !important;
-    background: var(--cfp-surface, #ffffff) !important;
+    background: var(--cfp-page-bg, transparent) !important;
     transition: none !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -2836,7 +2837,7 @@ facet-filters-form,
     flex-shrink: 0 !important;
     position: sticky !important;
     top: 0px !important;
-    background: var(--cfp-surface, #ffffff) !important;
+    background: var(--cfp-page-bg, transparent) !important;
     z-index: 10 !important;
     width: 100% !important;
     box-sizing: border-box !important;

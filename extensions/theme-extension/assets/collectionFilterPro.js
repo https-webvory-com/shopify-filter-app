@@ -335,24 +335,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function syncThemeBackgroundColor(settings = globalSettings) {
-    if (!topBar) return;
     try {
-      const configured = settings?.filterBarBackgroundColor ?? settings?.integrations?.filterBarBackgroundColor ??
-        window.collectionFilterProSettings?.filter_bar_bg_color ?? window.collectionFilterProSettings?.filter_bg_color;
-      if (configured && CSS.supports('color', configured)) {
-        topBar.style.setProperty('--cfp-filter-bar-bg', configured);
-        return;
-      }
-      // Walk every ancestor so section color schemes take precedence over body.
-      // Keep an opaque matching surface while the bar is sticky above cards.
-      for (let el = topBar.parentElement; el; el = el.parentElement) {
+      let pageBackground = 'transparent';
+      for (let el = (topBar || sidebar)?.parentElement; el; el = el.parentElement) {
         const bg = window.getComputedStyle(el).backgroundColor;
         if (bg && bg !== 'transparent' && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) {
-          topBar.style.setProperty('--cfp-filter-bar-bg', bg);
-          return;
+          pageBackground = bg;
+          break;
         }
       }
-      topBar.style.setProperty('--cfp-filter-bar-bg', 'transparent');
+      sidebar?.style.setProperty('--cfp-page-bg', pageBackground);
+      const configured = settings?.filterBarBackgroundColor ?? settings?.integrations?.filterBarBackgroundColor ??
+        window.collectionFilterProSettings?.filter_bar_bg_color ?? window.collectionFilterProSettings?.filter_bg_color;
+      topBar?.style.setProperty('--cfp-filter-bar-bg', configured && CSS.supports('color', configured) ? configured : pageBackground);
     } catch (e) {}
   }
 
@@ -2166,6 +2161,29 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   // â”€â”€ 5. Render Filters Sidebar dynamically â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function ensureHorizontalFilterContainers() {
+    if (!topBar) return;
+    let left = topBar.querySelector('.cfp-top-bar__left');
+    if (!left) {
+      left = document.createElement('div');
+      left.className = 'cfp-top-bar__left';
+      (topBar.querySelector('.cfp-top-bar__main') || topBar).prepend(left);
+      if (triggerBtn) left.append(triggerBtn);
+    }
+    if (!document.getElementById('cfp-horizontal-filters')) {
+      const primary = document.createElement('div');
+      primary.id = 'cfp-horizontal-filters';
+      primary.className = 'cfp-horizontal-filters';
+      left.prepend(primary);
+    }
+    if (!document.getElementById('cfp-horizontal-extra-filters')) {
+      const extra = document.createElement('div');
+      extra.id = 'cfp-horizontal-extra-filters';
+      extra.className = 'cfp-horizontal-extra-filters';
+      topBar.append(extra);
+    }
+  }
+
   function renderFilterSidebar(settings, facets, totalCount) {
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
@@ -2200,6 +2218,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
 
       const adv = config.advanced || {};
+      const showOptionSearch = window.matchMedia('(max-width: 768px)').matches ? adv.mobileSearchBox === true : adv.desktopSearchBox === true;
       const navigation = type === 'collection' && config.navCollections === true;
       const prefix = config.prefix || "";
       const displayMode = type === 'price' ?
@@ -2572,7 +2591,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           const swatchConf = config.swatchConfig || {};
           const isCircle = swatchConf.circleSwatch !== false;
           const showLabel = swatchConf.showLabel !== false;
-          const hasSearch = adv.desktopSearchBox;
+          const hasSearch = showOptionSearch;
           const swatchLayout = swatchConf.layout || 'List';
           const imageGrid = !isColor && swatchLayout === 'Grid';
           const gridStyle = imageGrid ? 'grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 8px !important; padding: 0 !important;' :
@@ -2688,7 +2707,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           `;
         }
         else if (resolvedMode === "Box/Button" || resolvedMode === "Button" || resolvedMode === "Box") {
-          const hasSearch = adv.desktopSearchBox;
+          const hasSearch = showOptionSearch;
           groupContent = `
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
@@ -2713,7 +2732,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           `;
         }
         else { // Default: List
-          const hasSearch = adv.desktopSearchBox;
+          const hasSearch = showOptionSearch;
           groupContent = `
             ${hasSearch ? `
               <div class="cfp-search-input-wrap">
@@ -2845,6 +2864,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
     body.scrollTop = scrollTop;
 
+    ensureHorizontalFilterContainers();
     const horizontalContainer = document.getElementById('cfp-horizontal-filters');
     const extraContainer = document.getElementById('cfp-horizontal-extra-filters');
 
@@ -3012,6 +3032,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     };
     window.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.addEventListener('resize', scheduleStickyOffsets, { passive: true });
+    let horizontalResizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(horizontalResizeTimer);
+      horizontalResizeTimer = setTimeout(() => {
+        if (typeof window.cfpSyncPillsLayout !== 'function' && isHorizontalFilterLayout() && cfpLastSettings.length) {
+          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+        }
+      }, 150);
+    }, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleStickyOffsets, { passive: true });
     window.visualViewport?.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
@@ -3258,6 +3287,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         // 2. API fetch for facet search
         if (wrapper.querySelector('.cfp-collection-navigation')) return;
         const inputName = searchInput.dataset.inputName;
+        if (['price','percent_sale','weight','review_rating','availability','inventory_locations'].includes(inputName)) return;
         if (!inputName || q.length < 2) return;
 
         let facetName = inputName;

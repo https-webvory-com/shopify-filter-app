@@ -4,7 +4,7 @@ import http from 'node:http';
 import {gunzipSync} from 'node:zlib';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
-import {transform} from 'esbuild';
+import {transform,build} from 'esbuild';
 import * as searchColor from '../../app/utils/searchColor.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as filterPresentation from '../../app/utils/filterPresentation.js';
@@ -237,9 +237,30 @@ export async function createLoadingServer({redisLayer}={}) {
   const start=liquid.indexOf('  (function() {',liquid.indexOf('Fire API request'));
   const inline=liquid.slice(start,liquid.indexOf('</script>',start)).replace('{{ shop.permanent_domain }}',shop).replace('{{ cfp_collection_handle }}','fixture').replace('{{ cfp_collection_id }}','1').replaceAll('{{ request.locale.iso_code }}','en').replaceAll("'https://aisearchfilter.webvory.com", "location.origin + '");
   const sockets=new Set();
+  let adminControlsBundle;
+  let barColorBundle;
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     try{
+      if(url.pathname==='/bar-color-admin'){
+        res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><style>body{font:14px Arial;margin:24px}.settings-row{display:flex;gap:24px}.settings-text-col{flex:1}</style></head><body><div id="root"></div><script>window.savedColors=[]</script><script src="/bar-color-admin.js"></script></body></html>');return;
+      }
+      if(url.pathname==='/bar-color-admin.js'){
+        if(!barColorBundle){
+          const source=await fs.readFile('app/routes/app.filters.settings.jsx','utf8');
+          const component=source.slice(source.indexOf('function SettingBarColor('),source.indexOf('function SettingsSection('));
+          barColorBundle=build({stdin:{resolveDir:process.cwd(),loader:'jsx',contents:`import React,{useState,useEffect}from'react';import{createRoot}from'react-dom/client';${component}\nfunction App(){const[value,setValue]=useState('');return <SettingBarColor value={value} onChange={next=>{window.savedColors.push(next);setValue(next)}} disabled={false}/>};createRoot(document.getElementById('root')).render(<App/>);`},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}}).then(result=>result.outputFiles[0].text);
+        }
+        res.setHeader('Content-Type','text/javascript');res.end(await barColorBundle);return;
+      }
+      if(url.pathname==='/filter-controls-admin'){
+        res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><body><div id="root"></div><script>window.browserErrors=[];addEventListener("error",e=>browserErrors.push(e.message));addEventListener("unhandledrejection",e=>browserErrors.push(String(e.reason)))</script><script src="/filter-controls-admin.js"></script></body></html>');return;
+      }
+      if(url.pathname==='/filter-controls-admin.js'){
+        adminControlsBundle??=build({stdin:{resolveDir:process.cwd(),loader:'jsx',contents:`import React,{useState}from'react';import{createRoot}from'react-dom/client';import{CreateFilterModal}from'./app/components/ui/CreateFilterModal.jsx';
+          function App(){const [open,setOpen]=useState(true);const [saved,setSaved]=useState({id:'price',optionType:'price',filterTitle:'Price',displayMode:'List',priceRanges:[{label:'{0} - {1}',min:0,max:0},{label:'From {0}',from:10,to:''}],advanced:{desktopSearchBox:false,mobileSearchBox:false}});return <><button id="reopen" onClick={()=>setOpen(true)}>Reopen saved filter</button><CreateFilterModal isOpen={open} onClose={()=>setOpen(false)} initialData={saved} storeData={{priceFilterDisplayMode:'List'}} onSave={data=>{window.lastSaved=data;setSaved({...data,id:'price'});setOpen(false)}}/></>};createRoot(document.getElementById('root')).render(<App/>);`},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}}).then(result=>result.outputFiles[0].text);
+        res.setHeader('Content-Type','text/javascript');res.end(await adminControlsBundle);return;
+      }
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
         if(updates.reset){state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;}
