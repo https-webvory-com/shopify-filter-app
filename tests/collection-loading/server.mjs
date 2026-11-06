@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import {transform} from 'esbuild';
 import * as searchColor from '../../app/utils/searchColor.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
+import * as filterPresentation from '../../app/utils/filterPresentation.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../app/utils/collectionFilterMembership.js';
@@ -213,6 +214,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true},
     '../utils/searchPinnedIntent.js':{pinnedProductMatchesAppliedIntent:()=>true},
   };
+  mocks['../utils/filterPresentation.js']=filterPresentation;
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
   vm.runInNewContext((await transform(source,{loader:'jsx',format:'cjs'})).code,routeCtx);

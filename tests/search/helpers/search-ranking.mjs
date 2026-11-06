@@ -13,6 +13,7 @@ import * as ranking from '../../../app/utils/rankedCollectionPage.js';
 import * as collectionCards from '../../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../../app/utils/productTitleFilter.js';
+import * as filterPresentation from '../../../app/utils/filterPresentation.js';
 import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../../app/utils/collectionFilterMembership.js';
@@ -38,6 +39,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/queryIntent.js')return queryIntent;
     if(!(name in mocks)&&(name==='./searchIndex.server.js'||name==='../services/searchIndex.server.js'))return {prepareConfiguredSearchQueries:async queries=>queries.map(({_cfpSearchSurface,...q})=>({...q,indexUid:q.indexUid||'products'})),getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),scheduleSearchIndex:async()=>{},resetSearchIndexContext:async()=>{},retireSearchIndexes:async()=>{},syncConfiguredSearchSynonyms:async()=>{},getSearchIndexStatus:async()=>({phase:'default'}),configuredSuggestions:async()=>null};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+    if(name==='../utils/filterPresentation.js')return filterPresentation;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;

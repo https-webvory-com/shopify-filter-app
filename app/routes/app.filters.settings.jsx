@@ -40,6 +40,16 @@ export const action = async ({ request }) => {
     if (value !== '' && !/^#[0-9a-f]{6}$/i.test(value)) return { success: false, error: 'Choose a valid background color' };
     payload.filterBarBackgroundColor = value.toLowerCase();
   }
+  if (formData.has('priceFilterDisplayMode')) {
+    const value = formData.get('priceFilterDisplayMode');
+    if (!['List', 'Range'].includes(value)) return {success:false,error:'Invalid Price filter style'};
+    payload.priceFilterDisplayMode = value;
+  }
+  if (formData.has('sizeOptionsPerRow')) {
+    const value = Number(formData.get('sizeOptionsPerRow'));
+    if (!Number.isInteger(value) || value < 2 || value > 6) return {success:false,error:'Choose 2 to 6 size options per row'};
+    payload.sizeOptionsPerRow = value;
+  }
   if (!Object.keys(payload).length) return { success: false, error: 'No filter settings supplied' };
   await updateFilterGlobalSettings(session.shop, payload);
   return { success: true };
@@ -249,6 +259,8 @@ export default function FilterSettings() {
   );
   const [mobileLayout, setMobileLayout] = useState(settings?.mobileFilterLayout || "off-canvas");
   const [barBackground, setBarBackground] = useState(settings?.filterBarBackgroundColor || '');
+  const [priceStyle, setPriceStyle] = useState(settings?.priceFilterDisplayMode || 'List');
+  const [sizeColumns, setSizeColumns] = useState(String(settings?.sizeOptionsPerRow || 4));
 
   const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
   const [showSingleItem, setShowSingleItem] = useState(settings?.showFilterOptionsWithOneItem || false);
@@ -267,6 +279,8 @@ export default function FilterSettings() {
     setDesktopLayout(settings?.desktopFilterLayout || (settings?.horizontalFilters ? 'horizontal' : 'drawer'));
     setMobileLayout(settings?.mobileFilterLayout || 'off-canvas');
     setBarBackground(settings?.filterBarBackgroundColor || '');
+    setPriceStyle(settings?.priceFilterDisplayMode || 'List');
+    setSizeColumns(String(settings?.sizeOptionsPerRow || 4));
     setShowBreadcrumb(settings?.showAttributeBasedBreadcrumb ?? true);
     setShowSingleItem(settings?.showFilterOptionsWithOneItem ?? false);
     setShowProductCount(settings?.showProductCount ?? true);
@@ -291,6 +305,8 @@ export default function FilterSettings() {
     }
     else if (key === "mobileFilterLayout") setMobileLayout(value);
     else if (key === "filterBarBackgroundColor") setBarBackground(value);
+    else if (key === 'priceFilterDisplayMode') setPriceStyle(value);
+    else if (key === 'sizeOptionsPerRow') setSizeColumns(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
     else if (key === "showProductCount") setShowProductCount(value);
@@ -484,6 +500,14 @@ export default function FilterSettings() {
         </SettingsSection>
         <SettingsSection title="Filters Settings">
           <SettingBarColor disabled={isSaving} value={barBackground} onChange={value => handleSettingChange('filterBarBackgroundColor', value)} />
+          <SettingSelect disabled={isSaving} label="Price filter style"
+            description="Choose checkboxes or a range slider for Price. Checkboxes are the default for every store. Saved price bands are kept. Reload the storefront after saving."
+            value={priceStyle} onChange={value => handleSettingChange('priceFilterDisplayMode', value)}
+            options={[{value:'List',label:'Checkboxes (default)'},{value:'Range',label:'Range slider'}]} />
+          <SettingSelect disabled={isSaving} label="Size options per row"
+            description="Choose how many size options appear in each row. The default is four. Reload the storefront after saving."
+            value={sizeColumns} onChange={value => handleSettingChange('sizeOptionsPerRow', value)}
+            options={[2,3,4,5,6].map(value => ({value:String(value),label:String(value) + (value === 4 ? ' (default)' : '')}))} />
           <SettingSelect disabled={isSaving}
             label="Desktop filter layout"
             description="Choose how filters appear on desktop and tablet: Horizontal toolbar, Vertical sidebar, or Drawer."

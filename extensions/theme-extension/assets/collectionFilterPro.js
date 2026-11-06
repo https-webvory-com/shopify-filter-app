@@ -2202,7 +2202,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const adv = config.advanced || {};
       const navigation = type === 'collection' && config.navCollections === true;
       const prefix = config.prefix || "";
-      const displayMode = setting.displayMode || "List";
+      const displayMode = type === 'price' ?
+        ((globalSettings.priceFilterDisplayMode ?? globalSettings.integrations?.priceFilterDisplayMode) === 'Range' ? 'Range' : 'List') : setting.displayMode || "List";
 
       const getDisplayLabel = (val, pref) => {
         if (!val) return '';
@@ -2517,6 +2518,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                           (type === 'metafield') ? `metafield-${key}` : type;
 
         const isColor = type === 'option' && (key.toLowerCase().includes('color') || key.toLowerCase().includes('colour'));
+        const isSize = type === 'option' && /size/i.test(key || '');
+        const configuredSizeColumns = Number(globalSettings.sizeOptionsPerRow ?? globalSettings.integrations?.sizeOptionsPerRow ?? 4);
+        const sizeColumns = Number.isInteger(configuredSizeColumns) && configuredSizeColumns >= 2 && configuredSizeColumns <= 6 ? configuredSizeColumns : 4;
         let resolvedMode = displayMode;
         if (resolvedMode.toLowerCase() === 'chips' || resolvedMode.toLowerCase() === 'buttons') {
           resolvedMode = 'Box/Button';
@@ -2693,7 +2697,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               </div>
             ` : ''}
             <div class="${scrollClass}" ${scrollStyle}>
-              <div class="cfp-button-grid">
+              <div class="cfp-button-grid${isSize ? ' cfp-size-grid' : ''}" ${isSize ? `style="grid-template-columns:repeat(${sizeColumns},minmax(0,1fr)) !important;"` : ''}>
                 ${items.map((item, idx) => {
                   const hide = isViewMore && idx >= limit;
                   return `

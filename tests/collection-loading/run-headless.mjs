@@ -46,6 +46,27 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('Price style defaults to checkboxes across stores and Size defaults to four configurable columns',async()=>{
+    const bands=[{from:0,to:10,label:'{0} - {1}'},{from:10,to:'',label:'From {0}'}];
+    const filterSettings=[{id:'price',isEnabled:true,filterType:'price',label:'Price',displayMode:'Range',config:{priceRanges:bands}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',displayMode:'Box',config:{}}];
+    const productFields=Object.fromEntries(Array.from({length:12},(_,i)=>[String(i+1),{options:[{name:'Size',values:['XS','S','M','L','XL','XXL','2XL','3XL']}]}]));
+    for(const [presentation,columns,slider]of [[{},4,false],[{sizeOptionsPerRow:3,priceFilterDisplayMode:'Range'},3,true],[{sizeOptionsPerRow:6,priceFilterDisplayMode:'List'},6,false]]){
+      await control({reset:true,productCount:12,noPins:true,noMerchandising:true,precompute:true,filterSettings,productFields,
+        globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'drawer',integrations:presentation},apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
+      assert.equal(await evaluate("!!document.querySelector('#cfp-sidebar input[type=range]')"),slider);
+      if(!slider)assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar input[name=price]')].map(e=>e.value)"),['0:10','10:Infinity']);
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-size-grid')).gridTemplateColumns.split(' ').length"),columns);
+      await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+      await evaluate("if(!document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open'))document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
+      await wait("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-size-grid')).gridTemplateColumns.split(' ').length==="+columns);
+      assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    }
+  });
   await test('filter and sort bar background follows its page section, custom color and reset',async()=>{
     const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`document.addEventListener('DOMContentLoaded',()=>{const app=document.querySelector('.cfp-v1-app-container');const section=document.createElement('section');section.style.backgroundColor='#fbf7f5';app.before(section);section.append(app);document.body.style.backgroundColor='#ffffff';},{once:true});`});
     try{

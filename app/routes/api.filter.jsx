@@ -34,6 +34,7 @@ import {isPublicCollectionCards,collectionCardsResponse,collectionPageFingerprin
 import {getPreparedCollectionCards,beginPreparedCollectionCards} from '../services/collectionCards.server.js';
 import {prepareCollectionPinnedPrefix} from '../utils/collectionPinnedPrefix.js';
 import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
+import {normalizePriceFilter} from '../utils/filterPresentation.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
 import {mappedFacetValue,expandMappedFacetValues} from '../utils/facetNormalization.js';
@@ -435,7 +436,7 @@ export const loader = async ({ request, context }) => {
 
     const { resolvedCollectionId, resolvedCollectionTitle, activeGroupFilters: savedGroupFilters } =
       resolvedGroup;
-    const activeGroupFilters = await resolveCollectionNavigation(savedGroupFilters?.map(normalizeProductTitleFilter) || null,
+    const activeGroupFilters = await resolveCollectionNavigation(savedGroupFilters?.map(filter => normalizePriceFilter(normalizeProductTitleFilter(filter), globalSettings)) || null,
       titles => getCached(`collectionNavigation:${shop}:${JSON.stringify(titles)}`, () => prisma.collection.findMany({where:{shop,title:{in:titles}},select:{title:true,handle:true}})));
     const configurationReadyMs=Date.now()-startTime;
 

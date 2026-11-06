@@ -23,6 +23,8 @@ export async function getFilterGlobalSettings(shop) {
     ...settings,
     desktopFilterLayout,
     filterBarBackgroundColor: integrations.filterBarBackgroundColor,
+    priceFilterDisplayMode: integrations.priceFilterDisplayMode === 'Range' ? 'Range' : 'List',
+    sizeOptionsPerRow: Number.isInteger(integrations.sizeOptionsPerRow) && integrations.sizeOptionsPerRow >= 2 && integrations.sizeOptionsPerRow <= 6 ? integrations.sizeOptionsPerRow : 4,
   };
 }
 
@@ -32,7 +34,8 @@ export async function getFilterGlobalSettings(shop) {
 export async function updateFilterGlobalSettings(shop, data) {
   const updateData = { ...data };
 
-  if (typeof data.desktopFilterLayout === 'string' || typeof data.filterBarBackgroundColor === 'string' || typeof data.horizontalFilters === 'boolean') {
+  const presentationKeys = ['filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow'];
+  if (typeof data.desktopFilterLayout === 'string' || presentationKeys.some(key => data[key] !== undefined) || typeof data.horizontalFilters === 'boolean') {
     const current = await prisma.filterGlobalSetting.findUnique({
       where: { shop },
       select: { integrations: true },
@@ -40,13 +43,13 @@ export async function updateFilterGlobalSettings(shop, data) {
     const currentIntegrations = (current?.integrations && typeof current.integrations === 'object') ? current.integrations : {};
     updateData.integrations = {
       ...currentIntegrations,
-      ...(typeof data.filterBarBackgroundColor === 'string' ? {filterBarBackgroundColor: data.filterBarBackgroundColor} : {}),
+      ...Object.fromEntries(presentationKeys.filter(key => data[key] !== undefined).map(key => [key, data[key]])),
       ...(typeof data.desktopFilterLayout === 'string' ? {desktopFilterLayout: data.desktopFilterLayout} :
         typeof data.horizontalFilters === 'boolean' ? {desktopFilterLayout: data.horizontalFilters ? 'horizontal' : 'drawer'} : {}),
     };
     if (typeof data.desktopFilterLayout === 'string') updateData.horizontalFilters = data.desktopFilterLayout === 'horizontal';
     delete updateData.desktopFilterLayout;
-    delete updateData.filterBarBackgroundColor;
+    for (const key of presentationKeys) delete updateData[key];
   }
 
   const settings = await prisma.filterGlobalSetting.upsert({

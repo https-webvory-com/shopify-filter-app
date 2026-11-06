@@ -1988,6 +1988,15 @@ facet-filters-form,
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.cfp-size-grid .cfp-button-chip > span {
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 4px !important;
+}
+.cfp-size-grid .cfp-button-chip .cfp-checkbox__count {
+  margin-left: 0 !important;
+  padding: 1px 4px !important;
+}
 .cfp-button-chip .cfp-checkbox__count {
   flex-shrink: 0;
   white-space: nowrap;

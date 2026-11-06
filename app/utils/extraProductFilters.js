@@ -1,3 +1,4 @@
+import {normalizePriceFilter} from './filterPresentation.js';
 const numericTypes = {weight:{parameter:'weight[]',config:'weightRanges',max:Infinity},review_rating:{parameter:'rating[]',config:'reviewRanges',max:5}};
 export const extraFilterTypes = new Set(['weight','review_rating','inventory_locations','stock_status']);
 const configOf = filter => {try{const value=typeof filter.config==='string'?JSON.parse(filter.config):filter.config;return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}};
@@ -57,8 +58,17 @@ export function extraFilterChoices(settings,rows) {
   return [...new Map(choices.map(value=>[`${value.type}:${value.value}`,value])).values()];
 }
 export function hasUsableExtraFacets(payload) {
-  const priceList=(payload?.settings||[]).some(f=>f.isEnabled&&f.filterType==='price'&&String(f.displayMode||'List').toLowerCase()==='list'&&(configOf(f).priceRanges||[]).length);
-  if(priceList&&payload.facets&&payload.facets.priceRanges?.version!==2)return false;
+  const priceLists=(payload?.settings||[]).map(f=>normalizePriceFilter(f,payload?.globalSettings)).filter(f=>f.isEnabled&&f.filterType==='price'&&f.displayMode==='List'&&(configOf(f).priceRanges||[]).length);
+  if(priceLists.length&&payload.facets){
+    if(payload.facets.priceRanges?.version!==2)return false;
+    // Legacy slider snapshots have no checkbox counts. Rebuild those facets
+    // instead of serving an empty Price group after the new default takes effect.
+    const ranges=payload.facets.priceRanges?.ranges||[];
+    for(const filter of priceLists)for(const expected of configOf(filter).priceRanges){
+      const min=Number(expected.min??expected.from??0),rawMax=expected.max??expected.to,max=rawMax==null||rawMax===''?Infinity:Number(rawMax);
+      if(!ranges.some(range=>Number(range.min??range.from??0)===min&&Number((range.max??range.to)==null||(range.max??range.to)===''?Infinity:(range.max??range.to))===max))return false;
+    }
+  }
   if(!(payload?.settings||[]).some(f=>f.isEnabled&&extraFilterTypes.has(f.filterType)))return true;
   if(!payload.facets)return payload.cfpCards?.facetsReady!==true;
   return payload.facets.extraFilters?.version===1;

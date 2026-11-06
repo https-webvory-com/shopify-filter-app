@@ -15,6 +15,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { invalidateShop } from "../services/shopCache.server";
 import { normalizeProductTitleFilter } from "../utils/productTitleFilter.js";
+import { normalizePriceFilter, priceFilterDisplayMode } from '../utils/filterPresentation.js';
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { CreateFilterModal } from "../components/ui/CreateFilterModal";
 import { ExportFilterItemsModal } from "../components/ui/ExportFilterItemsModal";
@@ -50,6 +51,7 @@ export const loader = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const { id } = params;
+  const presentationSettings = await prisma.filterGlobalSetting.findUnique({where:{shop},select:{integrations:true}});
 
   const group = await prisma.filterGroup.findFirst({
     where: { id, shop },
@@ -205,6 +207,7 @@ export const loader = async ({ request, params }) => {
   }
 
   const storeData = {
+    priceFilterDisplayMode: priceFilterDisplayMode(presentationSettings),
     totalProducts: Number(stockRaw[0]?.totalProducts || 0),
     stockStatusCounts: {
       inStock: Number(stockRaw[0]?.inStockCount || 0),
@@ -225,7 +228,7 @@ export const loader = async ({ request, params }) => {
   };
 
   return {
-    group,
+    group: {...group, filters: group.filters.map(filter => normalizePriceFilter(filter, presentationSettings))},
     detectedOptions: Array.from(optionNamesSet).sort(),
     shopifyCollections,
     storeData,

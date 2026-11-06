@@ -3,6 +3,7 @@ import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
+import * as filterPresentation from '../../app/utils/filterPresentation.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as pinImportOrder from "../../app/utils/pinImportOrder.js";
@@ -113,6 +114,7 @@ test('available product IDs exclude products with only unavailable matching comb
 async function route(file,mocks){
  const context={module:{exports:{}},exports:{},Response,URL,console,invalidateCall:mocks.invalidateCall||(()=>{}),require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
    if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+   if(name==='../utils/filterPresentation.js')return filterPresentation;
    if(name==='../utils/extraProductFilters.js')return extraProductFilters;
     if(name==='../utils/percentSaleFilter.js')return percentSaleFilter;
     if(name==='../utils/collectionNavigation.js')return collectionNavigation;

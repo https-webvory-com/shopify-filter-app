@@ -499,6 +499,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
     }
   }, [isOpen, initialData]);
 
+  useEffect(() => {
+    if (isOpen && optionType === 'price') setDisplayMode(storeData.priceFilterDisplayMode === 'Range' ? 'Range' : 'List');
+  }, [isOpen, optionType, storeData.priceFilterDisplayMode]);
+
   const DUMMY_DATA = {
     collection: (shopifyCollections || []).map(c => ({ label: c, count: 0 })),
     vendor: (storeData?.vendors || []).map(v => ({ label: v.value, count: v.count })),
@@ -928,7 +932,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                     <label style={{ fontSize: "13px", fontWeight: "600", color: "#4a4c4e" }}>Display mode</label>
                     <TooltipIcon content="Choose how the filter options should be displayed." />
                   </div>
-                  <SimpleDropdown 
+                  {optionType === 'price' ? <div>
+                    <p style={{margin:'0 0 6px',fontSize:14}}>{storeData.priceFilterDisplayMode === 'Range' ? 'Range slider' : 'Checkboxes'}</p>
+                    <a href="/app/filters/settings" style={{fontSize:13}}>Change Price filter style in Filters settings</a>
+                  </div> : <SimpleDropdown
                     value={displayMode} 
                     onChange={setDisplayMode} 
                     options={
@@ -936,7 +943,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                       : ["List", "Box", "Swatch"]
                     } 
                     width="100%"
-                  />
+                  />}
                 </div>
 
                 {/* Navigation Collections */}
