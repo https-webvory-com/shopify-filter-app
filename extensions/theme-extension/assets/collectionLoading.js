@@ -68,7 +68,7 @@
       const existing=[...grid.querySelectorAll('.cfp-initial-product')];
       const mismatch=existing.findIndex((card,index)=>card.dataset.productId!==String(payload.products[index]?.id||''));
       if(mismatch>=0){existing.slice(mismatch).forEach(card=>card.remove());rendered=mismatch;}
-      if(payload.products.length===rendered&&placeholders.length===missing)return;
+      if(payload.products.length===rendered&&placeholders.length===missing){dismissSkeleton();return;}
       placeholders.forEach(card=>card.remove());
       for(const [index,product] of payload.products.entries()){
         if(index<rendered)continue;
