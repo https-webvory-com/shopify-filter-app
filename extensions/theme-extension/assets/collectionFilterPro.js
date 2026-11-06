@@ -2533,9 +2533,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const limit = 6;
         const isViewMore = (showMoreType === "View more" || showMoreType === "View more with scrollbar") && items.length > limit;
 
-        // Wrapper for Max Height scroll
-        const scrollClass = (showMoreType === "Scrollbar" || showMoreType === "View more with scrollbar") && items.length > 6 ? "cfp-scroll-area" : "";
-        const scrollStyle = scrollClass ? `style="max-height: ${adv.maxHeight || '300px'};"` : "";
+        // Groups size to their options; scrolling belongs to the drawer/panel.
+        const scrollClass = '';
+        const scrollStyle = '';
 
         const renderViewMoreBtn = () => {
           if (!isViewMore) return '';

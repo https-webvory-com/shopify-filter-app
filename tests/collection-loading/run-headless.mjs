@@ -46,6 +46,22 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('filter groups grow to fit all options with only the drawer scrolling',async()=>{
+    const sleeves=Array.from({length:16},(_,i)=>'Sleeve:'+i);
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{advanced:{showMoreType:'Scrollbar',maxHeight:'80px'}}},
+      {id:'sleeve',isEnabled:true,filterType:'tag',label:'Sleeve',displayMode:'Swatch',config:{prefix:'Sleeve:',advanced:{showMoreType:'Scrollbar',maxHeight:'80px'},swatchConfig:{layout:'Grid',showLabel:true,colors:Object.fromEntries(sleeves.map(value=>[value,{type:'image',value:'/image/1.svg'}]))}}}];
+    const productFields=Object.fromEntries(Array.from({length:24},(_,i)=>[String(i+1),{vendor:'Designer '+i,tags:sleeves}]));
+    for(const width of [1440,390]){
+      await control({reset:true,productCount:24,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
+      const result=await evaluate("(()=>{const body=document.querySelector('#cfp-sidebar .cfp-sidebar__body');return {drawerScrolls:body.scrollHeight>body.clientHeight,groups:[...document.querySelectorAll('#cfp-sidebar .cfp-group__content')].map(e=>({height:e.getBoundingClientRect().height,clipped:[e,...e.querySelectorAll('*')].some(n=>['auto','scroll'].includes(getComputedStyle(n).overflowY)&&n.scrollHeight>n.clientHeight+1)})),vendors:document.querySelectorAll('#cfp-sidebar input[name=vendor]').length,sleeves:document.querySelectorAll('#cfp-sidebar input[name=tag]').length}})()");
+      assert.equal(result.vendors,24);assert.equal(result.sleeves,16);assert.equal(result.drawerScrolls,true);
+      assert.ok(result.groups.every(g=>g.height>80&&!g.clipped),JSON.stringify(result));
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('image filter labels align from the top and drawer Reset and Done remain visible',async()=>{
     const names={Length:['Mini','Midi','Maxi','Floor Length'],Sleeve:['Cap Sleeve','Long Sleeve','Off The Shoulder','One Shoulder']};
     const filterSettings=Object.entries(names).map(([label,values])=>({id:label,isEnabled:true,filterType:'tag',label,displayMode:'Swatch',config:{prefix:label+':',swatchConfig:{layout:'Grid',showLabel:true,colors:Object.fromEntries(values.map(value=>[label+':'+value,{type:'image',value:'/image/1.svg'}]))}}}));

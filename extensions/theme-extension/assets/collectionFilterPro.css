@@ -769,7 +769,11 @@ facet-filters-form,
   transition: opacity 0.15s;
 }
 .cfp-color-grid--images .cfp-swatch-circle { max-width: 100% !important; }
-.cfp-scroll-area:has(.cfp-color-grid--colors) { max-height: 420px !important; }
+.cfp-group__content .cfp-scroll-area,
+.cfp-horizontal-pill__popover .cfp-scroll-area {
+  max-height: none !important;
+  overflow: visible !important;
+}
 .cfp-group__content:has(.cfp-color-grid--colors) { padding-bottom: 4px; }
 .cfp-color-swatch--image:hover .cfp-swatch-image,
 .cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-image,
