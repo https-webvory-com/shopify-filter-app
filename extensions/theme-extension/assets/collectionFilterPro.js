@@ -334,25 +334,25 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     })();
   }
 
-  function syncThemeBackgroundColor() {
-    if (window.collectionFilterProSettings?.filter_bar_bg_color || window.collectionFilterProSettings?.filter_bg_color) return;
+  function syncThemeBackgroundColor(settings = globalSettings) {
+    if (!topBar) return;
     try {
-      const candidates = [
-        document.querySelector('.cfp-layout-wrapper')?.parentElement,
-        document.getElementById('cfp-v1-app-container')?.parentElement,
-        document.querySelector('#ProductGridContainer'),
-        document.querySelector('#MainContent'),
-        document.querySelector('main'),
-        document.body
-      ];
-      for (const el of candidates) {
-        if (!el) continue;
+      const configured = settings?.filterBarBackgroundColor ?? settings?.integrations?.filterBarBackgroundColor ??
+        window.collectionFilterProSettings?.filter_bar_bg_color ?? window.collectionFilterProSettings?.filter_bg_color;
+      if (configured && CSS.supports('color', configured)) {
+        topBar.style.setProperty('--cfp-filter-bar-bg', configured);
+        return;
+      }
+      // Walk every ancestor so section color schemes take precedence over body.
+      // Keep an opaque matching surface while the bar is sticky above cards.
+      for (let el = topBar.parentElement; el; el = el.parentElement) {
         const bg = window.getComputedStyle(el).backgroundColor;
-        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgba(0,0,0,0)') {
-          document.documentElement.style.setProperty('--cfp-filter-bar-bg', bg);
-          break;
+        if (bg && bg !== 'transparent' && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) {
+          topBar.style.setProperty('--cfp-filter-bar-bg', bg);
+          return;
         }
       }
+      topBar.style.setProperty('--cfp-filter-bar-bg', 'transparent');
     } catch (e) {}
   }
 
@@ -1137,6 +1137,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function applyGlobalSettings(settings) {
+    syncThemeBackgroundColor(settings);
     const container = document.body;
     if (!container) return;
     const mobile = window.matchMedia('(max-width: 768px)').matches;

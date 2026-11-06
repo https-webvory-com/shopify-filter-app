@@ -199,7 +199,6 @@
 
 {% render 'customization' %}
 
-{%- assign theme_detected_bg = settings.colors_background_1 | default: settings.color_background | default: settings.body_background | default: settings.bg_color | default: settings.background_color | default: settings.color_bg -%}
 {%- assign custom_filter_bar_bg = filter_bar_bg_color | default: filter_bg_color -%}
 
 {%- style -%}
@@ -213,10 +212,8 @@
 
     {% if custom_filter_bar_bg != blank and custom_filter_bar_bg != 'rgba(0,0,0,0)' %}
       --cfp-filter-bar-bg: {{ custom_filter_bar_bg }};
-    {% elsif theme_detected_bg != blank and theme_detected_bg != 'rgba(0,0,0,0)' %}
-      --cfp-filter-bar-bg: {{ theme_detected_bg }};
     {% else %}
-      --cfp-filter-bar-bg: var(--gradient-background, rgb(var(--color-base-background-1, 255, 255, 255)));
+      --cfp-filter-bar-bg: transparent;
     {% endif %}
 
     --cfp-filter-pill-bg: #ffffff;

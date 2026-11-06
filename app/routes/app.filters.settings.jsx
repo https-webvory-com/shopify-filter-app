@@ -35,6 +35,11 @@ export const action = async ({ request }) => {
     if (!['off-canvas', 'horizontal-scrolling'].includes(value)) return { success: false, error: 'Invalid mobile layout' };
     payload.mobileFilterLayout = value;
   }
+  if (formData.has('filterBarBackgroundColor')) {
+    const value = String(formData.get('filterBarBackgroundColor')).trim();
+    if (value !== '' && !/^#[0-9a-f]{6}$/i.test(value)) return { success: false, error: 'Choose a valid background color' };
+    payload.filterBarBackgroundColor = value.toLowerCase();
+  }
   if (!Object.keys(payload).length) return { success: false, error: 'No filter settings supplied' };
   await updateFilterGlobalSettings(session.shop, payload);
   return { success: true };
@@ -177,6 +182,33 @@ function SettingSelect({ label, description, value, onChange, options, disabled 
 }
 
 // â”€â”€ Section Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SettingBarColor({ value, onChange, disabled }) {
+  const [custom, setCustom] = useState(!!value);
+  const [draft, setDraft] = useState(value || '#ffffff');
+  useEffect(() => { setCustom(!!value); setDraft(value || '#ffffff'); }, [value]);
+  return (
+    <div className="settings-row">
+      <div className="settings-text-col">
+        <p className="settings-label">Filter and sort bar background</p>
+        <p className="settings-desc">Choose the background of the bar containing Filters and Bestselling. By default, it matches the surrounding page. Reload the storefront after saving.</p>
+      </div>
+      <fieldset disabled={disabled} style={{border:0,padding:0,margin:0,display:'grid',gap:12,minWidth:200}}>
+        <select aria-label="Filter and sort bar background" value={custom ? 'custom' : 'page'} onChange={e => {
+          const next = e.target.value === 'custom'; setCustom(next); if (!next) onChange('');
+        }} style={{padding:10,border:'1px solid #c9cccf',borderRadius:8,background:'#fff'}}>
+          <option value="page">Page background (default)</option>
+          <option value="custom">Custom color</option>
+        </select>
+        {custom && <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input type="color" aria-label="Bar background color" value={/^#[0-9a-f]{6}$/i.test(draft) ? draft : '#ffffff'} onChange={e => setDraft(e.target.value)} />
+          <input aria-label="Bar background hex color" value={draft} maxLength={7} onChange={e => setDraft(e.target.value)} style={{width:82,padding:8,border:'1px solid #c9cccf',borderRadius:6}} />
+          <button type="button" disabled={!/^#[0-9a-f]{6}$/i.test(draft) || draft.toLowerCase() === value} onClick={() => onChange(draft.toLowerCase())}>Apply</button>
+        </div>}
+      </fieldset>
+    </div>
+  );
+}
+
 function SettingsSection({ title, children }) {
   return (
     <div className="settings-card">
@@ -216,6 +248,7 @@ export default function FilterSettings() {
     settings?.desktopFilterLayout || (settings?.horizontalFilters ? "horizontal" : "drawer")
   );
   const [mobileLayout, setMobileLayout] = useState(settings?.mobileFilterLayout || "off-canvas");
+  const [barBackground, setBarBackground] = useState(settings?.filterBarBackgroundColor || '');
 
   const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
   const [showSingleItem, setShowSingleItem] = useState(settings?.showFilterOptionsWithOneItem || false);
@@ -233,6 +266,7 @@ export default function FilterSettings() {
     setHorizontalFilters(settings?.horizontalFilters ?? false);
     setDesktopLayout(settings?.desktopFilterLayout || (settings?.horizontalFilters ? 'horizontal' : 'drawer'));
     setMobileLayout(settings?.mobileFilterLayout || 'off-canvas');
+    setBarBackground(settings?.filterBarBackgroundColor || '');
     setShowBreadcrumb(settings?.showAttributeBasedBreadcrumb ?? true);
     setShowSingleItem(settings?.showFilterOptionsWithOneItem ?? false);
     setShowProductCount(settings?.showProductCount ?? true);
@@ -256,6 +290,7 @@ export default function FilterSettings() {
       setDesktopLayout(value ? "horizontal" : "drawer");
     }
     else if (key === "mobileFilterLayout") setMobileLayout(value);
+    else if (key === "filterBarBackgroundColor") setBarBackground(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
     else if (key === "showProductCount") setShowProductCount(value);
@@ -448,6 +483,7 @@ export default function FilterSettings() {
           />
         </SettingsSection>
         <SettingsSection title="Filters Settings">
+          <SettingBarColor disabled={isSaving} value={barBackground} onChange={value => handleSettingChange('filterBarBackgroundColor', value)} />
           <SettingSelect disabled={isSaving}
             label="Desktop filter layout"
             description="Choose how filters appear on desktop and tablet: Horizontal toolbar, Vertical sidebar, or Drawer."

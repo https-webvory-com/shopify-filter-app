@@ -15,6 +15,38 @@ async function action(file, dependencies) {
 }
 const request=values=>new Request('http://fixture/admin',{method:'POST',body:new URLSearchParams(values)});
 
+test('toolbar color saves validate custom colors and allow restoring the page background',async()=>{
+  const writes=[];
+  const save=await action('app/routes/app.filters.settings.jsx',{
+    updateFilterGlobalSettings:async(shop,payload)=>writes.push({shop,...payload}),
+  });
+  for(const value of ['#A1B2C3',''])assert.equal((await save({request:request({filterBarBackgroundColor:value})})).success,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(writes)),[
+    {shop:'fixture.myshopify.com',filterBarBackgroundColor:'#a1b2c3'},
+    {shop:'fixture.myshopify.com',filterBarBackgroundColor:''},
+  ]);
+  for(const value of ['red','url(https://example.com)','<style>','#xyzxyz'])assert.equal((await save({request:request({filterBarBackgroundColor:value})})).success,false);
+  assert.equal(writes.length,2);
+});
+
+test('toolbar color persistence preserves layout, wishlist and unrelated settings',async()=>{
+  let row={shop:'fixture.myshopify.com',horizontalFilters:true,showProductCount:false,integrations:{desktopFilterLayout:'horizontal',wishlist:true}};
+  const invalidations=[];
+  const service=await loadModule('app/services/filterSettings.server.js',{
+    '../db.server':{default:{filterGlobalSetting:{findUnique:async()=>row,upsert:async({update})=>(row={...row,...update})}}},
+    './shopCache.server':{invalidateShop:async shop=>invalidations.push(shop)},
+  });
+  for(const color of ['#a1b2c3','']){
+    await service.updateFilterGlobalSettings(row.shop,{filterBarBackgroundColor:color});
+    assert.deepEqual(JSON.parse(JSON.stringify(row.integrations)),{desktopFilterLayout:'horizontal',wishlist:true,filterBarBackgroundColor:color});
+    assert.equal(row.horizontalFilters,true);assert.equal(row.showProductCount,false);
+    assert.equal((await service.getFilterGlobalSettings(row.shop)).filterBarBackgroundColor,color);
+  }
+  await service.updateFilterGlobalSettings(row.shop,{desktopFilterLayout:'vertical'});
+  assert.equal(row.integrations.filterBarBackgroundColor,'');assert.equal(row.integrations.wishlist,true);
+  assert.equal(invalidations.length,3);
+});
+
 test('wishlist save preserves filter layout and waits for invalidation; malformed values cannot reset settings',async()=>{
   const writes=[];let release,finished=false;
   const save=await action('app/routes/app.settings.integrations.jsx',{

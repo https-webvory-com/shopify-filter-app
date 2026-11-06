@@ -46,6 +46,21 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('filter and sort bar background follows its page section, custom color and reset',async()=>{
+    const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`document.addEventListener('DOMContentLoaded',()=>{const app=document.querySelector('.cfp-v1-app-container');const section=document.createElement('section');section.style.backgroundColor='#fbf7f5';app.before(section);section.append(app);document.body.style.backgroundColor='#ffffff';},{once:true});`});
+    try{
+      for(const [settings,expected]of [[{},'rgb(251, 247, 245)'],[{integrations:{filterBarBackgroundColor:'#a1b2c3'}},'rgb(161, 178, 195)'],[{integrations:{filterBarBackgroundColor:''}},'rgb(251, 247, 245)']]){
+        await control({reset:true,productCount:30,precompute:true,hold:true,globalSettings:settings,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0,
+          filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});
+        await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-top-bar')).backgroundColor"),expected);
+        await evaluate("scrollTo(0,600);document.querySelector('#cfp-sidebar input[name=\"option-Color\"]').click()");
+        await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-top-bar')).backgroundColor"),expected);
+        assert.deepEqual(await evaluate('browserErrors'),[]);
+      }
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});}
+  });
   await test('saved filters are usable before a delayed product response finishes',async()=>{
     await control({reset:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,
       headRenderer:true,savedFilterDelay:300,globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});

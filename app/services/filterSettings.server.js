@@ -22,6 +22,7 @@ export async function getFilterGlobalSettings(shop) {
   return {
     ...settings,
     desktopFilterLayout,
+    filterBarBackgroundColor: integrations.filterBarBackgroundColor,
   };
 }
 
@@ -31,7 +32,7 @@ export async function getFilterGlobalSettings(shop) {
 export async function updateFilterGlobalSettings(shop, data) {
   const updateData = { ...data };
 
-  if (typeof data.desktopFilterLayout === 'string') {
+  if (typeof data.desktopFilterLayout === 'string' || typeof data.filterBarBackgroundColor === 'string' || typeof data.horizontalFilters === 'boolean') {
     const current = await prisma.filterGlobalSetting.findUnique({
       where: { shop },
       select: { integrations: true },
@@ -39,20 +40,13 @@ export async function updateFilterGlobalSettings(shop, data) {
     const currentIntegrations = (current?.integrations && typeof current.integrations === 'object') ? current.integrations : {};
     updateData.integrations = {
       ...currentIntegrations,
-      desktopFilterLayout: data.desktopFilterLayout,
+      ...(typeof data.filterBarBackgroundColor === 'string' ? {filterBarBackgroundColor: data.filterBarBackgroundColor} : {}),
+      ...(typeof data.desktopFilterLayout === 'string' ? {desktopFilterLayout: data.desktopFilterLayout} :
+        typeof data.horizontalFilters === 'boolean' ? {desktopFilterLayout: data.horizontalFilters ? 'horizontal' : 'drawer'} : {}),
     };
-    updateData.horizontalFilters = data.desktopFilterLayout === 'horizontal';
+    if (typeof data.desktopFilterLayout === 'string') updateData.horizontalFilters = data.desktopFilterLayout === 'horizontal';
     delete updateData.desktopFilterLayout;
-  } else if (typeof data.horizontalFilters === 'boolean') {
-    const current = await prisma.filterGlobalSetting.findUnique({
-      where: { shop },
-      select: { integrations: true },
-    });
-    const currentIntegrations = (current?.integrations && typeof current.integrations === 'object') ? current.integrations : {};
-    updateData.integrations = {
-      ...currentIntegrations,
-      desktopFilterLayout: data.horizontalFilters ? 'horizontal' : 'drawer',
-    };
+    delete updateData.filterBarBackgroundColor;
   }
 
   const settings = await prisma.filterGlobalSetting.upsert({
@@ -67,6 +61,7 @@ export async function updateFilterGlobalSettings(shop, data) {
   await invalidateShop(shop);
   return {
     ...settings,
+    filterBarBackgroundColor: settings.integrations?.filterBarBackgroundColor,
     desktopFilterLayout: settings.integrations?.desktopFilterLayout || updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
   };
 }
