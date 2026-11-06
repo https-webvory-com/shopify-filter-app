@@ -746,13 +746,21 @@ facet-filters-form,
   border-color: #000000 !important;
   box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #000000 !important;
 }
-.cfp-color-swatch--image .cfp-swatch-circle,
-.cfp-color-swatch--image:hover .cfp-swatch-circle,
-.cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle,
-.cfp-color-swatch--image input:checked ~ .cfp-swatch-circle {
+.cfp-color-swatch--image .cfp-swatch-circle {
   position: relative !important;
   border: 0 !important;
   box-shadow: none !important;
+  outline: 2px solid #d1d5db !important;
+  outline-offset: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s, outline-color 0.15s;
+}
+.cfp-color-swatch--image:hover .cfp-swatch-circle,
+.cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle,
+.cfp-color-swatch--image input:checked ~ .cfp-swatch-circle,
+.cfp-color-swatch--image:has(input:focus-visible) .cfp-swatch-circle {
+  outline-color: #111111 !important;
+  opacity: 1;
 }
 .cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle::after,
 .cfp-color-swatch--image input:checked ~ .cfp-swatch-circle::after {
