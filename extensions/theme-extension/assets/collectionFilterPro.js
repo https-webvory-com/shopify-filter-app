@@ -2634,15 +2634,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                       gap = '8px';
                     } else {
                       // Normal list layout (Colors) - small circle, text right
-                      vWidth = showLabel ? '22px' : '36px';
-                      vHeight = showLabel ? '22px' : '36px';
+                      vWidth = showLabel ? '24px' : '36px';
+                      vHeight = showLabel ? '24px' : '36px';
                       labelFlexDir = showLabel ? 'row' : 'column';
                       labelJustify = showLabel ? 'flex-start' : 'center';
                       textAlign = showLabel ? 'left' : 'center';
                       gap = '8px';
                     }
 
-                    const bgStyle = isImageItem ? `background: #f8f9fa url('${colorValue}') center/contain no-repeat; border: 0 !important;` : `background:${colorValue || '#f8f9fa'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
+                    const bgStyle = isImageItem ? `background: transparent !important; border: 0 !important;` : `background:${colorValue || '#f8f9fa'}; --cfp-check-color:${isWhite ? '#111' : '#fff'}; border: 1px solid ${isWhite ? '#e2e8f0' : '#e1e3e5'} !important;`;
 
                     const placeholderSvg = (!isImageItem && isGrid && !isColor) ? `
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="display: block; pointer-events: none;">
@@ -2654,7 +2654,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const isTopRightCount = isGrid && !isColor;
                     const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
 
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: 6px ${labelFlexDir === 'row' ? '6px' : 'auto'} !important;">${placeholderSvg}</span>`;
+                    const imageHtml=isImageItem?`<img class="cfp-swatch-image" src="${escapeCardHtml(colorValue)}" alt="" aria-hidden="true" decoding="async">`:placeholderSvg;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: 6px ${labelFlexDir === 'row' ? '6px' : 'auto'} !important;">${imageHtml}</span>`;
 
                     const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 

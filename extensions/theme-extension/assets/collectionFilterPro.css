@@ -746,21 +746,52 @@ facet-filters-form,
   border-color: #000000 !important;
   box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #000000 !important;
 }
-.cfp-color-swatch--image .cfp-swatch-circle {
+.cfp-color-swatch--image .cfp-swatch-circle,
+.cfp-color-swatch--image:hover .cfp-swatch-circle,
+.cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle,
+.cfp-color-swatch--image input:checked ~ .cfp-swatch-circle {
   position: relative !important;
   border: 0 !important;
   box-shadow: none !important;
-  outline: 2px solid #d1d5db !important;
-  outline-offset: 2px;
-  opacity: 0.55;
-  transition: opacity 0.15s, outline-color 0.15s;
+  outline: none !important;
+  background-color: transparent !important;
 }
-.cfp-color-swatch--image:hover .cfp-swatch-circle,
-.cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle,
-.cfp-color-swatch--image input:checked ~ .cfp-swatch-circle,
-.cfp-color-swatch--image:has(input:focus-visible) .cfp-swatch-circle {
-  outline-color: #111111 !important;
+.cfp-swatch-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  background: transparent;
+  mix-blend-mode: multiply;
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+.cfp-color-swatch--image:hover .cfp-swatch-image,
+.cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-image,
+.cfp-color-swatch--image input:checked ~ .cfp-swatch-circle .cfp-swatch-image,
+.cfp-color-swatch--image:has(input:focus-visible) .cfp-swatch-image {
   opacity: 1;
+}
+.cfp-color-swatch:not(.cfp-color-swatch--image) .cfp-swatch-circle { position: relative; }
+.cfp-color-swatch:not(.cfp-color-swatch--image).cfp-color-swatch--selected .cfp-swatch-circle,
+.cfp-color-swatch:not(.cfp-color-swatch--image) input:checked ~ .cfp-swatch-circle { box-shadow: none !important; }
+.cfp-color-swatch:not(.cfp-color-swatch--image).cfp-color-swatch--selected .cfp-swatch-circle::after,
+.cfp-color-swatch:not(.cfp-color-swatch--image) input:checked ~ .cfp-swatch-circle::after {
+  content: '\2713' !important;
+  position: absolute;
+  inset: 0;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  color: var(--cfp-check-color, #fff);
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px #000;
+}
+@media (min-width: 992px) {
+  .cfp-drawer-layout #cfp-sidebar.cfp-sidebar {
+    width: min(420px, 90vw) !important;
+    max-width: min(420px, 90vw) !important;
+  }
 }
 .cfp-color-swatch--image.cfp-color-swatch--selected .cfp-swatch-circle::after,
 .cfp-color-swatch--image input:checked ~ .cfp-swatch-circle::after {
