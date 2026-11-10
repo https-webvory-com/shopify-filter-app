@@ -26,7 +26,7 @@ export const DEFAULT_SEARCH_FIELD_CONFIG=Object.freeze([
 ].map(([key,label,weight])=>Object.freeze({key,label,weight,search:!['description','barcode'].includes(key),suggest:!['sku','barcode','description','handle'].includes(key),transforms:[],indexTransforms:[],delimiter:'',numeric:false})));
 const advancedDefaults=Object.fromEntries(Object.entries(ADVANCED_SEARCH_FIELDS).map(([key,field])=>[key,field[1]]));
 export const SEARCH_ENUM_FIELDS={
- instantLayout:['fullscreen','compact','two-columns','grid'],productColumn:['left','right'],pagination:['load-more','infinite'],imageSizeType:['dynamic','original','fixed'],productDateType:['created','published','updated'],
+ instantLayout:['fullscreen','compact'],productColumn:['left','right'],pagination:['load-more','infinite'],imageSizeType:['dynamic','original','fixed'],productDateType:['created','published','updated'],
 };
 const enumDefaults={instantLayout:'fullscreen',productColumn:'left',pagination:'load-more',imageSizeType:'dynamic',productDateType:'published'};
 export const DEFAULT_SEARCH_SETTINGS = Object.freeze(Object.fromEntries([
@@ -79,7 +79,9 @@ export function validateSearchSettings(input) {
     result[key]=value;
   }
   for(const [key,choices]of Object.entries(SEARCH_ENUM_FIELDS)){
-    const value=input[key]??enumDefaults[key];if(!choices.includes(value))throw Error('Invalid '+key+'.');result[key]=value;
+    let value=input[key]??enumDefaults[key];
+    if(key==='instantLayout'&&['two-columns','grid'].includes(value))value='fullscreen';
+    if(!choices.includes(value))throw Error('Invalid '+key+'.');result[key]=value;
   }
   result.searchResultsPath=text(input.searchResultsPath??'/search','Search results URL',200);
   if(!/^\/(?!\/)[a-z0-9/_-]*$/i.test(result.searchResultsPath)||result.searchResultsPath==='/')throw Error('Use a store path such as /search or /pages/search.');

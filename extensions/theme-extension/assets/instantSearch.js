@@ -320,7 +320,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   function applySearchDisplaySettings(){
     if(!modal)return;
     const settings=window.cfpSearchSettings||{};
-    modal.dataset.cfpLayout=settings.instantLayout||'fullscreen';
+    modal.dataset.cfpLayout=settings.instantLayout==='compact'?'compact':'fullscreen';
     modal.dataset.cfpProductColumn=settings.productColumn||'left';
     modal.style.setProperty('--cfp-instant-columns',String(settings.instantColumns||4));
     overlay.dataset.cfpLayout=modal.dataset.cfpLayout;
@@ -339,7 +339,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const left = window.innerWidth <= 600 ? 8 : Math.max(8, Math.min(rect?.left ?? window.innerWidth - width - 24, window.innerWidth - width - 8));
     const top = window.innerWidth <= 600 ? 12 : Math.max(8, Math.min(rect?.top ?? 64, window.innerHeight - 240));
     modal.style.left = left + 'px'; modal.style.top = top + 'px';
-    modal.style.width = width + 'px'; modal.style.maxHeight = Math.max(180, window.innerHeight - top - 12) + 'px';
+    modal.style.width = width + 'px'; modal.style.maxHeight = Math.min(600, Math.max(180, window.innerHeight - top - 12)) + 'px';
   }
 
   function renderCompactNavigation() {
@@ -376,10 +376,14 @@ document.addEventListener("DOMContentLoaded", async function () {
     browse.setAttribute('aria-labelledby','cfp-compact-tab-' + compactTab);
     browse.style.setProperty('--cfp-compact-rank-start', String(compactPage * 4));
     browse.innerHTML = `<div class="cfp-compact-columns">${groups.map(group => `<section><h3>${highlightSearchText(group.title,'')}</h3><ol start="${compactPage * 4 + 1}">${group.collections.slice(compactPage * 4, compactPage * 4 + 4).map(c => `<li><a href="${link(c)}">${c.image ? `<img src="${highlightSearchText(c.image,'')}" alt="" loading="lazy" width="42" height="64">` : '<span class="cfp-compact-image-placeholder" aria-hidden="true"></span>'}<span>${highlightSearchText(c.title,'')}</span></a></li>`).join('')}</ol></section>`).join('')}</div>
-      <a class="cfp-compact-shop-all" href="${link(main)}">Shop all ${highlightSearchText(main.title,'')} <span aria-hidden="true">→</span></a>
       ${pageCount > 1 ? `<div class="cfp-compact-pagination"><button type="button" data-page="-1" ${compactPage === 0 ? 'disabled' : ''}>‹ Previous</button><span aria-live="polite">${compactPage + 1} / ${pageCount}</span><button type="button" data-page="1" ${compactPage + 1 >= pageCount ? 'disabled' : ''}>Next ›</button></div>` : ''}`;
     browse.querySelectorAll('img').forEach(img => {
-      const hideBrokenImage = () => { img.style.visibility = 'hidden'; };
+      const hideBrokenImage = () => {
+        const placeholder = document.createElement('span');
+        placeholder.className = 'cfp-compact-image-placeholder';
+        placeholder.setAttribute('aria-hidden', 'true');
+        img.replaceWith(placeholder);
+      };
       img.addEventListener('error', hideBrokenImage, { once: true });
       if (img.complete && !img.naturalWidth) hideBrokenImage();
     });

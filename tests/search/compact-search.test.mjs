@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SEARCH_SETTINGS, validateSearchSettings } from '../../app/utils/searchSettings.js';
+import { DEFAULT_SEARCH_SETTINGS, SEARCH_ENUM_FIELDS, validateSearchSettings } from '../../app/utils/searchSettings.js';
 import { requiresCustomSearchIndex } from '../../app/utils/searchConfiguration.js';
 
 const child = { id:'gid://shopify/Collection/2', title:'Cocktail', handle:'cocktail', image:'https://cdn.shopify.com/cocktail.jpg' };
@@ -17,6 +17,8 @@ test('compact UI saves four ordered main collections and related collections wit
   const legacy = {...DEFAULT_SEARCH_SETTINGS}; delete legacy.compactCollections;
   assert.deepEqual(validateSearchSettings(legacy).compactCollections,[]);
   assert.equal(validateSearchSettings(legacy).instantLayout,'fullscreen');
+  assert.deepEqual(SEARCH_ENUM_FIELDS.instantLayout,['fullscreen','compact']);
+  for(const instantLayout of ['two-columns','grid'])assert.equal(settings({instantLayout}).instantLayout,'fullscreen');
 });
 
 test('compact collection settings reject oversized groups, duplicate tabs and unsafe links', () => {

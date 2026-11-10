@@ -1,46 +1,86 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useFetcher } from 'react-router';
 
 const groupNames = ['Top Searches', 'Trending', 'Occasion'];
-const inputStyle = { width: '100%', padding: 8, border: '1px solid #c9cccf', borderRadius: 6, boxSizing: 'border-box' };
-const fromResource = item => ({ id: item.id, title: item.title, handle: item.handle, image: item.image?.originalSrc || item.image?.src || item.image?.url || '' });
+const emptyGroups = () => groupNames.map(title => ({ title, collections: [] }));
+const fromResource = item => ({ id: item.id, title: item.title, handle: item.handle, image: typeof item.image === 'string' ? item.image : item.image?.originalSrc || item.image?.src || item.image?.url || '' });
 
-export default function CompactSearchSettings({ value = [], onChange, disabled }) {
+export default function CompactSearchSettings({ value = [], onChange, disabled, suggestions = [] }) {
   const [error, setError] = useState('');
-  const [picking, setPicking] = useState(false);
-  const busy = disabled || picking;
-  const pick = async (selected, multiple, done) => {
-    setError(''); setPicking(true);
-    try {
-      if (!window.shopify?.resourcePicker) throw Error('Open these settings inside Shopify admin to choose collections.');
-      const result = await window.shopify.resourcePicker({ type: 'collection', action: 'select', multiple, selectionIds: selected.filter(c => c.id).map(c => ({ id: c.id })) });
-      if (result) done(result.map(fromResource));
-    } catch (e) { setError(e.message || 'Could not open the collection picker. Please retry.'); }
-    finally { setPicking(false); }
+  const [picker, setPicker] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [query, setQuery] = useState('');
+  const [cursor, setCursor] = useState('');
+  const [rows, setRows] = useState([]);
+  const [pagination, setPagination] = useState({hasMore:false,nextCursor:''});
+  const collectionFetcher = useFetcher();
+  const dialog = useRef(null);
+  const [activeId, setActiveId] = useState('');
+  const [page, setPage] = useState(0);
+  const [mobile, setMobile] = useState(false);
+  const busy = disabled || !!picker;
+  useEffect(() => {
+    if (!picker) { if(dialog.current?.open)dialog.current.close(); return; }
+    if(!dialog.current.open)dialog.current.showModal();
+    const timer = setTimeout(() => collectionFetcher.load('/app/search/settings?collectionPicker=1&q=' + encodeURIComponent(query.trim()) + '&after=' + encodeURIComponent(cursor)), 200);
+    return () => clearTimeout(timer);
+  }, [picker, query, cursor]);
+  useEffect(() => {
+    const data = collectionFetcher.data;
+    if (!picker || !data || data.query !== query.trim() || data.after !== cursor) return;
+    setError(data.collectionPickerError || '');
+    setRows(previous => cursor ? [...previous, ...(data.collections || []).filter(item => !previous.some(row => row.id === item.id))] : data.collections || []);
+    setPagination({hasMore:!!data.hasMore,nextCursor:data.nextCursor||''});
+  }, [collectionFetcher.data, picker, query, cursor]);
+  const activeIndex = Math.max(0, value.findIndex(item => (item.id || item.handle) === activeId));
+  const active = value[activeIndex];
+  const groups = active?.groups?.length ? active.groups : emptyGroups();
+  const maxPage = Math.max(0, ...groups.map(group => Math.ceil(group.collections.length / 4) - 1));
+  const currentPage = Math.min(page, maxPage);
+  const selectTab = item => { setActiveId(item.id || item.handle); setPage(0); };
+  const pick = (items, limit, done) => {
+    setError(''); setSelected(items); setQuery(''); setCursor(''); setRows([]);setPagination({hasMore:false,nextCursor:''});
+    setPicker({limit,done});
   };
-  const update = (index, patch) => onChange(value.map((item, i) => i === index ? { ...item, ...patch } : item));
-  const updateGroup = (index, groupIndex, patch) => update(index, { groups: value[index].groups.map((g, i) => i === groupIndex ? { ...g, ...patch } : g) });
-  return <section aria-label="Compact UI collections" style={{ display: 'grid', gap: 16 }}>
-    <div><h3 style={{ marginBottom: 6 }}>Compact UI collections</h3><p style={{ margin: 0 }}>Choose up to four main collections for the tabs. For each tab, choose the related collections shown under Top Searches, Trending and Occasion. You can rename these headings. Typed searches keep your current search behavior.</p></div>
+  const chooseMain = () => pick(value, 4, selected => { onChange(selected.map(item => ({ ...item, groups: value.find(c => c.id === item.id)?.groups || emptyGroups() }))); setPage(0); });
+  const update = patch => onChange(value.map((item, i) => i === activeIndex ? { ...item, ...patch } : item));
+  const updateGroup = (groupIndex, patch) => update({ groups: groups.map((group, i) => i === groupIndex ? { ...group, ...patch } : group) });
+  const moveMain = direction => { const next = [...value]; const index = activeIndex + direction; [next[index], next[activeIndex]] = [next[activeIndex], next[index]]; setActiveId(active.id || active.handle); onChange(next); };
+  const chips = suggestions.filter(Boolean).slice(0, 6);
+  return <section className="cs-editor" aria-label="Compact UI collections" id="compact-collection-settings">
+    <dialog ref={dialog} className="cs-picker" aria-labelledby="cs-picker-title" onCancel={()=>setPicker(null)} onClose={()=>setPicker(null)} onClick={event=>{if(event.target===dialog.current){const rect=dialog.current.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)setPicker(null);}}}>
+      <div className="cs-picker-heading"><div><h3 id="cs-picker-title">{picker?.limit===4?'Choose main collections':'Choose related collections'}</h3><p>Collections saved in your app catalog</p></div><button type="button" aria-label="Close collection picker" onClick={()=>setPicker(null)}>×</button></div>
+      <div className="cs-picker-search"><input autoFocus type="search" aria-label="Search saved collections" placeholder="Search collections by name or handle" value={query} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} onChange={e=>{setQuery(e.target.value);setCursor('');setRows([]);}}/></div>
+      <div className="cs-picker-results" aria-busy={collectionFetcher.state!=='idle'}>
+        {error?<div role="alert">{error}<button type="button" onClick={()=>collectionFetcher.load('/app/search/settings?collectionPicker=1&q='+encodeURIComponent(query.trim())+'&after='+encodeURIComponent(cursor))}>Retry</button></div>:null}
+        {rows.map(item=>{const checked=selected.some(s=>s.id===item.id);return <label className="cs-picker-row" key={item.id}><input type="checkbox" checked={checked} disabled={!checked&&selected.length>=(picker?.limit||0)} onChange={()=>setSelected(items=>checked?items.filter(s=>s.id!==item.id):[...items,item])}/>{item.image?<img src={item.image} alt=""/>:<span className="cs-thumb"/>}<span><strong>{item.title}</strong><small>{item.handle}{typeof item.productCount==='number'?' · '+item.productCount+' products':''}</small></span></label>;})}
+        {!rows.length&&!error&&collectionFetcher.state==='idle'&&collectionFetcher.data?.query===query.trim()?<div className="cs-empty">{query?'No saved collections match this search. Try another name.':'No collections are saved for this store yet.'}</div>:null}
+        {collectionFetcher.state!=='idle'||(!rows.length&&!collectionFetcher.data)?<div className="cs-empty">Loading saved collections…</div>:null}
+        {pagination.hasMore&&<button type="button" className="cs-picker-more" disabled={collectionFetcher.state!=='idle'} onClick={()=>setCursor(pagination.nextCursor)}>Load more collections</button>}
+      </div>
+      <div className="cs-picker-footer"><span>{selected.length}/{picker?.limit} selected</span><div><button type="button" onClick={()=>setPicker(null)}>Cancel</button><button type="button" className="search-config-primary" onClick={()=>{picker.done(selected.map(fromResource));setPicker(null);}}>Select collections</button></div></div>
+    </dialog>
+    <div className="cs-heading"><div><h3><span className="cs-step">1</span>Choose collections for Compact UI</h3><p>Choose your four main collection tabs, then add the collections shoppers see beneath each tab.</p></div><button type="button" className="search-config-primary" disabled={busy} onClick={chooseMain}>Choose main collections ({value.length}/4)</button></div>
     {error && <p role="alert">{error}</p>}
-    <button type="button" disabled={busy} onClick={() => pick(value, 4, selected => onChange(selected.map(item => ({ ...item, groups: value.find(c => c.id === item.id)?.groups || groupNames.map(title => ({ title, collections: [] })) }))))}>Choose main collections ({value.length}/4)</button>
-    {value.length === 0 && <p>No main collections selected. Compact UI will show your existing suggestions and products until you configure tabs.</p>}
-    {value.map((item, index) => <fieldset key={item.id || item.handle} disabled={busy} style={{ border: '1px solid #ddd', borderRadius: 10, padding: 16, minWidth: 0 }}>
-      <legend>{index + 1}. {item.title}</legend>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button type="button" disabled={index === 0} onClick={() => { const next = [...value]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next); }}>Move left</button>
-        <button type="button" disabled={index === value.length - 1} onClick={() => { const next = [...value]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; onChange(next); }}>Move right</button>
-        <button type="button" aria-label={'Remove main collection ' + item.title} onClick={() => onChange(value.filter((_, i) => i !== index))}>Remove</button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16 }}>
-        {item.groups.map((group, groupIndex) => <div key={groupIndex} style={{ display: 'grid', alignContent: 'start', gap: 10 }}>
-          <label>Column {groupIndex + 1} heading<input aria-label={item.title + ' column ' + (groupIndex + 1) + ' heading'} value={group.title} maxLength={60} required style={inputStyle} onChange={e => updateGroup(index, groupIndex, { title: e.target.value })}/></label>
-          <button type="button" onClick={() => pick(group.collections, 12, collections => updateGroup(index, groupIndex, { collections }))}>Choose related collections ({group.collections.length}/12)</button>
-          <ol style={{ paddingLeft: 22, margin: 0 }}>{group.collections.map((child, childIndex) => <li key={child.handle} style={{ marginBottom: 8 }}>
-            {child.title} <button type="button" disabled={childIndex === 0} aria-label={'Move ' + child.title + ' up'} onClick={() => { const collections = [...group.collections]; [collections[childIndex - 1], collections[childIndex]] = [collections[childIndex], collections[childIndex - 1]]; updateGroup(index, groupIndex, { collections }); }}>↑</button> <button type="button" aria-label={'Remove related collection ' + child.title} onClick={() => updateGroup(index, groupIndex, { collections: group.collections.filter((_, i) => i !== childIndex) })}>Remove</button>
-          </li>)}</ol>
+    <div className="cs-workspace"><div className="cs-controls">
+      <div className="cs-label">Main collection tabs <span className="cs-muted">{value.length} of 4 selected</span></div>
+      {!active ? <button type="button" className="cs-add-empty" disabled={busy} onClick={chooseMain}><strong>+ Select main collections</strong><span>Choose collections from your Shopify catalog to build your search menu.</span></button> : <>
+        <div className="cs-tabs" role="tablist" aria-label="Edit main collection">{value.map((item,index)=><button type="button" role="tab" key={item.id||item.handle} aria-selected={index===activeIndex} disabled={busy} onClick={()=>selectTab(item)}><span className="cs-tab-number">{index+1}</span>{item.title}</button>)}</div>
+        <div className="cs-main-actions"><button type="button" disabled={busy||activeIndex===0} onClick={()=>moveMain(-1)}>Move left</button><button type="button" disabled={busy||activeIndex===value.length-1} onClick={()=>moveMain(1)}>Move right</button><button type="button" disabled={busy} className="search-config-danger" aria-label={'Remove main collection '+active.title} onClick={()=>onChange(value.filter((_,i)=>i!==activeIndex))}>Remove tab</button></div>
+        <div className="cs-label"><span><span className="cs-step">2</span>Collections shown in {active.title}</span></div><p>Choose links for each column. Rename headings and reorder links to arrange your menu.</p>
+        {groups.map((group,groupIndex)=><div className="cs-group" key={groupIndex}>
+          <div className="cs-group-head"><label><span className="cs-muted">Column {groupIndex+1}</span><input aria-label={active.title+' column '+(groupIndex+1)+' heading'} value={group.title} maxLength={60} required disabled={busy} onChange={e=>updateGroup(groupIndex,{title:e.target.value})}/></label><button type="button" disabled={busy} onClick={()=>pick(group.collections,12,collections=>updateGroup(groupIndex,{collections}))}>Choose related collections ({group.collections.length}/12)</button></div>
+          {!group.collections.length ? <div className="cs-empty">No collections added to this column yet.</div> : <ol>{group.collections.map((child,index)=><li className="cs-collection-row" key={child.handle}><span className="cs-muted">{index+1}</span>{child.image?<img src={child.image} alt=""/>:<span className="cs-thumb"/>}<span>{child.title}</span><div className="cs-row-actions"><button type="button" disabled={busy||index===0} aria-label={'Move '+child.title+' up'} onClick={()=>{const collections=[...group.collections];[collections[index-1],collections[index]]=[collections[index],collections[index-1]];updateGroup(groupIndex,{collections});}}>↑</button><button type="button" className="search-config-danger" disabled={busy} aria-label={'Remove related collection '+child.title} onClick={()=>updateGroup(groupIndex,{collections:group.collections.filter((_,i)=>i!==index)})}>×</button></div></li>)}</ol>}
         </div>)}
-      </div>
-    </fieldset>)}
-    <small>Links use the selected collection’s image and title. Four links per column appear at a time, with Previous and Next controls for additional links. Changes apply after Save settings.</small>
+      </>}
+    </div><aside className="cs-preview-area" aria-label="Compact UI live preview">
+      <div className="cs-preview-tools"><span>Live preview</span><div className="cs-device-buttons"><button type="button" aria-pressed={!mobile} onClick={()=>setMobile(false)}>Desktop</button><button type="button" aria-pressed={mobile} onClick={()=>setMobile(true)}>Mobile</button></div></div>
+      <div className="cs-preview" data-mobile={mobile}><div className="cs-preview-search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></svg><span>Search</span><span>×</span></div>
+        <div className="cs-preview-tabs" role="tablist" aria-label="Preview main collections">{(value.length?value:Array.from({length:4},(_,i)=>({title:'Tab '+(i+1),handle:'placeholder-'+i}))).map((item,index)=><button key={item.id||item.handle} type="button" role="tab" aria-selected={index===activeIndex} disabled={!value.length} onClick={()=>selectTab(item)}>{item.title}</button>)}</div>
+        <h4>Hot Searches</h4><div className="cs-chips">{(chips.length?chips:['Your popular searches','Search suggestions']).map((term,i)=><span key={i}>{term}</span>)}</div>
+        <div className="cs-preview-columns">{groups.map((group,i)=><div key={i}><h4>{group.title}</h4><ol>{(group.collections.length?group.collections.slice(currentPage*4,currentPage*4+4):Array.from({length:4},(_,j)=>({title:'Collection '+(j+1),handle:'placeholder-'+j}))).map((child,j)=><li key={child.handle}><span>{currentPage*4+j+1}</span>{child.image?<img src={child.image} alt=""/>:<span className="cs-preview-placeholder"/>}<span>{child.title}</span></li>)}</ol></div>)}</div>
+        <div className="cs-preview-pages"><button type="button" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>‹ Previous</button><span>{currentPage+1} / {maxPage+1}</span><button type="button" disabled={currentPage>=maxPage} onClick={()=>setPage(currentPage+1)}>Next ›</button></div>
+      </div><p className="cs-preview-note">Click a tab to preview its collections. Preview updates as you edit.</p>
+    </aside></div><div className="cs-footer">Four image links per column appear at a time. Save settings to apply your changes to the storefront.</div>
   </section>;
 }

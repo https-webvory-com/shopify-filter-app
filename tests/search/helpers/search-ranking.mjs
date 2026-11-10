@@ -33,6 +33,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/facetNormalization.js')return facetNormalization;
     if(name==='node:crypto')return {createHash};
     if(name==='../utils/searchConfiguration.js')return searchConfiguration;
+    if(name==='../services/searchCollectionPicker.server.js')return mocks[name]||{listSearchCollections:async()=>({query:'',after:'',collections:[],hasMore:false,nextCursor:''})};
     if(name==='../utils/marketPricingIndex.js')return marketPricingIndex;
     if(name==='../utils/variantSize.js')return variantSize;
     if(name==='../utils/searchPinnedIntent.js')return searchPinnedIntent;
