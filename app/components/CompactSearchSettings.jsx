@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useFetcher } from 'react-router';
+import CompactSearchSortable from './CompactSearchSortable';
 
 const groupNames = ['Top Searches', 'Trending', 'Occasion'];
 const emptyGroups = () => groupNames.map(title => ({ title, collections: [] }));
@@ -15,6 +16,12 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   const [pagination, setPagination] = useState({hasMore:false,nextCursor:''});
   const collectionFetcher = useFetcher();
   const dialog = useRef(null);
+  const groupKeys = useRef(new WeakMap());
+  const groupKeySequence = useRef(0);
+  const groupKey = group => {
+    if (!groupKeys.current.has(group)) groupKeys.current.set(group, 'compact-column-' + ++groupKeySequence.current);
+    return groupKeys.current.get(group);
+  };
   const [activeId, setActiveId] = useState('');
   const [page, setPage] = useState(0);
   const [mobile, setMobile] = useState(false);
@@ -44,8 +51,10 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   };
   const chooseMain = () => pick(value, 4, selected => { onChange(selected.map(item => ({ ...item, groups: value.find(c => c.id === item.id)?.groups || emptyGroups() }))); setPage(0); });
   const update = patch => onChange(value.map((item, i) => i === activeIndex ? { ...item, ...patch } : item));
-  const updateGroup = (groupIndex, patch) => update({ groups: groups.map((group, i) => i === groupIndex ? { ...group, ...patch } : group) });
-  const moveMain = direction => { const next = [...value]; const index = activeIndex + direction; [next[index], next[activeIndex]] = [next[activeIndex], next[index]]; setActiveId(active.id || active.handle); onChange(next); };
+  const updateGroup = (groupIndex, patch) => update({ groups: groups.map((group, i) => {
+    if (i !== groupIndex) return group;
+    const next = { ...group, ...patch }; groupKeys.current.set(next, groupKey(group)); return next;
+  }) });
   const chips = suggestions.filter(Boolean).slice(0, 6);
   return <section className="cs-editor" aria-label="Compact UI collections" id="compact-collection-settings">
     <dialog ref={dialog} className="cs-picker" aria-labelledby="cs-picker-title" onCancel={()=>setPicker(null)} onClose={()=>setPicker(null)} onClick={event=>{if(event.target===dialog.current){const rect=dialog.current.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)setPicker(null);}}}>
@@ -65,13 +74,13 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
     <div className="cs-workspace"><div className="cs-controls">
       <div className="cs-label">Main collection tabs <span className="cs-muted">{value.length} of 4 selected</span></div>
       {!active ? <button type="button" className="cs-add-empty" disabled={busy} onClick={chooseMain}><strong>+ Select main collections</strong><span>Choose collections from your Shopify catalog to build your search menu.</span></button> : <>
-        <div className="cs-tabs" role="tablist" aria-label="Edit main collection">{value.map((item,index)=><button type="button" role="tab" key={item.id||item.handle} aria-selected={index===activeIndex} disabled={busy} onClick={()=>selectTab(item)}><span className="cs-tab-number">{index+1}</span>{item.title}</button>)}</div>
-        <div className="cs-main-actions"><button type="button" disabled={busy||activeIndex===0} onClick={()=>moveMain(-1)}>Move left</button><button type="button" disabled={busy||activeIndex===value.length-1} onClick={()=>moveMain(1)}>Move right</button><button type="button" disabled={busy} className="search-config-danger" aria-label={'Remove main collection '+active.title} onClick={()=>onChange(value.filter((_,i)=>i!==activeIndex))}>Remove tab</button></div>
+        <CompactSearchSortable items={value} getId={item=>'main-'+(item.id||item.handle)} disabled={busy} horizontal className="cs-tabs" itemClassName="cs-sortable-tab" role="tablist" aria-label="Edit main collection" onChange={next=>{setActiveId(active.id||active.handle);onChange(next);}} renderItem={(item,index,handle)=><>{handle}<button type="button" role="tab" aria-selected={index===activeIndex} disabled={busy} onClick={()=>selectTab(item)}><span className="cs-tab-number">{index+1}</span>{item.title}</button></>}/>
+        <div className="cs-main-actions"><span className="cs-muted">Drag the handles to reorder tabs.</span><button type="button" disabled={busy} className="search-config-danger" aria-label={'Remove main collection '+active.title} onClick={()=>onChange(value.filter((_,i)=>i!==activeIndex))}>Remove tab</button></div>
         <div className="cs-label"><span><span className="cs-step">2</span>Collections shown in {active.title}</span></div><p>Choose links for each column. Rename headings and reorder links to arrange your menu.</p>
-        {groups.map((group,groupIndex)=><div className="cs-group" key={groupIndex}>
-          <div className="cs-group-head"><label><span className="cs-muted">Column {groupIndex+1}</span><input aria-label={active.title+' column '+(groupIndex+1)+' heading'} value={group.title} maxLength={60} required disabled={busy} onChange={e=>updateGroup(groupIndex,{title:e.target.value})}/></label><button type="button" disabled={busy} onClick={()=>pick(group.collections,12,collections=>updateGroup(groupIndex,{collections}))}>Choose related collections ({group.collections.length}/12)</button></div>
-          {!group.collections.length ? <div className="cs-empty">No collections added to this column yet.</div> : <ol>{group.collections.map((child,index)=><li className="cs-collection-row" key={child.handle}><span className="cs-muted">{index+1}</span>{child.image?<img src={child.image} alt=""/>:<span className="cs-thumb"/>}<span>{child.title}</span><div className="cs-row-actions"><button type="button" disabled={busy||index===0} aria-label={'Move '+child.title+' up'} onClick={()=>{const collections=[...group.collections];[collections[index-1],collections[index]]=[collections[index],collections[index-1]];updateGroup(groupIndex,{collections});}}>↑</button><button type="button" className="search-config-danger" disabled={busy} aria-label={'Remove related collection '+child.title} onClick={()=>updateGroup(groupIndex,{collections:group.collections.filter((_,i)=>i!==index)})}>×</button></div></li>)}</ol>}
-        </div>)}
+        <CompactSearchSortable items={groups} getId={groupKey} disabled={busy} onChange={next=>update({groups:next})} renderItem={(group,groupIndex,handle)=><div className="cs-group">
+          <div className="cs-group-head">{handle}<label><span className="cs-muted">Column {groupIndex+1}</span><input aria-label={active.title+' column '+(groupIndex+1)+' heading'} value={group.title} maxLength={60} required disabled={busy} onChange={e=>updateGroup(groupIndex,{title:e.target.value})}/></label><button type="button" disabled={busy} onClick={()=>pick(group.collections,12,collections=>updateGroup(groupIndex,{collections}))}>Choose related collections ({group.collections.length}/12)</button></div>
+          {!group.collections.length ? <div className="cs-empty">No collections added to this column yet.</div> : <CompactSearchSortable items={group.collections} getId={child=>groupKey(group)+'-'+child.handle} disabled={busy} listTag="ol" itemTag="li" itemClassName="cs-collection-row" onChange={collections=>updateGroup(groupIndex,{collections})} renderItem={(child,index,childHandle)=><>{childHandle}<span className="cs-muted">{index+1}</span>{child.image?<img src={child.image} alt=""/>:<span className="cs-thumb"/>}<span>{child.title}</span><div className="cs-row-actions"><button type="button" className="search-config-danger" disabled={busy} aria-label={'Remove related collection '+child.title} onClick={()=>updateGroup(groupIndex,{collections:group.collections.filter((_,i)=>i!==index)})}>×</button></div></>}/>}
+        </div>}/>
       </>}
     </div><aside className="cs-preview-area" aria-label="Compact UI live preview">
       <div className="cs-preview-tools"><span>Live preview</span><div className="cs-device-buttons"><button type="button" aria-pressed={!mobile} onClick={()=>setMobile(false)}>Desktop</button><button type="button" aria-pressed={mobile} onClick={()=>setMobile(true)}>Mobile</button></div></div>

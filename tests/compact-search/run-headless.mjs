@@ -126,6 +126,32 @@ try {
   await wait(compactSection);
   assert.ok(await evaluate(compactSection+'.innerText.includes("(2/4)")'));
   assert.ok(await evaluate(compactSection+'.innerText.includes("(3/12)")'));
+  const keyPress=async(key,code=key)=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key,code});await send('Input.dispatchKeyEvent',{type:'keyUp',key,code});await delay(120);};
+  const keyboardMove=async(selector,key)=>{await evaluate(`(()=>{const handle=document.querySelector(${JSON.stringify(selector)});handle.scrollIntoView({block:'center'});handle.focus();})()`);await keyPress(' ','Space');await keyPress(key);await keyPress(' ','Space');};
+  const pointerMove=async(source,target)=>{
+    await evaluate(`document.querySelector(${JSON.stringify(source)}).scrollIntoView({block:'center'})`);
+    const points=await evaluate(`(()=>{const a=document.querySelector(${JSON.stringify(source)}).getBoundingClientRect(),b=document.querySelector(${JSON.stringify(target)}).getBoundingClientRect();return {x:a.x+a.width/2,y:a.y+a.height/2,toX:b.x+b.width/2,toY:b.y+b.height/2};})()`);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:points.x,y:points.y});
+    await send('Input.dispatchMouseEvent',{type:'mousePressed',x:points.x,y:points.y,button:'left',clickCount:1});
+    for(let step=1;step<=12;step++){await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:points.x+(points.toX-points.x)*step/12,y:points.y+(points.toY-points.y)*step/12,buttons:1});await delay(25);}
+    await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:points.toX,y:points.toY,button:'left',clickCount:1});await delay(300);
+  };
+  await pointerMove('.cs-sortable-tab:first-child .cs-drag-handle','.cs-sortable-tab:nth-child(2)');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cs-tabs button[role=tab]")].map(e=>e.textContent.trim().replace(/^\\d+/,""))'),['Men','Women']);
+  assert.ok(await evaluate('document.querySelector(".cs-tabs button[aria-selected=true]").textContent.includes("Women")'));
+  await evaluate('(()=>{const i=document.querySelector(".cs-group-head input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(i,"Featured");i.dispatchEvent(new Event("input",{bubbles:true}));})()');
+  await keyboardMove('.cs-group-head .cs-drag-handle','ArrowDown');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cs-group-head input")].map(e=>e.value)'),['Trending','Featured','Occasion']);
+  await keyboardMove('.cs-group:has(input[value="Featured"]) .cs-collection-row .cs-drag-handle','ArrowDown');
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-group:has(input[value="Featured"]) .cs-collection-row>span:nth-last-child(2)')].map(e=>e.textContent)`),['Style 2','Style 1','Style 3']);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cs-preview-columns h4")].map(e=>e.textContent)'),['Trending','Featured','Occasion']);
+  await clickText('Save settings');await wait('document.querySelector("button[name=intent][value=save]").textContent==="Save settings"&&document.querySelector("p[role=status]")?.textContent.includes("saved")');
+  await navigate(origin+'/admin-ui');await wait(compactSection);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cs-tabs button[role=tab]")].map(e=>e.textContent.trim().replace(/^\\d+/,""))'),['Men','Women']);
+  await evaluate('[...document.querySelectorAll(".cs-tabs button[role=tab]")].find(e=>e.textContent.includes("Women")).click()');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cs-group-head input")].map(e=>e.value)'),['Trending','Featured','Occasion']);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-group:has(input[value="Featured"]) .cs-collection-row>span:nth-last-child(2)')].map(e=>e.textContent)`),['Style 2','Style 1','Style 3']);
+  console.log('PASS pointer drag for main tabs and keyboard drag for renamed columns and related links, with preview and save/reopen preservation');
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(200);
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
   await clickText('Choose main collections (2/4)');await wait('document.querySelector(".cs-picker[open]")');
@@ -133,7 +159,9 @@ try {
   await clickText('Cancel');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   await navigate(origin);await open();
   assert.equal(await evaluate('document.querySelectorAll("#cfp-compact-tabs button").length'),2);
-  assert.equal(await evaluate('document.querySelectorAll(".cfp-compact-columns section:first-child li").length'),3);
+  await evaluate('document.querySelectorAll("#cfp-compact-tabs button")[1].click()');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cfp-compact-columns h3")].map(e=>e.textContent)'),['Trending','Featured','Occasion']);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cfp-compact-columns section:nth-child(2) li a>span:last-child")].map(e=>e.textContent)'),['Style 2','Style 1','Style 3']);
   console.log('PASS actual React admin picker, limits, save/reopen and storefront use of saved main/related collections');
   await evaluate(`fetch('/admin').then(r=>r.json()).then(({settings})=>fetch('/admin',{method:'POST',body:new URLSearchParams({intent:'save',settings:JSON.stringify({...settings,compactCollections:[]})})}))`);
   await navigate(origin);await open();
