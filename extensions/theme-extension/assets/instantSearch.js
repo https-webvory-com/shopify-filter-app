@@ -273,6 +273,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         <div class="cfp-search-input-wrapper">
           <svg class="cfp-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="text" id="cfp-main-search-input" aria-label="Search products" placeholder="Search for..." autocomplete="off" />
+          <button type="button" id="cfp-compact-search-clear" class="cfp-compact-clear-btn" aria-label="Clear search" style="display:none" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19"/></svg></button>
           <button id="cfp-search-close" class="cfp-search-close-btn" aria-label="Close search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
@@ -289,6 +290,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       <div id="cfp-compact-tabs" class="cfp-compact-tabs" role="tablist" aria-label="Main collections" hidden></div>
       <div class="cfp-search-body" id="cfp-search-body">
         <div class="cfp-search-column-left">
+          <div class="cfp-search-section-title" id="cfp-compact-products-title" style="display:none" hidden>Products</div>
           <div class="cfp-search-product-grid" id="cfp-search-products">
             <!-- Products will be rendered here -->
           </div>
@@ -350,10 +352,17 @@ document.addEventListener("DOMContentLoaded", async function () {
     const collections = settings.compactCollections || [];
     const config = JSON.stringify(collections);
     if (config !== compactConfig) { compactConfig = config; compactTab = 0; compactPage = 0; }
-    const active = settings.instantLayout === 'compact' && collections.length > 0 && !mainInput.value.trim();
+    const isCompact = settings.instantLayout === 'compact';
+    const hasQuery = !!mainInput.value.trim();
+    const enabled = isCompact && collections.length > 0;
+    const active = enabled && !hasQuery;
+    modal.dataset.cfpSearching = String(isCompact && hasQuery);
+    document.getElementById('cfp-compact-search-clear').hidden = !(isCompact && hasQuery);
+    document.getElementById('cfp-compact-products-title').hidden = !(isCompact && hasQuery);
     modal.dataset.cfpBrowsing = String(active);
-    tabs.hidden = !active; browse.hidden = !active;
-    if (!active) return;
+    tabs.hidden = !enabled; browse.hidden = !active;
+    if (isCompact && !hasQuery) document.getElementById('cfp-did-you-mean-container').style.display = 'none';
+    if (!enabled) return;
     compactTab = Math.min(compactTab, collections.length - 1);
     tabs.innerHTML = collections.map((c,i) => `<button type="button" role="tab" id="cfp-compact-tab-${i}" aria-selected="${i === compactTab}" aria-controls="cfp-compact-browse" tabindex="${i === compactTab ? 0 : -1}">${highlightSearchText(c.title,'')}</button>`).join('');
     const selectTab = index => { compactTab = index; compactPage = 0; renderCompactNavigation(); };
@@ -366,6 +375,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         selectTab(index); tabs.querySelectorAll('button')[index].focus();
       });
     });
+    if (!active) return;
     const main = collections[compactTab];
     const groups = main.groups || [];
     const pageCount = Math.max(1, ...groups.map(g => Math.ceil(g.collections.length / 4)));
@@ -654,6 +664,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
+    document.getElementById('cfp-compact-search-clear').addEventListener('click', () => {
+      mainInput.value = '';
+      mainInput.dispatchEvent(new Event('input', { bubbles: true }));
+      mainInput.focus();
+    });
     overlay.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e) => {
       if (document.querySelector('.cfp-native-quick-view[open]')) return;
@@ -1027,7 +1042,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     let html = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <div class="cfp-search-section-title" style="margin-bottom: 0;">${!query && window.cfpSearchSettings?.instantLayout === 'compact' ? 'Hot Searches' : 'Suggestions'}</div>
+        <div class="cfp-search-section-title" style="margin-bottom: 0;">${window.cfpSearchSettings?.instantLayout === 'compact' ? (query ? 'Popular' : 'Hot Searches') : 'Suggestions'}</div>
       </div>
     `;
     suggestions.forEach((s) => {
@@ -1182,6 +1197,21 @@ document.addEventListener("DOMContentLoaded", async function () {
     } else if (data.collections) {
       collections = data.collections;
     }
+
+    if (window.cfpSearchSettings?.instantLayout === 'compact' && query?.trim()) {
+      const root = window.Shopify?.routes?.root || '/';
+      const links = collections.slice(0, CONFIG.collectionLimit ?? 5).flatMap(collection => {
+        try {
+          const url = new URL(collection.url || root + 'collections/' + encodeURIComponent(collection.handle), location.origin);
+          if (url.origin !== location.origin || !url.pathname.includes('/collections/')) return [];
+          return `<li><a href="${instantEscapeHtml(url.pathname + url.search)}">${highlightSearchText(collection.title, query)}</a></li>`;
+        } catch { return []; }
+      });
+      if (titleElement) { titleElement.textContent = 'Categories'; titleElement.style.display = links.length ? 'block' : 'none'; }
+      list.innerHTML = links.join('');
+      return;
+    }
+    if (titleElement && (window.cfpSearchSettings?.instantLayout === 'compact' || titleElement.textContent === 'Categories')) titleElement.textContent = 'Collections';
 
     if (query && query.trim().length > 0) {
       if (titleElement) titleElement.style.display = "none";
@@ -1506,7 +1536,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             ${(data.globalSettings && data.globalSettings.showQuickViewInstantSearch !== false) ? `<button type="button" class="cfp-quick-view-btn" data-cfp-quick-view-context="instant-search" data-product-handle="${instantEscapeHtml(p.handle)}">Quick View</button>` : ''}
           </div>
           <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
-            <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${instantEscapeHtml(p.title)}</div>
+            <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${window.cfpSearchSettings?.instantLayout === 'compact' && query ? highlightSearchText(p.title, query) : instantEscapeHtml(p.title)}</div>
             ${swatchesHtml}
             ${(data.globalSettings && data.globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `
             <div class="cfp-search-product-price" style="margin-top: 8px; text-align: center;">${p._marketPricingUnavailable ? "See product price" : instantEscapeHtml(price)}</div>

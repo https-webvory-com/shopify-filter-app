@@ -34,7 +34,7 @@ export async function createCompactSearchServer() {
       await new Promise(r=>setTimeout(r,q==='slow'?500:40));
       return respond({products:q==='nothing'?[]:Array.from({length:6},(_,i)=>({id:String(i+1),title:(q||'Popular')+' Dress '+(i+1),handle:'dress-'+(i+1),vendor:'Fixture',images:['https://cdn.shopify.com/fixture.jpg'],priceMin:29,priceMax:29,available:true,variants:[{id:String(i+1),price:29,available:true}]})),suggestions:q==='nothing'?[]:[q+' dress',q+' style'],matchCount:q==='nothing'?0:42,contextualPricingApplied:true});
     }
-    if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json')return respond({collections:children,resources:{results:{collections:children,pages:[]}}});
+    if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json')return respond({collections:children,resources:{results:{collections:children,pages:url.searchParams.get('resources[type]')==='page'?[{title:'Dress styling guide',url:'/pages/dress-styling-guide'}]:[]}}});
     if(url.pathname.startsWith('/assets/')){const name=url.pathname.slice(8);if(!['instantSearch.js','instantSearch.css','searchSettings.js'].includes(name)){res.writeHead(404);return res.end();}res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'application/javascript');return res.end((await fs.readFile('extensions/theme-extension/assets/'+name,'utf8')).replaceAll('https://aisearchfilter.webvory.com',''));}
     if(url.pathname==='/admin.js'){res.setHeader('Content-Type','application/javascript');return res.end(bundle.outputFiles[0].text);}
     res.setHeader('Content-Type','text/html');
