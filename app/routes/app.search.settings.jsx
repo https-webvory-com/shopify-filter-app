@@ -5,6 +5,7 @@ import { DEFAULT_SEARCH_SETTINGS, SEARCH_SETTING_FIELDS, ADVANCED_SEARCH_FIELDS,
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import SearchConfigurationLayout from '../components/SearchConfigurationLayout';
+import CompactSearchSettings from '../components/CompactSearchSettings';
 import {getSearchIndexStatus} from '../services/searchIndex.server.js';
 
 export const loader = async ({ request }) => {
@@ -58,7 +59,7 @@ export default function SearchSettings() {
     </label>;
   };
   const update=(key,value)=>setValues(v=>({...v,[key]:value}));
-  const select=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<select value={values[key]} disabled={busy} onChange={e=>update(key,e.target.value)} style={fieldStyle}>{SEARCH_ENUM_FIELDS[key].map(value=><option key={value} value={value}>{value.replaceAll('-',' ')}</option>)}</select></label>;
+  const select=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<select value={values[key]} disabled={busy} onChange={e=>update(key,e.target.value)} style={fieldStyle}>{SEARCH_ENUM_FIELDS[key].map(value=><option key={value} value={value}>{key==='instantLayout'?({fullscreen:'Full screen UI',compact:'Compact UI','two-columns':'Two columns',grid:'Grid'}[value]):value.replaceAll('-',' ')}</option>)}</select></label>;
   const textField=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<input type={key==='fixedImageWidth'?'number':'text'} value={values[key]} disabled={busy} onChange={e=>update(key,key==='fixedImageWidth'?Number(e.target.value):e.target.value)} style={fieldStyle}/></label>;
   const listField=(key,label,help)=> <label style={{display:'grid',gap:6}}>{label}<textarea rows={3} value={(values[key]||[]).join('\n')} disabled={busy} onChange={e=>update(key,e.target.value.split('\n'))} style={fieldStyle}/><small>{help||'One entry per line.'}</small></label>;
   const updateField=(index,patch)=>setValues(v=>({...v,fields:v.fields.map((field,i)=>i===index?{...field,...patch}:field)}));
@@ -91,6 +92,7 @@ export default function SearchSettings() {
         {tab==='instant'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="instant-search-heading">
           <h2 id="instant-search-heading">Instant search</h2>
           {field('instantSearchEnabled')}{select('instantLayout','Instant search layout')}{select('productColumn','Product column position')}{field('instantColumns')}{textField('searchBoxSelector','Custom search box selector')}
+          {values.instantLayout==='compact'&&<CompactSearchSettings value={values.compactCollections||[]} disabled={busy} onChange={value=>update('compactCollections',value)}/>}
           <div className="search-config-fields">{['productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
           <p style={{ margin: 0 }}>A count of zero hides that suggestion section. Recent searches are stored in the customer’s browser.</p>
           <label style={{ display: 'grid', gap: 6 }}>Manual suggestions<textarea name="manualSuggestions" value={manual} onChange={e => setManual(e.target.value)} rows={5} maxLength={1100} style={fieldStyle} /></label>

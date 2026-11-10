@@ -88,7 +88,7 @@ test('missing or unavailable settings preserve defaults; unavailable blacklist s
 test('admin uses session shop for reads, saves and reset, rejects invalid input and handles write failures', async () => {
   const { service } = await serviceFixture();
   const route = await loadModule('app/routes/app.search.settings.jsx', {
-    '../components/SearchConfigurationLayout': { default: () => null }, 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} },
+    '../components/CompactSearchSettings': { default: () => null }, '../components/SearchConfigurationLayout': { default: () => null }, 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} },
     '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'session-shop' } }) } },
     '../services/searchSettings.server.js': service, '../utils/searchSettings.js': schema,
   });
@@ -108,7 +108,7 @@ test('admin authentication failures escape and write failures return safe messag
   let writes = 0;
   let authorized = false;
   const route = await loadModule('app/routes/app.search.settings.jsx', {
-    '../components/SearchConfigurationLayout': { default: () => null }, 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} },
+    '../components/CompactSearchSettings': { default: () => null }, '../components/SearchConfigurationLayout': { default: () => null }, 'react-router': {}, react: {}, '@shopify/shopify-app-react-router/server': { boundary: {} },
     '../shopify.server': { authenticate: { admin: async () => { if (!authorized) throw Error('Unauthorized'); return { session: { shop: 'session-shop' } }; } } },
     '../services/searchSettings.server.js': { getSearchSettings: async () => null, saveSearchSettings: async () => { writes++; throw Error('private connection detail'); }, resetSearchSettings: async () => { writes++; throw Error('private connection detail'); } },
     '../utils/searchSettings.js': schema,

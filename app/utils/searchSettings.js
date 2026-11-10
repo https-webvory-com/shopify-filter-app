@@ -26,12 +26,13 @@ export const DEFAULT_SEARCH_FIELD_CONFIG=Object.freeze([
 ].map(([key,label,weight])=>Object.freeze({key,label,weight,search:!['description','barcode'].includes(key),suggest:!['sku','barcode','description','handle'].includes(key),transforms:[],indexTransforms:[],delimiter:'',numeric:false})));
 const advancedDefaults=Object.fromEntries(Object.entries(ADVANCED_SEARCH_FIELDS).map(([key,field])=>[key,field[1]]));
 export const SEARCH_ENUM_FIELDS={
- instantLayout:['fullscreen','two-columns','grid'],productColumn:['left','right'],pagination:['load-more','infinite'],imageSizeType:['dynamic','original','fixed'],productDateType:['created','published','updated'],
+ instantLayout:['fullscreen','compact','two-columns','grid'],productColumn:['left','right'],pagination:['load-more','infinite'],imageSizeType:['dynamic','original','fixed'],productDateType:['created','published','updated'],
 };
 const enumDefaults={instantLayout:'fullscreen',productColumn:'left',pagination:'load-more',imageSizeType:'dynamic',productDateType:'published'};
 export const DEFAULT_SEARCH_SETTINGS = Object.freeze(Object.fromEntries([
   ...Object.entries(SEARCH_SETTING_FIELDS).map(([key, field]) => [key, field[1]]),
   ['manualSuggestions', []],
+  ['compactCollections', []],
   ...Object.entries(advancedDefaults),...Object.entries(enumDefaults),
   ['searchResultsPath','/search'],['searchBoxSelector',''],['priceUnit',''],['fixedImageWidth',600],
   ['returnedMetafields',[]],['stopwords',[]],['tokenDelimiters',[]],['tentativeDelimiters',[]],['fields',DEFAULT_SEARCH_FIELD_CONFIG],
@@ -51,6 +52,7 @@ const transforms=(value)=>{
 export function validateSearchSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid search settings.');
   const result = {};
+  result.compactCollections = validateCompactCollections(input.compactCollections ?? []);
   for (const [key, [label, fallback, min, max]] of Object.entries(SEARCH_SETTING_FIELDS)) {
     const value = input[key];
     if (typeof fallback === 'boolean') {
@@ -101,4 +103,39 @@ export function validateSearchSettings(input) {
       delimiter:literalText(field.delimiter??'','Field delimiter',10),transforms:transforms(field.transforms??[]),indexTransforms:transforms(field.indexTransforms??[])};
   });
   return result;
+}
+
+// Shopify collections have no parent/child relationship. Merchants explicitly
+// choose the related collections displayed beneath each main collection tab.
+export function validateCompactCollections(value) {
+  if (!Array.isArray(value) || value.length > 4) throw Error('Choose up to four main collections.');
+  const collection = item => {
+    if (!item || typeof item !== 'object') throw Error('Invalid compact collection.');
+    const title = text(item.title, 'Collection title', 200);
+    const handle = text(item.handle, 'Collection handle', 200);
+    if (!title || !/^[a-z0-9][a-z0-9-]*$/i.test(handle)) throw Error('Choose a collection with a valid title and handle.');
+    const id = text(item.id ?? '', 'Collection ID', 100);
+    if (id && !/^gid:\/\/shopify\/Collection\/\d+$/.test(id)) throw Error('Invalid collection ID.');
+    const image = text(item.image ?? '', 'Collection image', 2000);
+    if (image) {
+      let url; try { url = new URL(image); } catch { throw Error('Use an HTTPS collection image.'); }
+      if (url.protocol !== 'https:' || url.username || url.password) throw Error('Use an HTTPS collection image.');
+    }
+    return { id, title, handle, image };
+  };
+  const seen = new Set();
+  return value.map(item => {
+    const main = collection(item);
+    if (seen.has(main.handle)) throw Error('Choose different main collections.');
+    seen.add(main.handle);
+    if (!Array.isArray(item.groups) || item.groups.length > 3) throw Error('Use up to three groups per main collection.');
+    return { ...main, groups: item.groups.map(group => {
+      if (!group || typeof group !== 'object') throw Error('Invalid related collection group.');
+      const title = text(group.title, 'Group title', 60);
+      if (!title || !Array.isArray(group.collections) || group.collections.length > 12) throw Error('Choose up to 12 related collections per group.');
+      const collections = group.collections.map(collection);
+      if (new Set(collections.map(c => c.handle)).size !== collections.length) throw Error('Choose different collections within each group.');
+      return { title, collections };
+    }) };
+  });
 }

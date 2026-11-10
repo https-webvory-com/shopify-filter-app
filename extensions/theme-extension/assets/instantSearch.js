@@ -109,6 +109,9 @@ document.addEventListener("DOMContentLoaded", async function () {
   let modal = null;
   let overlay = null;
   let mainInput = null;
+  let compactTab = 0;
+  let compactPage = 0;
+  let compactConfig = '';
 
   // Initialize
   init();
@@ -262,11 +265,14 @@ document.addEventListener("DOMContentLoaded", async function () {
     // 2. Modal
     modal = document.createElement("div");
     modal.className = "cfp-search-modal";
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-label', 'Search');
+    modal.setAttribute('aria-modal', 'true');
     modal.innerHTML = `
       <div class="cfp-search-header">
         <div class="cfp-search-input-wrapper">
           <svg class="cfp-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="cfp-main-search-input" placeholder="Search for..." autocomplete="off" />
+          <input type="text" id="cfp-main-search-input" aria-label="Search products" placeholder="Search for..." autocomplete="off" />
           <button id="cfp-search-close" class="cfp-search-close-btn" aria-label="Close search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
@@ -280,6 +286,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         <div class="cfp-search-spinner"></div>
       </div>
 
+      <div id="cfp-compact-tabs" class="cfp-compact-tabs" role="tablist" aria-label="Main collections" hidden></div>
       <div class="cfp-search-body" id="cfp-search-body">
         <div class="cfp-search-column-left">
           <div class="cfp-search-product-grid" id="cfp-search-products">
@@ -294,6 +301,7 @@ document.addEventListener("DOMContentLoaded", async function () {
               <!-- Recent searches rendered here -->
             </ul>
           </div>
+          <div id="cfp-compact-browse" hidden></div>
           <div class="cfp-search-section-title" id="cfp-collections-title">Collections</div>
           <ul class="cfp-search-collections-list" id="cfp-search-collections">
             <!-- Collections will be rendered here -->
@@ -315,9 +323,76 @@ document.addEventListener("DOMContentLoaded", async function () {
     modal.dataset.cfpLayout=settings.instantLayout||'fullscreen';
     modal.dataset.cfpProductColumn=settings.productColumn||'left';
     modal.style.setProperty('--cfp-instant-columns',String(settings.instantColumns||4));
+    overlay.dataset.cfpLayout=modal.dataset.cfpLayout;
+    renderCompactNavigation();
+    positionCompactPanel();
+  }
+
+  function positionCompactPanel() {
+    if (!modal || modal.dataset.cfpLayout !== 'compact') {
+      if (modal) for (const key of ['left','width','max-height']) modal.style.removeProperty(key);
+      if (modal) modal.style.top = '0px';
+      return;
+    }
+    const rect = modal._trigger?.getBoundingClientRect();
+    const width = Math.min(448, window.innerWidth - 16);
+    const left = window.innerWidth <= 600 ? 8 : Math.max(8, Math.min(rect?.left ?? window.innerWidth - width - 24, window.innerWidth - width - 8));
+    const top = window.innerWidth <= 600 ? 12 : Math.max(8, Math.min(rect?.top ?? 64, window.innerHeight - 240));
+    modal.style.left = left + 'px'; modal.style.top = top + 'px';
+    modal.style.width = width + 'px'; modal.style.maxHeight = Math.max(180, window.innerHeight - top - 12) + 'px';
+  }
+
+  function renderCompactNavigation() {
+    const settings = window.cfpSearchSettings || {};
+    const tabs = document.getElementById('cfp-compact-tabs');
+    const browse = document.getElementById('cfp-compact-browse');
+    if (!tabs || !browse) return;
+    const collections = settings.compactCollections || [];
+    const config = JSON.stringify(collections);
+    if (config !== compactConfig) { compactConfig = config; compactTab = 0; compactPage = 0; }
+    const active = settings.instantLayout === 'compact' && collections.length > 0 && !mainInput.value.trim();
+    modal.dataset.cfpBrowsing = String(active);
+    tabs.hidden = !active; browse.hidden = !active;
+    if (!active) return;
+    compactTab = Math.min(compactTab, collections.length - 1);
+    tabs.innerHTML = collections.map((c,i) => `<button type="button" role="tab" id="cfp-compact-tab-${i}" aria-selected="${i === compactTab}" aria-controls="cfp-compact-browse" tabindex="${i === compactTab ? 0 : -1}">${highlightSearchText(c.title,'')}</button>`).join('');
+    const selectTab = index => { compactTab = index; compactPage = 0; renderCompactNavigation(); };
+    tabs.querySelectorAll('button').forEach((button,i) => {
+      button.addEventListener('click', () => { selectTab(i); tabs.querySelectorAll('button')[i].focus(); });
+      button.addEventListener('keydown', event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = event.key === 'Home' ? 0 : event.key === 'End' ? collections.length - 1 : (i + (event.key === 'ArrowRight' ? 1 : -1) + collections.length) % collections.length;
+        selectTab(index); tabs.querySelectorAll('button')[index].focus();
+      });
+    });
+    const main = collections[compactTab];
+    const groups = main.groups || [];
+    const pageCount = Math.max(1, ...groups.map(g => Math.ceil(g.collections.length / 4)));
+    compactPage = Math.min(compactPage, pageCount - 1);
+    const root = window.Shopify?.routes?.root || '/';
+    const link = c => root + 'collections/' + encodeURIComponent(c.handle);
+    browse.setAttribute('role','tabpanel');
+    browse.setAttribute('aria-labelledby','cfp-compact-tab-' + compactTab);
+    browse.style.setProperty('--cfp-compact-rank-start', String(compactPage * 4));
+    browse.innerHTML = `<div class="cfp-compact-columns">${groups.map(group => `<section><h3>${highlightSearchText(group.title,'')}</h3><ol start="${compactPage * 4 + 1}">${group.collections.slice(compactPage * 4, compactPage * 4 + 4).map(c => `<li><a href="${link(c)}">${c.image ? `<img src="${highlightSearchText(c.image,'')}" alt="" loading="lazy" width="42" height="64">` : '<span class="cfp-compact-image-placeholder" aria-hidden="true"></span>'}<span>${highlightSearchText(c.title,'')}</span></a></li>`).join('')}</ol></section>`).join('')}</div>
+      <a class="cfp-compact-shop-all" href="${link(main)}">Shop all ${highlightSearchText(main.title,'')} <span aria-hidden="true">→</span></a>
+      ${pageCount > 1 ? `<div class="cfp-compact-pagination"><button type="button" data-page="-1" ${compactPage === 0 ? 'disabled' : ''}>‹ Previous</button><span aria-live="polite">${compactPage + 1} / ${pageCount}</span><button type="button" data-page="1" ${compactPage + 1 >= pageCount ? 'disabled' : ''}>Next ›</button></div>` : ''}`;
+    browse.querySelectorAll('img').forEach(img => {
+      const hideBrokenImage = () => { img.style.visibility = 'hidden'; };
+      img.addEventListener('error', hideBrokenImage, { once: true });
+      if (img.complete && !img.naturalWidth) hideBrokenImage();
+    });
+    browse.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => {
+      const direction = button.dataset.page;
+      compactPage += Number(direction); renderCompactNavigation();
+      const next = browse.querySelector(`[data-page="${direction}"]`);
+      (next?.disabled ? browse.querySelector('[data-page]:not(:disabled)') : next)?.focus();
+    }));
   }
 
   function attachListeners() {
+      window.addEventListener('resize', positionCompactPanel);
       // ─────────────────────────────────────────────────────────────────────────
       // WHITELIST APPROACH: Only intercept elements that are 100% confirmed
       // to be search triggers. This prevents false-positives on country pickers,
@@ -534,6 +609,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         const el = e.target;
         if (!el) return;
+        if (modal?._restoringFocus) return;
         if (el.tagName !== 'INPUT') return;                           // Only input elements
         if (el.type !== 'search' && el.name !== 'q') return;         // Only search inputs
         if (el.closest('.cfp-search-modal')) return;                  // Not our own modal input
@@ -577,6 +653,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     overlay.addEventListener("click", closeModal);
     document.addEventListener("keydown", (e) => {
       if (document.querySelector('.cfp-native-quick-view[open]')) return;
+      if (e.key === 'Tab' && modal.dataset.cfpLayout === 'compact' && modal.classList.contains('cfp-open')) {
+        const controls = [...modal.querySelectorAll('button:not(:disabled),input,a[href]')].filter(el => el.tabIndex >= 0 && el.getClientRects().length);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
       if (e.key === "Escape" && modal.classList.contains("cfp-open")) {
         closeModal();
       }
@@ -586,6 +668,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     let debounceTimer;
     mainInput.addEventListener("input", (e) => {
       const query = e.target.value.trim();
+      renderCompactNavigation();
       clearTimeout(debounceTimer);
       window.cfpActiveInstantSearchId = null;
       window.cfpActiveInstantSearchQuery = null;
@@ -635,7 +718,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Already open — don't re-open
     if (modal.classList.contains('cfp-open')) return;
 
+    modal._trigger = triggerElement;
     modal.style.top = '0px';
+    applySearchDisplaySettings();
     overlay.classList.add('cfp-open');
     modal.classList.add('cfp-open');
 
@@ -664,6 +749,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     // (avoids breaking other modals that also use overflow:hidden)
     document.body.style.overflow = modal._prevBodyOverflow || '';
     document.body.classList.remove('cfp-search-active');
+    if (modal.dataset.cfpLayout === 'compact' && modal._trigger?.isConnected) {
+      // Avoid the theme-input focus listener reopening the panel on close.
+      modal._restoringFocus = true;
+      modal._trigger.focus?.({ preventScroll: true });
+      modal._restoringFocus = false;
+    }
 
     // NOTE: We do NOT call closeThemeSearch() here.
     // The theme's search was already closed when we OPENED our modal.
@@ -932,7 +1023,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     let html = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <div class="cfp-search-section-title" style="margin-bottom: 0;">Suggestions</div>
+        <div class="cfp-search-section-title" style="margin-bottom: 0;">${!query && window.cfpSearchSettings?.instantLayout === 'compact' ? 'Hot Searches' : 'Suggestions'}</div>
       </div>
     `;
     suggestions.forEach((s) => {
