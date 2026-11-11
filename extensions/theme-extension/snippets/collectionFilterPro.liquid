@@ -469,7 +469,7 @@
     }
 
     var topBar = document.getElementById('cfp-top-bar');
-    var sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
+    var sortBox = topBar && topBar.querySelector('.cfp-top-bar__right') || document.getElementById('cfp-custom-sort');
     if (!topBar || !hFilters || !extra) return;
 
     var allPills = Array.from(topBar.querySelectorAll('.cfp-horizontal-pill'));
@@ -482,11 +482,18 @@
         hFilters.appendChild(pill);
       });
 
-      var topBarWidth = topBar.getBoundingClientRect().width || window.innerWidth;
+      var mainRow = topBar.querySelector('.cfp-top-bar__main') || topBar;
+      var rowStyle = getComputedStyle(mainRow);
+      var topBarWidth = mainRow.clientWidth - (parseFloat(rowStyle.paddingLeft)||0) - (parseFloat(rowStyle.paddingRight)||0);
       var sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
+      var leftGap = parseFloat(getComputedStyle(hFilters.parentElement).columnGap)||12;
+      var clearBtn = document.getElementById('cfp-clear-all-top');
+      var clearRect = clearBtn && clearBtn.getBoundingClientRect();
+      var clearStyle = clearBtn && getComputedStyle(clearBtn);
+      var clearWidth = clearRect && clearRect.width ? clearRect.width + (parseFloat(clearStyle.marginLeft)||0) + (parseFloat(clearStyle.marginRight)||0) + leftGap : 0;
 
       // Available width for pills when NO MORE button is shown (reserve sort box + 28px gap)
-      var availableWidthNoMore = Math.max(160, topBarWidth - sortWidth - 28);
+      var availableWidthNoMore = Math.max(0, topBarWidth - sortWidth - (parseFloat(rowStyle.columnGap)||12) - clearWidth);
 
       var pillWidths = allPills.map(function(pill) {
         return Math.ceil(pill.getBoundingClientRect().width) || 105;
@@ -512,9 +519,13 @@
         }
       } else {
         // Extra filters cannot adjust in Row 1 -> show MORE button and place overflowing filters in Row 2
+        if (triggerBtn) {
+          triggerBtn.classList.remove('is-hidden');
+          triggerBtn.style.setProperty('display','inline-flex','important');
+        }
         var moreBtnWidth = triggerBtn ? (triggerBtn.getBoundingClientRect().width || 90) : 90;
         // Available width for pills in Row 1 when MORE button is present (sortWidth + moreBtnWidth + gaps)
-        var availableWidthWithMore = Math.max(120, topBarWidth - sortWidth - moreBtnWidth - 40);
+        var availableWidthWithMore = Math.max(0, availableWidthNoMore - moreBtnWidth - leftGap);
 
         var currentWidth = 0;
         var primaryPills = [];

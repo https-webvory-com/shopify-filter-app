@@ -2965,12 +2965,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         const topBar = document.getElementById('cfp-top-bar');
-        const sortBox = document.getElementById('cfp-custom-sort') || document.querySelector('.cfp-top-bar__right');
-        const topBarWidth = topBar ? (topBar.getBoundingClientRect().width || window.innerWidth) : window.innerWidth;
+        const sortBox = topBar?.querySelector('.cfp-top-bar__right') || document.getElementById('cfp-custom-sort');
+        const mainRow = topBar?.querySelector('.cfp-top-bar__main') || topBar;
+        const rowStyle = mainRow ? getComputedStyle(mainRow) : null;
+        const topBarWidth = mainRow ? mainRow.clientWidth - (parseFloat(rowStyle.paddingLeft)||0) - (parseFloat(rowStyle.paddingRight)||0) : window.innerWidth;
         const sortWidth = sortBox ? (sortBox.getBoundingClientRect().width || 140) : 140;
+        const leftGap = parseFloat(getComputedStyle(horizontalContainer.parentElement).columnGap)||12;
+        const clearBtn = document.getElementById('cfp-clear-all-top');
+        const clearRect = clearBtn?.getBoundingClientRect();
+        const clearStyle = clearBtn ? getComputedStyle(clearBtn) : null;
+        const clearWidth = clearRect?.width ? clearRect.width + (parseFloat(clearStyle.marginLeft)||0) + (parseFloat(clearStyle.marginRight)||0) + leftGap : 0;
 
         const pillElements = Array.from(horizontalContainer.querySelectorAll('.cfp-horizontal-pill'));
-        const availableWidthNoMore = Math.max(160, topBarWidth - sortWidth - 28);
+        const availableWidthNoMore = Math.max(0, topBarWidth - sortWidth - (parseFloat(rowStyle?.columnGap)||12) - clearWidth);
         const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
         const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
 
@@ -2991,8 +2998,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         } else {
           // Extra pills overflow to Row 2
+          triggerBtn?.classList.remove('is-hidden');
+          triggerBtn?.style.setProperty('display','inline-flex','important');
           const moreBtnWidth = triggerBtn ? (triggerBtn.getBoundingClientRect().width || 90) : 90;
-          const availableWidthWithMore = Math.max(120, topBarWidth - sortWidth - moreBtnWidth - 40);
+          const availableWidthWithMore = Math.max(0, availableWidthNoMore - moreBtnWidth - leftGap);
 
           let currentWidth = 0;
           const primaryPills = [];
@@ -4008,6 +4017,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function updateActiveCountBadge() {
+    const topClearBtn = document.getElementById('cfp-clear-all-top');
+    const previousControlsWidth = (activeCount?.getBoundingClientRect().width||0) + (topClearBtn?.getBoundingClientRect().width||0);
     let count = 0;
     count += (activeFilters.weightRanges||[]).length+(activeFilters.ratingRanges||[]).length+(activeFilters.locations||[]).length;
     count += (activeFilters.saleRanges || []).length;
@@ -4029,10 +4040,15 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       activeCount.style.display = count > 0 ? 'inline-flex' : 'none';
     }
 
-    const topClearBtn = document.getElementById('cfp-clear-all-top');
     if (topClearBtn) {
       const isHorizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
       topClearBtn.style.display = (count > 0 && isHorizontal) ? 'inline-flex' : 'none';
+    }
+    if (isHorizontalFilterLayout()) {
+      if (typeof window.cfpSyncPillsLayout === 'function') window.cfpSyncPillsLayout();
+      else if (previousControlsWidth !== (activeCount?.getBoundingClientRect().width||0) + (topClearBtn?.getBoundingClientRect().width||0) && cfpLastSettings?.length) {
+        renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+      }
     }
   }
 

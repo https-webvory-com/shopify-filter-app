@@ -374,6 +374,37 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });
+  await test('horizontal Clear all stays inside the page after selection and responsive reflow',async()=>{
+    const filterSettings=Array.from({length:13},(_,i)=>({id:'clear-fit-'+i,isEnabled:true,filterType:'vendor',label:'Category '+(i+1),config:{multipleSelection:true}}));
+    for(const groupCount of [10,13])for(const useToolbarHelper of [false,true]){
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings:filterSettings.slice(0,groupCount),globalSettings:{desktopFilterLayout:'horizontal',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:2560,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+      await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      if(!useToolbarHelper)await evaluate('delete window.cfpSyncPillsLayout');
+      if(groupCount===10){
+        const fitWidth=await evaluate("(()=>{const row=document.querySelector('.cfp-top-bar__main'),pills=[...document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill')];return Math.ceil(innerWidth-row.clientWidth+pills.reduce((sum,p)=>sum+Math.ceil(p.getBoundingClientRect().width),0)+9*10+document.querySelector('.cfp-top-bar__right').getBoundingClientRect().width+12+8);})()");
+        await send('Emulation.setDeviceMetricsOverride',{width:fitWidth,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
+        assert.equal(await evaluate("document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill').length"),10);
+        assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width"),0);
+      }
+      await evaluate("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn').click();document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill input').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('#cfp-clear-all-top').getBoundingClientRect().width>0");
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true,'Clear all caused an immediate page overflow');
+      if(groupCount===10)assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width>0"),true,'overflow groups did not move under More');
+      for(const width of [1440,1366,1280,1024,900,769]){
+        await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
+        const bounds=await evaluate("(()=>{const b=document.querySelector('#cfp-top-bar').getBoundingClientRect(),c=document.querySelector('#cfp-clear-all-top').getBoundingClientRect(),s=document.querySelector('.cfp-top-bar__right').getBoundingClientRect();return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,barRight:b.right,clearLeft:c.left,clearRight:c.right,sortLeft:s.left,sortRight:s.right,pills:document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill').length};})()");
+        assert.ok(bounds.scroll<=width+1,'selected filters overflowed: '+JSON.stringify(bounds));
+        assert.ok(bounds.clearRight<=bounds.sortLeft+1&&bounds.sortRight<=bounds.barRight+1,'Clear all overlapped sorting: '+JSON.stringify(bounds));
+      }
+      await evaluate("document.querySelector('#cfp-clear-all-top').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('#cfp-clear-all-top').getBoundingClientRect().width===0");
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+      assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
   await test('horizontal filters recover missing toolbar containers and remain usable when resized',async()=>{
     const filterSettings=Array.from({length:8},(_,i)=>({id:'horizontal-'+i,isEnabled:true,filterType:'vendor',label:'Filter option group '+(i+1),displayMode:'List',config:{}}));
     for(const realToolbar of [false,true]){

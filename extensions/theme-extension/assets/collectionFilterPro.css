@@ -2493,6 +2493,9 @@ facet-filters-form,
 
 @media (min-width: 769px) {
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
+  .cfp-horizontal-layout .cfp-top-bar__main { min-width: 0; gap: 12px; }
+  .cfp-horizontal-layout .cfp-top-bar__left { min-width: 0; flex: 1 1 auto; }
+  .cfp-horizontal-layout :is(.cfp-top-bar__right, .cfp-clear-all-top, #cfp-drawer-trigger-btn) { flex-shrink: 0; }
   
   .cfp-horizontal-layout .cfp-product-count,
   .cfp-horizontal-layout #cfp-product-count,
