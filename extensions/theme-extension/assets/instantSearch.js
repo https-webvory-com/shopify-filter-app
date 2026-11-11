@@ -404,14 +404,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,rect.width+'px','important');
       for (const key of ['height','min-height','max-height']) state.slot.style.setProperty(key,rect.height+'px','important');
       state.slot.style.setProperty('flex-shrink','0','important');
-      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .32s cubic-bezier(.22,1,.36,1), min-width .32s cubic-bezier(.22,1,.36,1), max-width .32s cubic-bezier(.22,1,.36,1), flex-basis .32s cubic-bezier(.22,1,.36,1)','important');
+      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .4s cubic-bezier(.22,1,.36,1), min-width .4s cubic-bezier(.22,1,.36,1), max-width .4s cubic-bezier(.22,1,.36,1), flex-basis .4s cubic-bezier(.22,1,.36,1)','important');
       void state.slot.offsetWidth;state.active = true;
       if (window.ResizeObserver) {
         state.observer ||= new ResizeObserver(()=>{if(modal?.classList.contains('cfp-open'))positionCompactPanel();});
         state.observer.observe(state.slot);
       }
     }
-    for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,width+'px','important');
     // Use the existing input in the expanded header slot, rather than a second
     // search row inside the results popup. Interactive trigger elements cannot host it.
     if (state.slot !== state.trigger && !state.inputHeader) {
@@ -428,6 +427,11 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
     }
     state.inputHeader?.style.setProperty('--cfp-compact-panel-width',width+'px');
+    // Mount and measure the collapsed field before assigning its expanded
+    // width. Otherwise a cold first opening can coalesce both sizes into one.
+    if (modal.classList.contains('cfp-open')) {
+      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,width+'px','important');
+    } else void state.slot.offsetWidth;
     const rect = state.slot.getBoundingClientRect();
     return {left:rect.right-state.anchor.width,right:rect.right,top:rect.top+state.anchorOffset-state.anchor.height/2,
       bottom:rect.top+state.anchorOffset+state.anchor.height/2,width:state.anchor.width,height:state.anchor.height};
