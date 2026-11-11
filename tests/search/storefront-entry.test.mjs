@@ -7,11 +7,11 @@ import {transform} from 'esbuild';
 
 const base='extensions/theme-extension/';
 const entry=await fs.readFile(base+'assets/collectionWidget.js','utf8');
-function fixture({present=false,readyState='loading',runtimeUrl}={}){
+function fixture({present=false,sidebar=true,readyState='loading',runtimeUrl}={}){
  const scripts=[],window={},listeners={};let block=present,callback,disconnected=false;
  const document={readyState,currentScript:{src:'https://cdn.shopify.com/extensions/version/assets/collectionWidget.js',dataset:runtimeUrl?{cfpRuntime:runtimeUrl}:{}},
   documentElement:{},head:{append:script=>scripts.push(script)},
-  querySelector:selector=>selector.includes('#cfp-sidebar')?(block?{}:null):scripts.find(s=>s.dataset.cfpWidgetRuntime==='')||null,
+  querySelector:selector=>selector==='.cfp-v1-app-container'?(block?{}:null):selector.includes('#cfp-sidebar')?(block&&sidebar?{}:null):scripts.find(s=>s.dataset.cfpWidgetRuntime==='')||null,
   createElement:()=>({dataset:{},remove(){scripts.splice(scripts.indexOf(this),1);}}),
   addEventListener:(name,fn)=>listeners[name]=fn};
  const context={window,document,URL,MutationObserver:class{constructor(fn){callback=fn;}observe(){}disconnect(){disconnected=true;}}};
@@ -28,6 +28,13 @@ test('explicit Liquid asset URLs retain their version and a CDN error permits re
  const f=fixture({present:true,runtimeUrl:url});assert.equal(f.scripts[0].src,url);
  f.scripts[0].onerror();assert.equal(f.scripts.length,0);f.run();assert.equal(f.scripts.length,1);
  f.window._cfpRendererLoaded=true;f.run();assert.equal(f.scripts.length,1);
+});
+
+test('the widget starts at high priority when its block appears, before the sidebar finishes parsing',async()=>{
+ const f=fixture({present:true,sidebar:false});
+ assert.equal(f.scripts.length,1);assert.equal(f.scripts[0].fetchPriority,'high');
+ const liquid=await fs.readFile(base+'snippets/collectionFilterPro.liquid','utf8');
+ assert.ok(liquid.includes("'collectionFilterPro.min.js' | asset_url | preload_tag: as: 'script', fetchpriority: 'high'"));
 });
 test('pages without an app block download no full widget and clean up their observer',()=>{
  const f=fixture();f.domReady();assert.equal(f.scripts.length,0);assert.equal(f.disconnected(),true);assert.equal(f.window._cfpWidgetEntryLoaded,false);

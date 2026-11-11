@@ -8,7 +8,14 @@
     const query=new URLSearchParams(params);query.set('page','1');query.set('limit','25');query.delete('responseProfile');query.sort();
     const url='https://aisearchfilter.webvory.com/api/collection-filters?'+query;
     if(pending.has(url))return pending.get(url);
-    const task=fetch(url,{signal,cache:'no-cache',priority}).then(async response=>response.status===200?response.json():null).catch(()=>null).finally(()=>pending.delete(url));
+    const controller=new AbortController();
+    const abort=()=>controller.abort();
+    signal?.addEventListener('abort',abort,{once:true});
+    if(signal?.aborted)abort();
+    const timeout=setTimeout(abort,8000);
+    const task=fetch(url,{signal:controller.signal,cache:'no-cache',priority}).then(async response=>response.status===200?response.json():null).catch(()=>null).finally(()=>{
+      clearTimeout(timeout);signal?.removeEventListener('abort',abort);pending.delete(url);
+    });
     pending.set(url,task);return task;
   };
   function context(){

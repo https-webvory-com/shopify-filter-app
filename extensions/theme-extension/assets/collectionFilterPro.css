@@ -3301,16 +3301,20 @@ facet-filters-form,
   .cfp-vertical-layout .cfp-vertical-page-layout {
     display: grid !important;
     grid-template-columns: min(var(--cfp-vertical-width), calc(100% - 260px)) minmax(0, 1fr);
-    column-gap: 20px;
+    column-gap: 0;
     align-items: start;
+    background: var(--cfp-page-bg, transparent);
   }
   .cfp-vertical-layout .cfp-vertical-page-layout > .cfp-vertical-page-content {
     grid-column: 2; grid-row: var(--cfp-vertical-page-row); min-width: 0; max-width: 100%;
   }
-  .cfp-vertical-layout .cfp-vertical-page-layout > :not(.cfp-vertical-page-content):not(#cfp-sidebar) { grid-column: 1 / -1; }
-  .cfp-vertical-layout .cfp-vertical-page-layout > #cfp-sidebar {
-    --cfp-vertical-sticky-top: calc(var(--cfp-sticky-top, 0px) + 12px);
+  .cfp-vertical-layout .cfp-vertical-page-layout > :not(.cfp-vertical-page-content):not(.cfp-vertical-sidebar-boundary) { grid-column: 1 / -1; }
+  .cfp-vertical-layout .cfp-vertical-sidebar-boundary {
     grid-column: 1; grid-row: 1 / span var(--cfp-vertical-page-rows);
+    align-self: stretch; position: relative; min-width: 0;
+  }
+  .cfp-vertical-layout .cfp-vertical-sidebar-boundary > #cfp-sidebar {
+    --cfp-vertical-sticky-top: calc(var(--cfp-sticky-top, 0px) + 12px);
     order: 0 !important; width: 100% !important; max-width: none !important; min-width: 0; flex: none !important;
   }
 }

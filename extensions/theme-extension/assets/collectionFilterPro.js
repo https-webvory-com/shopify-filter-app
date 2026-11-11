@@ -29,23 +29,30 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       templateName === 'collection' && !document.body.classList.contains('cfp-no-filters');
     const appSection = document.querySelector('.cfp-v1-app-container')?.closest('.shopify-section');
     const main = appSection?.parentElement;
-    const sections = main?.matches('main, [role="main"]') ? [...main.children].filter(el => el !== sidebar && !el.matches('script, style, link')) : [];
+    const sections = main?.matches('main, [role="main"]') ? [...main.children].filter(el => el !== sidebar && !el.matches('script, style, link, .cfp-vertical-sidebar-boundary')) : [];
     const appIndex = sections.indexOf(appSection);
     const titleIndex = sections.findIndex(el => el !== appSection && el.querySelector('h1'));
     const eligible = enabled && titleIndex >= 0 && appIndex > titleIndex;
     if (verticalPageLayout && (!eligible || verticalPageLayout.main !== main)) {
       verticalPageLayout.main.classList.remove('cfp-vertical-page-layout');
       verticalPageLayout.main.style.removeProperty('--cfp-vertical-width');
+      verticalPageLayout.main.style.removeProperty('--cfp-page-bg');
       verticalPageLayout.main.style.removeProperty('--cfp-vertical-page-rows');
       verticalPageLayout.sections.forEach(el => {
         el.classList.remove('cfp-vertical-page-content');
         el.style.removeProperty('--cfp-vertical-page-row');
       });
+      if (verticalPageLayout.boundary.contains(sidebar) && sidebarHome?.parentNode)
+        sidebarHome.parentNode.insertBefore(sidebar,sidebarHome.nextSibling);
+      verticalPageLayout.boundary.remove();
       verticalPageLayout = null;
     }
     if (!eligible) return false;
     if (!verticalPageLayout) {
-      verticalPageLayout = {main,sections:sections.slice(0,appIndex + 1)};
+      const boundary = document.createElement('div');
+      boundary.className = 'cfp-vertical-sidebar-boundary';
+      main.insertBefore(boundary,main.firstChild);
+      verticalPageLayout = {main,boundary,sections:sections.slice(0,appIndex + 1)};
       main.classList.add('cfp-vertical-page-layout');
       main.style.setProperty('--cfp-vertical-page-rows',String(appIndex + 1));
       verticalPageLayout.sections.forEach((el,index) => {
@@ -54,7 +61,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       });
     }
     main.style.setProperty('--cfp-vertical-width',sidebar.style.getPropertyValue('--cfp-vertical-width') || '420px');
-    if (sidebar.parentElement !== main) main.insertBefore(sidebar,main.firstChild);
+    main.style.setProperty('--cfp-page-bg',sidebar.style.getPropertyValue('--cfp-page-bg') || 'transparent');
+    if (sidebar.parentElement !== verticalPageLayout.boundary) verticalPageLayout.boundary.append(sidebar);
     return true;
   }
 
@@ -572,23 +580,38 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   const collectionConfigurationCache = new Map();
   function startIndependentCollectionFilters(params,signal){
     if(templateName==='search'||filtersReady&&cfpLastSettings.length>0)return;
-    const read=()=>{
+    const read=async()=>{
       if(signal.aborted||!window.cfpLoadSavedFilters)return;
       const identity=value=>{const query=new URLSearchParams(value);for(const key of ['responseProfile','page','limit'])query.delete(key);query.sort();return query.toString();};
       const early=window._cfpSavedFilters;
-      const promise=early&&identity(early.params)===identity(params)?early.promise:window.cfpLoadSavedFilters(params,signal);
-      Promise.resolve(promise).then(saved=>{
-        if(signal.aborted||filtersReady&&cfpLastSettings.length>0||saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets)return;
+      const started=Date.now();
+      // An early 202 or transient failure is not a permanent result. Keep
+      // checking the small saved-filter read while products load separately.
+      for(let attempt=0;attempt<12&&Date.now()-started<30000;attempt++){
+        if(signal.aborted||filtersReady&&cfpLastSettings.length>0)return;
+        const promise=attempt===0&&early&&identity(early.params)===identity(params)?early.promise:window.cfpLoadSavedFilters(params,signal);
+        const saved=await Promise.resolve(promise).catch(()=>null);
+        if(signal.aborted||filtersReady&&cfpLastSettings.length>0)return;
+        if(saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets){
+          await new Promise(resolve=>{
+            const finish=()=>{clearTimeout(timer);signal.removeEventListener('abort',finish);resolve();};
+            const timer=setTimeout(finish,Math.min(250*2**attempt,2000));
+            signal.addEventListener('abort',finish,{once:true});
+            if(signal.aborted)finish();
+          });
+          continue;
+        }
         globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
         window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
         cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=saved.totalCount;
         renderFilterSidebar(saved.settings,saved.facets,saved.totalCount);
         renderBreadcrumbs();updateActiveCountBadge();sidebar.classList.remove('cfp-loading');
         performance.mark?.('cfp-filters-ready');
-      }).catch(()=>{});
+        return;
+      }
     };
-    if(window.cfpLoadSavedFilters)read();
-    else window.addEventListener('cfp-saved-filters-ready',read,{once:true,signal});
+    if(window.cfpLoadSavedFilters)return read().catch(()=>{});
+    else window.addEventListener('cfp-saved-filters-ready',()=>read().catch(()=>{}),{once:true,signal});
   }
   async function fetchCollectionConfiguration(requestUrl, signal) {
     if (!requestUrl.includes('responseProfile=collection-v2')) return null;

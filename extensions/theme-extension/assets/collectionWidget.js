@@ -7,12 +7,13 @@
   window._cfpWidgetEntryLoaded = true;
   let observer;
   function start() {
-    if (!document.querySelector('.cfp-v1-app-container #cfp-sidebar')) return false;
+    if (!document.querySelector('.cfp-v1-app-container')) return false;
     observer?.disconnect();
     if (window._cfpRendererLoaded || document.querySelector('script[data-cfp-widget-runtime]')) return true;
     const runtime = document.createElement('script');
     runtime.src = runtimeUrl;
     runtime.async = true;
+    runtime.fetchPriority = 'high';
     runtime.dataset.cfpWidgetRuntime = '';
     runtime.onerror = function () {
       // Allow a later block/entry invocation to retry a failed CDN request.
