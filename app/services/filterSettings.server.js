@@ -69,7 +69,10 @@ export async function updateFilterGlobalSettings(shop, data) {
     },
   });
   
-  await invalidateShop(shop);
+  const appearanceOnly = ['desktopFilterLayout','horizontalFilters','mobileFilterLayout','drawerWidth','verticalFilterWidth',
+    'filterBarBackgroundColor','sizeOptionsPerRow','showAttributeBasedBreadcrumb','showProductCount','scrollUpOnFilterValuesChange'];
+  const keys = Object.keys(data);
+  await invalidateShop(shop, keys.length && keys.every(key => appearanceOnly.includes(key)) ? {kind:'presentation'} : undefined);
   return {
     ...settings,
     filterBarBackgroundColor: settings.integrations?.filterBarBackgroundColor,

@@ -64,6 +64,10 @@ try{
   await test('filter width editor applies valid drafts, resets each style and preserves saved widths on reopen',async()=>{
     await send('Page.navigate',{url:origin+'/filter-width-admin'});
     await wait("!!document.querySelector('input[aria-label=\"Drawer width (px)\"]')");
+    assert.equal(await evaluate("document.body.innerText.includes('Horizontal toolbar width')"),false);
+    await evaluate("document.querySelector('[aria-label=\"Drawer width presets\"] button:last-child').click()");
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Drawer width (px)\"]').value"),'520');
+    assert.deepEqual(await evaluate('savedWidths'),[],'presets must remain drafts until Apply');
     const fill=async(label,value)=>evaluate(`(()=>{const input=document.querySelector('input[aria-label="'+${JSON.stringify(label)}+'"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await fill('Drawer width slider','560');
     assert.equal(await evaluate("document.querySelector('input[aria-label=\"Drawer width (px)\"]').value"),'560');
@@ -321,6 +325,22 @@ try{
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",20000);
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filtersMs,productDelayMs:5000,liveTiming:false};
+  });
+  await test('saved filters apply changed layout and widths before delayed product cards',async()=>{
+    for (const layout of ['vertical','horizontal','drawer']) {
+      await control({reset:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,headRenderer:true,savedFilterDelay:150,
+        globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});
+      await control({publishFirst50:true});
+      await control({apiDelay:5000,globalSettings:{desktopFilterLayout:layout,integrations:{drawerWidth:300,verticalFilterWidth:360}}});
+      await navigate();
+      await wait("performance.getEntriesByName('cfp-filters-ready').length>0",3000);
+      assert.equal(await evaluate('cfpGlobalSettings.desktopFilterLayout'),layout);
+      assert.equal((await cards()).length,0,'filters waited for cards');
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').style.getPropertyValue('--cfp-drawer-width')"),'300px');
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').style.getPropertyValue('--cfp-vertical-width')"),'360px');
+      assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input[type=checkbox]').length>0"),true);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
   });
   await test('review stars initialize on dynamic cards and Load more',async()=>{
     const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.reviewsIoStore='fixture-store';window.reviewCalls=[];window.ratingSnippet=(selector,settings)=>{reviewCalls.push({selector,store:settings.store,count:document.querySelectorAll('.ruk_rating_snippet').length});};`});

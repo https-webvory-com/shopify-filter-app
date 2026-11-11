@@ -205,21 +205,42 @@ function SettingFilterWidth({ label, description, value, onChange, disabled }) {
   const valid = isValidFilterWidth(draft);
   const changed = valid && Number(draft) !== value;
   const id = label.toLowerCase().replaceAll(' ','-');
-  return <div className="settings-row" style={{gap:20,flexWrap:'wrap'}}>
-    <div className="settings-text-col"><label className="settings-label" htmlFor={id}>{label}</label><p className="settings-desc" id={id+'-help'}>{description} Default: {FILTER_WIDTH_LIMITS.default}px.</p></div>
-    <div style={{width:260,maxWidth:'100%',display:'grid',gap:10,padding:14,border:'1px solid #e5e1ef',borderRadius:12,background:'#fff',boxSizing:'border-box'}}>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <input id={id} aria-label={label+' (px)'} aria-describedby={id+'-help'} aria-invalid={!valid} type="number" min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={draft} disabled={disabled} onChange={e=>setDraft(e.target.value)} style={{minWidth:0,width:'100%',padding:'9px 10px',border:'1px solid #d8d3e5',borderRadius:8}} />
-        <span style={{color:'#6b7280'}}>px</span>
-      </div>
-      <input type="range" aria-label={label+' slider'} min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={valid?Number(draft):value} disabled={disabled} onChange={e=>setDraft(e.target.value)} style={{width:'100%',accentColor:'#5b21b6'}} />
-      <small style={{color:valid?'#6b7280':'#b42318'}}>{FILTER_WIDTH_LIMITS.min}–{FILTER_WIDTH_LIMITS.max}px</small>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-        <button type="button" aria-label={'Apply '+label.toLowerCase()} disabled={disabled||!changed} onClick={()=>onChange(Number(draft))} style={{padding:'8px 12px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',cursor:'pointer',opacity:(disabled||!changed)?0.5:1}}>Apply width</button>
-        <button type="button" aria-label={'Reset '+label.toLowerCase()} disabled={disabled} onClick={()=>{setDraft(String(FILTER_WIDTH_LIMITS.default));if(value!==FILTER_WIDTH_LIMITS.default)onChange(FILTER_WIDTH_LIMITS.default);}} style={{padding:'8px 12px',border:'1px solid #d8d3e5',borderRadius:8,background:'#fff',color:'#5b21b6',cursor:'pointer'}}>Reset</button>
-      </div>
+  const previewWidth = (valid ? Number(draft) : value) / 900 * 100;
+  const drawer = label === 'Drawer width';
+  const buttonStyle = {padding:'8px 12px',border:'1px solid #ddd6e7',borderRadius:8,background:'#fff',color:'#5b21b6',font:'inherit',fontSize:12,cursor:'pointer'};
+  return <section aria-label={label+' settings'} style={{padding:20,border:'1px solid #e5dfed',borderRadius:14,background:'#fff',margin:'16px 0',boxSizing:'border-box'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginBottom:10}}>
+      <label className="settings-label" htmlFor={id} style={{margin:0}}>{label}</label>
+      <span style={{fontSize:12,color:'#766c82'}}>Saved: {value} px</span>
     </div>
-  </div>;
+    <p className="settings-desc" id={id+'-help'} style={{margin:'0 0 18px'}}>{description}</p>
+    <div style={{display:'flex',gap:24,flexWrap:'wrap',alignItems:'center'}}>
+      <div aria-hidden="true" style={{flex:'1 1 210px',height:130,position:'relative',overflow:'hidden',border:'1px solid #e8e3ef',borderRadius:10,background:'#f8f6fb'}}>
+        <div style={{height:18,background:'#eae5f2',borderBottom:'1px solid #ddd6e7'}} />
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,padding:12,paddingLeft:drawer?12:previewWidth+'%'}}>{[1,2,3].map(i=><div key={i} style={{height:78,background:'#e9e3f1',borderRadius:5}} />)}</div>
+        {drawer && <div style={{position:'absolute',inset:'19px 0 0',background:'rgba(37,24,55,.12)'}} />}
+        <div style={{position:'absolute',top:19,bottom:0,left:0,width:previewWidth+'%',minWidth:55,background:'#fff',borderRight:'2px solid #8b5cf6',padding:10,boxSizing:'border-box',boxShadow:drawer?'4px 0 12px #30253e1a':'none'}}>
+          <div style={{height:5,width:'70%',background:'#8b5cf6',borderRadius:3,marginBottom:12}} />{[1,2,3,4].map(i=><div key={i} style={{height:4,background:'#e6e0ee',marginBottom:8,borderRadius:3}} />)}
+        </div>
+      </div>
+      <fieldset disabled={disabled} style={{flex:'1 1 250px',minWidth:0,margin:0,padding:0,border:0,display:'grid',gap:12}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+          <span style={{fontSize:12,fontWeight:600,color:'#5c5069'}}>Panel width</span>
+          <span style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',border:'1px solid #d8d0e2',borderRadius:8}}>
+            <input id={id} aria-label={label+' (px)'} aria-describedby={id+'-help '+id+'-range'} aria-invalid={!valid} type="number" min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={draft} onChange={e=>setDraft(e.target.value)} style={{minWidth:0,width:64,border:0,font:'inherit',color:'#30253e',background:'transparent'}} /><span style={{fontSize:12,color:'#766c82'}}>px</span>
+          </span>
+        </div>
+        <input type="range" aria-label={label+' slider'} min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={valid?Number(draft):value} onChange={e=>setDraft(e.target.value)} style={{width:'100%',margin:0,accentColor:'#7c3aed'}} />
+        <div id={id+'-range'} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#766c82'}}><span>{FILTER_WIDTH_LIMITS.min} px</span><span>{FILTER_WIDTH_LIMITS.max} px</span></div>
+        <div role="group" aria-label={label+' presets'} style={{display:'flex',gap:8,flexWrap:'wrap'}}>{[['Narrow',300],['Default',420],['Wide',520]].map(([name,width])=><button key={name} type="button" aria-pressed={valid&&Number(draft)===width} onClick={()=>setDraft(String(width))} style={{...buttonStyle,borderColor:valid&&Number(draft)===width?'#8b5cf6':'#ddd6e7',background:valid&&Number(draft)===width?'#f5f3ff':'#fff'}}>{name}</button>)}</div>
+        {!valid && <p role="alert" style={{margin:0,color:'#b42318',fontSize:12}}>Enter a whole number from {FILTER_WIDTH_LIMITS.min} to {FILTER_WIDTH_LIMITS.max} px.</p>}
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
+          <button type="button" aria-label={'Apply '+label.toLowerCase()} disabled={disabled||!changed} onClick={()=>onChange(Number(draft))} style={{...buttonStyle,borderColor:'#6d28d9',background:'#6d28d9',color:'#fff',opacity:(disabled||!changed)?0.5:1}}>Apply width</button>
+          <button type="button" aria-label={'Reset '+label.toLowerCase()} onClick={()=>{setDraft(String(FILTER_WIDTH_LIMITS.default));if(value!==FILTER_WIDTH_LIMITS.default)onChange(FILTER_WIDTH_LIMITS.default);}} style={buttonStyle}>Reset to {FILTER_WIDTH_LIMITS.default} px</button>
+        </div>
+      </fieldset>
+    </div>
+  </section>;
 }
 
 function SettingBarColor({ value, onChange, disabled }) {
@@ -578,7 +599,6 @@ export default function FilterSettings() {
             description="Applies to Drawer filters and mobile off-canvas filters. It automatically fits smaller screens. Reload the storefront after saving." />
           <SettingFilterWidth disabled={isSaving} label="Vertical sidebar width" value={verticalWidth} onChange={value=>handleSettingChange('verticalFilterWidth',value)}
             description="Applies to the Vertical sidebar on desktop and tablet. Space is kept for products. Reload the storefront after saving." />
-          <div className="settings-row"><div className="settings-text-col"><p className="settings-label">Horizontal toolbar width</p><p className="settings-desc">Full width. Drawer and Vertical widths do not change the Horizontal toolbar.</p></div></div>
           <SettingSelect disabled={isSaving}
                         label="Mobile filter layout"
             description="Choose the display layout for filters on mobile."

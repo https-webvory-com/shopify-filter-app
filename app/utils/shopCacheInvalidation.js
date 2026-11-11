@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {createCollectionDependencies} from './collectionDependencies.js';
 import {createCollectionSalesDependencies} from './collectionSalesDependencies.js';
 export const configurationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
+export const presentationRevisionKey = shop => `filterPresentationRevision:${shop}`;
 export const productRevisionKey = (shop, collectionId) => `collectionProductRevision:${shop}:${String(collectionId || 'all').split('/').pop()}`;
 export const productContentRevisionKey=(shop,collectionId)=>`collectionProductContentRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
 export const rankingDataRevisionKey = (shop, collectionId='all') => `collectionRankingDataRevision:${shop}:${String(collectionId||'all').split('/').pop()}`;
@@ -33,6 +34,12 @@ export function productContentFingerprint(product){
 }
 export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
   return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof,countries=[]} = {}) {
+    // Appearance changes need fresh settings, not a collection-wide rebuild.
+    // A separate epoch also invalidates settings cached by another web process.
+    if (kind === 'presentation') {
+      await redis.incr(presentationRevisionKey(shop));
+      return {deleted:0,kind};
+    }
     const products = kind === 'products'||kind==='scores';
     const marketRule=kind==='market-rule'&&Array.isArray(countries)&&countries.length>0&&countries.every(country=>/^[A-Z]{2}$/.test(country));
     const scopes = [...new Set(collectionIds.map(id=>String(id).split('/').pop()))].filter(id=>id!=='all');

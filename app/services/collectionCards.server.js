@@ -28,18 +28,19 @@ const createSession=(request,entry,prepared)=>{
  const base=marketRankingFingerprint(collectionRankingFingerprint(request.url),entry.marketAvailabilityVersion);
  return saveCollectionRankingSession(entry.shop,entry.priceSortField?`${base}:price:${entry.priceSortField}`:base,prepared.ids,entry.sessionUpdatedAt,prepared.metadata,entry.membershipProof);
 };
+const readGlobalSettings = async shop=>{
+ const settings=await prisma.filterGlobalSetting.findUnique({where:{shop}});
+ if(!settings)return null;
+ return {...settings,desktopFilterLayout:settings.integrations?.desktopFilterLayout||(settings.horizontalFilters?'horizontal':'drawer')};
+};
 const publishedPages=createPublishedCollectionPages({redis,loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,createSession,
  readConfigurationRevision:async shop=>await redis.get(`collectionPreparationRevision:${shop}`)??'0',
  readCatalogInvalidatedAt:async(shop,id)=>await redis.get(catalogPublicationInvalidatedAtKey(shop,id)),
  readMarketRuleInvalidatedAt:async(shop,country)=>country?await redis.get(marketRuleInvalidatedAtKey(shop,country)):null,
  readExternalProof,
- readGlobalSettings:async shop=>{
-  const settings=await prisma.filterGlobalSetting.findUnique({where:{shop}});
-  if(!settings)return null;
-  return {...settings,desktopFilterLayout:settings.integrations?.desktopFilterLayout||(settings.horizontalFilters?'horizontal':'drawer')};
- },
+ readGlobalSettings,
 });
-const store=createCollectionCardStore({redis,readState:createCardStateReader(redis),loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,publishedPages,
+const store=createCollectionCardStore({redis,readState:createCardStateReader(redis),loadDurable:loadCollectionLoadingSnapshot,saveDurable:saveCollectionLoadingSnapshot,publishedPages,readGlobalSettings,
  observe:event=>recordCardEvent(event).catch(()=>{}),
  validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(meili.index('products'),entry,prepared,{...options,batchOwner:meili}),
  createSession,

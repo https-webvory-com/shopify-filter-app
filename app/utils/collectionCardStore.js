@@ -46,7 +46,7 @@ return 1`;
 
 // Working card snapshots verify documents and ranking epochs. Published serving
 // versions are checked first and deliberately bypass this preparation work.
-export function createCollectionCardStore({redis,readState,validateCards,createSession,makeMembershipProof,loadDurable,saveDurable,publishedPages,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=256*1024,lifetime=86400,readBudgetMs=1200}){
+export function createCollectionCardStore({redis,readState,validateCards,createSession,makeMembershipProof,loadDurable,saveDurable,publishedPages,readGlobalSettings,observe=()=>{},now=Date.now,maxEntries=1024,maxBytes=24*1024*1024,maxEntryBytes=256*1024,lifetime=86400,readBudgetMs=1200}){
  const sourceValid=(shop,key)=>typeof key==='string'&&key.startsWith(`collectionPreparedSequence:${shop}:background-v2:`)&&/^[a-f0-9]{64}$/.test(key.split(':').at(-1));
  const stateSignature=(state,external)=>JSON.stringify([state.configuration,state.products,external?(state.externalProducts??state.globalProducts):null,state.hardAll,state.hardCollection,state.orderRevision,state.scheduleEpoch,state.runtimeGeneration,state.epochsPresent,...(state.salesProducts!==undefined?[state.salesProducts]:[])]);
  const sequenceSignature=value=>digest([value.ids,value.metadata]);
@@ -134,6 +134,12 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
    // background probes must not masquerade as shopper visits or enqueue loops.
    if(!probe&&onHit)Promise.resolve().then(()=>onHit({request,entry,prepared:afterPrepared,state:after})).catch(()=>{});
    let payload=entry.payload;
+   if (readGlobalSettings) {
+    const settings = await readGlobalSettings(shop);
+    if (!settings || ['showOnlyInStock','prioritizeSortOverPinning','prioritizeSortOverMerchandising','hideUnavailableVariantsWhenSelected']
+      .some(key => (settings[key] === true) !== (payload.globalSettings?.[key] === true))) return null;
+    payload = {...payload,globalSettings:settings};
+   }
    // Soft updates can retain unchanged cards, but collection-wide counts must
    // match all saved product epochs, including products outside this page.
    if(payload.cfpCards?.facetsReady&&entry.state!==stateSignature(after,entry.external)){

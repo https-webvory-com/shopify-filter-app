@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import {createPublishedCollectionPages,publishedCollectionKey} from '../../app/utils/collectionPublishedPage.js';
 import {loadModule} from './helpers/search-ranking.mjs';
 import {encodePreparation,decodePreparation} from '../../app/utils/collectionPreparationPayload.js';
+import {createShopCacheInvalidation} from '../../app/utils/shopCacheInvalidation.js';
 const sessions=await loadModule('app/services/collectionRankingSession.server.js',{'node:crypto':crypto,'./redis.server.js':{default:{setex:async()=>{}}}});
 
 function fixture(options={}){
@@ -51,6 +52,24 @@ test('saved filters load from durable publication without product sessions and r
   assert.equal(await f.store.get(f.request(changes),{filtersOnly:true}),null);
  await f.publish({configuration:'0'});f.values.clear();
  assert.equal(await f.store.get(f.request(),{filtersOnly:true}),null);
+});
+
+test('layout and width saves keep independently published filters ready with fresh appearance',async()=>{
+ let current={desktopFilterLayout:'drawer'};
+ const f=fixture({readConfigurationRevision:async()=>f.values.get('collectionPreparationRevision:fixture.myshopify.com')||'0',readGlobalSettings:async()=>current});
+ f.payload.settings=[{isEnabled:true,filterType:'option',filterKey:'Color'}];
+ await f.publish({configuration:'0'});
+ const invalidate=createShopCacheInvalidation({redis:{incr:async key=>f.values.set(key,String(Number(f.values.get(key)||0)+1))},warm:()=>{throw Error('appearance rebuilt collection');}});
+ for (const layout of ['vertical','horizontal','drawer']) {
+   current={desktopFilterLayout:layout,integrations:{drawerWidth:300,verticalFilterWidth:520}};
+   await invalidate('fixture.myshopify.com',{kind:'presentation'});
+   const response=await f.store.get(f.request(),{filtersOnly:true});
+   assert.equal(response.status,200);
+   const body=await response.json();
+   assert.deepEqual(body.globalSettings,current);assert.deepEqual(body.facets,f.payload.facets);
+   assert.equal(f.sessionCalls(),0,'filter read must not wait on a product session');
+   assert.equal(body.products,undefined);
+ }
 });
 
 test('older option counts refresh in the background while saved cards remain visible',async()=>{

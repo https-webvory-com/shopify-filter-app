@@ -16,7 +16,7 @@ async function fixture(){
   const writes=[],invalidations=[];
   const service=await loadModule('app/services/filterSettings.server.js',{
     '../db.server':{default:{filterGlobalSetting:{findUnique:async()=>row,upsert:async args=>{writes.push(args);row={...row,...args.update};return row;}}}},
-    './shopCache.server':{invalidateShop:async shop=>invalidations.push(shop)},
+    './shopCache.server':{invalidateShop:async (shop,options)=>invalidations.push({shop,options})},
   });
   const route=await loadModule('app/routes/app.filters.settings.jsx',{
     'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{},'@shopify/app-bridge-react':{},
@@ -35,7 +35,19 @@ test('per-style widths save independently, stay in shop integrations and preserv
   await f.service.updateFilterGlobalSettings(shop,{verticalFilterWidth:'520'});
   assert.deepEqual(JSON.parse(JSON.stringify(f.row().integrations)),{desktopFilterLayout:'horizontal',wishlist:true,filterBarBackgroundColor:'#fbf7f5',drawerWidth:300,verticalFilterWidth:520});
   assert.ok(f.writes.every(w=>!('drawerWidth'in w.update)&&!('verticalFilterWidth'in w.update)));
-  assert.deepEqual(f.invalidations,[shop,shop]);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.invalidations)),[{shop,options:{kind:'presentation'}},{shop,options:{kind:'presentation'}}]);
+});
+
+test('layout and width saves preserve preparations; eligibility and mixed updates still rebuild',async()=>{
+  const f=await fixture(),shop=f.row().shop;
+  for (const changes of [{desktopFilterLayout:'drawer'},{horizontalFilters:false},{mobileFilterLayout:'off-canvas'},{drawerWidth:360,verticalFilterWidth:480}]) {
+    await f.service.updateFilterGlobalSettings(shop,changes);
+    assert.equal(f.invalidations.at(-1).options.kind,'presentation');
+  }
+  for (const changes of [{hideUnavailableVariantsWhenSelected:true},{prioritizeSortOverPinning:true},{desktopFilterLayout:'vertical',prioritizeSortOverMerchandising:true},{priceFilterDisplayMode:'Range'}]) {
+    await f.service.updateFilterGlobalSettings(shop,changes);
+    assert.equal(f.invalidations.at(-1).options,undefined);
+  }
 });
 
 test('invalid admin and internal width updates never mutate saved settings or invalidate caches',async()=>{

@@ -8,6 +8,13 @@ function fixture(){
   const redis={incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},set:async(key,value)=>values.set(key,value),scan:async()=>['0',[...values.keys()]],del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;}};
   return {values,calls,invalidate:createShopCacheInvalidation({redis,warm:async(...args)=>calls.push(args)})};
 }
+
+test('appearance invalidation performs one revision write with no scan, rebuild or product invalidation',async()=>{
+ const calls=[];
+ const invalidate=createShopCacheInvalidation({redis:{incr:async key=>calls.push(key),scan:()=>{throw Error('unnecessary scan');}},warm:()=>{throw Error('unnecessary rebuild');}});
+ assert.deepEqual(await invalidate(shop,{kind:'presentation'}),{deleted:0,kind:'presentation'});
+ assert.deepEqual(calls,[`filterPresentationRevision:${shop}`]);
+});
 test('configuration invalidation only deletes owned cache namespaces and preserves BullMQ metadata',async()=>{
   const f=fixture();const protectedKeys=[`bull:queue:warm-${shop}`,`bull:queue:warm-${shop}:lock`,`collectionWarmupContextsV2:${shop}`,`collectionProductRevision:${shop}:1`,`collectionOrder:${shop}:1`,`rankingToken:${shop}:token`,`merch:other.${shop}`];
   for(const key of protectedKeys)f.values.set(key,'protected');

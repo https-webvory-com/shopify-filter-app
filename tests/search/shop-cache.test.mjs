@@ -32,6 +32,19 @@ test('failed ranking preparations can be retried',async()=>{
  assert.equal(await getCached('ranking',async()=>42),42);
 });
 
+test('appearance saves refresh settings across processes without changing prepared ranking epochs',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ assert.equal(await f.getCached('globalSettings:'+shop,async()=>({desktopFilterLayout:'drawer'})).then(v=>v.desktopFilterLayout),'drawer');
+ await f.getCached('searchRankingCandidates:'+shop+':dress',async()=>['1','2']);
+ await f.invalidateShop(shop,{kind:'presentation'});
+ assert.equal(f.values.get('collectionPreparationRevision:'+shop),undefined);
+ assert.equal(f.warmups.length,0);
+ assert.deepEqual(Array.from(await f.getCached('searchRankingCandidates:'+shop+':dress',()=>{throw Error('ranking rebuilt');})),['1','2']);
+ // A second process sees the Redis revision, even without the local invalidation.
+ f.values.set('filterPresentationRevision:'+shop,'2');
+ assert.equal((await f.getCached('globalSettings:'+shop,async()=>({desktopFilterLayout:'vertical'}))).desktopFilterLayout,'vertical');
+});
+
 test('search ranking candidates follow product revisions written by another process',async()=>{
  const f=await fixture(),shop='fixture.myshopify.com',key='searchRankingCandidates:'+shop+':phrase';
  assert.equal(await f.getCached(key,async()=>1,15),1);

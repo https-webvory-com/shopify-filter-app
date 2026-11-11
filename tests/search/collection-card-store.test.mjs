@@ -21,6 +21,18 @@ function fixture(options={}){
  return {store,values,sessions,redis,state,prepared,request,spec,payload,begin,setSource:value=>source=value,setValidation:fn=>validation=fn,setValid:v=>valid=v,advance:ms=>clock+=ms};
 }
 
+test('retained working cards use current layout settings without rebuilding their product sequence',async()=>{
+ let current={desktopFilterLayout:'drawer',integrations:{drawerWidth:300}};
+ const f=fixture({readGlobalSettings:async()=>current});
+ const lease=await f.begin();assert.equal(await lease.finish(f.payload,'fp'),true);
+ const first=await(await f.store.get(f.request)).json();assert.equal(first.globalSettings.desktopFilterLayout,'drawer');
+ current={desktopFilterLayout:'vertical',integrations:{verticalFilterWidth:520}};
+ const next=await(await f.store.get(f.request)).json();assert.equal(next.globalSettings.desktopFilterLayout,'vertical');
+ assert.equal(next.globalSettings.integrations.verticalFilterWidth,520);
+ assert.deepEqual(next.products,first.products);assert.deepEqual(next.facets,first.facets);
+ current={...current,showOnlyInStock:true};assert.equal(await f.store.get(f.request),null);
+});
+
 test('saved first fifty supply the complete first 25 before a separate card copy or pin fallback',async()=>{
  const f=fixture();
  f.prepared.ids=Array.from({length:70},(_,i)=>String(i+1));f.setSource(encodePreparation(f.prepared));

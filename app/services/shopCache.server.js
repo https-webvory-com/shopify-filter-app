@@ -1,5 +1,5 @@
 import redis from './redis.server.js';
-import {createShopCacheInvalidation,configurationRevisionKey,productRevisionKey} from '../utils/shopCacheInvalidation.js';
+import {createShopCacheInvalidation,configurationRevisionKey,productRevisionKey,presentationRevisionKey} from '../utils/shopCacheInvalidation.js';
 const TTL_SEC=60;
 const pendingReads=new Map();
 let cacheGeneration=0;
@@ -13,6 +13,10 @@ export async function getCached(key,fetchFn,ttl=TTL_SEC,{maxBytes=Infinity}={}) 
       const products=/^(availableVariants|percentSale|extraFilterFacts|queryParserFacets|contextualPricing|collectionPageIds|searchRankingCandidates|searchNativeReady|searchInstant|searchInstantRanking|searchPageBatch):/.test(key) ? await redis.get(productRevisionKey(shop,'all')) ?? '0' : '0';
       const search=/^(searchRankingCandidates|searchNativeReady|skuSearch|queryParserFacets|searchInstant|searchInstantRanking|searchPageBatch):/.test(key)?await redis.get(`searchIndexRevision:${shop}`)??'0':'0';
       cacheKey=`${key}:revision:${config}:${products}${search==='0'?'':':search:'+search}`;
+      if (/^(globalSettings|quickViewSettings):/.test(key)) {
+        const presentation = await redis.get(presentationRevisionKey(shop)) ?? '0';
+        if (presentation !== '0') cacheKey += ':presentation:' + presentation;
+      }
     } catch(error) {console.error('CFP: Cache revision unavailable:',error.name);}
   }
   try {const raw=await redis.get(cacheKey);if(raw)return JSON.parse(raw);} catch(error) {console.error('CFP: Cache read unavailable:',error.name);}
