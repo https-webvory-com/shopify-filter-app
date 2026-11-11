@@ -16,6 +16,59 @@ window.runNativeQuickViewTests = async () => {
     try { await reset(); await body(); results.push({ name, passed: true }); }
     catch (error) { results.push({ name, passed: false, error: error.message }); }
   };
+  const withVariantButtons = async body => {
+    const section = document.createElement('section');
+    section.innerHTML = '<modal-opener data-modal="#QuickAdd-11"><button class="size-choice" data-product-url="/fr/products/multi?variant=12"><span style="font-weight:700">S</span></button></modal-opener>' +
+      '<modal-opener data-modal="#QuickAdd-11" style="display:none"><button data-product-url="/fr/products/multi?variant=13"><span style="text-decoration:line-through;opacity:.5">M</span></button></modal-opener>';
+    document.body.appendChild(section);
+    try { await tick(); await body(section, [...section.querySelectorAll('button')]); }
+    finally { qv.closeModal(); section.remove(); await tick(); }
+  };
+  await test('variant size choices retain labels and open the clicked variant once', () => withVariantButtons(async (section, buttons) => {
+    mode('app'); mode('app'); await tick();
+    assert(!section.querySelector('[data-cfp-theme-replacement]') && !buttons[0].hidden, 'size choices replaced');
+    assert(buttons[0].textContent === 'S' && buttons[1].textContent === 'M', 'size labels changed');
+    assert(buttons[1].firstElementChild.style.textDecoration === 'line-through' && getComputedStyle(buttons[1]).display === 'inline-block', 'sold-out presentation changed');
+    assert(getComputedStyle(buttons[1].parentElement).display === 'none', 'hidden color shown');
+    buttons[0].click(); await tick();
+    assert(qv.selectedVariantId === 12 && qv.selectedOptions.join() === 'Blue,S', 'clicked variant not selected');
+    assert(qv.modal.querySelector('.cfp-qv-view-details-link').href.endsWith('?variant=12'), 'details variant lost');
+    assert(qv.carouselImages[0] === products.multi.variants[1].featured_image.src, 'clicked variant hero missing');
+    assert(!native.hasAttribute('open') && fixture.requests.filter(r => r.url.endsWith('.js')).length === 1, 'competing native request');
+  }));
+  await test('variant URL changes restore size controls and reject unrelated variants', () => withVariantButtons(async (section, buttons) => {
+    const button = buttons[0];
+    button.setAttribute('data-product-url', '/fr/products/multi'); await tick();
+    assert(button.hidden && section.querySelector('[data-cfp-theme-replacement]'), 'ordinary opener not adapted');
+    button.setAttribute('data-product-url', '/fr/products/multi?variant=13'); await tick();
+    assert(!button.hidden && !section.querySelector('[data-cfp-theme-replacement]'), 'variant opener not restored');
+    button.click(); await tick();
+    assert(qv.selectedVariantId === 13 && qv.modal.querySelector('.cfp-qv-add-to-cart-btn').disabled, 'sold-out variant not retained');
+    qv.closeModal(); button.setAttribute('data-product-url', '/fr/products/multi?variant=999'); await tick();
+    button.click(); await tick(); assert(qv.selectedVariantId === 11, 'unrelated ID selected');
+    qv.closeModal(); button.setAttribute('data-product-url', 'https://example.invalid/products/multi?variant=12');
+    assert(CfpQuickViewAdapters.getVariantId(button) === null, 'foreign product accepted');
+    mode('theme'); await tick(); assert(!button.hidden && button.textContent === 'S', 'theme labels not restored');
+  }));
+  await test('variant size choices keep wholesale guest login gating', () => withVariantButtons(async (section, buttons) => {
+    const settings = { ...window.cfpGlobalSettings }, loggedIn = window.cfpCustomerLoggedIn;
+    try {
+      window.cfpCustomerLoggedIn = false; qv.configure({ ...settings, isWholesale: true });
+      buttons[0].click(); await tick();
+      assert(qv.selectedVariantId === 12 && qv.modal.querySelector('.cfp-qv-login-btn'), 'variant bypassed login');
+      assert(!qv.modal.querySelector('.cfp-qv-add-to-cart-btn') && !qv.modal.querySelector('.cfp-qv-price'), 'wholesale controls exposed');
+      assert(!native.hasAttribute('open'), 'native bypass opened');
+    } finally { window.cfpCustomerLoggedIn = loggedIn; qv.configure(settings); }
+  }));
+  await test('variant selection uses the clicked URL during delayed product loading', () => withVariantButtons(async (section, buttons) => {
+    fixture.delay = 80;
+    try {
+      const loading = qv.openModal('multi', buttons[0]);
+      buttons[0].setAttribute('data-product-url', '/fr/products/multi?variant=13');
+      await loading;
+      assert(qv.selectedVariantId === 12, 'later theme update changed clicked variant');
+    } finally { fixture.delay = 0; }
+  }));
   await test('App mode replaces native opener and opens only App Quick View', async () => {
     const replacement = document.querySelector('[data-cfp-theme-replacement]');
     assert(trigger.hidden && replacement, 'native opener not replaced');

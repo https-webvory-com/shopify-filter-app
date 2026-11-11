@@ -30,6 +30,13 @@ if (!window.CfpQuickViewAdapters) {
       return decodeURIComponent(url.pathname.match(/\/products\/([^/]+)/)?.[1] || '') || null;
     } catch { return null; }
   };
+  const variantFrom = button => {
+    if (!button?.matches(nativeSelector) || !handleFrom(button)) return null;
+    try {
+      const id = new URL(button.getAttribute('data-product-url'), location.origin).searchParams.get('variant');
+      return /^[1-9]\d*$/.test(id || '') ? id : null;
+    } catch { return null; }
+  };
   const nativeModal = trigger => {
     const id = trigger?.closest('modal-opener')?.getAttribute('data-modal')?.slice(1);
     return (id && document.getElementById(id)) || document.querySelector('quick-add-modal');
@@ -70,7 +77,7 @@ if (!window.CfpQuickViewAdapters) {
     scheduled = false;
     const appMode = configuration?.quickViewStyle !== 'theme' && configuration?.showQuickViewCollection !== false;
     replacements.forEach((saved, button) => {
-      if (!appMode || !button.isConnected || !handleFrom(button)) restore(button, saved);
+      if (!appMode || !button.isConnected || !handleFrom(button) || variantFrom(button)) restore(button, saved);
       else {
         saved.replacement.dataset.productHandle = handleFrom(button);
         if (saved.replacement.disabled !== button.disabled) saved.replacement.disabled = button.disabled;
@@ -82,6 +89,9 @@ if (!window.CfpQuickViewAdapters) {
       if (replacements.has(button) || button.hidden || getComputedStyle(button).display === 'none' || !handleFrom(button)) return;
       // Only replace actual Quick Add dialog openers, never one-click Add to Cart.
       if (!nativeModal(button)?.matches('quick-add-modal') && !prestigeModal(button)) return;
+      // Variant openers are size/color choices. Keep their original labels,
+      // styling and theme listeners; the delegated App handler still owns clicks.
+      if (variantFrom(button)) return;
       const replacement = document.createElement('button');
       replacement.type = 'button';
       replacement.className = button.className;
@@ -285,6 +295,7 @@ if (!window.CfpQuickViewAdapters) {
     };
   };
   window.CfpQuickViewAdapters = {
+    getVariantId: variantFrom,
     closeOpenNative() {
       if (prestigeBase()) document.querySelectorAll('quick-buy-modal[open]').forEach(modal => {
         modal.hide();

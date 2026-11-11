@@ -224,6 +224,7 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     async openModal(handle, trigger = document.activeElement) {
+      const requestedVariantId = window.CfpQuickViewAdapters?.getVariantId(trigger);
       if (this.overlay.classList.contains('cfp-active')) this.closeModal();
       this.nativeController?.abort();
       this.nativeAdapter?.close();
@@ -293,7 +294,7 @@ if (typeof window.CfpQuickView === 'undefined') {
         const product = await this.loadProduct(handle);
         if (requestId !== this.productRequestId) return;
         this.currentProduct = product;
-        this.renderProductDetails(product);
+        this.renderProductDetails(product, requestedVariantId);
         this.modal.querySelector('.cfp-quick-view-close').focus();
       } catch (error) {
         if (requestId !== this.productRequestId) return;
@@ -330,7 +331,9 @@ if (typeof window.CfpQuickView === 'undefined') {
       return `${window.cfpCurrencySymbol || '$'}${(cents / 100).toFixed(2)}`;
     }
 
-    renderProductDetails(product) {
+    renderProductDetails(product, requestedVariantId = null) {
+      const initialVariant = product.variants?.find(variant => String(variant.id) === requestedVariantId) ||
+        product.variants?.find(variant => variant.available) || product.variants?.[0] || null;
       const formattedPrice = this.money(product.price);
       const comparePrice = product.compare_at_price ? this.money(product.compare_at_price) : null;
       const showComparePrice = Array.isArray(product.tags) &&
@@ -341,9 +344,7 @@ if (typeof window.CfpQuickView === 'undefined') {
       // Smart image ordering: put initial-variant image first so it's always visible in capped set
       const MAX_IMAGES = 8;
       let images = allImages;
-      const initialVariantForImages = product.variants && product.variants.length > 0
-        ? (product.variants.find(v => v.available) || product.variants[0])
-        : null;
+      const initialVariantForImages = initialVariant;
       if (initialVariantForImages && initialVariantForImages.featured_image) {
         const heroSrc = initialVariantForImages.featured_image.src.split('?')[0];
         const heroIdx = allImages.findIndex(img => img.split('?')[0] === heroSrc);
@@ -375,11 +376,6 @@ if (typeof window.CfpQuickView === 'undefined') {
         imagesHtml = '<div style="padding: 50px;">No Image</div>';
       }
 
-      // Determine initial variant (first available, fallback to first)
-      let initialVariant = null;
-      if (product.variants && product.variants.length > 0) {
-        initialVariant = product.variants.find(v => v.available) || product.variants[0];
-      }
       const initialVariantId = initialVariant ? initialVariant.id.toString().replace('gid://shopify/ProductVariant/', '') : '';
       this.selectedOptions = initialVariant ? [...initialVariant.options] : [];
       const initialVariantUrl = this.productUrl(product, initialVariantId);
