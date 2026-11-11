@@ -2640,8 +2640,8 @@ facet-filters-form,
   /* ─── Vertical Sidebar Layout (Desktop) ──────────────────────────── */
   .cfp-vertical-layout .cfp-layout-wrapper {
     display: grid !important;
-    grid-template-columns: min(var(--cfp-vertical-width, 420px), calc(100% - 260px)) minmax(0, 1fr);
-    gap: 0 !important;
+    grid-template-columns: min(var(--cfp-vertical-width, 420px), calc(100% - 284px)) minmax(0, 1fr);
+    gap: 0 24px !important;
     align-items: start !important;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -3278,7 +3278,7 @@ facet-filters-form,
 /* Reserve the vertical column only after usable filters have rendered. */
 @media (min-width: 769px) {
   .cfp-vertical-layout:not(.cfp-filters-ready) #cfp-sidebar { display: none !important; }
-  .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper { grid-template-columns: minmax(0, 1fr); }
+  .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper { grid-template-columns: minmax(0, 1fr); column-gap: 0 !important; }
   .cfp-vertical-layout:not(.cfp-filters-ready) #cfp-top-bar,
   .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper > :not(#cfp-sidebar):not(.cfp-breadcrumbs) { grid-column: 1; }
 }

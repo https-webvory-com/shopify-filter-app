@@ -118,7 +118,7 @@ try{
     await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'vertical',integrations:{drawerWidth:600,verticalFilterWidth:600},showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await send('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
     const verticalSizing=await evaluate("(()=>{const wrapper=document.querySelector('.cfp-layout-wrapper'),style=getComputedStyle(wrapper);return {width:document.querySelector('#cfp-sidebar').getBoundingClientRect().width,available:wrapper.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};})()");
-    assert.ok(Math.abs(verticalSizing.width-Math.min(600,verticalSizing.available-260))<1,JSON.stringify(verticalSizing));
+    assert.ok(Math.abs(verticalSizing.width-Math.min(600,verticalSizing.available-284))<1,JSON.stringify(verticalSizing));
     await send('Emulation.setDeviceMetricsOverride',{width:769,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
     assert.ok(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width<=document.querySelector('.cfp-layout-wrapper').getBoundingClientRect().width-260"));
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
@@ -452,7 +452,7 @@ try{
     const geometry=()=>evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),w=document.querySelector('.cfp-layout-wrapper'),g=document.querySelector('#cfp-products-container'),summary=s.querySelector('.cfp-vertical-summary');return {ready:document.body.classList.contains('cfp-filters-ready'),sidebar:s.getBoundingClientRect().width,summary:!!summary&&summary.getBoundingClientRect().width>0,gap:g.getBoundingClientRect().left-w.getBoundingClientRect().left-parseFloat(getComputedStyle(w).paddingLeft)};})()");
     const pending=await geometry();assert.equal(pending.ready,false);assert.equal(pending.sidebar,0);assert.equal(pending.summary,false);assert.equal(pending.gap,0);
     await wait("document.body.classList.contains('cfp-filters-ready')",3500);
-    const ready=await geometry();assert.equal(ready.sidebar,349);assert.equal(ready.summary,true);assert.equal(ready.gap,349);assert.equal((await cards()).length,0,'filter readiness waited for products');
+    const ready=await geometry();assert.equal(ready.sidebar,349);assert.equal(ready.summary,true);assert.equal(ready.gap,373);assert.equal((await cards()).length,0,'filter readiness waited for products');
     await control({apiDelay:200});await evaluate("document.querySelector('#cfp-sidebar input[type=checkbox]').click()");await delay(30);
     assert.equal((await geometry()).sidebar,349,'existing filter column disappeared during selection');
     await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.deepEqual(await evaluate('browserErrors'),[]);
@@ -544,8 +544,8 @@ try{
         globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
       const spacing=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),m=s.closest('.cfp-layout-wrapper'),intro=document.querySelector('#cfp-products-container');return {gap:getComputedStyle(m).columnGap,background:getComputedStyle(document.querySelector('#fixture-app-section')).backgroundColor,sidebar:getComputedStyle(s).backgroundColor,width:s.getBoundingClientRect().width,right:s.getBoundingClientRect().right,left:intro.getBoundingClientRect().left,padding:getComputedStyle(s).paddingLeft};})()");
-      assert.equal(spacing.gap,'0px');assert.equal(spacing.background,'rgb(251, 247, 245)');assert.equal(spacing.sidebar,spacing.background);
-      assert.equal(spacing.width,349);assert.equal(spacing.right,spacing.left);assert.equal(spacing.padding,'16px');
+      assert.equal(spacing.gap,'24px');assert.equal(spacing.background,'rgb(251, 247, 245)');assert.equal(spacing.sidebar,spacing.background);
+      assert.equal(spacing.width,349);assert.equal(spacing.left-spacing.right,24);assert.equal(spacing.padding,'16px');
       await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);
       assert.equal(await evaluate("document.querySelector('#fixture-main').style.getPropertyValue('--cfp-page-bg')"),'');
       assert.equal(await evaluate("document.querySelector('#fixture-main').classList.contains('cfp-vertical-page-layout')"),false);
