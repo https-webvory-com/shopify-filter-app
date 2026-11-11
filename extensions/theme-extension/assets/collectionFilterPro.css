@@ -2813,7 +2813,7 @@ facet-filters-form,
     overflow-x: hidden !important;
     box-sizing: border-box !important;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain !important;
+    overscroll-behavior: auto !important;
     scrollbar-width: thin !important;
     scrollbar-color: #e5e7eb transparent !important;
   }

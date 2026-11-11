@@ -501,6 +501,30 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filtersMs,simulatedProductDelayMs:5000,transientSavedFilterMisses:2};
   });
+  await test('vertical filter wheel scrolling passes to the page at both edges',async()=>{
+    await control({reset:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,
+      productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{vendor:'Brand '+i}])),
+      filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',config:{}}],
+      globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    const wheel=async deltaY=>{
+      const point=await evaluate("(()=>{const r=document.querySelector('#cfp-sidebar').getBoundingClientRect();return {x:r.left+70,y:Math.max(r.top+80,150)};})()");
+      await send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
+      await send('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaX:0,deltaY});await delay(400);
+    };
+    await evaluate("scrollTo(0,700);document.querySelector('#cfp-sidebar').scrollTop=100");await delay(250);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').scrollHeight>document.querySelector('#cfp-sidebar').clientHeight+200"),true);
+    const middle=await evaluate("({page:scrollY,inner:document.querySelector('#cfp-sidebar').scrollTop})");
+    await wheel(100);assert.ok(await evaluate("document.querySelector('#cfp-sidebar').scrollTop>"+middle.inner));assert.equal(await evaluate('scrollY'),middle.page);
+    await evaluate("document.querySelector('#cfp-sidebar').scrollTop=document.querySelector('#cfp-sidebar').scrollHeight");await delay(250);
+    const bottomPage=await evaluate('scrollY');await wheel(350);assert.ok(await evaluate('scrollY>'+bottomPage),'bottom edge trapped the page');
+    await evaluate("scrollTo(0,700);document.querySelector('#cfp-sidebar').scrollTop=0");await delay(250);
+    const topPage=await evaluate('scrollY');await wheel(-350);assert.ok(await evaluate('scrollY<'+topPage),'top edge trapped the page');
+    await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').click();scrollTo(0,700)");await delay(250);
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').scrollHeight>document.querySelector('#cfp-sidebar').clientHeight"),false);
+    const collapsedPage=await evaluate('scrollY');await wheel(200);assert.ok(await evaluate('scrollY>'+collapsedPage),'short filters trapped the page');
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('vertical sidebar scrolls away at the collection boundary before FAQ and footer',async()=>{
     await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,
       filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}],
