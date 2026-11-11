@@ -3155,6 +3155,111 @@ facet-filters-form,
   color: #8a3b1e !important;
   font-weight: 500 !important;
 }
+/* The reference presentation belongs to the inline vertical sidebar only.
+   Its width remains --cfp-vertical-width, supplied by the merchant setting. */
+.cfp-vertical-summary,
+.cfp-vertical-toggle-icon { display: none; }
+@media (min-width: 769px) {
+  .cfp-vertical-layout .cfp-layout-wrapper > .cfp-main-content:empty { display: none !important; }
+  .cfp-vertical-layout #cfp-sidebar {
+    --cfp-vertical-sticky-top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px) + 12px);
+    top: var(--cfp-vertical-sticky-top) !important;
+    max-height: calc(100vh - var(--cfp-vertical-sticky-top) - 16px) !important;
+    max-height: calc(100dvh - var(--cfp-vertical-sticky-top) - 16px) !important;
+    padding: 24px 16px 48px !important;
+    border: 0 !important;
+    color: #111 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header {
+    position: static !important;
+    padding: 0 0 20px !important;
+    background: var(--cfp-page-bg, transparent) !important;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__header > :not(.cfp-vertical-summary) { display: none !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-summary h2 {
+    margin: 0 0 2px;
+    font: 600 14px/1.4 Arial, Helvetica, sans-serif;
+    letter-spacing: normal;
+    text-transform: none;
+    color: inherit;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-result-count { margin: 0; font: 400 12px/1.5 Arial, Helvetica, sans-serif; color: #555; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear {
+    display: inline-flex !important;
+    width: auto !important;
+    min-height: 24px;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #111 !important;
+    font: 400 12px/1.5 Arial, Helvetica, sans-serif !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear[hidden] { display: none !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear:focus-visible,
+  .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body { flex: none !important; min-height: auto !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-group { margin: 0 0 4px !important; padding: 0 !important; border: 0 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle {
+    min-height: 36px;
+    padding: 8px 0 !important;
+    font: 600 14px/1.4 Arial, Helvetica, sans-serif !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    color: #111 !important;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle .cfp-chevron { display: none !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-toggle-icon { display: inline-block; width: 12px; height: 12px; position: relative; flex-shrink: 0; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-toggle-icon::before,
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-toggle-icon::after { content: ''; position: absolute; background: currentColor; border-radius: 1px; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-toggle-icon::before { width: 12px; height: 1.5px; top: 5px; left: 0; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-toggle-icon::after { width: 1.5px; height: 12px; top: 0; left: 5px; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle[aria-expanded="true"] .cfp-vertical-toggle-icon::after { display: none; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-group__content { padding: 4px 0 16px !important; gap: 0 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox { padding: 6px 0 !important; min-height: 32px; gap: 10px !important; border-radius: 0; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox:hover { background: transparent !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__label,
+  .cfp-vertical-layout #cfp-sidebar .cfp-swatch-label { font: 400 14px/1.4 Arial, Helvetica, sans-serif !important; color: #111 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__box { width: 16px !important; height: 16px !important; min-width: 16px !important; border-radius: 2px !important; border: 1px solid #999 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox input:checked ~ .cfp-checkbox__box { background: #111 !important; border-color: #111 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__count { color: #666 !important; font-size: 12px !important; background: transparent !important; padding: 0 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-button-grid { gap: 8px !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-button-chip > span {
+    min-height: 32px !important;
+    padding: 6px 8px !important;
+    border-radius: 4px !important;
+    border: 1px solid #ddd !important;
+    background: #fff !important;
+    color: #111 !important;
+    font: 400 14px/1.25 Arial, Helvetica, sans-serif !important;
+  }
+  .cfp-vertical-layout #cfp-sidebar .cfp-size-grid .cfp-button-chip > span { padding: 6px 4px !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-button-chip:hover > span { border-color: #888 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-button-chip input:checked ~ span { border-color: #111 !important; box-shadow: inset 0 0 0 1px #111; font-weight: 400 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-button-chip input:focus-visible ~ span { outline: 2px solid #111; outline-offset: 2px; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-color-grid--colors { --cfp-color-swatch-size: 20px; --cfp-color-swatch-margin: 0px; gap: 12px 8px !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-color-grid--colors .cfp-color-swatch { gap: 10px !important; min-height: 24px; padding: 0 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-color-grid--colors .cfp-swatch-circle { width: 20px !important; height: 20px !important; border-radius: 50% !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-color-grid--colors .cfp-swatch-label { min-width: 0; text-align: left !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-view-more-action { grid-column: 1 / -1; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-view-more-btn { color: #111 !important; font: 400 13px/1.4 Arial, Helvetica, sans-serif !important; text-decoration: underline; padding: 4px 0 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-search-input-wrap { margin: 0 0 12px; border-radius: 4px; }
+}
+
 /* Empty or disabled groups must not leave a drawer, trigger, or sidebar gap. */
 body.cfp-no-filters #cfp-drawer-trigger-btn,
 body.cfp-no-filters #cfp-sidebar,

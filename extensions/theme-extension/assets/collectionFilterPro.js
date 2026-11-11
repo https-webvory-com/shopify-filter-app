@@ -1471,6 +1471,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   function updateProductCount(totalCount){
+    updateVerticalFilterSummary(totalCount);
     const countLabels = document.querySelectorAll('.cfp-product-count');
     if (!countLabels || countLabels.length === 0) return;
     if (!Number.isFinite(totalCount)) {
@@ -2210,7 +2211,22 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
+  function updateVerticalFilterSummary(totalCount) {
+    const header = sidebar?.querySelector('.cfp-sidebar__header');
+    if (!header) return;
+    let summary = header.querySelector('.cfp-vertical-summary');
+    if (!summary) {
+      summary = document.createElement('div');
+      summary.className = 'cfp-vertical-summary';
+      summary.innerHTML = '<div><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button>';
+      header.append(summary);
+    }
+    const count = summary.querySelector('.cfp-vertical-result-count');
+    count.textContent = Number.isFinite(totalCount) ? `${totalCount.toLocaleString()} ${totalCount === 1 ? 'product' : 'products'}` : '';
+  }
+
   function renderFilterSidebar(settings, facets, totalCount) {
+    updateVerticalFilterSummary(totalCount);
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
 
@@ -2709,8 +2725,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                     const borderRadiusStyle = isCircle ? 'border-radius: 50% !important;' : 'border-radius: 8px !important;';
 
                     const imageHtml=isImageItem?`<img class="cfp-swatch-image" src="${escapeCardHtml(colorValue)}" alt="" aria-hidden="true" decoding="async">`:placeholderSvg;
-                    const visualMargin=isColor?'3px':`6px ${labelFlexDir === 'row' ? '6px' : 'auto'}`;
-                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${vWidth} !important; height: ${vHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: ${visualMargin} !important;">${imageHtml}</span>`;
+                    const visualMargin=isColor?'var(--cfp-color-swatch-margin, 3px)':`6px ${labelFlexDir === 'row' ? '6px' : 'auto'}`;
+                    const visualWidth=isColor?`var(--cfp-color-swatch-size, ${vWidth})`:vWidth;
+                    const visualHeight=isColor?`var(--cfp-color-swatch-size, ${vHeight})`:vHeight;
+                    let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${visualWidth} !important; height: ${visualHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: ${visualMargin} !important;">${imageHtml}</span>`;
 
                     const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 
@@ -2837,6 +2855,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
                 <span class="cfp-clear-group" data-type="${type}" data-key="${key || ''}" style="color: #8c9196; font-size: 13px; font-family: 'Poppins', sans-serif; font-weight: 400; text-transform: none; margin-right: 12px; cursor: pointer; transition: color 0.15s;">Clear</span>
               ` : ''}
               <svg class="cfp-chevron" viewBox="0 0 20 20" style="width: 12px; height: 12px; fill: currentColor;"><path d="M5 8l5 5 5-5z" /></svg>
+              <span class="cfp-vertical-toggle-icon" aria-hidden="true"></span>
             </div>
           </button>
           <div class="cfp-group__content ${isCollapsed ? 'cfp-collapsed' : ''}" id="cfp-group-${setting.id || index}-${type}-${key || ''}">
@@ -3953,6 +3972,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (activeFilters.minPrice > 0) count++;
     if (activeFilters.maxPrice < maxPriceLimit) count++;
+
+    const verticalClear = sidebar?.querySelector('.cfp-vertical-clear');
+    if (verticalClear) {
+      const selections = count + (activeFilters.priceRanges || []).length;
+      verticalClear.hidden = selections === 0;
+      verticalClear.textContent = `Clear all (${selections})`;
+    }
 
     if (activeCount) {
       activeCount.textContent = count;

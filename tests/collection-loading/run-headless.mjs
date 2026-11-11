@@ -127,6 +127,76 @@ try{
     await evaluate("document.querySelector('#cfp-apply-btn').click()");
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   });
+  await test('vertical reference UI keeps saved widths and uses compact accessible controls',async()=>{
+    const filterSettings=[
+      {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,swatchConfig:{showLabel:true}}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',displayMode:'Box',config:{multipleSelection:true,advanced:{showMoreType:'View more'}}},
+      {id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{multipleSelection:true,advanced:{desktopCollapsed:true}}}];
+    const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Color',values:['Blue','Red','White']},{name:'Size',values:['XS','S','M','L','XL','2XL','3XL','4XL']}]}]));
+    await control({reset:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings,productFields,
+      globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:333,sizeOptionsPerRow:4,showProductCount:false,showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    const styles=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),group=s.querySelector('.cfp-group__toggle'),chip=s.querySelector('.cfp-button-chip > span'),swatch=s.querySelector('.cfp-swatch-circle'),grid=s.querySelector('.cfp-color-grid--colors');return {width:s.getBoundingClientRect().width,title:getComputedStyle(group).textTransform,font:getComputedStyle(group).fontSize,weight:getComputedStyle(group).fontWeight,chipHeight:chip.getBoundingClientRect().height,chipRadius:getComputedStyle(chip).borderRadius,swatchWidth:swatch.getBoundingClientRect().width,colorColumns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,summary:getComputedStyle(s.querySelector('.cfp-vertical-summary')).display,count:s.querySelector('.cfp-vertical-result-count').textContent,header:getComputedStyle(s.querySelector('.cfp-sidebar__header')).position,bodyOverflow:getComputedStyle(s.querySelector('.cfp-sidebar__body')).overflowY,printedCounts:s.querySelectorAll('.cfp-checkbox__count').length};})()`);
+    assert.equal(styles.width,333);assert.equal(styles.title,'none');assert.equal(styles.font,'14px');assert.equal(styles.weight,'600');
+    assert.equal(styles.chipHeight,32);assert.equal(styles.chipRadius,'4px');assert.equal(styles.swatchWidth,20);assert.equal(styles.colorColumns,2);
+    assert.equal(styles.summary,'flex');assert.equal(styles.count,'30 products');assert.equal(styles.header,'static');assert.equal(styles.bodyOverflow,'visible');assert.equal(styles.printedCounts,0);
+    assert.equal(await evaluate("document.querySelector('#cfp-group-vendor-vendor-').classList.contains('cfp-collapsed')"),true);
+    await evaluate("document.querySelector('#cfp-group-vendor-vendor-').previousElementSibling.click()");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-group-vendor-vendor-').previousElementSibling.querySelector('.cfp-vertical-toggle-icon'),'::after').display"),'none');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-size-grid .cfp-view-more-hidden')).display"),'none');
+    await evaluate("document.querySelector('#cfp-group-size-option-Size .cfp-view-more-btn').click()");
+    assert.equal(await evaluate("[...document.querySelectorAll('#cfp-group-size-option-Size .cfp-button-chip')].every(e=>e.getBoundingClientRect().height>0)"),true);
+    for(const width of [240,520,600]){
+      await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','"+width+"px')");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),width);
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+    }
+    await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','333px')");
+    await fs.writeFile('scratch/vertical-reference-fixture.png',Buffer.from(await send('Page.captureScreenshot',{format:'png'}).then(r=>r.data),'base64'));
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('vertical reference Clear all resets selected options and price bands without duplicate requests',async()=>{
+    const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{multipleSelection:true}},
+      {id:'price',isEnabled:true,filterType:'price',label:'Price',config:{priceRanges:[{from:0,to:100,label:'Under {1}'}]}}];
+    await control({reset:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings,
+      productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Size',values:['S','M']}]}])),
+      globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
+    await navigate('?option_Size=S&price[]=0:100');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').textContent"),'Clear all (2)');
+    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').getBoundingClientRect().width>0"),true);
+    const before=(await getState()).requests.length;
+    await evaluate("document.querySelector('.cfp-vertical-clear').click()");
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!new URLSearchParams(location.search).has('option_Size')");
+    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').hidden"),true);
+    assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-summary').length"),1);
+    assert.equal((await getState()).requests.length-before,1);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
+  await test('vertical reference styles leave horizontal, drawer and mobile presentation unchanged',async()=>{
+    const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{multipleSelection:true}}];
+    for(const layout of ['horizontal','drawer','vertical']){
+      await control({reset:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings,
+        productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Size',values:['S','M']}]}])),
+        globalSettings:{desktopFilterLayout:layout,drawerWidth:300,showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      if(layout!=='vertical')assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-vertical-summary')).display"),'none');
+      if(layout==='drawer'){
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+        assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-group__toggle')).textTransform"),'uppercase');
+      }
+      await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
+      await evaluate("if(!document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open'))document.querySelector('#cfp-drawer-trigger-btn').click()");
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-vertical-summary')).display"),'none');
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-vertical-toggle-icon')).display"),'none');
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-group__toggle')).textTransform"),'uppercase');
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    }
+  });
   await test('toolbar color picker previews presets and hex input before applying or restoring page color',async()=>{
     await send('Page.navigate',{url:origin+'/bar-color-admin'});
     await wait("!!document.querySelector('select[aria-label=\"Filter and sort bar background\"]')");
