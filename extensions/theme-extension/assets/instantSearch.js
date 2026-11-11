@@ -337,6 +337,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (!state?.inputHeader) return;
     modal.prepend(state.inputHeader);
     state.inputHeader.removeAttribute('data-cfp-inline');
+    state.inputHeader.style.removeProperty('--cfp-compact-panel-width');
     modal.removeAttribute('aria-owns');
     delete modal.dataset.cfpInline;
     delete overlay.dataset.cfpInline;
@@ -360,6 +361,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (state.visibility) state.trigger.style.setProperty('visibility',state.visibility,state.visibilityPriority);
     else state.trigger.style.removeProperty('visibility');
     if (animate && state.active && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      state.slot.style.setProperty('transition','width .22s ease, min-width .22s ease, max-width .22s ease, flex-basis .22s ease','important');
       for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,state.startWidth + 'px','important');
       const pending = {state,timer:setTimeout(()=>{restoreCompactSlot(state);if(compactHeaderRestore===pending)compactHeaderRestore=null;},240)};
       compactHeaderRestore = pending;
@@ -402,7 +404,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,rect.width+'px','important');
       for (const key of ['height','min-height','max-height']) state.slot.style.setProperty(key,rect.height+'px','important');
       state.slot.style.setProperty('flex-shrink','0','important');
-      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .22s ease, min-width .22s ease, max-width .22s ease, flex-basis .22s ease','important');
+      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .32s cubic-bezier(.22,1,.36,1), min-width .32s cubic-bezier(.22,1,.36,1), max-width .32s cubic-bezier(.22,1,.36,1), flex-basis .32s cubic-bezier(.22,1,.36,1)','important');
       void state.slot.offsetWidth;state.active = true;
       if (window.ResizeObserver) {
         state.observer ||= new ResizeObserver(()=>{if(modal?.classList.contains('cfp-open'))positionCompactPanel();});
@@ -425,6 +427,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         overlay.dataset.cfpInline = 'true';
       }
     }
+    state.inputHeader?.style.setProperty('--cfp-compact-panel-width',width+'px');
     const rect = state.slot.getBoundingClientRect();
     return {left:rect.right-state.anchor.width,right:rect.right,top:rect.top+state.anchorOffset-state.anchor.height/2,
       bottom:rect.top+state.anchorOffset+state.anchor.height/2,width:state.anchor.width,height:state.anchor.height};
@@ -867,7 +870,14 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (window.cfpSearchSettings?.instantLayout === 'compact') prepareCompactHeader(modal._trigger);
     modal.style.top = '0px';
     applySearchDisplaySettings();
-    if (modal.dataset.cfpLayout === 'compact') void modal.offsetWidth;
+    if (modal.dataset.cfpLayout === 'compact') {
+      // Start from the icon width even when settings arrived during a prior
+      // layout transition or the shopper immediately reopens the search.
+      modal.style.setProperty('transition','none','important');
+      void modal.offsetWidth;
+      modal.style.removeProperty('transition');
+      void modal.offsetWidth;
+    }
     overlay.classList.add('cfp-open');
     modal.classList.add('cfp-open');
 
@@ -884,7 +894,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     // Focus the input after transition
-    setTimeout(() => { mainInput.focus(); }, 100);
+    setTimeout(() => { if (modal.classList.contains('cfp-open')) mainInput.focus({preventScroll:true}); }, 100);
   }
 
   function closeModal() {

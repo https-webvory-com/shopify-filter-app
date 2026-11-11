@@ -3236,13 +3236,23 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (groups) groups.onscroll = () => {
       if (isMobileHorizontalFilterLayout()) closeHorizontalFilterGroups();
     };
-    sidebar.querySelectorAll('.cfp-group__toggle').forEach(toggle => {
+    const toggles = [...sidebar.querySelectorAll('.cfp-group__toggle')];
+    const openToggle = !isHorizontalPopoverLayout() && (toggles.find(toggle => cfpGroupToggleState[toggle.getAttribute('aria-controls')] === true)
+      || toggles.find(toggle => toggle.getAttribute('aria-expanded') === 'true'));
+    toggles.forEach(toggle => {
+      const contentId = toggle.getAttribute('aria-controls');
+      if (!isHorizontalPopoverLayout()) {
+        const expanded = toggle === openToggle;
+        toggle.setAttribute('aria-expanded', String(expanded));
+        document.getElementById(contentId)?.classList.toggle('cfp-collapsed', !expanded);
+        cfpGroupToggleState[contentId] = expanded;
+      }
       // Re-bind click event
       toggle.addEventListener('click', () => {
         const expanded = toggle.getAttribute('aria-expanded') === 'true';
         const contentId = toggle.getAttribute('aria-controls');
         const content = document.getElementById(contentId);
-        if (isHorizontalPopoverLayout() && !expanded) closeHorizontalFilterGroups();
+        if (!expanded) closeHorizontalFilterGroups();
         toggle.setAttribute('aria-expanded', String(!expanded));
         if (content) content.classList.toggle('cfp-collapsed', expanded);
           cfpGroupToggleState[contentId] = !expanded;

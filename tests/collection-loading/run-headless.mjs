@@ -127,6 +127,43 @@ try{
     await evaluate("document.querySelector('#cfp-apply-btn').click()");
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   });
+  await test('filter accordion keeps only one group open on desktop and mobile and preserves it after selection',async()=>{
+    const filterSettings=[
+      {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{multipleSelection:true}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{multipleSelection:true}},
+      {id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',config:{}}];
+    for(const desktopFilterLayout of ['vertical','drawer']){
+      await control({reset:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings,
+        productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Color',values:['Red','Blue']},{name:'Size',values:['S','M']}]}])),
+        globalSettings:{desktopFilterLayout,showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+      await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      if(desktopFilterLayout==='drawer')await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      const openGroups=()=>evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=true]')].map(t=>t.getAttribute('aria-controls'))");
+      assert.deepEqual(await openGroups(),['cfp-group-color-option-Color']);
+      const before=(await getState()).requests.length;
+      await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");
+      assert.deepEqual(await openGroups(),['cfp-group-size-option-Size']);
+      assert.equal(await evaluate("document.querySelector('#cfp-group-color-option-Color').getBoundingClientRect().height"),0);
+      await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");assert.deepEqual(await openGroups(),[]);
+      assert.equal((await getState()).requests.length,before,'accordion clicks requested product data');
+      await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').focus()");
+      await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13});
+      await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+      assert.deepEqual(await openGroups(),['cfp-group-size-option-Size']);
+      await evaluate("document.querySelector('#cfp-group-size-option-Size input').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')");
+      assert.deepEqual(await openGroups(),['cfp-group-size-option-Size']);
+      await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      await evaluate("document.querySelector('[aria-controls=cfp-group-color-option-Color]').click()");
+      assert.deepEqual(await openGroups(),['cfp-group-color-option-Color']);
+      await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");
+      assert.deepEqual(await openGroups(),['cfp-group-size-option-Size']);
+      await evaluate("document.querySelector('#cfp-apply-btn').click()");assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
   await test('vertical reference UI keeps saved widths and uses compact accessible controls',async()=>{
     const filterSettings=[
       {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,swatchConfig:{showLabel:true}}},
@@ -142,11 +179,14 @@ try{
     assert.equal(desktopOptions.chip,'12px');assert.equal(desktopOptions.swatch,'12px');assert.equal(desktopOptions.label,'12px');assert.equal(desktopOptions.separator,'1px');assert.equal(desktopOptions.firstSeparator,'0px');
     assert.equal(desktopOptions.left,'16px');assert.equal(desktopOptions.right,desktopOptions.left);assert.equal(desktopOptions.bottom,desktopOptions.left);
     assert.equal(styles.width,333);assert.equal(styles.title,'none');assert.equal(styles.font,'14px');assert.equal(styles.weight,'600');
-    assert.equal(styles.chipHeight,32);assert.equal(styles.chipRadius,'4px');assert.equal(styles.swatchWidth,20);assert.equal(styles.colorColumns,2);
+    await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-button-chip > span').getBoundingClientRect().height"),32);
+    assert.equal(styles.chipRadius,'4px');assert.equal(styles.swatchWidth,20);assert.equal(styles.colorColumns,2);
     assert.equal(styles.summary,'block');assert.equal(styles.count,'30 products');assert.equal(styles.header,'static');assert.equal(styles.bodyOverflow,'visible');assert.equal(styles.printedCounts,0);
     assert.equal(await evaluate("document.querySelector('#cfp-group-vendor-vendor-').classList.contains('cfp-collapsed')"),true);
     await evaluate("document.querySelector('#cfp-group-vendor-vendor-').previousElementSibling.click()");
     assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-group-vendor-vendor-').previousElementSibling.querySelector('.cfp-vertical-toggle-icon'),'::after').display"),'none');
+    await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");
     assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-size-grid .cfp-view-more-hidden')).display"),'none');
     await evaluate("document.querySelector('#cfp-group-size-option-Size .cfp-view-more-btn').click()");
     assert.equal(await evaluate("[...document.querySelectorAll('#cfp-group-size-option-Size .cfp-button-chip')].every(e=>e.getBoundingClientRect().height>0)"),true);
@@ -179,6 +219,7 @@ try{
     await evaluate("document.querySelector('.cfp-breadcrumb-clear').click()");
     await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!new URLSearchParams(location.search).has('option_Size')");
     await wait("!document.querySelector('.cfp-breadcrumb-clear')");
+    await wait("document.querySelectorAll('#cfp-sidebar input:checked').length===0");
     assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
     assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-summary').length"),1);
     assert.equal((await getState()).requests.length-before,1);
