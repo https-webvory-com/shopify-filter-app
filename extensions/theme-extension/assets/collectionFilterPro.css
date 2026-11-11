@@ -2817,17 +2817,12 @@ facet-filters-form,
     box-sizing: border-box !important;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: auto !important;
-    scrollbar-width: thin !important;
-    scrollbar-color: #e5e7eb transparent !important;
+    scrollbar-width: none !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
-    width: 4px !important;
-  }
-
-  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb {
-    background: #e5e7eb !important;
-    border-radius: 4px !important;
+    display: none !important;
+    width: 0 !important;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
@@ -3303,6 +3298,8 @@ facet-filters-form,
 
 /* The selected Vertical style also applies to its mobile drawer. */
 .cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 12px; }
+.cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { scrollbar-width: none; }
+.cfp-vertical-style #cfp-sidebar .cfp-sidebar__body::-webkit-scrollbar { display: none; width: 0; }
 .cfp-vertical-style #cfp-sidebar .cfp-group { border: 0 !important; }
 .cfp-vertical-style #cfp-sidebar .cfp-group + .cfp-group { border-top: 1px solid var(--cfp-border, #ddd) !important; }
 .cfp-vertical-style #cfp-sidebar .cfp-group__content,
