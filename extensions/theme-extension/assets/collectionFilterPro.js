@@ -21,6 +21,42 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let clearBtn = null;
   let activeCount = null;
   let sidebarHome = null;
+  let verticalPageLayout = null;
+  let collectionSearchDraft = null;
+
+  function syncVerticalPageLayout() {
+    const enabled = isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches &&
+      templateName === 'collection' && !document.body.classList.contains('cfp-no-filters');
+    const appSection = document.querySelector('.cfp-v1-app-container')?.closest('.shopify-section');
+    const main = appSection?.parentElement;
+    const sections = main?.matches('main, [role="main"]') ? [...main.children].filter(el => el !== sidebar && !el.matches('script, style, link')) : [];
+    const appIndex = sections.indexOf(appSection);
+    const titleIndex = sections.findIndex(el => el !== appSection && el.querySelector('h1'));
+    const eligible = enabled && titleIndex >= 0 && appIndex > titleIndex;
+    if (verticalPageLayout && (!eligible || verticalPageLayout.main !== main)) {
+      verticalPageLayout.main.classList.remove('cfp-vertical-page-layout');
+      verticalPageLayout.main.style.removeProperty('--cfp-vertical-width');
+      verticalPageLayout.main.style.removeProperty('--cfp-vertical-page-rows');
+      verticalPageLayout.sections.forEach(el => {
+        el.classList.remove('cfp-vertical-page-content');
+        el.style.removeProperty('--cfp-vertical-page-row');
+      });
+      verticalPageLayout = null;
+    }
+    if (!eligible) return false;
+    if (!verticalPageLayout) {
+      verticalPageLayout = {main,sections:sections.slice(0,appIndex + 1)};
+      main.classList.add('cfp-vertical-page-layout');
+      main.style.setProperty('--cfp-vertical-page-rows',String(appIndex + 1));
+      verticalPageLayout.sections.forEach((el,index) => {
+        el.classList.add('cfp-vertical-page-content');
+        el.style.setProperty('--cfp-vertical-page-row',String(index + 1));
+      });
+    }
+    main.style.setProperty('--cfp-vertical-width',sidebar.style.getPropertyValue('--cfp-vertical-width') || '420px');
+    if (sidebar.parentElement !== main) main.insertBefore(sidebar,main.firstChild);
+    return true;
+  }
 
   function syncFilterSurfacePlacement() {
     if (!sidebar || !document.body) return;
@@ -31,7 +67,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       else wrapper.append(sidebarHome);
     }
     const inline = isInlineFilterLayout();
-    if (inline && sidebarHome?.parentNode) {
+    if (syncVerticalPageLayout()) {
+      // Only the app sidebar moves; native collection sections retain their
+      // parents/listeners and become the right column beside it.
+    } else if (inline && sidebarHome?.parentNode) {
       if (sidebar.parentNode !== sidebarHome.parentNode || sidebar.previousSibling !== sidebarHome)
         sidebarHome.parentNode.insertBefore(sidebar, sidebarHome.nextSibling);
     } else if (!inline && sidebar.parentNode !== document.body) {
@@ -281,6 +320,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const params = new URLSearchParams(window.location.search);
     activeFilters.sortBy = params.get('sort_by') || params.get('sortBy') || (templateName === 'search' ? 'relevance' : 'best-selling');
     activeFilters.page = Number.parseInt(params.get('page'), 10) || 1;
+    if (templateName === 'collection') {
+      activeFilters.q = params.get('q') || '';
+      collectionSearchDraft = activeFilters.q;
+      updateVerticalFilterSummary(cfpLastTotalCount);
+    }
     fetchAndRenderData();
   });
 
@@ -819,6 +863,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (searchTerms) {
           queryParams.append('q', searchTerms);
         }
+      } else if (templateName === 'collection' && activeFilters.q) {
+        queryParams.set('q',activeFilters.q);
       }
 
       // Price range
@@ -850,20 +896,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       queryParams.append('sortBy', activeFilters.sortBy);
       queryParams.append('page', activeFilters.page);
       queryParams.append('limit', PAGE_SIZE);
-      const hasSelectedFilters=[...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+      const collectionQuery = templateName === 'collection' && Boolean(activeFilters.q);
+      const hasSelectedFilters=collectionQuery || [...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
       if(!isLoadMore&&!hasSelectedFilters&&activeFilters.page===1)startIndependentCollectionFilters(queryParams,fetchSignal);
-      if (templateName !== 'search' && activeFilters.sortBy !== 'manual') {
+      if (templateName !== 'search' && !collectionQuery && activeFilters.sortBy !== 'manual') {
         queryParams.set('responseProfile','collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
         if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
           queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
       }
-      if(templateName!=='search'&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
+      if(templateName!=='search'&&!collectionQuery&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
           (hasSelectedFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)))
         queryParams.set('responseProfile','fast-cards-v1');
       if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
-      if (templateName!=='search'&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
+      if (templateName!=='search'&&!collectionQuery&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
         queryParams.set('membershipParentToken', lastMembershipResult.token);
         queryParams.set('membershipParentQuery', lastMembershipResult.query);
       }
@@ -874,7 +921,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       rankingKeyParams.delete('membershipParentQuery');
       rankingKeyParams.sort();
       rankingKey = rankingKeyParams.toString();
-      const rankedCollection = templateName !== 'search' && activeFilters.sortBy !== 'manual';
+      const rankedCollection = templateName !== 'search' && !collectionQuery && activeFilters.sortBy !== 'manual';
       const rankingToken = rankedCollection ? collectionRankingTokens.get(rankingKey) || initialRankingToken : null;
       initialRankingToken = null;
       if (rankingToken) queryParams.set('rankingToken', rankingToken);
@@ -908,7 +955,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         let data = null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
-        if (window._cfpEarlyFetch && templateName !== 'search' && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
+        if (window._cfpEarlyFetch && templateName !== 'search' && !collectionQuery && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
           try {
             data = await window._cfpEarlyFetch;
             delete window._cfpEarlyFetch;
@@ -928,7 +975,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             } else early.controller.abort();
           }
           let response = earlySearchResponse;
-          if (!response && templateName !== 'search' && !isLoadMore && activeFilters.page === 1) {
+          if (!response && templateName !== 'search' && !collectionQuery && !isLoadMore && activeFilters.page === 1) {
             try { response = await takeEarlyCollectionResponse(requestUrl, fetchSignal); }
             catch (error) { if (fetchSignal.aborted) throw error; }
           }
@@ -1248,7 +1295,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     document.querySelectorAll('header, sticky-header, [data-sticky-header], .shopify-section-header-sticky').forEach(header => {
       const position = getComputedStyle(header).position;
       const rect = header.getBoundingClientRect();
-      if ((position === 'fixed' || position === 'sticky') && rect.top <= 1 && rect.bottom > 0) {
+      if ((position === 'fixed' || position === 'sticky') && rect.top < window.innerHeight && rect.bottom > 0) {
         headerBottom = Math.max(headerBottom, rect.bottom);
       }
     });
@@ -2218,11 +2265,46 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (!summary) {
       summary = document.createElement('div');
       summary.className = 'cfp-vertical-summary';
-      summary.innerHTML = '<div><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button>';
+      summary.innerHTML = '<div class="cfp-vertical-summary-heading"><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button><form class="cfp-collection-search" role="search" aria-label="Search within collection"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></svg><input type="search" name="q" aria-label="Search within collection" maxlength="200" autocomplete="off" enterkeyhint="search"><button type="button" class="cfp-collection-search-clear" aria-label="Clear collection search" hidden>&times;</button></form>';
       header.append(summary);
+      const form = summary.querySelector('form');
+      const input = form.querySelector('input');
+      const clear = form.querySelector('button');
+      form.addEventListener('submit',event => {
+        event.preventDefault();event.stopPropagation();
+        setCollectionQuery(input.value);
+      });
+      input.addEventListener('input',() => {
+        collectionSearchDraft = input.value;
+        clear.hidden = !input.value;
+      });
+      input.addEventListener('search',() => {if (!input.value && activeFilters.q) setCollectionQuery('');});
+      clear.addEventListener('click',() => {
+        input.value = '';collectionSearchDraft = '';clear.hidden = true;
+        if (activeFilters.q) setCollectionQuery('');
+        input.focus();
+      });
     }
     const count = summary.querySelector('.cfp-vertical-result-count');
     count.textContent = Number.isFinite(totalCount) ? `${totalCount.toLocaleString()} ${totalCount === 1 ? 'product' : 'products'}` : '';
+    const form = summary.querySelector('form');
+    form.hidden = templateName !== 'collection';
+    const input = form.querySelector('input');
+    const title = document.querySelector('main h1, [role="main"] h1, .cfp-page-header h1')?.textContent.trim() || collectionHandle?.replaceAll('-',' ') || 'this collection';
+    input.placeholder = `Search within ${title}`;
+    input.value = collectionSearchDraft ?? activeFilters.q ?? '';
+    form.querySelector('button').hidden = !input.value;
+  }
+
+  function setCollectionQuery(value) {
+    if (templateName !== 'collection') return;
+    const query = String(value || '').trim().slice(0,200);
+    collectionSearchDraft = query;
+    if (query === (activeFilters.q || '')) return;
+    activeFilters.q = query;activeFilters.page = 1;
+    updateVerticalFilterSummary(cfpLastTotalCount);
+    renderBreadcrumbs();updateActiveCountBadge();
+    fetchAndRenderData();
   }
 
   function renderFilterSidebar(settings, facets, totalCount) {
@@ -2897,9 +2979,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     });
 
 
-    const hasFilters = horizontalPills.length > 0;
+    const hasFilters = horizontalPills.length > 0 || Boolean(templateName === 'collection' && activeFilters.q);
+    if (!html && templateName === 'collection' && activeFilters.q) html = '<p class="cfp-vertical-filter-empty">No filters available for this search.</p>';
     filtersReady = true;
     document.body.classList.toggle('cfp-no-filters', !hasFilters);
+    syncFilterSurfacePlacement();
     if (!hasFilters) closeSidebar();
     const groupsContainer = body.querySelector('#cfp-sidebar__filter-groups');
     if (groupsContainer) {
@@ -3736,6 +3820,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function clearAllFilters() {
+    if (templateName === 'collection') collectionSearchDraft = '';
     activeFilters = {
       vendors: [],
       types: [],
@@ -3757,6 +3842,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     };
 
     syncCheckboxSelections();
+    if (templateName === 'collection') updateVerticalFilterSummary(cfpLastTotalCount);
     renderBreadcrumbs();
     fetchAndRenderData();
   }
@@ -3812,6 +3898,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function removeFilter(type, val) {
+    if (type === 'collection-query') { setCollectionQuery(''); return; }
     if (type==='weight') activeFilters.weightRanges=(activeFilters.weightRanges||[]).filter(x=>x!==val);
     else if (type==='review_rating') activeFilters.ratingRanges=(activeFilters.ratingRanges||[]).filter(x=>x!==val);
     else if (type==='inventory_locations') activeFilters.locations=(activeFilters.locations||[]).filter(x=>x!==val);
@@ -3890,6 +3977,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       return { label, cleanVal };
     };
 
+    if (templateName === 'collection' && activeFilters.q) addChip(activeFilters.q,'collection-query',activeFilters.q);
     (activeFilters.weightRanges||[]).forEach(value=>addChip('Weight: '+value.replace(':',' - ')+' g','weight',value));
     (activeFilters.ratingRanges||[]).forEach(value=>addChip(value==='0:0'?'No reviews':'Rating: '+value.replace(':',' - ')+' stars','review_rating',value));
     (activeFilters.locations||[]).forEach(value=>addChip(cfpLastFacets?.extraFilters?.choices?.find(c=>c.type==='inventory_locations'&&c.value===value)?.label||value,'inventory_locations',value));
@@ -3975,7 +4063,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     const verticalClear = sidebar?.querySelector('.cfp-vertical-clear');
     if (verticalClear) {
-      const selections = count + (activeFilters.priceRanges || []).length;
+      const selections = count + (activeFilters.priceRanges || []).length + (templateName === 'collection' && activeFilters.q ? 1 : 0);
       verticalClear.hidden = selections === 0;
       verticalClear.textContent = `Clear all (${selections})`;
     }

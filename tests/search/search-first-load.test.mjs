@@ -9,15 +9,16 @@ const end = source.indexOf('      data = await waitForCollectionOrder', start);
 assert.ok(start >= 0 && end > start);
 const requestBlock = source.slice(start, end);
 const earlyHelper = source.slice(source.indexOf('  async function takeEarlyCollectionResponse('), source.indexOf('  async function waitForCollectionOrder('));
-async function load({ template = 'search', page = 1, limit = 4, sort = 'relevance', loadMore = false } = {}) {
+async function load({ template = 'search', page = 1, limit = 4, sort = 'relevance', loadMore = false, collectionQuery = '' } = {}) {
   const calls = [], expectedOrder = Array.from({ length: 47 }, (_, i) => 'ranked-' + (i + 1));
   const early = { products: expectedOrder.slice(0, 25), source: 'unscoped-early' };
   const params = new URLSearchParams({ shop: 'fixture.myshopify.com', q: 'green dresses', country: 'IN', locale: 'en', isSearch: 'true', sortBy: sort, page: String(page), limit: String(limit), 'options[Color][]': 'Green' });
   const context = { window: { _cfpEarlyFetch: Promise.resolve(early) }, templateName: template,
-    rankedCollection: template !== 'search' && sort !== 'manual', isLoadMore: loadMore,
+    collectionQuery: Boolean(collectionQuery), rankedCollection: template !== 'search' && !collectionQuery && sort !== 'manual', isLoadMore: loadMore,
     activeFilters: { page }, queryParams: params, API_DOMAIN: 'https://api.test', fetchSignal: new AbortController().signal,
     fetchCollectionResponse: async url => { calls.push(url); return { status: 200, json: async () => ({ products: expectedOrder.slice((page - 1) * limit, page * limit), source: 'scoped' }) }; },
   };
+  if (collectionQuery) {params.set('q',collectionQuery);params.set('collectionHandle','formal-dresses');params.delete('isSearch');}
   context.fetchCollectionResponseWithRecovery = context.fetchCollectionResponse;
   const data = await vm.runInNewContext(earlyHelper + '\n(async()=>{' + requestBlock + '\nreturn data;})()', context);
   return { data, calls, early, context };
@@ -43,6 +44,13 @@ test('search early responses cannot override page sizes or explicit sort changes
 test('eligible manual collection first load retains its existing early response', async () => {
   const f = await load({ template: 'collection', sort: 'manual' });
   assert.equal(f.data, f.early); assert.equal(f.calls.length, 0);
+});
+
+test('collection-wide search never consumes an unfiltered early collection response',async()=>{
+  const f=await load({template:'collection',sort:'manual',collectionQuery:'red'});
+  assert.equal(f.data.source,'scoped');assert.equal(f.calls.length,1);
+  const query=new URL(f.calls[0]).searchParams;
+  assert.equal(query.get('q'),'red');assert.equal(query.get('collectionHandle'),'formal-dresses');assert.equal(query.has('isSearch'),false);
 });
 test('ranked collection, later page and Load More continue using their own requests', async () => {
   for (const options of [{ template: 'collection', sort: 'best-selling' }, { template: 'collection', sort: 'manual', page: 2 }, { template: 'collection', sort: 'manual', loadMore: true }]) {
