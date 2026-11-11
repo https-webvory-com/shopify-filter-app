@@ -197,17 +197,17 @@ try{
       await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     }
   });
-  await test('vertical refinement aligns the sidebar beside native collection content and restores sections on mobile',async()=>{
+  await test('vertical refinement starts the sidebar at the product grid and restores placement on mobile',async()=>{
     const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,advanced:{desktopSearchBox:true,mobileSearchBox:true}}}];
     await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings:settings,
       globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.closest('.cfp-vertical-page-layout').id,width:r.width,sidebarTop:r.top,introTop:intro.getBoundingClientRect().top,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:s.querySelector('.cfp-collection-search input').placeholder};})()`);
-    assert.equal(geometry.parent,'fixture-main');assert.equal(geometry.introParent,'fixture-main');assert.equal(geometry.width,349);
+    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.parentElement.className,width:r.width,sidebarTop:r.top,gridTop:document.querySelector('#cfp-products-container').getBoundingClientRect().top,introBottom:intro.getBoundingClientRect().bottom,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:s.querySelector('.cfp-collection-search input').placeholder};})()`);
+    assert.ok(geometry.parent.includes('cfp-layout-wrapper'));assert.equal(geometry.introParent,'fixture-main');assert.equal(geometry.width,349);
     assert.ok(Math.abs(geometry.headingTop-geometry.countTop)<2);assert.ok(geometry.countRight>geometry.headingRight+30);
-    assert.ok(Math.abs(geometry.sidebarTop-geometry.introTop)<=16,JSON.stringify(geometry));assert.equal(geometry.duplicates,false);assert.equal(geometry.groupSearch,false);
+    assert.ok(Math.abs(geometry.sidebarTop-geometry.gridTop)<=1&&geometry.sidebarTop>=geometry.introBottom,JSON.stringify(geometry));assert.equal(geometry.duplicates,false);assert.equal(geometry.groupSearch,false);
     assert.equal(geometry.search,'Search within Fixture collection');
-    assert.equal(await evaluate("document.querySelector('#fixture-faq').getBoundingClientRect().left<document.querySelector('#fixture-intro').getBoundingClientRect().left"),true);
+    assert.equal(await evaluate("document.querySelector('#fixture-faq').getBoundingClientRect().left===document.querySelector('#fixture-intro').getBoundingClientRect().left"),true);
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);
     assert.equal(await evaluate("document.querySelector('#fixture-main').classList.contains('cfp-vertical-page-layout')"),false);
     await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
@@ -216,7 +216,7 @@ try{
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-search-input').getBoundingClientRect().width>0"),true,JSON.stringify(await evaluate("({width:innerWidth,body:document.body.className,sidebar:document.querySelector('#cfp-sidebar').className,styles:getComputedStyle(document.querySelector('#cfp-sidebar')).display,group:document.querySelector('#cfp-sidebar .cfp-group__content').className,wrap:getComputedStyle(document.querySelector('#cfp-sidebar .cfp-search-input-wrap')).display})")));
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-vertical-summary')).display"),'none');
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(400);
-    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').closest('.cfp-vertical-page-layout').id"),'fixture-main');
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar').parentElement.classList.contains('cfp-layout-wrapper')"),true);
     assert.equal(await evaluate("document.querySelectorAll('#fixture-intro').length"),1);assert.equal(await evaluate("document.querySelector('#fixture-footer').parentElement.id"),'fixture-main');
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
@@ -496,8 +496,8 @@ try{
       globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
     await evaluate("document.querySelector('#fixture-faq').style.height='300px';document.querySelector('#fixture-footer').style.height='900px'");
-    const boundary=await evaluate("(()=>{const b=document.querySelector('.cfp-vertical-sidebar-boundary'),a=document.querySelector('#fixture-app-section');return {bottom:b.getBoundingClientRect().bottom,appBottom:a.getBoundingClientRect().bottom};})()");
-    assert.ok(Math.abs(boundary.bottom-boundary.appBottom)<2,JSON.stringify(boundary));
+    const boundary=await evaluate("(()=>{const b=document.querySelector('.cfp-layout-wrapper'),a=document.querySelector('#fixture-app-section');return {bottom:b.getBoundingClientRect().bottom,appBottom:a.getBoundingClientRect().bottom};})()");
+    assert.ok(boundary.bottom<=boundary.appBottom+1,JSON.stringify(boundary));
     await evaluate("scrollTo(0,document.querySelector('#fixture-app-section').getBoundingClientRect().bottom+scrollY-200)");await delay(200);
     const end=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar').getBoundingClientRect(),a=document.querySelector('#fixture-app-section').getBoundingClientRect(),f=document.querySelector('#fixture-faq').getBoundingClientRect();return {top:s.top,bottom:s.bottom,appBottom:a.bottom,faqTop:f.top};})()");
     assert.ok(end.top<0,JSON.stringify(end));assert.ok(end.bottom<=end.appBottom+1,JSON.stringify(end));assert.ok(end.bottom<=end.faqTop+1,JSON.stringify(end));
@@ -505,7 +505,7 @@ try{
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().bottom<=document.querySelector('#fixture-footer').getBoundingClientRect().top+1"),true);
     for(const width of [390,1440,390,1440]){
       await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<769});await delay(300);
-      assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-sidebar-boundary').length"),width<769?0:1);
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-sidebar-boundary').length"),0);
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar').length"),1);
     }
     assert.deepEqual(await evaluate('browserErrors'),[]);return end;
@@ -517,7 +517,7 @@ try{
         filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}],
         globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-      const spacing=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),m=s.closest('.cfp-vertical-page-layout'),intro=document.querySelector('#fixture-intro');return {gap:getComputedStyle(m).columnGap,background:getComputedStyle(m).backgroundColor,sidebar:getComputedStyle(s).backgroundColor,width:s.getBoundingClientRect().width,right:s.getBoundingClientRect().right,left:intro.getBoundingClientRect().left,padding:getComputedStyle(s).paddingLeft};})()");
+      const spacing=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),m=s.closest('.cfp-layout-wrapper'),intro=document.querySelector('#cfp-products-container');return {gap:getComputedStyle(m).columnGap,background:getComputedStyle(document.querySelector('#fixture-app-section')).backgroundColor,sidebar:getComputedStyle(s).backgroundColor,width:s.getBoundingClientRect().width,right:s.getBoundingClientRect().right,left:intro.getBoundingClientRect().left,padding:getComputedStyle(s).paddingLeft};})()");
       assert.equal(spacing.gap,'0px');assert.equal(spacing.background,'rgb(251, 247, 245)');assert.equal(spacing.sidebar,spacing.background);
       assert.equal(spacing.width,349);assert.equal(spacing.right,spacing.left);assert.equal(spacing.padding,'32px');
       await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);

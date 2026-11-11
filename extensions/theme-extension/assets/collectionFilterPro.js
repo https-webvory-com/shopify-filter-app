@@ -21,50 +21,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let clearBtn = null;
   let activeCount = null;
   let sidebarHome = null;
-  let verticalPageLayout = null;
   let collectionSearchDraft = null;
-
-  function syncVerticalPageLayout() {
-    const enabled = isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches &&
-      templateName === 'collection' && !document.body.classList.contains('cfp-no-filters');
-    const appSection = document.querySelector('.cfp-v1-app-container')?.closest('.shopify-section');
-    const main = appSection?.parentElement;
-    const sections = main?.matches('main, [role="main"]') ? [...main.children].filter(el => el !== sidebar && !el.matches('script, style, link, .cfp-vertical-sidebar-boundary')) : [];
-    const appIndex = sections.indexOf(appSection);
-    const titleIndex = sections.findIndex(el => el !== appSection && el.querySelector('h1'));
-    const eligible = enabled && titleIndex >= 0 && appIndex > titleIndex;
-    if (verticalPageLayout && (!eligible || verticalPageLayout.main !== main)) {
-      verticalPageLayout.main.classList.remove('cfp-vertical-page-layout');
-      verticalPageLayout.main.style.removeProperty('--cfp-vertical-width');
-      verticalPageLayout.main.style.removeProperty('--cfp-page-bg');
-      verticalPageLayout.main.style.removeProperty('--cfp-vertical-page-rows');
-      verticalPageLayout.sections.forEach(el => {
-        el.classList.remove('cfp-vertical-page-content');
-        el.style.removeProperty('--cfp-vertical-page-row');
-      });
-      if (verticalPageLayout.boundary.contains(sidebar) && sidebarHome?.parentNode)
-        sidebarHome.parentNode.insertBefore(sidebar,sidebarHome.nextSibling);
-      verticalPageLayout.boundary.remove();
-      verticalPageLayout = null;
-    }
-    if (!eligible) return false;
-    if (!verticalPageLayout) {
-      const boundary = document.createElement('div');
-      boundary.className = 'cfp-vertical-sidebar-boundary';
-      main.insertBefore(boundary,main.firstChild);
-      verticalPageLayout = {main,boundary,sections:sections.slice(0,appIndex + 1)};
-      main.classList.add('cfp-vertical-page-layout');
-      main.style.setProperty('--cfp-vertical-page-rows',String(appIndex + 1));
-      verticalPageLayout.sections.forEach((el,index) => {
-        el.classList.add('cfp-vertical-page-content');
-        el.style.setProperty('--cfp-vertical-page-row',String(index + 1));
-      });
-    }
-    main.style.setProperty('--cfp-vertical-width',sidebar.style.getPropertyValue('--cfp-vertical-width') || '420px');
-    main.style.setProperty('--cfp-page-bg',sidebar.style.getPropertyValue('--cfp-page-bg') || 'transparent');
-    if (sidebar.parentElement !== verticalPageLayout.boundary) verticalPageLayout.boundary.append(sidebar);
-    return true;
-  }
 
   function syncFilterSurfacePlacement() {
     if (!sidebar || !document.body) return;
@@ -75,10 +32,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       else wrapper.append(sidebarHome);
     }
     const inline = isInlineFilterLayout();
-    if (syncVerticalPageLayout()) {
-      // Only the app sidebar moves; native collection sections retain their
-      // parents/listeners and become the right column beside it.
-    } else if (inline && sidebarHome?.parentNode) {
+    if (inline && sidebarHome?.parentNode) {
       if (sidebar.parentNode !== sidebarHome.parentNode || sidebar.previousSibling !== sidebarHome)
         sidebarHome.parentNode.insertBefore(sidebar, sidebarHome.nextSibling);
     } else if (!inline && sidebar.parentNode !== document.body) {
