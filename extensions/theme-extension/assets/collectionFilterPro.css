@@ -18,6 +18,7 @@
   --cfp-radius-sm: 0px;
   --cfp-sidebar-w: 350px;
   --cfp-drawer-width: 420px;
+  --cfp-vertical-width: 420px;
   --cfp-transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -216,7 +217,7 @@ facet-filters-form,
   top: 0 !important;
   left: -100% !important;
   width: 360px !important;
-  max-width: min(var(--cfp-sidebar-w), 90vw) !important;
+  max-width: min(var(--cfp-drawer-width), 90vw) !important;
   height: 100vh !important;
   z-index: 2147483647 !important;
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -261,7 +262,7 @@ facet-filters-form,
     left: 0 !important;
     height: 100% !important;
     max-height: 100vh !important;
-    width: min(var(--cfp-sidebar-w), 88vw) !important;
+    width: min(var(--cfp-drawer-width), 90vw) !important;
     border-radius: 0 !important;
     border: none !important;
     z-index: 9999;
@@ -1627,9 +1628,9 @@ facet-filters-form,
     left: -100% !important;
     right: auto !important;
     bottom: 0 !important;
-    width: min(360px, 90vw) !important;
+    width: min(var(--cfp-drawer-width), 90vw) !important;
     min-width: 0 !important;
-    max-width: min(360px, 90vw) !important;
+    max-width: min(var(--cfp-drawer-width), 90vw) !important;
     box-sizing: border-box !important;
     height: 100vh !important;
     max-height: 100vh !important;
@@ -2792,9 +2793,9 @@ facet-filters-form,
     right: auto !important;
     bottom: auto !important;
     align-self: flex-start !important;
-    flex: 0 0 var(--cfp-drawer-width) !important;
-    width: var(--cfp-drawer-width) !important;
-    max-width: var(--cfp-drawer-width) !important;
+    flex: 0 0 min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
+    width: min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
+    max-width: min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
     height: fit-content !important;
     max-height: calc(100vh - max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) - 20px) !important;
     z-index: 2 !important;

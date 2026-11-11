@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
+import {FILTER_WIDTH_KEYS,FILTER_WIDTH_LIMITS,isValidFilterWidth,normalizeFilterWidth} from '../utils/filterWidths.js';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -17,6 +18,12 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   
   const payload = {};
+  for (const key of FILTER_WIDTH_KEYS) {
+    if (!formData.has(key)) continue;
+    const value = formData.get(key);
+    if (!isValidFilterWidth(value)) return {success:false,error:'Enter a whole-number filter width from 240 to 600 px.'};
+    payload[key] = Number(value);
+  }
   const booleanSettings = ['horizontalFilters', 'showAttributeBasedBreadcrumb', 'showFilterOptionsWithOneItem', 'showProductCount', 'scrollUpOnFilterValuesChange', 'hideUnavailableVariantsWhenSelected', 'prioritizeSortOverPinning', 'prioritizeSortOverMerchandising'];
   for (const key of booleanSettings) {
     if (formData.has(key)) {
@@ -192,6 +199,29 @@ function SettingSelect({ label, description, value, onChange, options, disabled 
 }
 
 // â”€â”€ Section Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function SettingFilterWidth({ label, description, value, onChange, disabled }) {
+  const [draft,setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const valid = isValidFilterWidth(draft);
+  const changed = valid && Number(draft) !== value;
+  const id = label.toLowerCase().replaceAll(' ','-');
+  return <div className="settings-row" style={{gap:20,flexWrap:'wrap'}}>
+    <div className="settings-text-col"><label className="settings-label" htmlFor={id}>{label}</label><p className="settings-desc" id={id+'-help'}>{description} Default: {FILTER_WIDTH_LIMITS.default}px.</p></div>
+    <div style={{width:260,maxWidth:'100%',display:'grid',gap:10,padding:14,border:'1px solid #e5e1ef',borderRadius:12,background:'#fff',boxSizing:'border-box'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <input id={id} aria-label={label+' (px)'} aria-describedby={id+'-help'} aria-invalid={!valid} type="number" min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={draft} disabled={disabled} onChange={e=>setDraft(e.target.value)} style={{minWidth:0,width:'100%',padding:'9px 10px',border:'1px solid #d8d3e5',borderRadius:8}} />
+        <span style={{color:'#6b7280'}}>px</span>
+      </div>
+      <input type="range" aria-label={label+' slider'} min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={valid?Number(draft):value} disabled={disabled} onChange={e=>setDraft(e.target.value)} style={{width:'100%',accentColor:'#5b21b6'}} />
+      <small style={{color:valid?'#6b7280':'#b42318'}}>{FILTER_WIDTH_LIMITS.min}–{FILTER_WIDTH_LIMITS.max}px</small>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button type="button" aria-label={'Apply '+label.toLowerCase()} disabled={disabled||!changed} onClick={()=>onChange(Number(draft))} style={{padding:'8px 12px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',cursor:'pointer',opacity:(disabled||!changed)?0.5:1}}>Apply width</button>
+        <button type="button" aria-label={'Reset '+label.toLowerCase()} disabled={disabled} onClick={()=>{setDraft(String(FILTER_WIDTH_LIMITS.default));if(value!==FILTER_WIDTH_LIMITS.default)onChange(FILTER_WIDTH_LIMITS.default);}} style={{padding:'8px 12px',border:'1px solid #d8d3e5',borderRadius:8,background:'#fff',color:'#5b21b6',cursor:'pointer'}}>Reset</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function SettingBarColor({ value, onChange, disabled }) {
   const [custom, setCustom] = useState(!!value);
   const [draft, setDraft] = useState(value || '#ffffff');
@@ -280,6 +310,8 @@ export default function FilterSettings() {
   const [barBackground, setBarBackground] = useState(settings?.filterBarBackgroundColor || '');
   const [priceStyle, setPriceStyle] = useState(settings?.priceFilterDisplayMode || 'List');
   const [sizeColumns, setSizeColumns] = useState(String(settings?.sizeOptionsPerRow || 4));
+  const [drawerWidth,setDrawerWidth] = useState(normalizeFilterWidth(settings?.drawerWidth));
+  const [verticalWidth,setVerticalWidth] = useState(normalizeFilterWidth(settings?.verticalFilterWidth));
 
   const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
   const [showSingleItem, setShowSingleItem] = useState(settings?.showFilterOptionsWithOneItem || false);
@@ -300,6 +332,8 @@ export default function FilterSettings() {
     setBarBackground(settings?.filterBarBackgroundColor || '');
     setPriceStyle(settings?.priceFilterDisplayMode || 'List');
     setSizeColumns(String(settings?.sizeOptionsPerRow || 4));
+    setDrawerWidth(normalizeFilterWidth(settings?.drawerWidth));
+    setVerticalWidth(normalizeFilterWidth(settings?.verticalFilterWidth));
     setShowBreadcrumb(settings?.showAttributeBasedBreadcrumb ?? true);
     setShowSingleItem(settings?.showFilterOptionsWithOneItem ?? false);
     setShowProductCount(settings?.showProductCount ?? true);
@@ -326,6 +360,8 @@ export default function FilterSettings() {
     else if (key === "filterBarBackgroundColor") setBarBackground(value);
     else if (key === 'priceFilterDisplayMode') setPriceStyle(value);
     else if (key === 'sizeOptionsPerRow') setSizeColumns(value);
+    else if (key === 'drawerWidth') setDrawerWidth(value);
+    else if (key === 'verticalFilterWidth') setVerticalWidth(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
     else if (key === "showProductCount") setShowProductCount(value);
@@ -538,6 +574,11 @@ export default function FilterSettings() {
               { value: "drawer", label: "Drawer" },
             ]}
           />
+          <SettingFilterWidth disabled={isSaving} label="Drawer width" value={drawerWidth} onChange={value=>handleSettingChange('drawerWidth',value)}
+            description="Applies to Drawer filters and mobile off-canvas filters. It automatically fits smaller screens. Reload the storefront after saving." />
+          <SettingFilterWidth disabled={isSaving} label="Vertical sidebar width" value={verticalWidth} onChange={value=>handleSettingChange('verticalFilterWidth',value)}
+            description="Applies to the Vertical sidebar on desktop and tablet. Space is kept for products. Reload the storefront after saving." />
+          <div className="settings-row"><div className="settings-text-col"><p className="settings-label">Horizontal toolbar width</p><p className="settings-desc">Full width. Drawer and Vertical widths do not change the Horizontal toolbar.</p></div></div>
           <SettingSelect disabled={isSaving}
                         label="Mobile filter layout"
             description="Choose the display layout for filters on mobile."

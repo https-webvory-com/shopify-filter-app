@@ -4,13 +4,14 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import ts from 'typescript';
 import {loadModule} from './helpers/search-ranking.mjs';
+import * as filterWidths from '../../app/utils/filterWidths.js';
 
 async function action(file, dependencies) {
   const source=await fs.readFile(file,'utf8');
   const ast=ts.createSourceFile('route.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   const initializer=ast.statements.find(s=>ts.isVariableStatement(s)&&s.declarationList.declarations.some(d=>d.name.getText(ast)==='action')).declarationList.declarations[0].initializer.getText(ast);
   return vm.runInNewContext('('+initializer+')',{
-    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},...dependencies,
+    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},...filterWidths,...dependencies,
   });
 }
 const request=values=>new Request('http://fixture/admin',{method:'POST',body:new URLSearchParams(values)});

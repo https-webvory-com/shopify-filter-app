@@ -4,6 +4,7 @@ import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as filterPresentation from '../../app/utils/filterPresentation.js';
+import * as filterWidths from '../../app/utils/filterWidths.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as searchColor from "../../app/utils/searchColor.js";
@@ -25,6 +26,7 @@ async function loadModule(file, mocks) {
   const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
     if(name==='../utils/filterPresentation.js')return filterPresentation;
+    if(name==='../utils/filterWidths.js')return filterWidths;
     if(name==='../utils/facetNormalization.js')return facetNormalization;
     if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;

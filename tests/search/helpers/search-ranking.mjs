@@ -23,10 +23,12 @@ import * as marketPricingIndex from '../../../app/utils/marketPricingIndex.js';
 import * as variantSize from '../../../app/utils/variantSize.js';
 import * as searchPinnedIntent from '../../../app/utils/searchPinnedIntent.js';
 import * as queryIntent from '../../../app/utils/queryIntent.js';
+import * as filterWidths from '../../../app/utils/filterWidths.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Request, Response, AbortSignal, setTimeout, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
+    if(name==='../utils/filterWidths.js')return filterWidths;
     if(name==='../utils/skuSearch.js')return skuSearch;
     if(name==='../utils/instantSearchCard.js')return instantSearchCard;
     if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;

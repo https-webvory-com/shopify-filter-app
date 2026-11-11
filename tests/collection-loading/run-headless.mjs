@@ -61,6 +61,68 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});}
   });
+  await test('filter width editor applies valid drafts, resets each style and preserves saved widths on reopen',async()=>{
+    await send('Page.navigate',{url:origin+'/filter-width-admin'});
+    await wait("!!document.querySelector('input[aria-label=\"Drawer width (px)\"]')");
+    const fill=async(label,value)=>evaluate(`(()=>{const input=document.querySelector('input[aria-label="'+${JSON.stringify(label)}+'"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await fill('Drawer width slider','560');
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Drawer width (px)\"]').value"),'560');
+    await fill('Drawer width (px)','300');
+    assert.deepEqual(await evaluate('savedWidths'),[]);
+    await evaluate("document.querySelector('[aria-label=\"Apply drawer width\"]').click()");
+    assert.deepEqual(await evaluate('savedWidths'),[{key:'drawerWidth',value:300}]);
+    await fill('Vertical sidebar width (px)','601');
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Apply vertical sidebar width\"]').disabled"),true);
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Vertical sidebar width (px)\"]').getAttribute('aria-invalid')"),'true');
+    await fill('Vertical sidebar width (px)','');
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Apply vertical sidebar width\"]').disabled"),true);
+    await fill('Vertical sidebar width (px)','520');
+    await evaluate("document.querySelector('[aria-label=\"Apply vertical sidebar width\"]').click()");
+    await send('Page.reload');await wait("document.querySelector('input[aria-label=\"Drawer width (px)\"]')?.value==='300'");
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Vertical sidebar width (px)\"]').value"),'520');
+    await evaluate("document.querySelector('[aria-label=\"Reset drawer width\"]').click()");
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Vertical sidebar width (px)\"]').value"),'520');
+    assert.equal(await evaluate("document.querySelector('input[aria-label=\"Drawer width (px)\"]').value"),'420');
+    await send('Emulation.setDeviceMetricsOverride',{width:375,height:900,deviceScaleFactor:1,mobile:true});await delay(200);
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
+  await test('per-style filter widths apply independently and horizontal filters retain full width',async()=>{
+    const filterSettings=[{id:'width-vendor',isEnabled:true,filterType:'vendor',label:'Brand',displayMode:'List',config:{}}];
+    for(const desktopFilterLayout of ['drawer','vertical','horizontal']){
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout,drawerWidth:300,verticalFilterWidth:520,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+      await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      const products=await cards();assert.equal(products.length,25);
+      if(desktopFilterLayout==='drawer'){
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+        assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+        await evaluate("document.querySelector('#cfp-apply-btn').click()");
+      }else if(desktopFilterLayout==='vertical')assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),520);
+      else {
+        const sizes=await evaluate("(()=>{const wrapper=document.querySelector('.cfp-layout-wrapper'),style=getComputedStyle(wrapper);return {toolbar:document.querySelector('#cfp-top-bar').getBoundingClientRect().width,available:wrapper.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),viewport:innerWidth};})()");
+        assert.ok(Math.abs(sizes.toolbar-sizes.available)<2,'Horizontal full-width sizing: '+JSON.stringify(sizes));
+      }
+      await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').parentElement.tagName"),'BODY');
+      await evaluate("document.querySelector('#cfp-apply-btn').click()");
+      assert.deepEqual(await cards(),products);assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'Mobile overflow after '+desktopFilterLayout+': '+JSON.stringify(await evaluate('({scroll:document.documentElement.scrollWidth,viewport:innerWidth})')));
+    }
+    await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'vertical',integrations:{drawerWidth:600,verticalFilterWidth:600},showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+    await send('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    const verticalSizing=await evaluate("(()=>{const wrapper=document.querySelector('.cfp-layout-wrapper'),style=getComputedStyle(wrapper);return {width:document.querySelector('#cfp-sidebar').getBoundingClientRect().width,available:wrapper.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};})()");
+    assert.ok(Math.abs(verticalSizing.width-Math.min(600,verticalSizing.available-260))<1,JSON.stringify(verticalSizing));
+    await send('Emulation.setDeviceMetricsOverride',{width:769,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
+    assert.ok(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width<=document.querySelector('.cfp-layout-wrapper').getBoundingClientRect().width-260"));
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+    assert.ok(await evaluate("Math.abs(document.querySelector('#cfp-sidebar').getBoundingClientRect().width-innerWidth*.9)<1"));
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.deepEqual(await evaluate('browserErrors'),[]);
+    await evaluate("document.querySelector('#cfp-apply-btn').click()");
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
   await test('toolbar color picker previews presets and hex input before applying or restoring page color',async()=>{
     await send('Page.navigate',{url:origin+'/bar-color-admin'});
     await wait("!!document.querySelector('select[aria-label=\"Filter and sort bar background\"]')");
@@ -93,6 +155,7 @@ try{
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),drawerWidth);
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).backgroundColor"),'rgb(251, 247, 245)');
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-sidebar__header')).backgroundColor"),'rgb(251, 247, 245)');
+      await wait("getComputedStyle(document.querySelector('#cfp-top-bar')).backgroundColor==='rgb(17, 17, 17)'");
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-top-bar')).backgroundColor"),'rgb(17, 17, 17)');
       for(const width of [900,390,1440]){
         await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<769});await delay(350);

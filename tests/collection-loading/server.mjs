@@ -239,9 +239,21 @@ export async function createLoadingServer({redisLayer}={}) {
   const sockets=new Set();
   let adminControlsBundle;
   let barColorBundle;
+  let filterWidthBundle;
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://127.0.0.1');
     try{
+      if(url.pathname==='/filter-width-admin'){
+        res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:14px Arial;margin:16px}.settings-row{display:flex;justify-content:space-between;margin-bottom:16px}.settings-text-col{flex:1;min-width:180px}</style></head><body><div id="root"></div><script>window.savedWidths=[];window.browserErrors=[];addEventListener("error",e=>browserErrors.push(e.message));addEventListener("unhandledrejection",e=>browserErrors.push(String(e.reason)))</script><script src="/filter-width-admin.js"></script></body></html>');return;
+      }
+      if(url.pathname==='/filter-width-admin.js'){
+        if(!filterWidthBundle){
+          const source=await fs.readFile('app/routes/app.filters.settings.jsx','utf8');
+          const component=source.slice(source.indexOf('function SettingFilterWidth('),source.indexOf('function SettingBarColor('));
+          filterWidthBundle=build({stdin:{resolveDir:process.cwd(),loader:'jsx',contents:`import React,{useState,useEffect}from'react';import{createRoot}from'react-dom/client';import{FILTER_WIDTH_LIMITS,isValidFilterWidth}from'./app/utils/filterWidths.js';${component}\nfunction App(){const[drawer,setDrawer]=useState(Number(localStorage.getItem('drawerWidth')||420));const[vertical,setVertical]=useState(Number(localStorage.getItem('verticalFilterWidth')||420));const save=(key,set,next)=>{window.savedWidths.push({key,value:next});localStorage.setItem(key,String(next));set(next)};return <><SettingFilterWidth label="Drawer width" description="Drawer filters" value={drawer} onChange={v=>save('drawerWidth',setDrawer,v)}/><SettingFilterWidth label="Vertical sidebar width" description="Vertical filters" value={vertical} onChange={v=>save('verticalFilterWidth',setVertical,v)}/><p>Horizontal toolbar width: Full width</p></>};createRoot(document.getElementById('root')).render(<App/>);`},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}}).then(result=>result.outputFiles[0].text);
+        }
+        res.setHeader('Content-Type','text/javascript');res.end(await filterWidthBundle);return;
+      }
       if(url.pathname==='/bar-color-admin'){
         res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><style>body{font:14px Arial;margin:24px}.settings-row{display:flex;gap:24px}.settings-text-col{flex:1}</style></head><body><div id="root"></div><script>window.savedColors=[]</script><script src="/bar-color-admin.js"></script></body></html>');return;
       }
