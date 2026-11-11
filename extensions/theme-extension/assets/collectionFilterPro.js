@@ -1180,7 +1180,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     syncThemeBackgroundColor(settings);
     for (const [key,variable] of [['drawerWidth','--cfp-drawer-width'],['verticalFilterWidth','--cfp-vertical-width']]) {
       const width=Number(settings?.[key] ?? settings?.integrations?.[key]);
-      sidebar?.style.setProperty(variable,`${Number.isInteger(width)&&width>=240&&width<=600?width:420}px`);
+      const cssWidth = `${Number.isInteger(width)&&width>=240&&width<=600?width:420}px`;
+      sidebar?.style.setProperty(variable,cssWidth);
+      if (key === 'verticalFilterWidth') document.querySelector('.cfp-layout-wrapper')?.style.setProperty(variable,cssWidth);
     }
     const container = document.body;
     if (!container) return;

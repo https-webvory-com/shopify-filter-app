@@ -2639,16 +2639,17 @@ facet-filters-form,
 
   /* ─── Vertical Sidebar Layout (Desktop) ──────────────────────────── */
   .cfp-vertical-layout .cfp-layout-wrapper {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
+    display: grid !important;
+    grid-template-columns: min(var(--cfp-vertical-width, 420px), calc(100% - 260px)) minmax(0, 1fr);
     gap: 0 !important;
-    align-items: flex-start !important;
+    align-items: start !important;
     box-sizing: border-box !important;
     width: 100% !important;
   }
 
   .cfp-vertical-layout #cfp-top-bar {
+    grid-column: 2;
+    grid-row: 1;
     order: 1 !important;
     width: 100% !important;
     flex: 0 0 100% !important;
@@ -2782,6 +2783,8 @@ facet-filters-form,
   }
 
   .cfp-vertical-layout #cfp-sidebar {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     order: 2 !important;
     display: flex !important;
     flex-direction: column !important;
@@ -2794,8 +2797,8 @@ facet-filters-form,
     bottom: auto !important;
     align-self: flex-start !important;
     flex: 0 0 min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
-    width: min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
-    max-width: min(var(--cfp-vertical-width), calc(100% - 260px)) !important;
+    width: 100% !important;
+    max-width: 100% !important;
     height: fit-content !important;
     max-height: calc(100vh - max(85px, calc(var(--cfp-sticky-top, 0px) + 15px)) - 20px) !important;
     z-index: 2 !important;
@@ -2865,6 +2868,8 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-products-container,
   .cfp-vertical-layout .cfp-products-grid,
   .cfp-vertical-layout .cfp-layout-wrapper > *:not(.cfp-sidebar):not(.cfp-top-bar):not(.cfp-breadcrumbs) {
+    grid-column: 2;
+    grid-row: 2;
     order: 3 !important;
     flex: 1 1 0% !important;
     min-width: 0 !important;
@@ -3162,11 +3167,11 @@ facet-filters-form,
 @media (min-width: 769px) {
   .cfp-vertical-layout .cfp-layout-wrapper > .cfp-main-content:empty { display: none !important; }
   .cfp-vertical-layout #cfp-sidebar {
-    --cfp-vertical-sticky-top: calc(var(--cfp-sticky-top, 0px) + var(--cfp-toolbar-height, 0px) + 12px);
+    --cfp-vertical-sticky-top: calc(var(--cfp-sticky-top, 0px) + 12px);
     top: var(--cfp-vertical-sticky-top) !important;
     max-height: calc(100vh - var(--cfp-vertical-sticky-top) - 16px) !important;
     max-height: calc(100dvh - var(--cfp-vertical-sticky-top) - 16px) !important;
-    padding: 24px 16px 16px !important;
+    padding: 6px 16px 16px !important;
     border: 0 !important;
     color: #111 !important;
     font-family: Arial, Helvetica, sans-serif !important;
@@ -3185,7 +3190,8 @@ facet-filters-form,
   }
   .cfp-vertical-layout #cfp-sidebar .cfp-vertical-summary-heading {
     display: flex;
-    align-items: flex-start;
+    min-height: 38px;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     width: 100%;

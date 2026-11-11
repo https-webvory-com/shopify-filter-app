@@ -151,11 +151,11 @@ try{
     await evaluate("document.querySelector('#cfp-group-size-option-Size .cfp-view-more-btn').click()");
     assert.equal(await evaluate("[...document.querySelectorAll('#cfp-group-size-option-Size .cfp-button-chip')].every(e=>e.getBoundingClientRect().height>0)"),true);
     for(const width of [240,520,600]){
-      await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','"+width+"px')");
+      await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','"+width+"px');document.querySelector('.cfp-layout-wrapper').style.setProperty('--cfp-vertical-width','"+width+"px')");
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),width);
       assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     }
-    await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','333px')");
+    await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','333px');document.querySelector('.cfp-layout-wrapper').style.setProperty('--cfp-vertical-width','333px')");
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
     await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
     const mobileOptions=await optionStyles();assert.equal(mobileOptions.chip,'10px');assert.equal(mobileOptions.swatch,'10px');assert.equal(mobileOptions.label,'10px');assert.equal(mobileOptions.separator,'1px');
@@ -208,15 +208,15 @@ try{
       await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     }
   });
-  await test('vertical refinement starts the sidebar at the product grid and restores placement on mobile',async()=>{
+  await test('vertical refinement starts the sidebar at the sorting row and restores placement on mobile',async()=>{
     const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,advanced:{desktopSearchBox:true,mobileSearchBox:true}}}];
     await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings:settings,
       globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.parentElement.className,width:r.width,sidebarTop:r.top,gridTop:document.querySelector('#cfp-products-container').getBoundingClientRect().top,introBottom:intro.getBoundingClientRect().bottom,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:s.querySelector('.cfp-collection-search input').placeholder};})()`);
+    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.parentElement.className,width:r.width,sidebarTop:r.top,sortTop:document.querySelector('#cfp-top-bar').getBoundingClientRect().top,gridTop:document.querySelector('#cfp-products-container').getBoundingClientRect().top,introBottom:intro.getBoundingClientRect().bottom,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:s.querySelector('.cfp-collection-search input').placeholder};})()`);
     assert.ok(geometry.parent.includes('cfp-layout-wrapper'));assert.equal(geometry.introParent,'fixture-main');assert.equal(geometry.width,349);
     assert.ok(Math.abs(geometry.headingTop-geometry.countTop)<2);assert.ok(geometry.countRight>geometry.headingRight+30);
-    assert.ok(Math.abs(geometry.sidebarTop-geometry.gridTop)<=1&&geometry.sidebarTop>=geometry.introBottom,JSON.stringify(geometry));assert.equal(geometry.duplicates,false);assert.equal(geometry.groupSearch,false);
+    assert.ok(Math.abs(geometry.sidebarTop-geometry.sortTop)<=1&&geometry.sidebarTop<geometry.gridTop&&geometry.sidebarTop>=geometry.introBottom,JSON.stringify(geometry));assert.equal(geometry.duplicates,false);assert.equal(geometry.groupSearch,false);
     assert.equal(geometry.search,'Search within Fixture collection');
     assert.equal(await evaluate("document.querySelector('#fixture-faq').getBoundingClientRect().left===document.querySelector('#fixture-intro').getBoundingClientRect().left"),true);
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);
