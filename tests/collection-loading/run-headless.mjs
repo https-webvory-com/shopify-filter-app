@@ -46,6 +46,21 @@ try{
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const version=await send('Browser.getVersion');
+  await test('filter drawer escapes transformed and clipped theme sections at desktop and mobile widths',async()=>{
+    const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`document.addEventListener('DOMContentLoaded',()=>{const app=document.querySelector('.cfp-v1-app-container');const section=document.createElement('section');section.id='theme-clipped-section';section.style.cssText='transform:translateZ(0);overflow:hidden;contain:paint;margin-top:140px;height:320px;position:relative;z-index:0';app.before(section);section.append(app);},{once:true});`});
+    try{
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',displayMode:'List',config:{}}],globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      for(const width of [1440,900,390]){
+        await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<769});await delay(350);
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");await delay(350);
+        const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),r=s.getBoundingClientRect(),f=s.querySelector('.cfp-sidebar__footer').getBoundingClientRect();return {top:r.top,left:r.left,bottom:r.bottom,right:r.right,footerBottom:f.bottom,parent:s.parentElement.tagName,overlayParent:document.querySelector('#cfp-overlay').parentElement.tagName,hit:s.contains(document.elementFromPoint(30,110))};})()`);
+        assert.equal(geometry.top,0,JSON.stringify(geometry));assert.equal(geometry.left,0);assert.ok(geometry.bottom<=900&&geometry.right<=width);assert.ok(geometry.footerBottom<=900);assert.equal(geometry.parent,'BODY');assert.equal(geometry.overlayParent,'BODY');assert.equal(geometry.hit,true);
+        await evaluate("document.querySelector('#cfp-apply-btn').click()");assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),false);
+      }
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});}
+  });
   await test('toolbar color picker previews presets and hex input before applying or restoring page color',async()=>{
     await send('Page.navigate',{url:origin+'/bar-color-admin'});
     await wait("!!document.querySelector('select[aria-label=\"Filter and sort bar background\"]')");

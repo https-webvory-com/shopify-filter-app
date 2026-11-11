@@ -20,6 +20,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let applyBtn = null;
   let clearBtn = null;
   let activeCount = null;
+  let sidebarHome = null;
+
+  function syncFilterSurfacePlacement() {
+    if (!sidebar || !document.body) return;
+    const wrapper = document.querySelector('.cfp-layout-wrapper');
+    if (!sidebarHome?.isConnected && wrapper) {
+      sidebarHome = document.createComment('cfp-sidebar-home');
+      if (sidebar.parentElement === wrapper) sidebar.before(sidebarHome);
+      else wrapper.append(sidebarHome);
+    }
+    const inline = isInlineFilterLayout();
+    if (inline && sidebarHome?.parentNode) {
+      if (sidebar.parentNode !== sidebarHome.parentNode || sidebar.previousSibling !== sidebarHome)
+        sidebarHome.parentNode.insertBefore(sidebar, sidebarHome.nextSibling);
+    } else if (!inline && sidebar.parentNode !== document.body) {
+      // A theme's transformed/contained/overflow-clipped section must never
+      // become the fixed drawer's viewport or hide its controls.
+      document.body.append(sidebar);
+    }
+    if (overlay && overlay.parentNode !== document.body) document.body.append(overlay);
+  }
 
   function queryElements() {
     sidebar = document.getElementById('cfp-sidebar');
@@ -1146,6 +1167,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.classList.remove('cfp-dark-mode');
     container.classList.toggle('cfp-mobile-horizontal-scrolling', mobile && settings.mobileFilterLayout === 'horizontal-scrolling');
     container.classList.remove('cfp-desktop-like-mobile');
+    syncFilterSurfacePlacement();
 
     if (triggerBtn) {
       if (!filtersReady || mobile && settings.mobileFilterLayout === 'horizontal-scrolling') {
@@ -4072,6 +4094,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
       return;
     }
+    syncFilterSurfacePlacement();
     sidebar.classList.add('cfp-sidebar--open');
     syncDrawerViewport();
     if (overlay) overlay.classList.add('cfp-overlay--visible');
@@ -4185,6 +4208,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       sidebar.style.display = 'flex';
       isAttached = true;
+      syncFilterSurfacePlacement();
     }
   }
 

@@ -15,125 +15,13 @@ import { ImportFilterGroupModal } from "../components/ui/ImportFilterGroupModal"
 import { ExportFilterGroupsModal } from "../components/ui/ExportFilterGroupsModal";
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Built-in filters seeded into every new default group Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-const DEFAULT_FILTERS = [
-  {
-    filterType: "price",
-    filterKey: null,
-    label: "Price",
-    displayMode: "range",
-    order: 0,
-  },
-  {
-    filterType: "vendor",
-    filterKey: null,
-    label: "Brand",
-    displayMode: "list",
-    order: 1,
-  },
-  {
-    filterType: "product_type",
-    filterKey: null,
-    label: "Product Type",
-    displayMode: "list",
-    order: 2,
-  },
-  {
-    filterType: "collection",
-    filterKey: null,
-    label: "Collection",
-    displayMode: "list",
-    order: 3,
-  },
-  {
-    filterType: "option",
-    filterKey: "Color",
-    label: "Color",
-    displayMode: "list",
-    order: 4,
-  },
-  {
-    filterType: "option",
-    filterKey: "Size",
-    label: "Size",
-    displayMode: "list",
-    order: 5,
-  },
-];
+import {ensureDefaultGroup} from '../services/defaultFilterGroup.server.js';
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-async function ensureDefaultGroup(shop) {
-  const existing = await prisma.filterGroup.findFirst({
-    where: { shop, isDefault: true },
-    include: { collections: true, filters: true },
-  });
-
-  if (!existing) {
-    await prisma.filterGroup.create({
-      data: {
-        shop,
-        name: "Default filter group",
-        isDefault: true,
-        status: true,
-        order: 0,
-        collections: {
-          create: [
-            {
-              collectionId: "__all__",
-              collectionTitle: "All Collections",
-              pageType: "collection",
-            },
-          ],
-        },
-        filters: { create: DEFAULT_FILTERS },
-      },
-    });
-    return;
-  }
-
-  const hasAllCollections = existing.collections.some(
-    (c) => c.collectionId === "__all__",
-  );
-  if (!hasAllCollections) {
-    await prisma.filterGroupCollection.create({
-      data: {
-        filterGroupId: existing.id,
-        collectionId: "__all__",
-        collectionTitle: "All Collections",
-        pageType: "collection",
-      },
-    });
-  }
-
-  const existingFilterKeys = new Set(
-    existing.filters.map((filter) => `${filter.filterType}:${filter.filterKey ?? ""}`)
-  );
-
-  const missingFilters = DEFAULT_FILTERS.filter(
-    (filter) =>
-      !existingFilterKeys.has(`${filter.filterType}:${filter.filterKey ?? ""}`),
-  );
-
-  if (missingFilters.length > 0) {
-    await prisma.filterGroupItem.createMany({
-      data: missingFilters.map((filter) => ({
-        filterGroupId: existing.id,
-        filterType: filter.filterType,
-        filterKey: filter.filterKey,
-        label: filter.label,
-        displayMode: filter.displayMode,
-        isEnabled: true,
-        order: filter.order,
-      })),
-    });
-  }
-}
-
-// Ã¢â€â‚¬Ã¢â€â‚¬ Loader Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  await ensureDefaultGroup(shop);
+  await ensureDefaultGroup(shop, {repair:true});
 
   const groups = await prisma.filterGroup.findMany({
     where: { shop },
