@@ -2945,6 +2945,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       body.innerHTML = html;
     }
     body.scrollTop = scrollTop;
+    document.body.classList.toggle('cfp-filters-ready', hasFilters);
 
     ensureHorizontalFilterContainers();
     const horizontalContainer = document.getElementById('cfp-horizontal-filters');

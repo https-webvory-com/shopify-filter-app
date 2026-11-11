@@ -441,6 +441,23 @@ try{
       }
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});}
   });
+  await test('vertical filter heading and reserved column appear only when filters are ready',async()=>{
+    await control({reset:true,realToolbar:true,productCount:30,cardSnapshots:true,publishedPages:true,headRenderer:true,noPins:true,noMerchandising:true,precompute:true,
+      filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}],
+      globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},savedFilterDelay:1200,apiDelay:0,imageDelay:0,priceDelay:0});
+    await control({publishFirst50:true});await control({apiDelay:5000});
+    await navigate();await evaluate("document.body.classList.add('cfp-vertical-layout')");
+    const geometry=()=>evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),w=document.querySelector('.cfp-layout-wrapper'),g=document.querySelector('#cfp-products-container'),summary=s.querySelector('.cfp-vertical-summary');return {ready:document.body.classList.contains('cfp-filters-ready'),sidebar:s.getBoundingClientRect().width,summary:!!summary&&summary.getBoundingClientRect().width>0,gap:g.getBoundingClientRect().left-w.getBoundingClientRect().left-parseFloat(getComputedStyle(w).paddingLeft)};})()");
+    const pending=await geometry();assert.equal(pending.ready,false);assert.equal(pending.sidebar,0);assert.equal(pending.summary,false);assert.equal(pending.gap,0);
+    await wait("document.body.classList.contains('cfp-filters-ready')",3500);
+    const ready=await geometry();assert.equal(ready.sidebar,349);assert.equal(ready.summary,true);assert.equal(ready.gap,349);assert.equal((await cards()).length,0,'filter readiness waited for products');
+    await control({apiDelay:200});await evaluate("document.querySelector('#cfp-sidebar input[type=checkbox]').click()");await delay(30);
+    assert.equal((await geometry()).sidebar,349,'existing filter column disappeared during selection');
+    await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings:[],globalSettings:{desktopFilterLayout:'vertical'},apiDelay:0,imageDelay:0,priceDelay:0});
+    await navigate();await wait("window._cfpInitialized&&document.body.classList.contains('cfp-no-filters')");
+    const empty=await geometry();assert.equal(empty.ready,false);assert.equal(empty.sidebar,0);assert.equal(empty.summary,false);assert.equal(empty.gap,0);
+  });
   await test('saved filters are usable before a delayed product response finishes',async()=>{
     await control({reset:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,
       headRenderer:true,savedFilterDelay:300,globalSettings:{desktopFilterLayout:'drawer'},filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'List'}]});

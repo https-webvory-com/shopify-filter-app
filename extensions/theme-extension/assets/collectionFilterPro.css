@@ -3292,6 +3292,14 @@ facet-filters-form,
   .cfp-vertical-style #cfp-sidebar.cfp-sidebar .cfp-sidebar__footer { padding: 0 16px max(16px, env(safe-area-inset-bottom)) !important; }
 }
 
+/* Reserve the vertical column only after usable filters have rendered. */
+@media (min-width: 769px) {
+  .cfp-vertical-layout:not(.cfp-filters-ready) #cfp-sidebar { display: none !important; }
+  .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper { grid-template-columns: minmax(0, 1fr); }
+  .cfp-vertical-layout:not(.cfp-filters-ready) #cfp-top-bar,
+  .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper > :not(#cfp-sidebar):not(.cfp-breadcrumbs) { grid-column: 1; }
+}
+
 /* Empty or disabled groups must not leave a drawer, trigger, or sidebar gap. */
 body.cfp-no-filters #cfp-drawer-trigger-btn,
 body.cfp-no-filters #cfp-sidebar,
