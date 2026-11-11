@@ -3201,35 +3201,6 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-vertical-result-count { margin: 0; font: 400 14px/1.4 Arial, Helvetica, sans-serif; color: #111; white-space: nowrap; }
   .cfp-vertical-layout #cfp-top-bar .cfp-product-count { display: none !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-search-input-wrap { display: none !important; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 16px 0 4px;
-    padding: 0 0 5px;
-    min-height: 30px;
-    border: 0;
-    border-bottom: 1px solid #aaa;
-    background: transparent;
-    color: #777;
-  }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search[hidden],
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search-clear[hidden] { display: none !important; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search:focus-within { border-bottom-color: #111; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search svg { flex-shrink: 0; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search input {
-    min-width: 0; width: 100%; flex: 1; margin: 0; padding: 0; height: 24px; min-height: 0;
-    background: transparent; color: #111; border: 0; border-radius: 0; box-shadow: none;
-    font: 400 14px/24px Arial, Helvetica, sans-serif; outline: none;
-  }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search input::placeholder { color: #777; opacity: 1; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search-clear {
-    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 24px; height: 24px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0;
-    background: transparent; color: #111; box-shadow: none; font: 20px/1 Arial, Helvetica, sans-serif; cursor: pointer;
-  }
-  .cfp-vertical-layout #cfp-sidebar .cfp-collection-search-clear:focus-visible { outline: 2px solid #111; }
   .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear {
     display: inline-flex !important;
     width: auto !important;

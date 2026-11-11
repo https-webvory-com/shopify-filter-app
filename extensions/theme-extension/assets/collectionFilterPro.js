@@ -21,7 +21,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let clearBtn = null;
   let activeCount = null;
   let sidebarHome = null;
-  let collectionSearchDraft = null;
 
   function syncFilterSurfacePlacement() {
     if (!sidebar || !document.body) return;
@@ -284,7 +283,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     activeFilters.page = Number.parseInt(params.get('page'), 10) || 1;
     if (templateName === 'collection') {
       activeFilters.q = params.get('q') || '';
-      collectionSearchDraft = activeFilters.q;
       updateVerticalFilterSummary(cfpLastTotalCount);
     }
     fetchAndRenderData();
@@ -2246,44 +2244,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (!summary) {
       summary = document.createElement('div');
       summary.className = 'cfp-vertical-summary';
-      summary.innerHTML = '<div class="cfp-vertical-summary-heading"><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button><form class="cfp-collection-search" role="search" aria-label="Search within collection"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></svg><input type="search" name="q" aria-label="Search within collection" maxlength="200" autocomplete="off" enterkeyhint="search"><button type="button" class="cfp-collection-search-clear" aria-label="Clear collection search" hidden>&times;</button></form>';
+      summary.innerHTML = '<div class="cfp-vertical-summary-heading"><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button>';
       header.append(summary);
-      const form = summary.querySelector('form');
-      const input = form.querySelector('input');
-      const clear = form.querySelector('button');
-      form.addEventListener('submit',event => {
-        event.preventDefault();event.stopPropagation();
-        setCollectionQuery(input.value);
-      });
-      input.addEventListener('input',() => {
-        collectionSearchDraft = input.value;
-        clear.hidden = !input.value;
-      });
-      input.addEventListener('search',() => {if (!input.value && activeFilters.q) setCollectionQuery('');});
-      clear.addEventListener('click',() => {
-        input.value = '';collectionSearchDraft = '';clear.hidden = true;
-        if (activeFilters.q) setCollectionQuery('');
-        input.focus();
-      });
     }
     const count = summary.querySelector('.cfp-vertical-result-count');
     count.textContent = Number.isFinite(totalCount) ? `${totalCount.toLocaleString()} ${totalCount === 1 ? 'product' : 'products'}` : '';
-    const form = summary.querySelector('form');
-    form.hidden = templateName !== 'collection';
-    const input = form.querySelector('input');
-    const title = document.querySelector('main h1, [role="main"] h1, .cfp-page-header h1')?.textContent.trim() || collectionHandle?.replaceAll('-',' ') || 'this collection';
-    input.placeholder = `Search within ${title}`;
-    input.value = collectionSearchDraft ?? activeFilters.q ?? '';
-    form.querySelector('button').hidden = !input.value;
   }
 
   function setCollectionQuery(value) {
     if (templateName !== 'collection') return;
     const query = String(value || '').trim().slice(0,200);
-    collectionSearchDraft = query;
     if (query === (activeFilters.q || '')) return;
     activeFilters.q = query;activeFilters.page = 1;
-    updateVerticalFilterSummary(cfpLastTotalCount);
     renderBreadcrumbs();updateActiveCountBadge();
     fetchAndRenderData();
   }
@@ -3801,7 +3773,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function clearAllFilters() {
-    if (templateName === 'collection') collectionSearchDraft = '';
     activeFilters = {
       vendors: [],
       types: [],

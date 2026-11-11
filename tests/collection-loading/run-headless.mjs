@@ -213,11 +213,11 @@ try{
     await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings:settings,
       globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.parentElement.className,width:r.width,sidebarTop:r.top,sortTop:document.querySelector('#cfp-top-bar').getBoundingClientRect().top,gridTop:document.querySelector('#cfp-products-container').getBoundingClientRect().top,introBottom:intro.getBoundingClientRect().bottom,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:s.querySelector('.cfp-collection-search input').placeholder};})()`);
+    const geometry=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),intro=document.querySelector('#fixture-intro'),r=s.getBoundingClientRect(),heading=s.querySelector('h2').getBoundingClientRect(),count=s.querySelector('.cfp-vertical-result-count').getBoundingClientRect();return {parent:s.parentElement.className,width:r.width,sidebarTop:r.top,sortTop:document.querySelector('#cfp-top-bar').getBoundingClientRect().top,gridTop:document.querySelector('#cfp-products-container').getBoundingClientRect().top,introBottom:intro.getBoundingClientRect().bottom,introParent:intro.parentElement.id,headingTop:heading.top,countTop:count.top,countRight:count.right,headingRight:heading.right,duplicates:[...document.querySelectorAll('#cfp-top-bar .cfp-product-count')].some(e=>e.getBoundingClientRect().width>0),groupSearch:[...s.querySelectorAll('.cfp-search-input')].some(e=>e.getBoundingClientRect().width>0),search:!!s.querySelector('.cfp-collection-search')};})()`);
     assert.ok(geometry.parent.includes('cfp-layout-wrapper'));assert.equal(geometry.introParent,'fixture-main');assert.equal(geometry.width,349);
     assert.ok(Math.abs(geometry.headingTop-geometry.countTop)<2);assert.ok(geometry.countRight>geometry.headingRight+30);
     assert.ok(Math.abs(geometry.sidebarTop-geometry.sortTop)<=1&&geometry.sidebarTop<geometry.gridTop&&geometry.sidebarTop>=geometry.introBottom,JSON.stringify(geometry));assert.equal(geometry.duplicates,false);assert.equal(geometry.groupSearch,false);
-    assert.equal(geometry.search,'Search within Fixture collection');
+    assert.equal(geometry.search,false);
     assert.equal(await evaluate("document.querySelector('#fixture-faq').getBoundingClientRect().left===document.querySelector('#fixture-intro').getBoundingClientRect().left"),true);
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);
     assert.equal(await evaluate("document.querySelector('#fixture-main').classList.contains('cfp-vertical-page-layout')"),false);
@@ -231,64 +231,34 @@ try{
     assert.equal(await evaluate("document.querySelectorAll('#fixture-intro').length"),1);assert.equal(await evaluate("document.querySelector('#fixture-footer').parentElement.id"),'fixture-main');
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('vertical refinement collection search submits on Enter, scopes results and remains clearable when empty',async()=>{
-    const settings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,advanced:{desktopSearchBox:true}}}];
-    await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,noMatchQuery:'zznomatches',filterSettings:settings,
-      globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:349,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
-    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    await evaluate("document.querySelector('.cfp-collection-search input').value='zznomatches';document.querySelector('.cfp-collection-search input').dispatchEvent(new Event('input',{bubbles:true}))");
-    const before=(await getState()).allRequests.length;await delay(350);assert.equal((await getState()).allRequests.length,before,'typing submitted before Enter');
-    await evaluate("document.querySelector('.cfp-collection-search input').focus()");await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',unmodifiedText:'\r',windowsVirtualKeyCode:13});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
-    await wait("new URLSearchParams(location.search).get('q')==='zznomatches'&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    await wait("document.querySelector('.cfp-vertical-result-count').textContent==='0 products'");
-    const state=await getState();const search=state.allRequests.filter(r=>r.query==='zznomatches');assert.ok(search.length>0);assert.ok(search.every(r=>!r.profile&&!r.token&&!r.membershipParent),'collection search reused an unfiltered ranking');
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').getBoundingClientRect().width>0"),true);
+  await test('vertical refinement has no search bar and existing empty query links remain clearable',async()=>{
+    await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,noMatchQuery:'zznomatches',
+      filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}],
+      globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+    await navigate('?q=zznomatches');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('.cfp-vertical-result-count').textContent==='0 products'");
+    assert.equal(await evaluate("document.querySelector('.cfp-collection-search')"),null);
     assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').textContent"),'Clear all (1)');
-    await evaluate("document.querySelector('.cfp-collection-search-clear').click()");
+    const before=(await getState()).state.builds;
+    await evaluate("document.querySelector('[data-type=\"collection-query\"] .cfp-breadcrumb-remove').click()");
     await wait("!new URLSearchParams(location.search).has('q')&&document.querySelectorAll('.cfp-product-card--reveal').length===25");
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').value"),'');
-    assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-summary').length"),1);
-    assert.equal((await getState()).state.builds,state.state.builds,'search or clearing rebuilt collection data');
-    assert.deepEqual(await evaluate('browserErrors'),[]);
+    assert.equal((await getState()).state.builds,before,'clearing rebuilt collection data');assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('vertical refinement keeps collection search through sort, Load more, reload and browser history',async()=>{
+  await test('vertical refinement preserves existing query links through sort, Load more, reload and browser history',async()=>{
     await control({reset:true,themeIntro:true,realToolbar:true,productCount:50,noPins:true,noMerchandising:true,precompute:true,
       filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{multipleSelection:true}}],
       globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate('?q=fixture');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').value"),'fixture');
+    assert.equal(await evaluate("new URLSearchParams(location.search).get('q')"),'fixture');
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===50");
     assert.equal((await getState()).allRequests.at(-1).query,'fixture');assert.equal((await getState()).allRequests.at(-1).page,'2');
     await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"price-ascending\"]').click()");
     await wait("new URLSearchParams(location.search).get('sort_by')==='price-ascending'&&!document.querySelector('#cfp-sidebar.cfp-loading')");
     assert.equal((await getState()).allRequests.at(-1).query,'fixture');
     await send('Page.reload');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').value"),'fixture');
+    assert.equal(await evaluate("new URLSearchParams(location.search).get('q')"),'fixture');
     await evaluate("history.pushState(null,'','/collections/fixture?q=history');dispatchEvent(new PopStateEvent('popstate'))");
-    await wait("document.querySelector('.cfp-collection-search input').value==='history'&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await wait("new URLSearchParams(location.search).get('q')==='history'&&!document.querySelector('#cfp-sidebar.cfp-loading')");
     assert.equal((await getState()).allRequests.at(-1).query,'history');assert.deepEqual(await evaluate('browserErrors'),[]);
-  });
-  await test('vertical refinement clearing a collection query preserves selected facets and supersedes stale responses',async()=>{
-    await control({reset:true,themeIntro:true,realToolbar:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,noMatchQuery:'older',
-      filterSettings:[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{multipleSelection:true}}],
-      globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
-    await navigate('?option_Color=Blue&q=fixture');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    await evaluate("document.querySelector('.cfp-collection-search-clear').click()");
-    await wait("!new URLSearchParams(location.search).has('q')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("new URLSearchParams(location.search).get('option_Color')"),'Blue');
-    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[value=Blue]').checked"),true);
-    await control({apiDelay:200});
-    await evaluate("document.querySelector('.cfp-collection-search input').value='older';document.querySelector('.cfp-collection-search').requestSubmit()");
-    await delay(30);
-    await evaluate("document.querySelector('.cfp-collection-search input').value='latest';document.querySelector('.cfp-collection-search').requestSubmit()");
-    await wait("new URLSearchParams(location.search).get('q')==='latest'&&!document.querySelector('#cfp-sidebar.cfp-loading')");await delay(350);
-    assert.equal(await evaluate("document.querySelector('.cfp-vertical-result-count').textContent"),'30 products');
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').value"),'latest');
-    assert.equal(await evaluate("new URLSearchParams(location.search).get('option_Color')"),'Blue');
-    await evaluate("document.querySelector('.cfp-vertical-clear').click()");
-    await wait("!new URLSearchParams(location.search).has('q')&&!new URLSearchParams(location.search).has('option_Color')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("document.querySelector('.cfp-collection-search input').value"),'');
-    assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('toolbar color picker previews presets and hex input before applying or restoring page color',async()=>{
     await send('Page.navigate',{url:origin+'/bar-color-admin'});
@@ -535,7 +505,7 @@ try{
     await evaluate("document.querySelector('#fixture-faq').style.height='300px';document.querySelector('#fixture-footer').style.height='900px'");
     const boundary=await evaluate("(()=>{const b=document.querySelector('.cfp-layout-wrapper'),a=document.querySelector('#fixture-app-section');return {bottom:b.getBoundingClientRect().bottom,appBottom:a.getBoundingClientRect().bottom};})()");
     assert.ok(boundary.bottom<=boundary.appBottom+1,JSON.stringify(boundary));
-    await evaluate("scrollTo(0,document.querySelector('#fixture-app-section').getBoundingClientRect().bottom+scrollY-200)");await delay(200);
+    await evaluate("scrollTo(0,document.querySelector('#fixture-app-section').getBoundingClientRect().bottom+scrollY-80)");await delay(200);
     const end=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar').getBoundingClientRect(),a=document.querySelector('#fixture-app-section').getBoundingClientRect(),f=document.querySelector('#fixture-faq').getBoundingClientRect();return {top:s.top,bottom:s.bottom,appBottom:a.bottom,faqTop:f.top};})()");
     assert.ok(end.top<0,JSON.stringify(end));assert.ok(end.bottom<=end.appBottom+1,JSON.stringify(end));assert.ok(end.bottom<=end.faqTop+1,JSON.stringify(end));
     await evaluate("scrollTo(0,document.querySelector('#fixture-footer').getBoundingClientRect().top+scrollY-400)");await delay(200);
