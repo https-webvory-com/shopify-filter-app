@@ -1,4 +1,4 @@
-name: Apply authorized saved configuration version
+name: Verify saved configuration update
 on:
   workflow_dispatch:
 permissions:
@@ -6,25 +6,14 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 6m
+          command_timeout: 3m
           script: |
             set -eu
-            umask 077
-            backup_root="$HOME/.local/state/shopify-filter-app/backups/cfp-saved-version-20261111-497"
-            cd "$backup_root"
-            sha256sum -c SHA256SUMS > /dev/null
-            expected_plan=$(sha256sum plan.json | cut -d ' ' -f 1)
-            actual_plan=$(docker exec shopify-filter-app sha256sum /tmp/cfp-saved-version-20261111-497/plan.json | cut -d ' ' -f 1)
-            test "$expected_plan" = "$actual_plan"
-            printf '%s' 'Y29uc3Qge1ByaXNtYUNsaWVudH09YXdhaXQgaW1wb3J0KCdAcHJpc21hL2NsaWVudCcpO2NvbnN0IHtkZWNvZGVQcmVwYXJhdGlvbn09YXdhaXQgaW1wb3J0KCcuL2FwcC91dGlscy9jb2xsZWN0aW9uUHJlcGFyYXRpb25QYXlsb2FkLmpzJyk7Y29uc3Qge2d1bnppcFN5bmN9PWF3YWl0IGltcG9ydCgnbm9kZTp6bGliJyk7Y29uc3QgZnM9YXdhaXQgaW1wb3J0KCdub2RlOmZzL3Byb21pc2VzJyk7Y29uc3Qge2NyZWF0ZUhhc2h9PWF3YWl0IGltcG9ydCgnbm9kZTpjcnlwdG8nKTtjb25zdCBkaXI9Jy90bXAvY2ZwLXNhdmVkLXZlcnNpb24tMjAyNjExMTEtNDk3JyxzaG9wPSd0aGVkcmVzc291dGxldC5teXNob3BpZnkuY29tJyxkYj1uZXcgUHJpc21hQ2xpZW50KCk7dHJ5e2NvbnN0IHA9SlNPTi5wYXJzZShhd2FpdCBmcy5yZWFkRmlsZShkaXIrJy9wbGFuLmpzb24nLCd1dGY4JykpO2NvbnN0IFtzZXR0aW5ncyxtZXJjaCxwaW5zXT1hd2FpdCBQcm9taXNlLmFsbChbZGIuZmlsdGVyR2xvYmFsU2V0dGluZy5maW5kVW5pcXVlKHt3aGVyZTp7c2hvcH19KSxkYi5tZXJjaGFuZGlzaW5nUnVsZS5maW5kRmlyc3Qoe3doZXJlOntzaG9wfSxvcmRlckJ5Ont1cGRhdGVkQXQ6J2Rlc2MnfSxzZWxlY3Q6e3VwZGF0ZWRBdDp0cnVlfX0pLGRiLnBpbm5lZFByb2R1Y3RSdWxlLmZpbmRGaXJzdCh7d2hlcmU6e3Nob3B9LG9yZGVyQnk6e3VwZGF0ZWRBdDonZGVzYyd9LHNlbGVjdDp7dXBkYXRlZEF0OnRydWV9fSldKTtpZighc2V0dGluZ3MpdGhyb3cgRXJyb3IoJ0N1cnJlbnQgc2V0dGluZ3MgdW5hdmFpbGFibGUnKTtjb25zdCBmbGFncz1bJ3Nob3dPbmx5SW5TdG9jaycsJ3ByaW9yaXRpemVTb3J0T3ZlclBpbm5pbmcnLCdwcmlvcml0aXplU29ydE92ZXJNZXJjaGFuZGlzaW5nJywnaGlkZVVuYXZhaWxhYmxlVmFyaWFudHNXaGVuU2VsZWN0ZWQnXTtjb25zdCBsYXRlc3Q9TWF0aC5tYXgobWVyY2g/LnVwZGF0ZWRBdD8uZ2V0VGltZSgpfHwwLHBpbnM/LnVwZGF0ZWRBdD8uZ2V0VGltZSgpfHwwKTtjb25zdCB1bnNhZmU9W107Zm9yKGNvbnN0IG9iamVjdCBvZiBwLm9iamVjdHMpe2NvbnN0IHJhdz1ndW56aXBTeW5jKGF3YWl0IGZzLnJlYWRGaWxlKGRpcisnL29iamVjdHMvJytvYmplY3QrJy5neicpKS50b1N0cmluZygpO2lmKGNyZWF0ZUhhc2goJ3NoYTI1NicpLnVwZGF0ZShyYXcpLmRpZ2VzdCgnaGV4JykhPT1vYmplY3QpdGhyb3cgRXJyb3IoJ0JhY2t1cCBjaGVja3N1bSBtaXNtYXRjaCcpO2NvbnN0IGU9ZGVjb2RlUHJlcGFyYXRpb24ocmF3KTtjb25zdCBjaGFuZ2VkPWZsYWdzLmZpbHRlcihrPT4oc2V0dGluZ3Nba109PT10cnVlKSE9PShlLnBheWxvYWQ/Lmdsb2JhbFNldHRpbmdzPy5ba109PT10cnVlKSk7aWYoZS5hdDxsYXRlc3R8fGNoYW5nZWQubGVuZ3RoKXVuc2FmZS5wdXNoKHtjb2xsZWN0aW9uSWQ6ZS5jb2xsZWN0aW9uSWQsY2hhbmdlZEZsYWdzOmNoYW5nZWQscHJlZGF0ZXNSdWxlQ2hhbmdlOmUuYXQ8bGF0ZXN0fSk7fWNvbnNvbGUubG9nKCdWRVJTSU9OX0NPTVBBVElCSUxJVFlfUkVWSUVXJyxKU09OLnN0cmluZ2lmeSh7b2JqZWN0czpwLm9iamVjdHMubGVuZ3RoLHVuc2FmZTp1bnNhZmUubGVuZ3RoLHNhbXBsZXM6dW5zYWZlLnNsaWNlKDAsNSl9KSk7aWYodW5zYWZlLmxlbmd0aCl0aHJvdyBFcnJvcignU2F2ZWQgZW50cmllcyByZXF1aXJlIGluZGl2aWR1YWwgcmV2aWV3OyBubyB2ZXJzaW9uIHVwZGF0ZSBhcHBsaWVkJyk7fWZpbmFsbHl7YXdhaXQgZGIuJGRpc2Nvbm5lY3QoKX0=' | base64 -d | docker exec -i -w /app shopify-filter-app node --input-type=module
-            docker exec -w /app shopify-filter-app node /tmp/cfp-saved-version-20261111-497/repair.mjs apply
-            docker cp shopify-filter-app:/tmp/cfp-saved-version-20261111-497/result.json "$backup_root/result.json"
-            sha256sum result.json > APPLIED_RESULT_SHA256
-            echo SAVED_VERSION_UPDATE_COMPLETED
+            printf '%s' 'Y29uc3Qge1ByaXNtYUNsaWVudH09YXdhaXQgaW1wb3J0KCdAcHJpc21hL2NsaWVudCcpO2NvbnN0IHtkZWZhdWx0OlJlZGlzfT1hd2FpdCBpbXBvcnQoJ2lvcmVkaXMnKTtjb25zdCB7UkVESVNfVVJMfT1hd2FpdCBpbXBvcnQoJy4vYXBwL3NlcnZpY2VzL3JlZGlzQ29ubmVjdGlvbi5zZXJ2ZXIuanMnKTtjb25zdCB7cHVibGlzaGVkQ29sbGVjdGlvbktleX09YXdhaXQgaW1wb3J0KCcuL2FwcC91dGlscy9jb2xsZWN0aW9uUHVibGlzaGVkUGFnZS5qcycpO2NvbnN0IHtkZWNvZGVQcmVwYXJhdGlvbn09YXdhaXQgaW1wb3J0KCcuL2FwcC91dGlscy9jb2xsZWN0aW9uUHJlcGFyYXRpb25QYXlsb2FkLmpzJyk7Y29uc3QgZGI9bmV3IFByaXNtYUNsaWVudCgpLHI9bmV3IFJlZGlzKFJFRElTX1VSTCx7bGF6eUNvbm5lY3Q6dHJ1ZSxjb25uZWN0VGltZW91dDo1MDAwLGNvbW1hbmRUaW1lb3V0OjEwMDAwLG1heFJldHJpZXNQZXJSZXF1ZXN0OjAscmV0cnlTdHJhdGVneTooKT0+bnVsbH0pO3Iub24oJ2Vycm9yJywoKT0+e30pO3RyeXthd2FpdCByLmNvbm5lY3QoKTtjb25zdCBzaG9wPSd0aGVkcmVzc291dGxldC5teXNob3BpZnkuY29tJyxjdXJyZW50PWF3YWl0IHIuZ2V0KCdjb2xsZWN0aW9uUHJlcGFyYXRpb25SZXZpc2lvbjonK3Nob3ApLGNvbHM9YXdhaXQgZGIuY29sbGVjdGlvbi5maW5kTWFueSh7d2hlcmU6e3Nob3B9LHNlbGVjdDp7aGFuZGxlOnRydWV9fSksdmVyc2lvbnM9e30scHJlc2VudGF0aW9uPXt9LHJlbWFpbmluZz1bXTtsZXQgbWlzc2luZz0wO2Zvcihjb25zdCBjIG9mIGNvbHMpe2NvbnN0IGtleT1wdWJsaXNoZWRDb2xsZWN0aW9uS2V5KG5ldyBSZXF1ZXN0KCdodHRwczovL2Fpc2VhcmNoZmlsdGVyLndlYnZvcnkuY29tL2FwaS9maWx0ZXI/JytuZXcgVVJMU2VhcmNoUGFyYW1zKHtzaG9wLGNvbGxlY3Rpb25IYW5kbGU6Yy5oYW5kbGUsY291bnRyeTonVVMnLGxvY2FsZTonZW4nLHNvcnRCeTonYmVzdC1zZWxsaW5nJyxwYWdlOicxJyxsaW1pdDonMjUnLHJlc3BvbnNlUHJvZmlsZTonY29sbGVjdGlvbi12MSd9KSkpO2NvbnN0IHJhdz1hd2FpdCByLmdldChrZXkpO2lmKCFyYXcpe21pc3NpbmcrKztjb250aW51ZTt9bGV0IGU7dHJ5e2U9ZGVjb2RlUHJlcGFyYXRpb24ocmF3KX1jYXRjaHt2ZXJzaW9ucy5pbnZhbGlkPSh2ZXJzaW9ucy5pbnZhbGlkfHwwKSsxO2NvbnRpbnVlO31jb25zdCB2PVN0cmluZyhlLmNvbmZpZ3VyYXRpb24pO3ZlcnNpb25zW3ZdPSh2ZXJzaW9uc1t2XXx8MCkrMTtwcmVzZW50YXRpb25bZS5jYXJkUHJlc2VudGF0aW9uVmVyc2lvbl09KHByZXNlbnRhdGlvbltlLmNhcmRQcmVzZW50YXRpb25WZXJzaW9uXXx8MCkrMTtpZih2IT09Y3VycmVudCYmcmVtYWluaW5nLmxlbmd0aDwxMilyZW1haW5pbmcucHVzaCh7aGFuZGxlOmMuaGFuZGxlLHZlcnNpb246dixwcmVzZW50YXRpb246ZS5jYXJkUHJlc2VudGF0aW9uVmVyc2lvbixzYXZlZDplLnBheWxvYWQ/LnByb2R1Y3RzPy5sZW5ndGh9KTt9Y29uc29sZS5sb2coJ1NBVkVEX1ZFUlNJT05fQ09WRVJBR0UnLEpTT04uc3RyaW5naWZ5KHtjdXJyZW50LGRhdGFiYXNlQ29sbGVjdGlvbnM6Y29scy5sZW5ndGgsdmVyc2lvbnMscHJlc2VudGF0aW9uLG1pc3NpbmcscmVtYWluaW5nfSkpO31maW5hbGx5e3IuZGlzY29ubmVjdCgpO2F3YWl0IGRiLiRkaXNjb25uZWN0KCl9cHJvY2Vzcy5leGl0KDAp' | base64 -d | docker exec -i -w /app shopify-filter-app node --input-type=module
