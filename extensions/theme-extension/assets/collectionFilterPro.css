@@ -3166,7 +3166,7 @@ facet-filters-form,
     top: var(--cfp-vertical-sticky-top) !important;
     max-height: calc(100vh - var(--cfp-vertical-sticky-top) - 16px) !important;
     max-height: calc(100dvh - var(--cfp-vertical-sticky-top) - 16px) !important;
-    padding: 24px 16px 48px 32px !important;
+    padding: 24px 16px 16px !important;
     border: 0 !important;
     color: #111 !important;
     font-family: Arial, Helvetica, sans-serif !important;
@@ -3293,6 +3293,29 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-view-more-action { grid-column: 1 / -1; }
   .cfp-vertical-layout #cfp-sidebar .cfp-view-more-btn { color: #111 !important; font: 400 13px/1.4 Arial, Helvetica, sans-serif !important; text-decoration: underline; padding: 4px 0 !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-search-input-wrap { margin: 0 0 12px; border-radius: 4px; }
+}
+
+/* The selected Vertical style also applies to its mobile drawer. */
+.cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 12px; }
+.cfp-vertical-style #cfp-sidebar .cfp-group { border: 0 !important; }
+.cfp-vertical-style #cfp-sidebar .cfp-group + .cfp-group { border-top: 1px solid var(--cfp-border, #ddd) !important; }
+.cfp-vertical-style #cfp-sidebar .cfp-group__content,
+.cfp-vertical-style #cfp-sidebar .cfp-group__content :is(.cfp-checkbox__label, .cfp-checkbox__count, .cfp-swatch-label, .cfp-price-input, .cfp-price-symbol, .cfp-price-divider, .cfp-search-input, .cfp-view-more-btn, .cfp-collection-nav-link),
+.cfp-vertical-style #cfp-sidebar .cfp-group__content .cfp-button-chip > span,
+.cfp-vertical-style #cfp-sidebar .cfp-slider-ticks span,
+.cfp-vertical-style #cfp-sidebar .cfp-price-presets button {
+  font-size: var(--cfp-option-font-size) !important;
+}
+@media (min-width: 769px) {
+  .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { padding-bottom: 0 !important; }
+  .cfp-vertical-style #cfp-sidebar .cfp-group:last-child { margin-bottom: 0 !important; }
+  .cfp-vertical-style #cfp-sidebar .cfp-group:last-child .cfp-group__content { padding-bottom: 0 !important; }
+}
+@media (max-width: 768px) {
+  .cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 10px; }
+  .cfp-vertical-style #cfp-sidebar .cfp-sidebar__header { padding-left: 16px !important; padding-right: 16px !important; }
+  .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { padding: 16px !important; }
+  .cfp-vertical-style #cfp-sidebar.cfp-sidebar .cfp-sidebar__footer { padding: 0 16px max(16px, env(safe-area-inset-bottom)) !important; }
 }
 
 /* Empty or disabled groups must not leave a drawer, trigger, or sidebar gap. */

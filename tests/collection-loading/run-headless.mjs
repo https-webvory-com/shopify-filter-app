@@ -137,6 +137,10 @@ try{
       globalSettings:{desktopFilterLayout:'vertical',verticalFilterWidth:333,sizeOptionsPerRow:4,showProductCount:false,showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
     const styles=await evaluate(`(()=>{const s=document.querySelector('#cfp-sidebar'),group=s.querySelector('.cfp-group__toggle'),chip=s.querySelector('.cfp-button-chip > span'),swatch=s.querySelector('.cfp-swatch-circle'),grid=s.querySelector('.cfp-color-grid--colors');return {width:s.getBoundingClientRect().width,title:getComputedStyle(group).textTransform,font:getComputedStyle(group).fontSize,weight:getComputedStyle(group).fontWeight,chipHeight:chip.getBoundingClientRect().height,chipRadius:getComputedStyle(chip).borderRadius,swatchWidth:swatch.getBoundingClientRect().width,colorColumns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,summary:getComputedStyle(s.querySelector('.cfp-vertical-summary')).display,count:s.querySelector('.cfp-vertical-result-count').textContent,header:getComputedStyle(s.querySelector('.cfp-sidebar__header')).position,bodyOverflow:getComputedStyle(s.querySelector('.cfp-sidebar__body')).overflowY,printedCounts:s.querySelectorAll('.cfp-checkbox__count').length};})()`);
+    const optionStyles=()=>evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),p=getComputedStyle(s),body=getComputedStyle(s.querySelector('.cfp-sidebar__body'));return {chip:getComputedStyle(s.querySelector('.cfp-button-chip > span')).fontSize,swatch:getComputedStyle(s.querySelector('.cfp-swatch-label')).fontSize,label:getComputedStyle(s.querySelector('.cfp-checkbox__label')).fontSize,separator:getComputedStyle(s.querySelectorAll('.cfp-group')[1]).borderTopWidth,firstSeparator:getComputedStyle(s.querySelector('.cfp-group')).borderTopWidth,left:p.paddingLeft,right:p.paddingRight,bottom:p.paddingBottom,bodyLeft:body.paddingLeft,bodyRight:body.paddingRight,bodyBottom:body.paddingBottom};})()");
+    const desktopOptions=await optionStyles();
+    assert.equal(desktopOptions.chip,'12px');assert.equal(desktopOptions.swatch,'12px');assert.equal(desktopOptions.label,'12px');assert.equal(desktopOptions.separator,'1px');assert.equal(desktopOptions.firstSeparator,'0px');
+    assert.equal(desktopOptions.left,'16px');assert.equal(desktopOptions.right,desktopOptions.left);assert.equal(desktopOptions.bottom,desktopOptions.left);
     assert.equal(styles.width,333);assert.equal(styles.title,'none');assert.equal(styles.font,'14px');assert.equal(styles.weight,'600');
     assert.equal(styles.chipHeight,32);assert.equal(styles.chipRadius,'4px');assert.equal(styles.swatchWidth,20);assert.equal(styles.colorColumns,2);
     assert.equal(styles.summary,'block');assert.equal(styles.count,'30 products');assert.equal(styles.header,'static');assert.equal(styles.bodyOverflow,'visible');assert.equal(styles.printedCounts,0);
@@ -152,6 +156,12 @@ try{
       assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     }
     await evaluate("document.querySelector('#cfp-sidebar').style.setProperty('--cfp-vertical-width','333px')");
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
+    await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+    const mobileOptions=await optionStyles();assert.equal(mobileOptions.chip,'10px');assert.equal(mobileOptions.swatch,'10px');assert.equal(mobileOptions.label,'10px');assert.equal(mobileOptions.separator,'1px');
+    assert.equal(mobileOptions.bodyLeft,'16px');assert.equal(mobileOptions.bodyRight,mobileOptions.bodyLeft);assert.equal(mobileOptions.bodyBottom,mobileOptions.bodyLeft);
+    await evaluate("document.querySelector('#cfp-apply-btn').click()");
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
     await fs.writeFile('scratch/vertical-reference-fixture.png',Buffer.from(await send('Page.captureScreenshot',{format:'png'}).then(r=>r.data),'base64'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
@@ -180,6 +190,7 @@ try{
         productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Size',values:['S','M']}]}])),
         globalSettings:{desktopFilterLayout:layout,drawerWidth:300,showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      assert.equal(await evaluate("document.body.classList.contains('cfp-vertical-style')"),layout==='vertical');
       if(layout!=='vertical')assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-vertical-summary')).display"),'none');
       if(layout==='drawer'){
         await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
@@ -519,7 +530,7 @@ try{
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
       const spacing=await evaluate("(()=>{const s=document.querySelector('#cfp-sidebar'),m=s.closest('.cfp-layout-wrapper'),intro=document.querySelector('#cfp-products-container');return {gap:getComputedStyle(m).columnGap,background:getComputedStyle(document.querySelector('#fixture-app-section')).backgroundColor,sidebar:getComputedStyle(s).backgroundColor,width:s.getBoundingClientRect().width,right:s.getBoundingClientRect().right,left:intro.getBoundingClientRect().left,padding:getComputedStyle(s).paddingLeft};})()");
       assert.equal(spacing.gap,'0px');assert.equal(spacing.background,'rgb(251, 247, 245)');assert.equal(spacing.sidebar,spacing.background);
-      assert.equal(spacing.width,349);assert.equal(spacing.right,spacing.left);assert.equal(spacing.padding,'32px');
+      assert.equal(spacing.width,349);assert.equal(spacing.right,spacing.left);assert.equal(spacing.padding,'16px');
       await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(400);
       assert.equal(await evaluate("document.querySelector('#fixture-main').style.getPropertyValue('--cfp-page-bg')"),'');
       assert.equal(await evaluate("document.querySelector('#fixture-main').classList.contains('cfp-vertical-page-layout')"),false);

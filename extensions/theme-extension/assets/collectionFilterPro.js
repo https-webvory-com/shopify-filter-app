@@ -1190,6 +1190,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     container.classList.toggle('cfp-horizontal-layout', layout === 'horizontal');
     container.classList.toggle('cfp-vertical-layout', layout === 'vertical');
+    // Preserve the chosen style when the mobile presentation becomes a drawer.
+    container.classList.toggle('cfp-vertical-style', (settings.desktopFilterLayout || settings.integrations?.desktopFilterLayout) === 'vertical');
     container.classList.toggle('cfp-drawer-layout', layout === 'drawer');
     // Ignore legacy saved darkMode preferences after removal of the feature.
     container.classList.remove('cfp-dark-mode');
