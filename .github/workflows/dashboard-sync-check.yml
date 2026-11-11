@@ -1,4 +1,4 @@
-name: Inspect dashboard sync error
+name: Inspect collection latency read only
 on:
   workflow_dispatch:
 permissions:
@@ -6,29 +6,17 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
       - uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 2m
           script: |
+            set -eu
             docker ps --format '{{.Names}} {{.Status}}'
-            docker exec -i shopify-filter-app node --input-type=module <<'NODE'
-            import {PrismaClient} from '@prisma/client';
-            import {Queue} from 'bullmq';
-            import {redisOptions,webhookQueue} from './app/services/queue.server.js';
-            import meiliClient from './app/services/meiliClient.server.js';
-            const db=new PrismaClient(); const queue=new Queue('productSyncQueue',{connection:redisOptions});
-            try {
-              const stats=await meiliClient.index('products').getStats();
-              const embedders=(await meiliClient.index('products').getSettings()).embedders || {};
-              const embeddingTask=await meiliClient.tasks.getTask(252811);
-              console.log('SEARCH_ENGINE_STATUS',JSON.stringify({documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,embedders:Object.keys(embedders),embeddingTask:embeddingTask.status,autoEmbeddingSetup:process.env.SEMANTIC_EMBEDDING_SETUP_ENABLED==='true'}));
-              for(const shop of ['thedressoutlet.myshopify.com','another-shpyfy-store.myshopify.com']){
-                const rows=await db.syncJob.findMany({where:{shop,kind:'PRODUCTS'},orderBy:{createdAt:'desc'},take:3,select:{id:true,status:true,productsProcessed:true,totalProducts:true,completedAt:true,updatedAt:true,lastError:true}});
-                for(const row of rows){const queued=await queue.getJob(row.id);console.log('SYNC_JOB',JSON.stringify({...row,shop,queueState:queued?await queued.getState():'missing',lastError:row.lastError?.replace(/https?:\S+/g,'[url]').slice(0,350)}));}
-              }
-            }finally{await queue.close();await webhookQueue.close();await db.$disconnect();}
-            NODE
+            docker stats --no-stream --format '{{.Name}} CPU={{.CPUPerc}} Memory={{.MemUsage}}'
+            docker inspect --format 'WORKER RestartCount={{.RestartCount}} OOMKilled={{.State.OOMKilled}} StartedAt={{.State.StartedAt}}' shopify-filter-sync-worker
+            printf '%s' 'Y29uc3Qge2RlZmF1bHQ6UmVkaXN9PWF3YWl0IGltcG9ydCgnaW9yZWRpcycpO2NvbnN0IHtSRURJU19VUkx9PWF3YWl0IGltcG9ydCgnLi9hcHAvc2VydmljZXMvcmVkaXNDb25uZWN0aW9uLnNlcnZlci5qcycpO2NvbnN0IHtQcmlzbWFDbGllbnR9PWF3YWl0IGltcG9ydCgnQHByaXNtYS9jbGllbnQnKTtjb25zdCByPW5ldyBSZWRpcyhSRURJU19VUkwse2xhenlDb25uZWN0OnRydWUsY29ubmVjdFRpbWVvdXQ6NTAwMCxjb21tYW5kVGltZW91dDoxMDAwMCxtYXhSZXRyaWVzUGVyUmVxdWVzdDowLHJldHJ5U3RyYXRlZ3k6KCk9Pm51bGx9KTtyLm9uKCdlcnJvcicsKCk9Pnt9KTtjb25zdCBkYj1uZXcgUHJpc21hQ2xpZW50KCk7dHJ5e2F3YWl0IHIuY29ubmVjdCgpO2NvbnN0IHNob3A9J3RoZWRyZXNzb3V0bGV0Lm15c2hvcGlmeS5jb20nO2NvbnNvbGUubG9nKCdSRUFEX1JFVklTSU9OUycsSlNPTi5zdHJpbmdpZnkoYXdhaXQgci5tZ2V0KCdjb2xsZWN0aW9uUHJlcGFyYXRpb25SZXZpc2lvbjonK3Nob3AsJ2NvbGxlY3Rpb25Qcm9kdWN0UmV2aXNpb246JytzaG9wLCdmaWx0ZXJQcmVzZW50YXRpb25SZXZpc2lvbjonK3Nob3ApKSk7Y29uc3QgY29scz1hd2FpdCBkYi5jb2xsZWN0aW9uLmZpbmRNYW55KHt3aGVyZTp7c2hvcCxoYW5kbGU6e2luOlsnZm9ybWFsLWRyZXNzZXMnLCdwZXRpdGUtbW90aGVyLW9mLXRoZS1icmlkZS1kcmVzc2VzJywnbW90aGVyLW9mLXRoZS1icmlkZS1kcmVzc2VzJ119fSxzZWxlY3Q6e2lkOnRydWUsaGFuZGxlOnRydWV9fSk7Zm9yKGNvbnN0IGMgb2YgY29scyl7bGV0IHM7dHJ5e3M9SlNPTi5wYXJzZShhd2FpdCByLmdldCgnY29sbGVjdGlvbk9yZGVyU25hcHNob3Q6JytzaG9wKyc6JytjLmlkKSl9Y2F0Y2h7fWNvbnNvbGUubG9nKCdSRUFEX09SREVSJyxKU09OLnN0cmluZ2lmeSh7aGFuZGxlOmMuaGFuZGxlLGNvdW50OnM/Lmlkcz8ubGVuZ3RoLGFnZVNlY29uZHM6cz9NYXRoLnJvdW5kKChEYXRlLm5vdygpLXMudXBkYXRlZEF0KS8xMDAwKTpudWxsLHJldmlzaW9uOnM/LnJldmlzaW9ufSkpO31mb3IoY29uc3QgbmFtZSBvZiBbJ2NvbGxlY3Rpb25SYW5raW5nUXVldWVWMicsJ2NvbGxlY3Rpb25PcmRlclF1ZXVlVjEnLCdjb2xsZWN0aW9uTWVtYmVyc2hpcFF1ZXVlVjEnLCdwcm9kdWN0U3luY1F1ZXVlJ10pe2NvbnN0IHA9J2J1bGw6JytuYW1lO2NvbnN0IGNvdW50cz17YWN0aXZlOmF3YWl0IHIubGxlbihwKyc6YWN0aXZlJyksd2FpdGluZzphd2FpdCByLmxsZW4ocCsnOndhaXQnKSxwcmlvcml0aXplZDphd2FpdCByLnpjYXJkKHArJzpwcmlvcml0aXplZCcpLGRlbGF5ZWQ6YXdhaXQgci56Y2FyZChwKyc6ZGVsYXllZCcpLGZhaWxlZDphd2FpdCByLnpjYXJkKHArJzpmYWlsZWQnKX07Y29uc3QgZ3JvdXBzPXthY3RpdmU6YXdhaXQgci5scmFuZ2UocCsnOmFjdGl2ZScsMCw5KSxwcmlvcml0aXplZDphd2FpdCByLnpyYW5nZShwKyc6cHJpb3JpdGl6ZWQnLDAsOSksZmFpbGVkOmF3YWl0IHIuenJhbmdlKHArJzpmYWlsZWQnLC01LC0xKX07Y29uc3Qgcm93cz1bXTtmb3IoY29uc3Rbc3RhdGUsaWRzXW9mIE9iamVjdC5lbnRyaWVzKGdyb3VwcykpZm9yKGNvbnN0IGlkIG9mIGlkcyl7Y29uc3QgaD1hd2FpdCByLmhnZXRhbGwocCsnOicraWQpO2xldCBkPXt9O3RyeXtkPUpTT04ucGFyc2UoaC5kYXRhfHwne30nKX1jYXRjaHt9cm93cy5wdXNoKHtzdGF0ZSxuYW1lOmgubmFtZSxzaG9wOmQuc2hvcHx8ZC5zcGVjPy5zaG9wLGNvbGxlY3Rpb25JZDpkLmNvbGxlY3Rpb25JZHx8ZC5zcGVjPy5jb2xsZWN0aW9uSWQsYWdlU2Vjb25kczpNYXRoLnJvdW5kKChEYXRlLm5vdygpLU51bWJlcihoLnRpbWVzdGFtcCkpLzEwMDApLGFjdGl2ZVNlY29uZHM6aC5wcm9jZXNzZWRPbj9NYXRoLnJvdW5kKChEYXRlLm5vdygpLU51bWJlcihoLnByb2Nlc3NlZE9uKSkvMTAwMCk6bnVsbCxhdHRlbXB0czpoLmF0bSxsb2NrOnN0YXRlPT09J2FjdGl2ZSc/YXdhaXQgci5wdHRsKHArJzonK2lkKyc6bG9jaycpOnVuZGVmaW5lZCxlcnJvcjpoLmZhaWxlZFJlYXNvbj8ucmVwbGFjZSgvaHR0cHM/OlxTKy9nLCdbdXJsXScpLnNsaWNlKDAsMjAwKX0pO31jb25zb2xlLmxvZygnUkVBRF9RVUVVRScsSlNPTi5zdHJpbmdpZnkoe25hbWUsY291bnRzLHJvd3N9KSk7fX1maW5hbGx5e3IuZGlzY29ubmVjdCgpO2F3YWl0IGRiLiRkaXNjb25uZWN0KCk7fXByb2Nlc3MuZXhpdCgwKTs=' | base64 -d | docker exec -i shopify-filter-app node --input-type=module
