@@ -2244,7 +2244,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (!summary) {
       summary = document.createElement('div');
       summary.className = 'cfp-vertical-summary';
-      summary.innerHTML = '<div class="cfp-vertical-summary-heading"><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div><button type="button" class="cfp-vertical-clear cfp-clear-all-top" hidden>Clear all</button>';
+      summary.innerHTML = '<div class="cfp-vertical-summary-heading"><h2>Refine by</h2><p class="cfp-vertical-result-count"></p></div>';
       header.append(summary);
     }
     const count = summary.querySelector('.cfp-vertical-result-count');
@@ -4013,13 +4013,6 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     if (activeFilters.minPrice > 0) count++;
     if (activeFilters.maxPrice < maxPriceLimit) count++;
-
-    const verticalClear = sidebar?.querySelector('.cfp-vertical-clear');
-    if (verticalClear) {
-      const selections = count + (activeFilters.priceRanges || []).length + (templateName === 'collection' && activeFilters.q ? 1 : 0);
-      verticalClear.hidden = selections === 0;
-      verticalClear.textContent = `Clear all (${selections})`;
-    }
 
     if (activeCount) {
       activeCount.textContent = count;

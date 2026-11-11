@@ -3201,23 +3201,6 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-vertical-result-count { margin: 0; font: 400 14px/1.4 Arial, Helvetica, sans-serif; color: #111; white-space: nowrap; }
   .cfp-vertical-layout #cfp-top-bar .cfp-product-count { display: none !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-search-input-wrap { display: none !important; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear {
-    display: inline-flex !important;
-    width: auto !important;
-    min-height: 24px;
-    padding: 0 !important;
-    margin: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    color: #111 !important;
-    font: 400 12px/1.5 Arial, Helvetica, sans-serif !important;
-    text-transform: none !important;
-    letter-spacing: normal !important;
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear[hidden] { display: none !important; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-vertical-clear:focus-visible,
   .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
   .cfp-vertical-layout #cfp-sidebar .cfp-sidebar__body { flex: none !important; min-height: auto !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-group { margin: 0 0 4px !important; padding: 0 !important; border: 0 !important; }

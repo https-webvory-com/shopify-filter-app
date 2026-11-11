@@ -165,19 +165,20 @@ try{
     await fs.writeFile('scratch/vertical-reference-fixture.png',Buffer.from(await send('Page.captureScreenshot',{format:'png'}).then(r=>r.data),'base64'));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
-  await test('vertical reference Clear all resets selected options and price bands without duplicate requests',async()=>{
+  await test('vertical selected filters keep one Clear all that resets options and price bands',async()=>{
     const filterSettings=[{id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{multipleSelection:true}},
       {id:'price',isEnabled:true,filterType:'price',label:'Price',config:{priceRanges:[{from:0,to:100,label:'Under {1}'}]}}];
     await control({reset:true,productCount:30,noPins:true,noMerchandising:true,precompute:true,filterSettings,
       productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Size',values:['S','M']}]}])),
       globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,priceDelay:0,imageDelay:0});
     await navigate('?option_Size=S&price[]=0:100');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').textContent"),'Clear all (2)');
-    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').getBoundingClientRect().width>0"),true);
+    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear')"),null);
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].filter(b=>/^Clear all/.test(b.textContent.trim())&&b.getBoundingClientRect().width>0).length"),1);
+    assert.equal(await evaluate("document.querySelector('.cfp-breadcrumb-clear').getBoundingClientRect().width>0"),true);
     const before=(await getState()).requests.length;
-    await evaluate("document.querySelector('.cfp-vertical-clear').click()");
+    await evaluate("document.querySelector('.cfp-breadcrumb-clear').click()");
     await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!new URLSearchParams(location.search).has('option_Size')");
-    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').hidden"),true);
+    await wait("!document.querySelector('.cfp-breadcrumb-clear')");
     assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
     assert.equal(await evaluate("document.querySelectorAll('.cfp-vertical-summary').length"),1);
     assert.equal((await getState()).requests.length-before,1);
@@ -237,7 +238,8 @@ try{
       globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate('?q=zznomatches');await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('.cfp-vertical-result-count').textContent==='0 products'");
     assert.equal(await evaluate("document.querySelector('.cfp-collection-search')"),null);
-    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear').textContent"),'Clear all (1)');
+    assert.equal(await evaluate("document.querySelector('.cfp-vertical-clear')"),null);
+    assert.equal(await evaluate("document.querySelector('.cfp-breadcrumb-clear').textContent"),'Clear all');
     const before=(await getState()).state.builds;
     await evaluate("document.querySelector('[data-type=\"collection-query\"] .cfp-breadcrumb-remove').click()");
     await wait("!new URLSearchParams(location.search).has('q')&&document.querySelectorAll('.cfp-product-card--reveal').length===25");
