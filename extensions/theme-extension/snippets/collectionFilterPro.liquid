@@ -497,8 +497,9 @@
         return sum + w + (i > 0 ? 10 : 0);
       }, 0);
 
-      // CONDITION: If all filters fit in the first row without the MORE button, DO NOT show MORE button!
-      if (totalPillsWidth <= availableWidthNoMore) {
+      // Keep at most twelve groups in the primary row, even on wide screens.
+      var maxPillsRow1 = 12;
+      if (allPills.length <= maxPillsRow1 && totalPillsWidth <= availableWidthNoMore) {
         // All pills fit in Row 1!
         extra.innerHTML = '';
         extra.style.display = 'none';
@@ -522,7 +523,7 @@
         allPills.forEach(function(pill, idx) {
           var pillWidth = pillWidths[idx];
           var neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
-          if (primaryPills.length === 0 || neededWidth <= availableWidthWithMore) {
+          if (primaryPills.length < maxPillsRow1 && (primaryPills.length === 0 || neededWidth <= availableWidthWithMore)) {
             currentWidth = neededWidth;
             primaryPills.push(pill);
           } else {

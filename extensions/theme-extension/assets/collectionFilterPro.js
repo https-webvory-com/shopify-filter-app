@@ -2958,9 +2958,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const openPopoverScrollArea = currentlyOpenPopover?.querySelector('.cfp-scroll-area');
         const openPopoverScrollTop = openPopoverScrollArea ? openPopoverScrollArea.scrollTop : 0;
 
-        // Limit the Horizontal toolbar without dropping groups from drawers,
-        // saved settings, or active-filter handling.
-        horizontalContainer.innerHTML = horizontalPills.slice(0, 12).join('');
+        horizontalContainer.innerHTML = horizontalPills.join('');
         horizontalContainer.style.display = 'flex';
         if (extraContainer) {
           extraContainer.innerHTML = '';
@@ -2976,7 +2974,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
         const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
 
-        const maxPillsRow1 = 5; // When more than 5 filter elements exist, show MORE/LESS and place the rest in Row 2
+        const maxPillsRow1 = 12; // Keep remaining groups available under MORE.
         const needsMore = (pillElements.length > maxPillsRow1) || (totalPillsWidth > availableWidthNoMore);
 
         if (!needsMore) {

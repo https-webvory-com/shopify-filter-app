@@ -345,18 +345,27 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});}
   });
-  await test('horizontal toolbar shows the first twelve eligible groups while vertical and drawer retain every group',async()=>{
+  await test('horizontal main row shows twelve groups and keeps remaining groups accessible under More',async()=>{
     const filterSettings=[{id:'disabled',isEnabled:false,filterType:'vendor',label:'Disabled'},...Array.from({length:13},(_,i)=>({id:'limit-'+i,isEnabled:true,filterType:'vendor',label:'Filter '+(i+1),config:{}}))];
-    for(const desktopFilterLayout of ['horizontal','vertical','drawer']){
-      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
-      await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+    for(const [desktopFilterLayout,realToolbar] of [['horizontal',false],['horizontal',true],['vertical',true],['drawer',true]]){
+      await control({reset:true,realToolbar,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:2560,height:900,deviceScaleFactor:1,mobile:false});await navigate();
       await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group').length"),13);
       if(desktopFilterLayout==='horizontal'){
-        const labels=()=>evaluate("[...document.querySelectorAll('#cfp-top-bar .cfp-horizontal-pill__btn')].map(b=>b.textContent.trim())");
-        assert.deepEqual(await labels(),Array.from({length:12},(_,i)=>'Filter '+(i+1)));
+        const labels=selector=>evaluate("[...document.querySelectorAll('"+selector+" .cfp-horizontal-pill__btn')].map(b=>b.textContent.trim())");
+        assert.deepEqual(await labels('#cfp-horizontal-filters'),Array.from({length:12},(_,i)=>'Filter '+(i+1)));
+        assert.deepEqual(await labels('#cfp-horizontal-extra-filters'),['Filter 13']);
+        assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width>0"),true);
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+        assert.equal(await evaluate("document.querySelector('#cfp-horizontal-extra-filters .cfp-horizontal-pill__btn').getBoundingClientRect().width>0"),true);
+        await evaluate("document.querySelector('#cfp-horizontal-extra-filters .cfp-horizontal-pill__btn').click()");
+        assert.equal(await evaluate("document.querySelector('#cfp-horizontal-extra-filters .cfp-horizontal-pill__popover').classList.contains('is-open')"),true);
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
         await send('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
-        assert.equal((await labels()).length,12);
+        assert.equal((await labels('#cfp-top-bar')).length,13);
+        assert.ok((await labels('#cfp-horizontal-filters')).length<=12);
+        assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true);
         await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
         await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
         assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group').length"),13);
