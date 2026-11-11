@@ -112,6 +112,8 @@ document.addEventListener("DOMContentLoaded", async function () {
   let compactTab = 0;
   let compactPage = 0;
   let compactConfig = '';
+  let compactHeader = null;
+  let compactHeaderRestore = null;
 
   // Initialize
   init();
@@ -330,38 +332,106 @@ document.addEventListener("DOMContentLoaded", async function () {
     positionCompactPanel();
   }
 
+  const compactSlotProperties = ['width','min-width','max-width','flex-basis','flex-shrink','transition'];
+  function restoreCompactSlot(state) {
+    if (!state?.slot) return;
+    for (const [key,value,priority] of state.styles) {
+      if (value) state.slot.style.setProperty(key,value,priority); else state.slot.style.removeProperty(key);
+    }
+    state.active = false;
+  }
+  function releaseCompactHeader(animate = false) {
+    if (compactHeaderRestore) {
+      clearTimeout(compactHeaderRestore.timer);restoreCompactSlot(compactHeaderRestore.state);compactHeaderRestore = null;
+    }
+    const state = compactHeader;compactHeader = null;
+    if (!state) return;
+    state.observer?.disconnect();
+    if (state.visibility) state.trigger.style.setProperty('visibility',state.visibility,state.visibilityPriority);
+    else state.trigger.style.removeProperty('visibility');
+    if (animate && state.active && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,state.startWidth + 'px','important');
+      const pending = {state,timer:setTimeout(()=>{restoreCompactSlot(state);if(compactHeaderRestore===pending)compactHeaderRestore=null;},240)};
+      compactHeaderRestore = pending;
+    } else restoreCompactSlot(state);
+  }
+  function prepareCompactHeader(trigger) {
+    releaseCompactHeader();
+    if (!trigger?.getBoundingClientRect) return;
+    const icon = trigger.querySelector?.('svg');
+    const iconRect = icon?.getBoundingClientRect();
+    const anchor = iconRect?.width && iconRect?.height ? iconRect : trigger.getBoundingClientRect();
+    const header = trigger.closest('header, [role="banner"], sticky-header, .site-header');
+    let slot = trigger, candidate = null;
+    while (header && slot && slot !== header) {
+      let parent = slot.parentElement;
+      while (parent && getComputedStyle(parent).display === 'contents') parent = parent.parentElement;
+      if (!parent || !header.contains(parent)) break;
+      if (['flex','inline-flex','grid','inline-grid'].includes(getComputedStyle(parent).display)) {
+        if (!['absolute','fixed'].includes(getComputedStyle(slot).position)) candidate = slot;
+        break;
+      }
+      slot = parent;
+    }
+    const state = {trigger,anchor,slot:candidate,active:false,visibility:trigger.style.getPropertyValue('visibility'),visibilityPriority:trigger.style.getPropertyPriority('visibility'),
+      styles:candidate?compactSlotProperties.map(key=>[key,candidate.style.getPropertyValue(key),candidate.style.getPropertyPriority(key)]):[]};
+    compactHeader = state;
+    trigger.style.setProperty('visibility','hidden','important');
+  }
+  function syncCompactHeaderSpace(width) {
+    const state = compactHeader;
+    if (!state?.slot?.isConnected) return null;
+    if (window.innerWidth <= 768) {
+      state.observer?.disconnect();restoreCompactSlot(state);return null;
+    }
+    if (!state.active) {
+      const rect = state.slot.getBoundingClientRect();
+      if (!rect.width || rect.width > 80) return null;
+      state.startWidth = rect.width;
+      state.anchorOffset = state.anchor.top + state.anchor.height / 2 - rect.top;
+      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,rect.width+'px','important');
+      state.slot.style.setProperty('flex-shrink','0','important');
+      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .22s ease, min-width .22s ease, max-width .22s ease, flex-basis .22s ease','important');
+      void state.slot.offsetWidth;state.active = true;
+      if (window.ResizeObserver) {
+        state.observer ||= new ResizeObserver(()=>{if(modal?.classList.contains('cfp-open'))positionCompactPanel();});
+        state.observer.observe(state.slot);
+      }
+    }
+    for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,width+'px','important');
+    const rect = state.slot.getBoundingClientRect();
+    return {left:rect.right-state.anchor.width,right:rect.right,top:rect.top+state.anchorOffset-state.anchor.height/2,
+      bottom:rect.top+state.anchorOffset+state.anchor.height/2,width:state.anchor.width,height:state.anchor.height};
+  }
   function positionCompactPanel() {
     if (!modal || modal.dataset.cfpLayout !== 'compact') {
-      if (modal) for (const key of ['left','bottom','width','max-height','transform-origin','--cfp-compact-enter-y']) modal.style.removeProperty(key);
-      if (modal) modal.style.top = '0px';
+      releaseCompactHeader();
+      if (modal) for (const key of ['left','right','bottom','width','max-height','transform-origin','--cfp-compact-panel-width','--cfp-compact-panel-height','--cfp-compact-trigger-width']) modal.style.removeProperty(key);
+      if (modal) {modal.style.top='0px';delete modal.dataset.cfpPlacement;}
       return;
     }
+    if (compactHeaderRestore && !modal.classList.contains('cfp-open')) return;
     const viewport = window.visualViewport;
-    const x = viewport?.offsetLeft || 0, y = viewport?.offsetTop || 0;
-    const viewportWidth = viewport?.width || window.innerWidth;
-    const viewportHeight = viewport?.height || window.innerHeight;
-    const margin = 8, gap = 8;
-    const width = Math.min(448, Math.max(0, viewportWidth - margin * 2));
-    const trigger = modal._trigger;
-    const icon = trigger?.querySelector?.('svg');
-    const iconRect = icon?.getBoundingClientRect();
-    const bounds = iconRect?.width && iconRect?.height ? iconRect : trigger?.getBoundingClientRect();
-    const anchor = bounds?.width && bounds?.height && bounds.bottom > y && bounds.top < y + viewportHeight && bounds.right > x && bounds.left < x + viewportWidth ? bounds : null;
-    const left = Math.max(x + margin, Math.min(anchor ? anchor.right - width : x + viewportWidth - width - 24, x + viewportWidth - width - margin));
-    const belowTop = anchor ? Math.max(y + margin, anchor.bottom + gap) : y + (viewportWidth <= 600 ? 12 : 64);
-    const below = Math.max(0, y + viewportHeight - margin - belowTop);
-    const above = anchor ? Math.max(0, anchor.top - gap - y - margin) : 0;
-    const opensAbove = below < Math.min(240, viewportHeight - margin * 2) && above > below;
-    const top = Math.min(belowTop, y + viewportHeight - margin);
-    modal.style.left = left + 'px';
-    modal.style.width = width + 'px';
-    modal.style.top = opensAbove ? 'auto' : top + 'px';
-    modal.style.bottom = opensAbove ? window.innerHeight - anchor.top + gap + 'px' : 'auto';
-    modal.style.maxHeight = Math.min(600, opensAbove ? above : below) + 'px';
-    const originX = anchor ? anchor.left + anchor.width / 2 - left : width / 2;
-    const originY = opensAbove ? `calc(100% + ${gap + anchor.height / 2}px)` : (anchor ? anchor.top + anchor.height / 2 - top : 0) + 'px';
-    modal.style.transformOrigin = `${originX}px ${originY}`;
-    modal.style.setProperty('--cfp-compact-enter-y', opensAbove ? '6px' : '-6px');
+    const x=viewport?.offsetLeft||0,y=viewport?.offsetTop||0;
+    const viewportWidth=viewport?.width||window.innerWidth,viewportHeight=viewport?.height||window.innerHeight;
+    const margin=8,barHeight=50,width=Math.min(448,Math.max(0,viewportWidth-margin*2));
+    const reserved = syncCompactHeaderSpace(width);
+    const icon=modal._trigger?.querySelector?.('svg'),iconRect=icon?.getBoundingClientRect();
+    const bounds=reserved||(iconRect?.width&&iconRect?.height?iconRect:modal._trigger?.getBoundingClientRect());
+    const anchor=bounds?.width&&bounds?.height&&bounds.bottom>y&&bounds.top<y+viewportHeight&&bounds.right>x&&bounds.left<x+viewportWidth?bounds:null;
+    const left=Math.max(x+margin,Math.min(anchor?anchor.right-width:x+viewportWidth-width-24,x+viewportWidth-width-margin));
+    const center=anchor?anchor.top+anchor.height/2:y+(viewportWidth<=600?37:89);
+    const barTop=Math.max(y+margin,Math.min(center-barHeight/2,y+viewportHeight-margin-barHeight));
+    const below=Math.max(0,y+viewportHeight-margin-barTop),above=Math.max(0,barTop+barHeight-y-margin);
+    const opensAbove=below<Math.min(240,viewportHeight-margin*2)&&above>below;
+    modal.dataset.cfpPlacement=opensAbove?'above':'below';
+    modal.style.left='auto';modal.style.right=window.innerWidth-left-width+'px';modal.style.width=width+'px';
+    modal.style.top=opensAbove?'auto':barTop+'px';modal.style.bottom=opensAbove?window.innerHeight-barTop-barHeight+'px':'auto';
+    modal.style.maxHeight=Math.min(600,opensAbove?above:below)+'px';
+    modal.style.setProperty('--cfp-compact-panel-width',width+'px');
+    modal.style.setProperty('--cfp-compact-panel-height',Math.min(600,opensAbove?above:below)+'px');
+    modal.style.setProperty('--cfp-compact-trigger-width',Math.min(50,anchor?.width||50)+'px');
+    modal.style.transformOrigin=(anchor?anchor.left+anchor.width/2-left:width/2)+'px '+(opensAbove?'calc(100% - 25px)':(center-barTop)+'px');
   }
 
   function renderCompactNavigation() {
@@ -761,6 +831,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (modal.classList.contains('cfp-open')) return;
 
     modal._trigger = triggerElement;
+    if (window.cfpSearchSettings?.instantLayout === 'compact') prepareCompactHeader(triggerElement);
     modal.style.top = '0px';
     applySearchDisplaySettings();
     if (modal.dataset.cfpLayout === 'compact') void modal.offsetWidth;
@@ -788,6 +859,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     overlay.classList.remove('cfp-open');
     modal.classList.remove('cfp-open');
+    releaseCompactHeader(true);
 
     // Restore body overflow to what it was before we set it
     // (avoids breaking other modals that also use overflow:hidden)
