@@ -107,6 +107,28 @@ try {
     await evaluate('document.querySelector("#cfp-search-close").click()');
   }
   console.log('PASS compact panel fits 320px, 390px, 900px and 1440px viewports');
+  await evaluate(`(()=>{const b=document.createElement('button');b.id='fixture-search-icon';b.className='header__icon--search';b.setAttribute('aria-label','Search');b.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/></svg>';document.querySelector('header').append(b);})()`);
+  const anchoredGeometry=()=>evaluate(`(()=>{const m=document.querySelector('.cfp-search-modal'),r=m.getBoundingClientRect(),i=document.querySelector('#fixture-search-icon svg').getBoundingClientRect(),o=getComputedStyle(m).transformOrigin.split(' ').map(parseFloat);return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,iconTop:i.top,iconBottom:i.bottom,originX:r.left+o[0],originY:r.top+o[1],iconX:i.left+i.width/2,iconY:i.top+i.height/2};})()`);
+  for(const [width,height,left,top,above] of [[1440,740,1380,20,false],[1440,740,12,20,false],[390,740,340,20,false],[320,740,270,20,false],[390,300,340,20,false],[1440,740,1300,680,true]]){
+    await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<600});
+    await evaluate("document.querySelector('#fixture-search-icon').style.cssText='position:fixed;display:flex;width:40px;height:40px;padding:8px;border:0;box-sizing:border-box;z-index:20;left:"+left+"px;top:"+top+"px';document.querySelector('#fixture-search-icon').click()");
+    await delay(250);const g=await anchoredGeometry();
+    assert.ok(g.left>=0&&g.right<=width&&g.top>=0&&g.bottom<=height,JSON.stringify(g));
+    assert.ok(above?Math.abs(g.bottom-(g.iconTop-8))<1:Math.abs(g.top-(g.iconBottom+8))<1,JSON.stringify(g));
+    assert.ok(Math.abs(g.originX-g.iconX)<1&&Math.abs(g.originY-g.iconY)<1,JSON.stringify(g));
+    await evaluate('document.querySelector("#cfp-search-close").click()');await delay(220);
+  }
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:740,deviceScaleFactor:1,mobile:false});
+  await evaluate("document.querySelector('#fixture-search-icon').style.cssText='position:fixed;display:flex;width:40px;height:40px;padding:8px;border:0;box-sizing:border-box;right:24px;top:20px';document.querySelector('#fixture-search-icon').click()");await delay(250);
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:740,deviceScaleFactor:1,mobile:true});await delay(250);
+  const resizedAnchor=await anchoredGeometry();assert.ok(Math.abs(resizedAnchor.top-resizedAnchor.iconBottom-8)<1&&Math.abs(resizedAnchor.originX-resizedAnchor.iconX)<1);
+  await evaluate('document.querySelector("#cfp-search-close").click()');await delay(220);
+  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  await evaluate("document.querySelector('#fixture-search-icon').click()");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-search-modal')).transitionDuration"),'0s');
+  await evaluate('document.querySelector("#cfp-search-close").click()');await send('Emulation.setEmulatedMedia',{features:[]});
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:740,deviceScaleFactor:1,mobile:false});
+  console.log('PASS compact popup anchors to the search icon on either edge, flips above low triggers, repositions on resize and respects reduced motion');
   await setLayout('fullscreen');await navigate(origin);await open();await input('blue dress');
   await wait('document.querySelectorAll(".cfp-search-result-card").length===6&&document.querySelector("#cfp-search-products").innerText.includes("blue dress Dress")');
   assert.equal(await evaluate('document.querySelector(".cfp-search-modal").getBoundingClientRect().width'),1440);

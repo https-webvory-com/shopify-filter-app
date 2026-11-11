@@ -332,16 +332,36 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   function positionCompactPanel() {
     if (!modal || modal.dataset.cfpLayout !== 'compact') {
-      if (modal) for (const key of ['left','width','max-height']) modal.style.removeProperty(key);
+      if (modal) for (const key of ['left','bottom','width','max-height','transform-origin','--cfp-compact-enter-y']) modal.style.removeProperty(key);
       if (modal) modal.style.top = '0px';
       return;
     }
-    const rect = modal._trigger?.getBoundingClientRect();
-    const width = Math.min(448, window.innerWidth - 16);
-    const left = window.innerWidth <= 600 ? 8 : Math.max(8, Math.min(rect?.left ?? window.innerWidth - width - 24, window.innerWidth - width - 8));
-    const top = window.innerWidth <= 600 ? 12 : Math.max(8, Math.min(rect?.top ?? 64, window.innerHeight - 240));
-    modal.style.left = left + 'px'; modal.style.top = top + 'px';
-    modal.style.width = width + 'px'; modal.style.maxHeight = Math.min(600, Math.max(180, window.innerHeight - top - 12)) + 'px';
+    const viewport = window.visualViewport;
+    const x = viewport?.offsetLeft || 0, y = viewport?.offsetTop || 0;
+    const viewportWidth = viewport?.width || window.innerWidth;
+    const viewportHeight = viewport?.height || window.innerHeight;
+    const margin = 8, gap = 8;
+    const width = Math.min(448, Math.max(0, viewportWidth - margin * 2));
+    const trigger = modal._trigger;
+    const icon = trigger?.querySelector?.('svg');
+    const iconRect = icon?.getBoundingClientRect();
+    const bounds = iconRect?.width && iconRect?.height ? iconRect : trigger?.getBoundingClientRect();
+    const anchor = bounds?.width && bounds?.height && bounds.bottom > y && bounds.top < y + viewportHeight && bounds.right > x && bounds.left < x + viewportWidth ? bounds : null;
+    const left = Math.max(x + margin, Math.min(anchor ? anchor.right - width : x + viewportWidth - width - 24, x + viewportWidth - width - margin));
+    const belowTop = anchor ? Math.max(y + margin, anchor.bottom + gap) : y + (viewportWidth <= 600 ? 12 : 64);
+    const below = Math.max(0, y + viewportHeight - margin - belowTop);
+    const above = anchor ? Math.max(0, anchor.top - gap - y - margin) : 0;
+    const opensAbove = below < Math.min(240, viewportHeight - margin * 2) && above > below;
+    const top = Math.min(belowTop, y + viewportHeight - margin);
+    modal.style.left = left + 'px';
+    modal.style.width = width + 'px';
+    modal.style.top = opensAbove ? 'auto' : top + 'px';
+    modal.style.bottom = opensAbove ? window.innerHeight - anchor.top + gap + 'px' : 'auto';
+    modal.style.maxHeight = Math.min(600, opensAbove ? above : below) + 'px';
+    const originX = anchor ? anchor.left + anchor.width / 2 - left : width / 2;
+    const originY = opensAbove ? `calc(100% + ${gap + anchor.height / 2}px)` : (anchor ? anchor.top + anchor.height / 2 - top : 0) + 'px';
+    modal.style.transformOrigin = `${originX}px ${originY}`;
+    modal.style.setProperty('--cfp-compact-enter-y', opensAbove ? '6px' : '-6px');
   }
 
   function renderCompactNavigation() {
@@ -407,6 +427,9 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   function attachListeners() {
       window.addEventListener('resize', positionCompactPanel);
+      window.addEventListener('scroll', positionCompactPanel, {passive:true});
+      window.visualViewport?.addEventListener('resize', positionCompactPanel);
+      window.visualViewport?.addEventListener('scroll', positionCompactPanel);
       // ─────────────────────────────────────────────────────────────────────────
       // WHITELIST APPROACH: Only intercept elements that are 100% confirmed
       // to be search triggers. This prevents false-positives on country pickers,
@@ -740,6 +763,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     modal._trigger = triggerElement;
     modal.style.top = '0px';
     applySearchDisplaySettings();
+    if (modal.dataset.cfpLayout === 'compact') void modal.offsetWidth;
     overlay.classList.add('cfp-open');
     modal.classList.add('cfp-open');
 
@@ -748,6 +772,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     modal._prevBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.body.classList.add('cfp-search-active');
+    if (modal.dataset.cfpLayout === 'compact') positionCompactPanel();
 
     // Load default view if input is empty
     if (mainInput.value.trim().length === 0) {
