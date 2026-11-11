@@ -332,7 +332,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     positionCompactPanel();
   }
 
-  const compactSlotProperties = ['width','min-width','max-width','flex-basis','flex-shrink','transition'];
+  const compactSlotProperties = ['width','min-width','max-width','height','min-height','max-height','flex-basis','flex-shrink','transition'];
   function restoreCompactSlot(state) {
     if (!state?.slot) return;
     for (const [key,value,priority] of state.styles) {
@@ -390,6 +390,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       state.startWidth = rect.width;
       state.anchorOffset = state.anchor.top + state.anchor.height / 2 - rect.top;
       for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,rect.width+'px','important');
+      for (const key of ['height','min-height','max-height']) state.slot.style.setProperty(key,rect.height+'px','important');
       state.slot.style.setProperty('flex-shrink','0','important');
       state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .22s ease, min-width .22s ease, max-width .22s ease, flex-basis .22s ease','important');
       void state.slot.offsetWidth;state.active = true;
@@ -830,8 +831,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Already open — don't re-open
     if (modal.classList.contains('cfp-open')) return;
 
-    modal._trigger = triggerElement;
-    if (window.cfpSearchSettings?.instantLayout === 'compact') prepareCompactHeader(triggerElement);
+    modal._trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
+    if (window.cfpSearchSettings?.instantLayout === 'compact') prepareCompactHeader(modal._trigger);
     modal.style.top = '0px';
     applySearchDisplaySettings();
     if (modal.dataset.cfpLayout === 'compact') void modal.offsetWidth;
