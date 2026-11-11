@@ -53,6 +53,46 @@ window.runPrestigeQuickViewTests = async () => {
     try { await body(); results.push({ name, passed: true }); }
     catch (error) { results.push({ name, passed: false, error: error.message }); }
   };
+  const withVariantHandle = async body => {
+    const source = document.querySelector('#native-prestige');
+    source.setAttribute('handle','multi?variant=12');
+    try { await tick(); await body(source); }
+    finally { qv.closeModal(); source.setAttribute('handle','multi'); await tick(); }
+  };
+  await test('Prestige App Quick View separates the variant query from the product handle', () => withVariantHandle(async () => {
+    mode({quickViewStyle:'app'}); await tick();
+    const replacement=document.querySelector('[data-cfp-theme-replacement]');
+    assert(replacement.dataset.productHandle === 'multi' && replacement.dataset.cfpVariantId === '12','query retained in handle');
+    replacement.click(); await tick();
+    assert(fixture.requests.length===1 && fixture.requests[0].url==='/fr/products/multi.js','invalid product JSON URL');
+    assert(qv.selectedVariantId===12 && qv.selectedOptions.join()==='Blue,S','variant lost');
+    assert(qv.modal.querySelector('.cfp-qv-view-details-link').href.endsWith('?variant=12'),'details variant lost');
+    assert(!modal()?.open && qv.overlay.classList.contains('cfp-active'),'competing dialogs');
+  }));
+  await test('Prestige Theme Quick View forwards the variant as a query parameter', () => withVariantHandle(async () => {
+    native.click(); await tick();
+    const url=new URL(fixture.requests[0].url);
+    assert(url.pathname==='/fr/products/multi' && url.searchParams.get('variant')==='12','variant encoded into path');
+    assert(modal().open && !qv.overlay.classList.contains('cfp-active'),'theme variant failed');
+  }));
+  await test('Prestige template failure keeps the variant when falling back to App Quick View', () => withVariantHandle(async () => {
+    prestigeFixture.fail=true; native.click(); await tick();
+    assert(qv.selectedVariantId===12 && qv.overlay.classList.contains('cfp-active'),'fallback lost variant');
+    assert(fixture.requests.at(-1).url==='/fr/products/multi.js','fallback malformed product URL');
+  }));
+  await test('Prestige rerender updates or clears the replacement variant without duplicating buttons', () => withVariantHandle(async source => {
+    mode({quickViewStyle:'app'}); await tick();
+    source.setAttribute('handle','multi?variant=13&tracking=homepage'); await tick();
+    let replacement=document.querySelector('[data-cfp-theme-replacement]');
+    assert(replacement.dataset.productHandle==='multi' && replacement.dataset.cfpVariantId==='13','rerender variant stale');
+    replacement.click(); await tick();
+    assert(qv.selectedVariantId===13 && qv.modal.querySelector('.cfp-qv-add-to-cart-btn').disabled,'sold-out variant lost');
+    qv.closeModal();source.setAttribute('handle','multi?variant=invalid'); await tick();
+    replacement=document.querySelector('[data-cfp-theme-replacement]');
+    assert(!replacement.hasAttribute('data-cfp-variant-id'),'invalid variant retained');
+    replacement.click();await tick();assert(qv.selectedVariantId===11,'invalid variant did not fall back');
+    assert(document.querySelectorAll('[data-cfp-theme-replacement]').length===1,'duplicate replacements');
+  }));
   await test('Prestige app card loads only the native template with locale', async () => {
     await qv.openModal('multi', app);
     assert(modal().open && !qv.overlay.classList.contains('cfp-active'), 'native not exclusive');

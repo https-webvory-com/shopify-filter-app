@@ -21,21 +21,31 @@ if (!window.CfpQuickViewAdapters) {
     return prestigeBase() && modal?.matches('quick-buy-modal[handle]') ? modal : null;
   };
 
-  const handleFrom = button => {
+  const productTarget = button => {
     const prestige = prestigeModal(button);
-    if (prestige) return prestige.getAttribute('handle');
     try {
-      const url = new URL(button.getAttribute('data-product-url'), location.origin);
+      const url = new URL(prestige ? `/products/${prestige.getAttribute('handle') || ''}` : button.getAttribute('data-product-url'), location.origin);
       if (url.origin !== location.origin) return null;
-      return decodeURIComponent(url.pathname.match(/\/products\/([^/]+)/)?.[1] || '') || null;
+      const handle = decodeURIComponent(url.pathname.match(/\/products\/([^/]+)\/?$/)?.[1] || '');
+      if (!handle || /[/?#\\]/.test(handle)) return null;
+      const variant = url.searchParams.get('variant');
+      return {handle,variantId:/^[1-9]\d*$/.test(variant || '') ? variant : null};
     } catch { return null; }
   };
+  const handleFrom = button => productTarget(button)?.handle || null;
   const variantFrom = button => {
-    if (!button?.matches(nativeSelector) || !handleFrom(button)) return null;
-    try {
-      const id = new URL(button.getAttribute('data-product-url'), location.origin).searchParams.get('variant');
+    if (button?.matches('[data-cfp-theme-replacement]')) {
+      const id = button.dataset.cfpVariantId;
       return /^[1-9]\d*$/.test(id || '') ? id : null;
-    } catch { return null; }
+    }
+    if (!button?.matches(nativeSelector) && !prestigeModal(button)) return null;
+    return productTarget(button)?.variantId || null;
+  };
+  const syncReplacement = (button, replacement) => {
+    const target = productTarget(button);
+    replacement.dataset.productHandle = target.handle;
+    if (target.variantId) replacement.dataset.cfpVariantId = target.variantId;
+    else delete replacement.dataset.cfpVariantId;
   };
   const nativeModal = trigger => {
     const id = trigger?.closest('modal-opener')?.getAttribute('data-modal')?.slice(1);
@@ -77,9 +87,9 @@ if (!window.CfpQuickViewAdapters) {
     scheduled = false;
     const appMode = configuration?.quickViewStyle !== 'theme' && configuration?.showQuickViewCollection !== false;
     replacements.forEach((saved, button) => {
-      if (!appMode || !button.isConnected || !handleFrom(button) || variantFrom(button)) restore(button, saved);
+      if (!appMode || !button.isConnected || !handleFrom(button) || button.matches(nativeSelector) && variantFrom(button)) restore(button, saved);
       else {
-        saved.replacement.dataset.productHandle = handleFrom(button);
+        syncReplacement(button,saved.replacement);
         if (saved.replacement.disabled !== button.disabled) saved.replacement.disabled = button.disabled;
         if (!saved.replacement.isConnected) button.after(saved.replacement);
       }
@@ -91,13 +101,13 @@ if (!window.CfpQuickViewAdapters) {
       if (!nativeModal(button)?.matches('quick-add-modal') && !prestigeModal(button)) return;
       // Variant openers are size/color choices. Keep their original labels,
       // styling and theme listeners; the delegated App handler still owns clicks.
-      if (variantFrom(button)) return;
+      if (button.matches(nativeSelector) && variantFrom(button)) return;
       const replacement = document.createElement('button');
       replacement.type = 'button';
       replacement.className = button.className;
       replacement.textContent = 'Quick View';
       replacement.dataset.cfpThemeReplacement = '';
-      replacement.dataset.productHandle = handleFrom(button);
+      syncReplacement(button,replacement);
       replacement.setAttribute('aria-haspopup', 'dialog');
       replacement.disabled = button.disabled;
       const focused = document.activeElement === button;
@@ -149,6 +159,8 @@ if (!window.CfpQuickViewAdapters) {
         await prestigeHides.get(modal);
         signal.throwIfAborted();
         const url = new URL(`${window.Shopify.routes.root}products/${encodeURIComponent(handle)}`, location.origin);
+        const variant = variantFrom(trigger);
+        if (variant) url.searchParams.set('variant', variant);
         if (window.Shopify.theme.role === 'unpublished') url.searchParams.set('preview_theme_id', window.Shopify.theme.id);
         const response = await fetch(url, { signal, credentials: 'same-origin' });
         if (!response.ok) throw new Error('Prestige Quick Buy could not load the product');
