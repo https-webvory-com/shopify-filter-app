@@ -332,7 +332,16 @@ document.addEventListener("DOMContentLoaded", async function () {
     positionCompactPanel();
   }
 
-  const compactSlotProperties = ['width','min-width','max-width','height','min-height','max-height','flex-basis','flex-shrink','transition'];
+  const compactSlotProperties = ['width','min-width','max-width','height','min-height','max-height','flex-basis','flex-shrink','transition','position','overflow'];
+  function restoreCompactInput(state) {
+    if (!state?.inputHeader) return;
+    modal.prepend(state.inputHeader);
+    state.inputHeader.removeAttribute('data-cfp-inline');
+    modal.removeAttribute('aria-owns');
+    delete modal.dataset.cfpInline;
+    delete overlay.dataset.cfpInline;
+    state.inputHeader = null;
+  }
   function restoreCompactSlot(state) {
     if (!state?.slot) return;
     for (const [key,value,priority] of state.styles) {
@@ -346,6 +355,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
     const state = compactHeader;compactHeader = null;
     if (!state) return;
+    restoreCompactInput(state);
     state.observer?.disconnect();
     if (state.visibility) state.trigger.style.setProperty('visibility',state.visibility,state.visibilityPriority);
     else state.trigger.style.removeProperty('visibility');
@@ -382,7 +392,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const state = compactHeader;
     if (!state?.slot?.isConnected) return null;
     if (window.innerWidth <= 768) {
-      state.observer?.disconnect();restoreCompactSlot(state);return null;
+      restoreCompactInput(state);state.observer?.disconnect();restoreCompactSlot(state);return null;
     }
     if (!state.active) {
       const rect = state.slot.getBoundingClientRect();
@@ -400,6 +410,21 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
     }
     for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,width+'px','important');
+    // Use the existing input in the expanded header slot, rather than a second
+    // search row inside the results popup. Interactive trigger elements cannot host it.
+    if (state.slot !== state.trigger && !state.inputHeader) {
+      state.inputHeader = modal.querySelector('.cfp-search-header');
+      if (state.inputHeader) {
+        if (getComputedStyle(state.slot).position === 'static') state.slot.style.setProperty('position','relative','important');
+        state.slot.style.setProperty('overflow','visible','important');
+        state.inputHeader.dataset.cfpInline = 'true';
+        state.inputHeader.id = 'cfp-inline-search-header';
+        modal.setAttribute('aria-owns','cfp-inline-search-header');
+        state.slot.append(state.inputHeader);
+        modal.dataset.cfpInline = 'true';
+        overlay.dataset.cfpInline = 'true';
+      }
+    }
     const rect = state.slot.getBoundingClientRect();
     return {left:rect.right-state.anchor.width,right:rect.right,top:rect.top+state.anchorOffset-state.anchor.height/2,
       bottom:rect.top+state.anchorOffset+state.anchor.height/2,width:state.anchor.width,height:state.anchor.height};
@@ -425,12 +450,16 @@ document.addEventListener("DOMContentLoaded", async function () {
     const barTop=Math.max(y+margin,Math.min(center-barHeight/2,y+viewportHeight-margin-barHeight));
     const below=Math.max(0,y+viewportHeight-margin-barTop),above=Math.max(0,barTop+barHeight-y-margin);
     const opensAbove=below<Math.min(240,viewportHeight-margin*2)&&above>below;
+    // Keep viewport-edge/mobile fallbacks inside the popup when the header
+    // cannot safely contain a full-width field.
+    if (compactHeader?.inputHeader && (opensAbove || Math.abs(left-(compactHeader.slot.getBoundingClientRect().right-width))>1)) restoreCompactInput(compactHeader);
+    const inline = !!compactHeader?.inputHeader;
     modal.dataset.cfpPlacement=opensAbove?'above':'below';
     modal.style.left='auto';modal.style.right=window.innerWidth-left-width+'px';modal.style.width=width+'px';
-    modal.style.top=opensAbove?'auto':barTop+'px';modal.style.bottom=opensAbove?window.innerHeight-barTop-barHeight+'px':'auto';
+    modal.style.top=opensAbove?'auto':(inline?compactHeader.inputHeader.getBoundingClientRect().bottom:barTop)+'px';modal.style.bottom=opensAbove?window.innerHeight-barTop-barHeight+'px':'auto';
     modal.style.maxHeight=Math.min(600,opensAbove?above:below)+'px';
     modal.style.setProperty('--cfp-compact-panel-width',width+'px');
-    modal.style.setProperty('--cfp-compact-panel-height',Math.min(600,opensAbove?above:below)+'px');
+    modal.style.setProperty('--cfp-compact-panel-height',(Math.min(600,opensAbove?above:below)-(inline?barHeight:0))+'px');
     modal.style.setProperty('--cfp-compact-trigger-width',Math.min(50,anchor?.width||50)+'px');
     modal.style.transformOrigin=(anchor?anchor.left+anchor.width/2-left:width/2)+'px '+(opensAbove?'calc(100% - 25px)':(center-barTop)+'px');
   }
@@ -586,7 +615,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       const handleEvent = (e) => {
         if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         // ── GATE 0: Ignore events inside our own modal/overlay ───────────────
-        if (e.target.closest('.cfp-search-modal') || e.target.closest('.cfp-search-modal-overlay')) return;
+        if (e.target.closest('.cfp-search-modal, .cfp-search-modal-overlay, [data-cfp-inline="true"].cfp-search-header')) return;
 
         console.log(`[CFP-IS] Event triggered: ${e.type} on`, e.target);
 
@@ -720,7 +749,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         if (modal?._restoringFocus) return;
         if (el.tagName !== 'INPUT') return;                           // Only input elements
         if (el.type !== 'search' && el.name !== 'q') return;         // Only search inputs
-        if (el.closest('.cfp-search-modal')) return;                  // Not our own modal input
+        if (el.closest('.cfp-search-modal, .cfp-search-header[data-cfp-inline="true"]')) return;
         const inHeader = el.closest(
           'header, sticky-header, .header, #header, .site-header, #shopify-section-header'
         );
@@ -764,10 +793,13 @@ document.addEventListener("DOMContentLoaded", async function () {
       mainInput.focus();
     });
     overlay.addEventListener("click", closeModal);
+    document.addEventListener('pointerdown', e => {
+      if (modal.dataset.cfpInline === 'true' && modal.classList.contains('cfp-open') && !modal.contains(e.target) && !compactHeader?.inputHeader?.contains(e.target)) closeModal();
+    });
     document.addEventListener("keydown", (e) => {
       if (document.querySelector('.cfp-native-quick-view[open]')) return;
       if (e.key === 'Tab' && modal.dataset.cfpLayout === 'compact' && modal.classList.contains('cfp-open')) {
-        const controls = [...modal.querySelectorAll('button:not(:disabled),input,a[href]')].filter(el => el.tabIndex >= 0 && el.getClientRects().length);
+        const controls = [...(compactHeader?.inputHeader?.querySelectorAll('button:not(:disabled),input,a[href]')||[]),...modal.querySelectorAll('button:not(:disabled),input,a[href]')].filter(el => el.tabIndex >= 0 && el.getClientRects().length);
         const first = controls[0], last = controls[controls.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
