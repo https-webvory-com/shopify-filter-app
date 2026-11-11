@@ -2958,7 +2958,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const openPopoverScrollArea = currentlyOpenPopover?.querySelector('.cfp-scroll-area');
         const openPopoverScrollTop = openPopoverScrollArea ? openPopoverScrollArea.scrollTop : 0;
 
-        horizontalContainer.innerHTML = horizontalPills.join('');
+        // Limit the Horizontal toolbar without dropping groups from drawers,
+        // saved settings, or active-filter handling.
+        horizontalContainer.innerHTML = horizontalPills.slice(0, 12).join('');
         horizontalContainer.style.display = 'flex';
         if (extraContainer) {
           extraContainer.innerHTML = '';
