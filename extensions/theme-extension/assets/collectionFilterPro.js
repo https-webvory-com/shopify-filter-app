@@ -3819,8 +3819,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     };
 
     syncCheckboxSelections();
+    // Reset every rendered control and pill badge from the cleared state now;
+    // the next product response may reuse facets without rebuilding filters.
+    if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
     if (templateName === 'collection') updateVerticalFilterSummary(cfpLastTotalCount);
     renderBreadcrumbs();
+    updateActiveCountBadge();
     fetchAndRenderData();
   }
 
@@ -3916,7 +3920,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (!breadcrumbs) return;
 
     const horizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
-    if (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) {
+    if (!filtersReady || (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false)) {
       breadcrumbs.style.display = 'none';
       breadcrumbs.innerHTML = '';
       return;
