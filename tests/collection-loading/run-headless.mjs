@@ -1729,6 +1729,23 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
     return {query:'purple prom dress',firstCardsMs:Math.round(firstCardsMs),sizeResults:15,filterRequests:1};
   });
+  await test('expanded product variants stay open when shoppers select another variant',async()=>{
+    const colors=['Green','Blue','Red','Navy','Pink','Black','White'];
+    const productVariants=Object.fromEntries([1,2].map(id=>[String(id),colors.map((color,i)=>({id:String(id*100+i),option1:color,available:true,imageUrl:'/image/'+id+'.svg',price:id*10+i}))]));
+    await control({reset:true,realToolbar:true,productCount:10,precompute:true,noPins:true,noMerchandising:true,hold:false,delay:20,apiDelay:0,imageDelay:0,priceDelay:0,productVariants,
+      globalSettings:{desktopFilterLayout:'drawer',showOnlyInStock:true}});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===10&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    const card="document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1?\"]').closest('.cfp-product-card')";
+    await evaluate(`${card}.querySelector('.cfp-swatch-more').click();${card}.querySelector('[data-cfp-color="White"]').click()`);
+    const swatchState=()=>evaluate(`(()=>{const c=${card};return {hidden:c.querySelectorAll('.cfp-swatch-hidden').length,more:c.querySelector('.cfp-swatch-more').textContent,active:c.querySelector('.cfp-swatch-active').dataset.cfpColor,variant:new URL(c.querySelector('.cfp-product-card__link').href).searchParams.get('variant')};})()`);
+    assert.deepEqual(await swatchState(),{hidden:0,more:'-2',active:'White',variant:'106'});
+    await evaluate(`${card}.querySelector('[data-cfp-color="Blue"]').click()`);
+    assert.deepEqual(await swatchState(),{hidden:0,more:'-2',active:'Blue',variant:'101'});
+    assert.equal(await evaluate("document.querySelector('.cfp-product-card__link[href*=\"/products/dress-2?\"]').closest('.cfp-product-card').querySelectorAll('.cfp-swatch-hidden').length"),2,'other cards retain their own collapsed state');
+    await evaluate(`${card}.querySelector('.cfp-swatch-more').click();${card}.querySelector('[data-cfp-color="Red"]').click()`);
+    assert.deepEqual(await swatchState(),{hidden:2,more:'+2',active:'Red',variant:'102'});
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('pinned cards keep the first variant from early display through full cards and shopper swatch changes',async()=>{
     const productVariants={'1':[{id:'100',option1:'Green',available:false,imageUrl:'/image/green.svg',price:10},{id:'101',option1:'Blue',available:true,imageUrl:'/image/blue.svg',price:20}]};
     await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,colorRule:true,pinList:['1'],productVariants,assetDelay:1600,apiDelay:0,imageDelay:0,priceDelay:0});

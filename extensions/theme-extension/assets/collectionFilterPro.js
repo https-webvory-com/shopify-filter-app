@@ -1449,11 +1449,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (!availableColors.has(swatch.dataset.cfpColor)) swatch.remove();
       });
       const swatches = [...card.querySelectorAll('.cfp-swatch-item')];
-      swatches.forEach((swatch, index) => swatch.classList.toggle('cfp-swatch-hidden', index >= 5));
       const more = card.querySelector('.cfp-swatch-more');
+      const expanded = more?.textContent.trim().startsWith('-') === true;
+      swatches.forEach((swatch, index) => swatch.classList.toggle('cfp-swatch-hidden', index >= 5 && !expanded));
       if (more) {
         const extra = Math.max(0, swatches.length - 5);
-        if (extra) more.textContent = `+${extra}`;
+        if (extra) more.textContent = `${expanded ? '-' : '+'}${extra}`;
         else more.remove();
       }
     }
