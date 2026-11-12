@@ -790,7 +790,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     activeFetchController = new AbortController();
     const fetchSignal = activeFetchController.signal;
     let rankingKey;
-    document.querySelectorAll('.cfp-order-error').forEach(error => error.remove());
+    document.querySelectorAll('.cfp-order-error, .cfp-price-sort-notice').forEach(error => error.remove());
 
     syncStateToURL(); // Sync URL
 
@@ -968,6 +968,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       data = await waitForCollectionOrder(data, `${API_DOMAIN}/api/filter?${queryParams.toString()}`, fetchSignal);
       if (fetchSignal.aborted) return;
+      updatePriceSortNotice(data);
       if (templateName === 'search' && !isLoadMore && activeFilters.page === 1) {
         window.cfpSearchAnalyticsId ||= window.CfpAnalytics?.newSearchId?.();
         const searchId = window.cfpSearchAnalyticsId;
@@ -1092,6 +1093,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
+  function updatePriceSortNotice(data) {
+    document.querySelectorAll('.cfp-price-sort-notice').forEach(notice => notice.remove());
+    if (data.priceSortSource !== 'partial-market') return;
+    const container = getProductContainer();
+    const notice = document.createElement('div');
+    notice.className = 'cfp-price-sort-notice';
+    notice.setAttribute('role', 'status');
+    notice.textContent = 'Price sorting is still preparing for this country. Products are available, but their order may change.';
+    container.parentElement?.insertBefore(notice, container);
+  }
+
   async function completeSearchFacets(cards,requestUrl,signal){
     if(signal.aborted)return;
     const request=new URL(requestUrl);request.searchParams.delete('responseProfile');
@@ -1111,6 +1123,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
     }catch(error){
       if(signal.aborted)return;
+      sidebar.querySelectorAll('.cfp-facet-error').forEach(notice=>notice.remove());
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
       const message=document.createElement('p');message.textContent='Search filters are temporarily unavailable.';
       const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
@@ -1148,6 +1161,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
+      updatePriceSortNotice(full);
       if(full.cfpFacetsOnly){
         updateProductCount(full.totalCount);renderPagination(getProductContainer(),full.totalCount);
         getProductContainer().querySelectorAll('.cfp-product-card--preview').forEach(card=>card.classList.remove('cfp-product-card--preview'));
@@ -1166,6 +1180,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }catch(error){
       if(signal.aborted)return;
       if(prefix)getProductContainer().querySelectorAll(':scope > .cfp-skeleton-card').forEach(card=>card.remove());
+      sidebar.querySelectorAll('.cfp-facet-error').forEach(notice=>notice.remove());
       const notice=document.createElement('div');notice.className='cfp-facet-error';notice.setAttribute('role','status');
       const message=document.createElement('p');message.textContent=cards.cfpCards?.preview?'The remaining products and filters are temporarily unavailable.':'Filters are temporarily unavailable.';
       const retry=document.createElement('button');retry.type='button';retry.textContent='Retry filters';
@@ -2265,6 +2280,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     updateVerticalFilterSummary(totalCount);
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
+    body.querySelectorAll('.cfp-facet-error').forEach(notice=>notice.remove());
 
 
     // Cache scroll position

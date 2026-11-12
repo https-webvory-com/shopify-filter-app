@@ -929,6 +929,29 @@ try{
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
+  await test('incomplete country price data keeps products, filters and pagination available',async()=>{
+    for(const country of ['GB','DE']){
+      await control({reset:true,country,realToolbar:true,hold:false,precompute:true,productCount:40,noPins:true,noMerchandising:true,delay:20,apiDelay:0,priceDelay:0,imageDelay:0,
+        filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',config:{}}],
+        globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});
+      await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+      await navigate('?sort_by=price-ascending');
+      await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar .cfp-group')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-order-error,.cfp-facet-error').length"),0);
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),1);
+      assert.ok((await getState()).requests.some(r=>r.sort==='price-ascending'&&r.status===200));
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();document.querySelector('#cfp-sidebar input[name=vendor]').click();document.querySelector('#cfp-apply-btn').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('.cfp-price-sort-notice')");
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),1);
+      await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===40");
+      assert.equal(new Set(await cards()).size,40);
+      await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"best-selling\"]').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-product-card--reveal').length===25");
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),0);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
   await test('cards render within two seconds while slow facets finish later and failed facets preserve cards',async()=>{
     await control({reset:true,hold:true,precompute:true,early:true,assetDelay:200,apiDelay:300,facetDelay:3000,clockOffset:0,cssDelay:0,
       filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Brand',config:{}}],globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});
@@ -946,6 +969,8 @@ try{
     await control({facetDelay:0,facetFailure:true});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25");await wait("!!document.querySelector('.cfp-facet-error')");
     assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-drawer-trigger-btn')).display"),'none','failed facets must not expose an empty drawer');
     assert.deepEqual(await cards(),first);assert.equal(await evaluate("!!document.querySelector('.cfp-order-error')"),false);
+    await evaluate("(()=>{const notice=document.querySelector('.cfp-facet-error');notice.after(notice.cloneNode(true));})()");
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-facet-error').length"),2,'simulate the duplicate stale notices from an earlier failed request');
     await control({facetFailure:false});await evaluate("document.querySelector('.cfp-facet-error button').click()");await wait("!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     assert.deepEqual((await cards()).slice(0,first.length),first);assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);

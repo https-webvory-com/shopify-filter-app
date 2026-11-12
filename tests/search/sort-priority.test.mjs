@@ -109,7 +109,7 @@ async function collectionRoute(settings) {
     "../services/shopCache.server": { getCached: async (key, fetchValue) => {
       if (key.startsWith("globalSettings:")) return settings;
       if (key.startsWith("mergedValues:")) return [];
-      if (key.startsWith("filterGroup:")) return { resolvedCollectionId: "gid://shopify/Collection/1", resolvedCollectionTitle: "Dresses", activeGroupFilters: [] };
+      if (key.startsWith("filterGroup:")) return { resolvedCollectionId: "gid://shopify/Collection/1", resolvedCollectionTitle: "Dresses", activeGroupFilters: settings.filterSettings || [] };
       if (!cache.has(key)) cache.set(key, await fetchValue());
       return cache.get(key);
     } },
@@ -136,6 +136,23 @@ for (const overPins of [false,true]) for (const overMerch of [false,true]) {
     const empty = await load("page=9&sortBy=best-selling"); assert.equal(empty.products.length,0);
   });
 }
+
+test('incomplete contextual prices keep collections available across unrelated shops and countries',async()=>{
+  for(const [shop,country] of [['thedressoutletuk.myshopify.com','GB'],['canadian-fixture.myshopify.com','CA'],['german-fixture.myshopify.com','DE']]){
+    const load=await collectionRoute({shop,prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,
+      filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',config:{}}]});
+    for(const sortBy of ['price-ascending','price-descending']){
+      const result=await load('page=1&sortBy='+sortBy+'&country='+country);
+      assert.equal(result.priceSortSource,'partial-market');
+      assert.equal(result.products.length,25);assert.equal(result.totalCount,180);
+      assert.equal(result.debug.meiliError,null);
+      assert.ok(result.settings.length>0);assert.ok(result.facets);
+    }
+    const filtered=await load('page=1&sortBy=price-ascending&country='+country+'&tag[]=TopFormal');
+    assert.equal(filtered.totalCount,10);
+    assert.ok(filtered.products.every(product=>Number(product.id.split('/').pop())<=10),'partial pricing must retain the selected filter scope');
+  }
+});
 
 test("priority ON respects price sorting and filtered collection membership", async()=>{
   const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true});

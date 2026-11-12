@@ -130,14 +130,8 @@ export const loader = async ({ request, context }) => {
     // the saved base variant prices; there is no separate US contextual column.
     const savedUsBasePrice=marketPriceSortRequested&&shop==='thedressoutlet.myshopify.com'&&requestedCountry==='US';
     const verifiedMarketPriceSort=marketPriceSortRequested&&!savedUsBasePrice ? await marketPriceIntentReady(shop,requestedCountry) : null;
-    if(marketPriceSortRequested&&!verifiedMarketPriceSort&&
-      !savedUsBasePrice&&(requestedCountry!=='IN'||shop!=='thedressoutlet.myshopify.com')&&
-      url.searchParams.get('responseProfile')!=='collection-config-v1'){
-      const warmup=context?.rankingWarmup===true;
-      return data({error:'Price sorting is preparing for this country. Please try again later.',priceSortStatus:'pending',
-        ...(warmup?{debug:{collectionRankingStatus:'pending',marketPriceSortStatus:'pending'}}:{})},
-        {status:warmup?202:503,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Retry-After':'60'}});
-    }
+    // Incomplete contextual prices use the partial-price ranker below for any
+    // shop/country. They must not make the collection and its filters unavailable.
     const marketCountry=url.searchParams.get('country');
     const marketState=url.searchParams.get('responseProfile')==='collection-config-v1'
       ? {status:'disabled',version:null} : await getMarketAvailabilityState(shop,marketCountry);
@@ -2066,7 +2060,8 @@ export const loader = async ({ request, context }) => {
     if(isSearch||searchQuery){const searchContext=await getSearchIndexContext(shop);responsePayload.products=responsePayload.products.map(p=>publicSearchProduct(p,searchContext.settings));}
     if(facetsOnly)return data({rankingToken:rankingSession.token,totalCount:responsePayload.totalCount,
       settings:responsePayload.settings,facets:responsePayload.facets,globalSettings:responsePayload.globalSettings,
-      mergedValues:responsePayload.mergedValues,cfpFacetsOnly:true,debug:{timing:responsePayload.debug.timing}},
+      mergedValues:responsePayload.mergedValues,cfpFacetsOnly:true,
+      ...(responsePayload.priceSortSource?{priceSortSource:responsePayload.priceSortSource}:{}),debug:{timing:responsePayload.debug.timing}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     if(cardsOnly){
       if(pinnedPrefix){

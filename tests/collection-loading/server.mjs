@@ -275,7 +275,7 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
-        if(updates.reset){state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;state.savedFilterFailures=0;state.savedFilterAttempts=0;state.themeIntro=false;state.noMatchQuery=null;}
+        if(updates.reset){state.country=null;state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;state.savedFilterFailures=0;state.savedFilterAttempts=0;state.themeIntro=false;state.noMatchQuery=null;}
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;}
@@ -365,7 +365,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.independentFilters)body=body.replace('</head>','<script src="/assets/collectionFilters.js"></script></head>');
         if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
         if(url.pathname==='/search')body=body.replace('data-search-terms="purple prom dress"','data-search-terms="'+String(url.searchParams.get('q')||'')+'"');
-        if(state.countryStock)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||'US'));
+        if(state.countryStock||state.country)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||state.country||'US'));
         body=body.replace(/<div class="cfp-sidebar__footer">[\s\S]*?<\/div>/,footerHtml);
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){
