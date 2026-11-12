@@ -475,6 +475,12 @@ try{
     await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!!document.querySelector('.cfp-breadcrumb-chip')");
     assert.equal(await evaluate("document.querySelector('[data-group=\"option-Color\"] .is-open').getBoundingClientRect().width"),420);
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+    await control({globalSettings:{desktopFilterLayout:'horizontal',showProductCount:false,showFilterOptionsWithOneItem:true}});
+    await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    await evaluate("(()=>{const p=document.querySelector('[data-group=\"option-Color\"]');if(p.closest('#cfp-horizontal-extra-filters'))document.querySelector('#cfp-drawer-trigger-btn').click();p.querySelector('button').click();})()");
+    const noCounts=await evaluate("[...document.querySelectorAll('[data-group=\"option-Color\"] .is-open .cfp-color-swatch')].map(e=>{const l=e.querySelector('.cfp-swatch-label').getBoundingClientRect(),s=e.querySelector('.cfp-swatch-circle').getBoundingClientRect();return {offset:Math.abs(l.top+l.height/2-s.top-s.height/2),count:!!e.querySelector('.cfp-checkbox__count')};})");
+    assert.equal(noCounts.length,8);
+    for(const item of noCounts){assert.equal(item.count,false);assert.ok(item.offset<1,JSON.stringify(item));}
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('horizontal filters recover missing toolbar containers and remain usable when resized',async()=>{

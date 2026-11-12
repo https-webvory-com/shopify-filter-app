@@ -2529,6 +2529,13 @@ facet-filters-form,
     justify-self: start;
     margin: 0 !important;
   }
+  .cfp-horizontal-layout .cfp-horizontal-pill__popover .cfp-color-grid--colors .cfp-color-swatch:not(:has(.cfp-checkbox__count)) {
+    grid-template-rows: auto;
+    row-gap: 0 !important;
+  }
+  .cfp-horizontal-layout .cfp-horizontal-pill__popover .cfp-color-grid--colors .cfp-color-swatch:not(:has(.cfp-checkbox__count)) .cfp-swatch-circle {
+    grid-row: 1;
+  }
   .cfp-horizontal-layout .cfp-top-bar__main { min-width: 0; gap: 12px; }
   .cfp-horizontal-layout .cfp-top-bar__left { min-width: 0; flex: 1 1 auto; }
   .cfp-horizontal-layout .cfp-horizontal-pill__count {
