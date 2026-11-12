@@ -3407,6 +3407,32 @@ facet-filters-form,
   .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper > :not(#cfp-sidebar):not(.cfp-breadcrumbs) { grid-column: 1; }
 }
 
+/* Product counts have no outline in any filter layout. */
+:is(#cfp-sidebar, #cfp-horizontal-filters, #cfp-horizontal-extra-filters) .cfp-checkbox__count,
+.cfp-product-count,
+.cfp-applied-product-count,
+.cfp-vertical-result-count {
+  border: 0 !important;
+}
+
+/* Horizontal toolbar groups stay borderless and square in every state. */
+.cfp-horizontal-pill__btn,
+.cfp-horizontal-layout #cfp-drawer-trigger-btn,
+.cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group,
+.cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__toggle {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.cfp-horizontal-pill__btn::before,
+.cfp-horizontal-layout #cfp-drawer-trigger-btn::before {
+  display: none !important;
+}
+.cfp-horizontal-layout .cfp-horizontal-pill__popover,
+.cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content {
+  border-radius: 0 !important;
+}
+
 /* Keep all Horizontal dropdown and open Drawer scrollbars consistent. */
 :is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content) {
   scrollbar-width: thin !important;
