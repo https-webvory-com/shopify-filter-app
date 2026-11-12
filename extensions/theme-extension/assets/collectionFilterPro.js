@@ -124,13 +124,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function getGlobalCurrencySymbol() {
     if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
+      if (window.Shopify.currency.active === 'INR') return 'Rs. ';
       try {
         const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: window.Shopify.currency.active }).formatToParts(0);
         const sym = parts.find(p => p.type === 'currency');
         if (sym) return sym.value;
       } catch(e) {}
     }
-    return (window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$';
+    return ((window.cfpCurrency && window.cfpCurrency.symbol) ? window.cfpCurrency.symbol : '$').replace(/₹/g, 'Rs. ');
   }
 
   // Production build - debug logs removed
@@ -2373,8 +2374,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
       else if (type === 'price' && displayMode.toLowerCase() === 'range') {
         const s = config.sliderConfig || {};
-        const prefixStr = s.sliderPrefix || (setting.type === "price_range" ? getGlobalCurrencySymbol() : "");
-        const suffixStr = s.sliderSuffix || "";
+        const prefixStr = (s.sliderPrefix || (setting.type === "price_range" ? getGlobalCurrencySymbol() : "")).replace(/₹/g, 'Rs. ');
+        const suffixStr = (s.sliderSuffix || "").replace(/₹/g, 'Rs. ');
         const step = s.sliderStep || 1;
         const rate = getGlobalCurrencyRate();
         // Calculate max and min price from priceRanges
@@ -2515,7 +2516,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             let maxStrDisp = Math.round(maxRaw * rate).toString();
 
             // Prepend symbol if label doesn't already include it
-            const rawLabel = r.label || "";
+            const rawLabel = (r.label || "").replace(/₹/g, 'Rs. ');
             if (!rawLabel.includes('$') && !rawLabel.includes(symbol)) {
                minStrDisp = symbol + minStrDisp;
                maxStrDisp = symbol + maxStrDisp;

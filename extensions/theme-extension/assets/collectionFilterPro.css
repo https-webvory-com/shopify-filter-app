@@ -1736,6 +1736,12 @@ facet-filters-form,
   text-transform: none !important;
   letter-spacing: normal !important;
 }
+#cfp-sidebar .cfp-sidebar__footer :is(#cfp-clear-btn, #cfp-apply-btn) {
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  line-height: 18px;
+  min-height: 36px;
+}
 .cfp-filter-group-header {
   border-top: 1px solid #eee;
   padding: 15px 0;
@@ -3374,6 +3380,16 @@ facet-filters-form,
   flex-wrap: nowrap;
   max-width: 100%;
   gap: 2px;
+}
+@media (max-width: 768px) {
+  #cfp-products-container .cfp-product-card__price-row {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+  #cfp-products-container :is(.cfp-product-card__price, .cfp-product-card__compare-price) {
+    white-space: nowrap;
+  }
 }
 .cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 12px; }
 .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { scrollbar-width: none; }
