@@ -498,10 +498,11 @@
       var pillWidths = allPills.map(function(pill) {
         return Math.ceil(pill.getBoundingClientRect().width) || 105;
       });
+      var pillGap = parseFloat(getComputedStyle(hFilters).columnGap) || 0;
 
       // Total width of all pills combined including 10px gap between each
       var totalPillsWidth = pillWidths.reduce(function(sum, w, i) {
-        return sum + w + (i > 0 ? 10 : 0);
+        return sum + w + (i > 0 ? pillGap : 0);
       }, 0);
 
       // Keep at most twelve groups in the primary row, even on wide screens.
@@ -533,7 +534,7 @@
 
         allPills.forEach(function(pill, idx) {
           var pillWidth = pillWidths[idx];
-          var neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
+          var neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + pillGap + pillWidth);
           if (primaryPills.length < maxPillsRow1 && (primaryPills.length === 0 || neededWidth <= availableWidthWithMore)) {
             currentWidth = neededWidth;
             primaryPills.push(pill);

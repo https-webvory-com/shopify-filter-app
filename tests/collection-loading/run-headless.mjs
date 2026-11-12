@@ -374,6 +374,28 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });
+  await test('horizontal More stays before sorting after font and container widths change',async()=>{
+    const filterSettings=Array.from({length:16},(_,i)=>({id:'font-fit-'+i,isEnabled:true,filterType:'vendor',label:'Designer category '+(i+1),config:{}}));
+    for(const useToolbarHelper of [false,true]){
+      await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,globalSettings:{desktopFilterLayout:'horizontal',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width:1893,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+      await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      if(!useToolbarHelper)await evaluate('delete window.cfpSyncPillsLayout');
+      const requestsBefore=(await getState()).allRequests.length;
+      await evaluate("(()=>{const s=document.createElement('style');s.textContent='.cfp-horizontal-pill__btn{font:18px monospace!important}.cfp-horizontal-filters{column-gap:16px!important}';document.head.append(s);})()");
+      await delay(450);
+      const check=async()=>{
+        const box=await evaluate("(()=>{const more=document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect(),sort=document.querySelector('.cfp-top-bar__right').getBoundingClientRect();return {moreRight:more.right,moreWidth:more.width,sortLeft:sort.left,scroll:document.documentElement.scrollWidth,viewport:innerWidth,total:document.querySelectorAll('#cfp-top-bar .cfp-horizontal-pill').length};})()");
+        assert.ok(box.moreRight+10<=box.sortLeft,'More overlaps Best selling: '+JSON.stringify(box));assert.ok(box.moreWidth>0);assert.equal(box.total,16);assert.ok(box.scroll<=box.viewport+1);
+      };
+      await check();
+      await evaluate("document.querySelector('.cfp-layout-wrapper').style.width='calc(100% - 160px)'");await delay(450);await check();
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      assert.ok(await evaluate("document.querySelector('#cfp-horizontal-extra-filters .cfp-horizontal-pill__btn').getBoundingClientRect().width>0"));
+      assert.equal((await getState()).allRequests.length,requestsBefore,'toolbar reflow must not reload products');
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('horizontal applied chips and Clear all wrap below the toolbar without page overflow',async()=>{
     const filterSettings=Array.from({length:13},(_,i)=>({id:'clear-fit-'+i,isEnabled:true,filterType:'vendor',label:'Category '+(i+1),config:{multipleSelection:true}}));
     for(const groupCount of [10,13])for(const useToolbarHelper of [false,true]){

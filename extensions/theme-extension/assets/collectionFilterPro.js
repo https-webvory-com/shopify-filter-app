@@ -2997,9 +2997,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const clearWidth = clearRect?.width ? clearRect.width + (parseFloat(clearStyle.marginLeft)||0) + (parseFloat(clearStyle.marginRight)||0) + leftGap : 0;
 
         const pillElements = Array.from(horizontalContainer.querySelectorAll('.cfp-horizontal-pill'));
+        const pillGap = parseFloat(getComputedStyle(horizontalContainer).columnGap) || 0;
         const availableWidthNoMore = Math.max(0, topBarWidth - sortWidth - (parseFloat(rowStyle?.columnGap)||12) - clearWidth);
         const pillWidths = pillElements.map(p => Math.ceil(p.getBoundingClientRect().width) || 105);
-        const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? 10 : 0), 0);
+        const totalPillsWidth = pillWidths.reduce((sum, w, i) => sum + w + (i > 0 ? pillGap : 0), 0);
 
         const maxPillsRow1 = 12; // Keep remaining groups available under MORE.
         const needsMore = (pillElements.length > maxPillsRow1) || (totalPillsWidth > availableWidthNoMore);
@@ -3029,7 +3030,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
           pillElements.forEach((pill, idx) => {
             const pillWidth = pillWidths[idx];
-            const neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + 10 + pillWidth);
+            const neededWidth = (primaryPills.length === 0) ? pillWidth : (currentWidth + pillGap + pillWidth);
             const canFitInRow1 = (primaryPills.length < maxPillsRow1) && (primaryPills.length === 0 || neededWidth <= availableWidthWithMore);
             if (canFitInRow1) {
               currentWidth = neededWidth;
@@ -3115,6 +3116,41 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     setupCollapsibleToggles();
     setupDynamicFieldListeners();
+    observeHorizontalToolbar();
+  }
+
+  let horizontalToolbarObserver;
+  let horizontalToolbarFrame = 0;
+  const horizontalToolbarWidths = new WeakMap();
+  function observeHorizontalToolbar() {
+    horizontalToolbarObserver?.disconnect();
+    if (!window.ResizeObserver || !isHorizontalFilterLayout() || window.innerWidth <= 768) return;
+    if (!horizontalToolbarObserver) horizontalToolbarObserver = new ResizeObserver(entries => {
+      let changed = false;
+      for (const {target} of entries) {
+        if (!target.isConnected) continue;
+        const width = target.getBoundingClientRect().width;
+        if (Math.abs(width - horizontalToolbarWidths.get(target)) > 0.5) changed = true;
+        horizontalToolbarWidths.set(target, width);
+      }
+      if (!changed || horizontalToolbarFrame) return;
+      horizontalToolbarFrame = requestAnimationFrame(() => {
+        horizontalToolbarFrame = 0;
+        if (!isHorizontalFilterLayout() || window.innerWidth <= 768) return;
+        if (typeof window.cfpSyncPillsLayout === 'function') {
+          window.cfpSyncPillsLayout();
+          observeHorizontalToolbar();
+        } else if (cfpLastSettings?.length) {
+          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+        }
+      });
+    });
+    // Font loading, translated labels and theme container changes can resize
+    // controls without a window resize. Watch both reserved controls and pills.
+    topBar?.querySelectorAll('.cfp-top-bar__main, .cfp-top-bar__right, #cfp-horizontal-filters, #cfp-drawer-trigger-btn, .cfp-horizontal-pill__btn').forEach(element => {
+      horizontalToolbarWidths.set(element, element.getBoundingClientRect().width);
+      horizontalToolbarObserver.observe(element);
+    });
   }
 
   // â”€â”€ 6. Utility: CSS Color mapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
