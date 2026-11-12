@@ -3354,6 +3354,9 @@ facet-filters-form,
 }
 
 /* The selected Vertical style also applies to its mobile drawer. */
+.cfp-vertical-style #cfp-products-container :is(.cfp-product-card__price, .cfp-product-card__compare-price) {
+  font-size: 12px !important;
+}
 .cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 12px; }
 .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { scrollbar-width: none; }
 .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body::-webkit-scrollbar { display: none; width: 0; }

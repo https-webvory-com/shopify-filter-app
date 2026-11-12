@@ -547,8 +547,8 @@
 /* ==========================================================================
    Suppress theme's OWN search modal/drawer while our modal is open.
 
-   SAFETY: All rules are gated on body.cfp-search-active — they ONLY apply
-   while our modal is open. When our modal is closed, ZERO effect on theme.
+   SAFETY: Rules apply only while our modal is open or a confirmed search
+   opening is waiting for settings. Other theme interactions are unaffected.
 
    LAYERS (from safest to broadest):
    1. Shopify custom elements — these are ALWAYS search, 100% safe
@@ -559,8 +559,9 @@
    ========================================================================== */
 
 /* ── Layer 1: Shopify custom elements (always search, 100% safe) ─────────── */
-body.cfp-search-active predictive-search,
-body.cfp-search-active search-modal {
+body:is(.cfp-search-active, .cfp-search-pending) header-search,
+body:is(.cfp-search-active, .cfp-search-pending) predictive-search,
+body:is(.cfp-search-active, .cfp-search-pending) search-modal {
   display:      none !important;
   visibility:   hidden !important;
   pointer-events: none !important;

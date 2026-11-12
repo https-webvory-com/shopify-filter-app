@@ -744,6 +744,17 @@ try{
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').style.getPropertyValue('--cfp-drawer-width')"),'300px');
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').style.getPropertyValue('--cfp-vertical-width')"),'360px');
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input[type=checkbox]').length>0"),true);
+      const filterReadyMs=await evaluate("performance.getEntriesByName('cfp-filters-ready')[0].startTime");
+      assert.ok(filterReadyMs<1500,'filters did not render promptly: '+filterReadyMs);
+      if(layout==='horizontal'){
+        await evaluate("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn').click()");
+        assert.equal(await evaluate("!!document.querySelector('.cfp-horizontal-pill__popover.is-open')"),true);
+      }else if(layout==='vertical'){
+        const expanded=await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')");
+        await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').click()");
+        assert.notEqual(await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').getAttribute('aria-expanded')"),expanded);
+      }
+      assert.equal((await cards()).length,0,'filter controls waited for delayed products');
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });

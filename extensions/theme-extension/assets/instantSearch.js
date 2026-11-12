@@ -762,9 +762,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function openModal(triggerElement) {
     if (modal.classList.contains('cfp-open') || pendingOpen) return;
-    const trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
+    let trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
+    const nativeSearch = trigger?.closest?.('header-search, search-modal, #SearchModal, #SearchDrawer, #search-modal, #search-drawer');
+    if (nativeSearch?.id) {
+      trigger = [...document.querySelectorAll('a[aria-controls],button[aria-controls],summary[aria-controls]')].find(el =>
+        !nativeSearch.contains(el) && el.getAttribute('aria-controls').split(/\s+/).includes(nativeSearch.id)) || trigger;
+    }
     const request = { trigger, busy: trigger?.getAttribute('aria-busy') };
     pendingOpen = request;
+    document.body.classList.add('cfp-search-pending');
+    closeThemeSearch();
     trigger?.setAttribute('aria-busy', 'true');
     return openConfiguredModal(request);
   }
@@ -782,6 +789,7 @@ document.addEventListener("DOMContentLoaded", function () {
     pendingOpen = null;
     restorePendingTrigger(request);
     if (CONFIG.enabled === false) {
+      document.body.classList.remove('cfp-search-pending');
       modal._nativeFallback = true;
       try { request.trigger?.click(); } finally { modal._nativeFallback = false; }
       return;
@@ -799,6 +807,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     overlay.classList.add('cfp-open');
     modal.classList.add('cfp-open');
+    closeThemeSearch();
+    document.body.classList.remove('cfp-search-pending');
 
     // Prevent background scrolling.
     // Save any existing overflow value so we can restore it precisely on close.
@@ -827,8 +837,11 @@ document.addEventListener("DOMContentLoaded", function () {
     if (pendingOpen) {
       restorePendingTrigger(pendingOpen);
       pendingOpen = null;
+      document.body.classList.remove('cfp-search-pending');
+      closeNativeHeaderSearch();
     }
     if (!modal.classList.contains('cfp-open')) return; // Already closed
+    closeNativeHeaderSearch();
 
     overlay.classList.remove('cfp-open');
     modal.classList.remove('cfp-open');
@@ -856,6 +869,15 @@ document.addEventListener("DOMContentLoaded", function () {
     // search if the user navigates away.
   }
 
+  function closeNativeHeaderSearch() {
+    document.querySelectorAll('header-search').forEach(el => {
+      if (el.hasAttribute('open') && typeof el.hide === 'function') {
+        try { Promise.resolve(el.hide()).catch(() => {}); } catch {}
+      }
+      el.removeAttribute('open');
+    });
+  }
+
   function closeThemeSearch() {
     // Close the theme's own search modal so ours can take over.
     // Strategy: layered approach from safest to broadest, all scoped to header.
@@ -863,6 +885,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const headerEl = document.querySelector(
       'header, sticky-header, .site-header, #shopify-section-header'
     );
+    closeNativeHeaderSearch();
 
     // ── Layer 1: Shopify custom elements (always search, 100% safe) ──────────
     document.querySelectorAll('predictive-search, search-modal').forEach(el => {
