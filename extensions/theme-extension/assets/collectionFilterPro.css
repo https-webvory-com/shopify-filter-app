@@ -3354,18 +3354,18 @@ facet-filters-form,
 }
 
 /* The selected Vertical style also applies to its mobile drawer. */
-.cfp-vertical-style #cfp-products-container :is(.cfp-product-card__title, .cfp-product-card__vendor) {
+.cfp-vertical-style #cfp-products-container .cfp-product-card__vendor {
   font-size: 12px !important;
 }
 .cfp-vertical-style #cfp-products-container :is(.cfp-product-card__price, .cfp-product-card__compare-price) {
-  font-size: 11px !important;
   white-space: nowrap;
 }
 .cfp-vertical-style #cfp-products-container .cfp-product-card__price-row {
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: inherit !important;
+  flex-wrap: nowrap;
   max-width: 100%;
-  column-gap: 6px;
-  row-gap: 2px;
+  gap: 2px;
 }
 .cfp-vertical-style #cfp-sidebar { --cfp-option-font-size: 12px; }
 .cfp-vertical-style #cfp-sidebar .cfp-sidebar__body { scrollbar-width: none; }

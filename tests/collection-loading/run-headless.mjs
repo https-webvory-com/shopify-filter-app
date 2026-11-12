@@ -908,17 +908,24 @@ try{
   });
 
   await test('compare-at and image sale badge follow separate live theme tags',async()=>{
-    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['show compare price']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,globalSettings:{desktopFilterLayout:'vertical'},productFields:{'1':{tags:['show compare price']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')",10000);
     const result=await evaluate("(()=>{const card=document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card');return {price:card?.querySelector('.cfp-product-card__price')?.textContent,compare:card?.querySelector('.cfp-product-card__compare-price')?.textContent,link:card?.querySelector('.cfp-product-card__link')?.href};})()");
     assert.match(result.compare,/50\.00/);assert.match(result.price,/1\.00/);assert.match(result.link,/variant=100/);
+    for(const width of [1440,390]){
+      await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<768});await delay(350);
+      const text=await evaluate("(()=>{const c=document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]').closest('.cfp-product-card'),p=c.querySelector('.cfp-product-card__price'),old=c.querySelector('.cfp-product-card__compare-price');return {title:getComputedStyle(c.querySelector('.cfp-product-card__title')).fontSize,price:getComputedStyle(p).fontSize,compare:getComputedStyle(old).fontSize,below:old.getBoundingClientRect().top>=p.getBoundingClientRect().bottom};})()");
+      assert.deepEqual(text,{title:'14px',price:'15px',compare:'13px',below:true});
+    }
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__badge')"),false);
-    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,productFields:{'1':{tags:['Sale']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
+    await control({reset:true,hold:false,precompute:true,early:true,delay:20,priceDelay:0,imageDelay:0,globalSettings:{desktopFilterLayout:'drawer'},productFields:{'1':{tags:['Sale']}},productVariants:{'1':[{id:'100',price:1,compareAtPrice:50,available:true,option1:'Blue',imageUrl:'/image/1.svg'}]}});
     await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await wait("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__price')",10000);
     assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__compare-price')"),true);
     assert.equal(await evaluate("!!document.querySelector('.cfp-product-card__link[href*=\"/products/dress-1\"]')?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__badge')"),true);
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-product-card__price-row')).flexDirection"),'row','Drawer keeps its existing inline prices');
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
 
