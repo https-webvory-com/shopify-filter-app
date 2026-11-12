@@ -3399,6 +3399,27 @@ facet-filters-form,
   .cfp-vertical-layout:not(.cfp-filters-ready) .cfp-layout-wrapper > :not(#cfp-sidebar):not(.cfp-breadcrumbs) { grid-column: 1; }
 }
 
+/* Keep all Horizontal dropdown and open Drawer scrollbars consistent. */
+:is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content) {
+  scrollbar-width: thin !important;
+  scrollbar-color: #b8b8b8 transparent;
+}
+:is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content)::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+  height: 4px;
+}
+:is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content)::-webkit-scrollbar-track {
+  background: transparent;
+}
+:is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content)::-webkit-scrollbar-thumb {
+  background: #b8b8b8;
+  border-radius: 4px;
+}
+:is(.cfp-horizontal-pill__popover, #cfp-sidebar.cfp-sidebar--open .cfp-sidebar__body, .cfp-mobile-horizontal-scrolling #cfp-sidebar__filter-groups, .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__content)::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
 /* Empty or disabled groups must not leave a drawer, trigger, or sidebar gap. */
 body.cfp-no-filters #cfp-drawer-trigger-btn,
 body.cfp-no-filters #cfp-sidebar,

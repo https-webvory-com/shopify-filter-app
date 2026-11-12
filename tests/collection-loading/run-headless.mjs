@@ -546,6 +546,32 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });
+  await test('horizontal and drawer filters use thin scrollbars and remain scrollable',async()=>{
+    for(const [width,desktopFilterLayout,mobileFilterLayout] of [[1440,'horizontal','off-canvas'],[1440,'drawer','off-canvas'],[390,'vertical','off-canvas'],[390,'horizontal','horizontal-scrolling']]){
+      await control({reset:true,realToolbar:true,productCount:40,precompute:true,noPins:true,noMerchandising:true,
+        productFields:Object.fromEntries(Array.from({length:40},(_,i)=>[String(i+1),{vendor:'Designer '+i}])),
+        filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',config:{}}],
+        globalSettings:{desktopFilterLayout,mobileFilterLayout,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+      await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
+      await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+      let selector;
+      if(width>768&&desktopFilterLayout==='horizontal'){
+        await evaluate("document.querySelector('.cfp-horizontal-pill button').click()");selector='.cfp-horizontal-pill__popover.is-open';
+      }else if(mobileFilterLayout==='horizontal-scrolling'){
+        await evaluate("document.querySelector('#cfp-sidebar .cfp-group__toggle').click()");selector='#cfp-sidebar .cfp-group__content';
+        assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar__filter-groups')).scrollbarWidth"),'thin');
+      }else{
+        await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");selector='#cfp-sidebar .cfp-sidebar__body';
+      }
+      await delay(350);
+      const target=JSON.stringify(selector);
+      const state=await evaluate(`(()=>{const e=document.querySelector(${target}),s=getComputedStyle(e);e.scrollTop=100;return {thin:s.scrollbarWidth,width:getComputedStyle(e,'::-webkit-scrollbar').width,display:getComputedStyle(e,'::-webkit-scrollbar').display,overflow:e.scrollHeight-e.clientHeight,scrolled:e.scrollTop};})()`);
+      assert.equal(state.thin,'thin');assert.equal(state.width,'4px');assert.notEqual(state.display,'none');
+      assert.ok(state.overflow>100&&state.scrolled>0,JSON.stringify({width,desktopFilterLayout,mobileFilterLayout,state}));
+      assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('filter groups grow to fit all options with only the drawer scrolling',async()=>{
     const sleeves=Array.from({length:16},(_,i)=>'Sleeve:'+i);
     const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Designers',displayMode:'List',config:{advanced:{showMoreType:'Scrollbar',maxHeight:'80px'}}},
