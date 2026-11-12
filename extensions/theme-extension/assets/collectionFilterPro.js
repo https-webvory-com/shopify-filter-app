@@ -1242,8 +1242,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         breadcrumbs.style.borderTop = 'none';
         breadcrumbs.style.marginTop = '0';
       } else if (layout === 'horizontal' && !mobile) {
-        breadcrumbs.style.display = 'none';
-        breadcrumbs.innerHTML = '';
+        topBar?.appendChild(breadcrumbs);
+        Object.assign(breadcrumbs.style, { padding: '', marginBottom: '', borderBottom: '', borderTop: '', marginTop: '' });
       } else {
         const filterBody = sidebar?.querySelector('.cfp-sidebar__body');
         if (filterBody && breadcrumbs.parentElement !== filterBody) {
@@ -1498,7 +1498,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   window.cfpUpdateMarketCardPrice = updateMarketCardPrice;
   function updateProductCount(totalCount){
     updateVerticalFilterSummary(totalCount);
-    const countLabels = document.querySelectorAll('.cfp-product-count');
+    const countLabels = document.querySelectorAll('.cfp-product-count, .cfp-applied-product-count');
     if (!countLabels || countLabels.length === 0) return;
     if (!Number.isFinite(totalCount)) {
       countLabels.forEach(lbl => { lbl.textContent = ''; lbl.style.display = 'none'; });
@@ -1509,7 +1509,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const shouldHideCount = isMobile || layout === 'horizontal' || layout === 'drawer';
     const unit = templateName === 'search' ? (totalCount === 1 ? 'result' : 'results') : (totalCount === 1 ? 'product' : 'products');
     countLabels.forEach(lbl => {
-      if (shouldHideCount) {
+      const isAppliedCount = lbl.classList.contains('cfp-applied-product-count');
+      if (isAppliedCount ? (isMobile || layout !== 'horizontal') : shouldHideCount) {
         lbl.style.display = 'none';
       } else {
         lbl.style.display = globalSettings?.showProductCount === false ? 'none' : 'inline-flex';
@@ -2916,6 +2917,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}" data-multiple="true" ${!navigation && !config.multipleSelection ? 'data-single-select="true"' : ''}>
           <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
             <span>${setting.label}</span>
+            ${activeCount > 0 ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
             <svg class="cfp-pill-chevron" viewBox="0 0 20 20" width="12" height="12"><path d="M5 8l5 5 5-5z"/></svg>
           </button>
           <div class="cfp-horizontal-pill__popover" id="${hPopoverId}">
@@ -3910,13 +3912,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const breadcrumbs = document.getElementById('cfp-breadcrumbs');
     if (!breadcrumbs) return;
 
-    if ((globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) || (isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches)) {
+    const horizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
+    if (globalSettings && globalSettings.showAttributeBasedBreadcrumb === false) {
       breadcrumbs.style.display = 'none';
       breadcrumbs.innerHTML = '';
       return;
     }
 
-    let chipsHTML = '';
+    let chipsHTML = horizontal ? '<span class="cfp-applied-label">Applied:</span>' : '';
     let hasFilters = false;
 
     const escapeBreadcrumb = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -3936,6 +3939,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         group = cfpLastSettings.find(s => s.filterType === 'option' && s.filterKey === type.replace('option-', ''));
       } else if (type.startsWith('metafield-')) {
         group = cfpLastSettings.find(s => s.filterType === 'metafield' && s.filterKey === type.replace('metafield-', ''));
+      } else if (horizontal) {
+        group = cfpLastSettings.find(s => s.filterType === (type === 'type' ? 'product_type' : type));
       }
 
       let label = group ? group.label : (type.startsWith('option-') ? type.replace('option-', '') : type.charAt(0).toUpperCase() + type.slice(1));
@@ -3954,23 +3959,27 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     (activeFilters.ratingRanges||[]).forEach(value=>addChip(value==='0:0'?'No reviews':'Rating: '+value.replace(':',' - ')+' stars','review_rating',value));
     (activeFilters.locations||[]).forEach(value=>addChip(cfpLastFacets?.extraFilters?.choices?.find(c=>c.type==='inventory_locations'&&c.value===value)?.label||value,'inventory_locations',value));
     (activeFilters.saleRanges || []).forEach(value => addChip(value.split(':').join('% - ') + '% off', 'percent_sale', value));
-    activeFilters.vendors.forEach(v => addChip(v, 'vendor', v));
-    activeFilters.types.forEach(v => addChip(v, 'type', v));
+    const labeledValue = (type, value) => {
+      const { label, cleanVal } = getCleanLabel(type, value);
+      return horizontal ? `${label}: ${cleanVal}` : cleanVal;
+    };
+    activeFilters.vendors.forEach(v => addChip(horizontal ? labeledValue('vendor', v) : v, 'vendor', v));
+    activeFilters.types.forEach(v => addChip(horizontal ? labeledValue('type', v) : v, 'type', v));
 
     activeFilters.tags.forEach(v => {
       const { label, cleanVal } = getCleanLabel('tag', v);
-      addChip(cleanVal, 'tag', v, /^colou?rs?$/i.test(label));
+      addChip(horizontal ? `${label}: ${cleanVal}` : cleanVal, 'tag', v, /^colou?rs?$/i.test(label));
     });
 
     (activeFilters.titles || []).forEach(v => addChip(v, 'title', v));
-    activeFilters.collections.forEach(v => addChip(v, 'collection', v));
+    activeFilters.collections.forEach(v => addChip(horizontal ? labeledValue('collection', v) : v, 'collection', v));
     activeFilters.availability.forEach(v => addChip(v.replace('_', ' '), 'availability', v));
 
     Object.keys(activeFilters.options).forEach(k => {
       activeFilters.options[k].forEach(v => {
         const { label, cleanVal } = getCleanLabel(`option-${k}`, v);
         const isColor = /^colou?rs?$/i.test(k) || /^colou?rs?$/i.test(label);
-        const displayLabel = isColor ? cleanVal : (label ? `${label}: ${cleanVal}` : cleanVal);
+        const displayLabel = isColor && !horizontal ? cleanVal : (label ? `${label}: ${cleanVal}` : cleanVal);
         addChip(displayLabel, `option-${k}`, v, isColor);
       });
     });
@@ -3985,13 +3994,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const displayMaxRaw = activeFilters.maxPrice === 999999 ? maxPriceLimit : activeFilters.maxPrice;
       const minVal = Math.round(activeFilters.minPrice * rate);
       const maxVal = Math.round(displayMaxRaw * rate);
-      addChip(`${symbol}${minVal} - ${symbol}${maxVal}`, 'price', 'range');
+      addChip(`${horizontal ? 'Price: ' : ''}${symbol}${minVal} - ${symbol}${maxVal}`, 'price', 'range');
     }
 
     if (hasFilters) {
       chipsHTML += `<button type="button" class="cfp-breadcrumb-clear">Clear all</button>`;
+      if (horizontal) chipsHTML += '<span class="cfp-applied-product-count" aria-live="polite"></span>';
       breadcrumbs.innerHTML = chipsHTML;
       breadcrumbs.style.display = 'flex';
+      if (horizontal) {
+        const priceChip = breadcrumbs.querySelector('[data-type="price"]');
+        if (priceChip) breadcrumbs.querySelector('.cfp-applied-label').after(priceChip);
+        updateProductCount(cfpLastTotalCount);
+      }
 
       // Attach events
       breadcrumbs.querySelectorAll('.cfp-breadcrumb-chip').forEach(chip => {
@@ -4041,8 +4056,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
     if (topClearBtn) {
-      const isHorizontal = isHorizontalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches;
-      topClearBtn.style.display = (count > 0 && isHorizontal) ? 'inline-flex' : 'none';
+      const useTopClear = isHorizontalFilterLayout() && globalSettings?.showAttributeBasedBreadcrumb === false && !window.matchMedia('(max-width: 768px)').matches;
+      topClearBtn.style.display = count > 0 && useTopClear ? 'inline-flex' : 'none';
     }
     if (isHorizontalFilterLayout()) {
       if (typeof window.cfpSyncPillsLayout === 'function') window.cfpSyncPillsLayout();
@@ -4274,8 +4289,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           breadcrumbs.style.borderTop = 'none';
           breadcrumbs.style.marginTop = '0';
         } else if (layout === 'horizontal' && !mobile) {
-          breadcrumbs.style.display = 'none';
-          breadcrumbs.innerHTML = '';
+          topBar?.appendChild(breadcrumbs);
+          Object.assign(breadcrumbs.style, { padding: '', marginBottom: '', borderBottom: '', borderTop: '', marginTop: '' });
         } else {
           const filterBody = sidebar.querySelector('.cfp-sidebar__body');
           if (filterBody && breadcrumbs.parentElement !== filterBody) {

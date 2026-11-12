@@ -2495,6 +2495,21 @@ facet-filters-form,
   .cfp-horizontal-layout .cfp-layout-wrapper { box-sizing: border-box; }
   .cfp-horizontal-layout .cfp-top-bar__main { min-width: 0; gap: 12px; }
   .cfp-horizontal-layout .cfp-top-bar__left { min-width: 0; flex: 1 1 auto; }
+  .cfp-horizontal-layout .cfp-horizontal-pill__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 99px;
+    background: #111;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
   .cfp-horizontal-layout :is(.cfp-top-bar__right, .cfp-clear-all-top, #cfp-drawer-trigger-btn) { flex-shrink: 0; }
   
   .cfp-horizontal-layout .cfp-product-count,
@@ -2506,7 +2521,7 @@ facet-filters-form,
   }
   
   .cfp-horizontal-layout .cfp-clear-all-top {
-    display: inline-flex;
+    display: none;
     align-items: center;
     justify-content: center;
     background: transparent;
@@ -2526,22 +2541,50 @@ facet-filters-form,
   }
 
   .cfp-horizontal-layout .cfp-breadcrumbs {
-    display: none !important;
-    visibility: hidden !important;
+    visibility: visible;
+    gap: 8px;
+    padding: 12px 0 0;
+    margin: 12px 0 0;
+    border-top: 1px solid #e1e1e1;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .cfp-horizontal-layout .cfp-applied-label,
+  .cfp-horizontal-layout .cfp-applied-product-count {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--cfp-text-muted);
+  }
+
+  .cfp-horizontal-layout .cfp-applied-product-count {
+    margin-left: auto;
+    align-self: flex-end;
+    padding-bottom: 8px;
+    white-space: nowrap;
+  }
+
+  .cfp-horizontal-layout .cfp-breadcrumb-value {
+    font-weight: 400;
   }
 
   .cfp-horizontal-layout .cfp-breadcrumb-chip {
     display: inline-flex !important;
     align-items: center !important;
     gap: 6px !important;
-    background: #f3f4f6 !important;
-    border: 1px solid #e5e7eb !important;
-    border-radius: 4px !important;
+    background: var(--cfp-surface, #fff) !important;
+    border: 1px solid #ccc !important;
+    border-radius: 99px !important;
     padding: 5px 10px !important;
     font-size: 12.5px !important;
-    font-weight: 500 !important;
+    font-weight: 400 !important;
     color: #111827 !important;
     line-height: 1.4 !important;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    box-shadow: none;
+    overflow-wrap: anywhere;
     transition: all 0.2s ease !important;
   }
 
@@ -2571,13 +2614,14 @@ facet-filters-form,
   .cfp-horizontal-layout .cfp-breadcrumb-clear {
     color: #111827 !important;
     font-size: 12.5px !important;
-    font-weight: 600 !important;
+    font-weight: 400 !important;
     text-decoration: underline !important;
     cursor: pointer !important;
     background: transparent !important;
-    border: none !important;
-    padding: 4px 8px !important;
-    margin-left: 4px !important;
+    border: 1px solid #ccc !important;
+    border-radius: 6px;
+    padding: 8px 16px !important;
+    margin-left: 0 !important;
     transition: color 0.15s ease !important;
     white-space: nowrap !important;
   }

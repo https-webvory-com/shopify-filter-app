@@ -374,7 +374,7 @@ try{
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });
-  await test('horizontal Clear all stays inside the page after selection and responsive reflow',async()=>{
+  await test('horizontal applied chips and Clear all wrap below the toolbar without page overflow',async()=>{
     const filterSettings=Array.from({length:13},(_,i)=>({id:'clear-fit-'+i,isEnabled:true,filterType:'vendor',label:'Category '+(i+1),config:{multipleSelection:true}}));
     for(const groupCount of [10,13])for(const useToolbarHelper of [false,true]){
       await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings:filterSettings.slice(0,groupCount),globalSettings:{desktopFilterLayout:'horizontal',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
@@ -388,22 +388,68 @@ try{
         assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width"),0);
       }
       await evaluate("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn').click();document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill input').click()");
-      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('#cfp-clear-all-top').getBoundingClientRect().width>0");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('.cfp-breadcrumb-clear')?.getBoundingClientRect().width>0");
       assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true,'Clear all caused an immediate page overflow');
-      if(groupCount===10)assert.equal(await evaluate("document.querySelector('#cfp-drawer-trigger-btn').getBoundingClientRect().width>0"),true,'overflow groups did not move under More');
+      assert.equal(await evaluate("document.querySelector('#cfp-breadcrumbs').parentElement.id"),'cfp-top-bar');
+      assert.equal(await evaluate("document.querySelector('.cfp-applied-label').textContent"),'Applied:');
+      assert.equal(await evaluate("document.querySelector('#cfp-clear-all-top').getBoundingClientRect().width"),0);
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-breadcrumb-chip').length"),1);
+      assert.ok(await evaluate("document.querySelector('.cfp-breadcrumb-chip').textContent.includes('Category 1:')"));
+      assert.ok(await evaluate("/products?/.test(document.querySelector('.cfp-applied-product-count').textContent)"));
       for(const width of [1440,1366,1280,1024,900,769]){
         await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
-        const bounds=await evaluate("(()=>{const b=document.querySelector('#cfp-top-bar').getBoundingClientRect(),c=document.querySelector('#cfp-clear-all-top').getBoundingClientRect(),s=document.querySelector('.cfp-top-bar__right').getBoundingClientRect();return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,barRight:b.right,clearLeft:c.left,clearRight:c.right,sortLeft:s.left,sortRight:s.right,pills:document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill').length};})()");
+        const bounds=await evaluate("(()=>{const b=document.querySelector('#cfp-top-bar').getBoundingClientRect(),c=document.querySelector('.cfp-breadcrumb-clear').getBoundingClientRect(),s=document.querySelector('.cfp-top-bar__main').getBoundingClientRect();return {viewport:innerWidth,scroll:document.documentElement.scrollWidth,barRight:b.right,clearTop:c.top,clearRight:c.right,rowBottom:s.bottom,pills:document.querySelectorAll('#cfp-horizontal-filters .cfp-horizontal-pill').length};})()");
         assert.ok(bounds.scroll<=width+1,'selected filters overflowed: '+JSON.stringify(bounds));
-        assert.ok(bounds.clearRight<=bounds.sortLeft+1&&bounds.sortRight<=bounds.barRight+1,'Clear all overlapped sorting: '+JSON.stringify(bounds));
+        assert.ok(bounds.clearTop>=bounds.rowBottom&&bounds.clearRight<=bounds.barRight+1,'Applied row overlapped toolbar: '+JSON.stringify(bounds));
       }
-      await evaluate("document.querySelector('#cfp-clear-all-top').click()");
-      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelector('#cfp-clear-all-top').getBoundingClientRect().width===0");
+      await evaluate("document.querySelector('.cfp-breadcrumb-remove').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!document.querySelector('.cfp-breadcrumb-chip')");
+      assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-breadcrumbs')).display"),'none');
+      await evaluate("document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill__btn').click();document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill input').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!!document.querySelector('.cfp-breadcrumb-clear')");
+      await evaluate("document.querySelector('.cfp-breadcrumb-clear').click()");
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!document.querySelector('.cfp-breadcrumb-chip')");
       assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  });
+  await test('horizontal applied row shows labeled multi-selections, badges and updated result counts',async()=>{
+    const filterSettings=[
+      {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{multipleSelection:true}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',config:{multipleSelection:true}},
+      {id:'price',isEnabled:true,filterType:'price',label:'Price',config:{}}];
+    await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,
+      productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{
+        options:[{name:'Color',values:['Blue','Red']},{name:'Size',values:['S','M']}],
+        variantPrices:['Blue','Red'].map((color,j)=>({id:String((i+1)*100+j),price:20,compareAtPrice:null,available:true,option1:color,option2:'S'}))
+      }])),
+      globalSettings:{desktopFilterLayout:'horizontal',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+    await send('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});
+    await navigate('?option_Color=Blue,Red&option_Size=S&minPrice=15&maxPrice=50');
+    await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-breadcrumb-chip').length===4");
+    const labels=await evaluate("[...document.querySelectorAll('.cfp-breadcrumb-value')].map(e=>e.textContent)");
+    assert.ok(labels[0].startsWith('Price: '),JSON.stringify(labels));
+    assert.ok(labels.includes('Color: Blue')&&labels.includes('Color: Red')&&labels.includes('Size: S'),JSON.stringify(labels));
+    assert.equal(await evaluate("document.querySelector('[data-group=\"option-Color\"] .cfp-horizontal-pill__count').textContent"),'2');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-breadcrumb-chip')).borderRadius"),'99px');
+    assert.equal(await evaluate("document.querySelector('.cfp-applied-product-count').textContent"),await evaluate("document.querySelector('#cfp-product-count').textContent"));
+    await evaluate("document.querySelector('.cfp-breadcrumb-chip[data-val=Blue] .cfp-breadcrumb-remove').click()");
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-breadcrumb-chip').length===3");
+    assert.equal(await evaluate("new URLSearchParams(location.search).get('option_Color')"),'Red');
+    assert.equal(await evaluate("document.querySelector('[data-group=\"option-Color\"] .cfp-horizontal-pill__count').textContent"),'1');
+    await fs.writeFile('scratch/horizontal-applied-fixture.png',Buffer.from(await send('Page.captureScreenshot',{format:'png'}).then(r=>r.data),'base64'));
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
+    assert.equal(await evaluate("document.querySelector('#cfp-breadcrumbs').parentElement.className"),'cfp-sidebar__body');
+    assert.equal(await evaluate("document.querySelector('.cfp-applied-label')"),null);
+    await send('Emulation.setDeviceMetricsOverride',{width:900,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
+    assert.equal(await evaluate("document.querySelector('#cfp-breadcrumbs').parentElement.id"),'cfp-top-bar');
+    await evaluate("document.querySelector('.cfp-breadcrumb-clear').click()");
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!document.querySelector('.cfp-breadcrumb-chip')");
+    assert.equal(await evaluate("document.querySelectorAll('.cfp-horizontal-pill__count').length"),0);
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('horizontal filters recover missing toolbar containers and remain usable when resized',async()=>{
     const filterSettings=Array.from({length:8},(_,i)=>({id:'horizontal-'+i,isEnabled:true,filterType:'vendor',label:'Filter option group '+(i+1),displayMode:'List',config:{}}));
