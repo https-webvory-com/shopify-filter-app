@@ -264,11 +264,35 @@ try {
   await clickText('Load more collections');
   await wait('document.querySelectorAll(".cs-picker-row").length>40');
   const searchCollections=async value=>{await evaluate(`(()=>{const input=document.querySelector('.cs-picker-search input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);};
+  await fetch(origin+'/__settings-control',{method:'POST',body:JSON.stringify({pickerDelay:700})});
+  const pickerCallsBefore=(await(await fetch(origin+'/__state')).json()).pickerRequests.length;
+  await searchCollections('Style');
+  await wait('document.querySelector(".cs-picker-results").getAttribute("aria-busy")==="true"');
+  assert.equal(await evaluate('document.querySelector(".cs-picker-results").innerText.includes("No saved collections match")'),false);
+  await wait('document.querySelectorAll(".cs-picker-row").length===8');
+  await searchCollections('');await wait('document.querySelectorAll(".cs-picker-row").length===40');
+  await searchCollections('Style');await wait('document.querySelectorAll(".cs-picker-row").length===8');
+  await delay(250);
+  assert.equal((await(await fetch(origin+'/__state')).json()).pickerRequests.length,pickerCallsBefore+1,'repeat searches reuse the recent page without another request');
+  await clickText('Cancel');await clickText('Choose main collections (4/4)');
+  await wait('document.querySelectorAll(".cs-picker-row").length===40');
+  await delay(250);
+  assert.equal((await(await fetch(origin+'/__state')).json()).pickerRequests.length,pickerCallsBefore+1,'reopening the picker reuses its first page');
+  await searchCollections('Saved Collection');
+  for(let attempt=0;attempt<50;attempt++){
+    if((await(await fetch(origin+'/__state')).json()).pickerRequests.length===pickerCallsBefore+2)break;
+    await delay(50);
+  }
+  assert.equal((await(await fetch(origin+'/__state')).json()).pickerRequests.length,pickerCallsBefore+2);
+  await searchCollections('Style');await wait('document.querySelectorAll(".cs-picker-row").length===8');
+  await delay(900);
+  assert.equal(await evaluate('[...document.querySelectorAll(".cs-picker-row strong")].every(row=>row.textContent.startsWith("Style "))'),true,'a late search response cannot replace the cached current query');
   await searchCollections('not-a-collection');await wait('document.querySelector(".cs-picker-results").innerText.includes("No saved collections match")');
   await searchCollections('');await wait('document.querySelectorAll(".cs-picker-row").length===40');
   await evaluate('[...document.querySelectorAll(".cs-picker-row")].filter(e=>e.textContent.includes("Sport")||e.textContent.includes("Kids")).forEach(e=>e.querySelector("input").click())');
   await clickText('Select collections');
   await wait(compactSection+'.innerText.includes("(2/4)")');
+  await fetch(origin+'/__settings-control',{method:'POST',body:JSON.stringify({pickerDelay:0})});
   await evaluate('[...document.querySelectorAll("button")].find(e=>e.textContent.includes("Choose related collections")).click()');
   await searchCollections('Style');await wait('document.querySelectorAll(".cs-picker-row").length===8');
   await evaluate('document.querySelectorAll(".cs-picker-row input").forEach(e=>{if(e.checked)e.click()});[...document.querySelectorAll(".cs-picker-row input")].slice(0,3).forEach(e=>e.click())');

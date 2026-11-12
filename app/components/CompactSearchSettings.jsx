@@ -15,6 +15,19 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({hasMore:false,nextCursor:''});
   const collectionFetcher = useFetcher();
+  const collectionPages = useRef(new Map());
+  const [loadingCollections, setLoadingCollections] = useState(false);
+  const pageKey = (search, after) => JSON.stringify([search, after]);
+  const cachedPage = (search, after) => {
+    const entry = collectionPages.current.get(pageKey(search, after));
+    return entry && Date.now() - entry.time < 30000 ? entry.data : null;
+  };
+  const showPage = data => {
+    setError(data.collectionPickerError || '');
+    setRows(previous => data.after ? [...previous, ...(data.collections || []).filter(item => !previous.some(row => row.id === item.id))] : data.collections || []);
+    setPagination({hasMore:!!data.hasMore,nextCursor:data.nextCursor||''});
+    setLoadingCollections(false);
+  };
   const dialog = useRef(null);
   const groupKeys = useRef(new WeakMap());
   const groupKeySequence = useRef(0);
@@ -29,16 +42,23 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   useEffect(() => {
     if (!picker) { if(dialog.current?.open)dialog.current.close(); return; }
     if(!dialog.current.open)dialog.current.showModal();
-    const timer = setTimeout(() => collectionFetcher.load('/app/search/settings?collectionPicker=1&q=' + encodeURIComponent(query.trim()) + '&after=' + encodeURIComponent(cursor)), 200);
+    const cached = cachedPage(query.trim(), cursor);
+    if (cached) { showPage(cached); return; }
+    setLoadingCollections(true);
+    const timer = setTimeout(() => collectionFetcher.load('/app/search/settings?collectionPicker=1&q=' + encodeURIComponent(query.trim()) + '&after=' + encodeURIComponent(cursor)), query.trim() && !cursor ? 150 : 0);
     return () => clearTimeout(timer);
   }, [picker, query, cursor]);
   useEffect(() => {
     const data = collectionFetcher.data;
+    if (data && !data.collectionPickerError) {
+      const key = pageKey(data.query, data.after);
+      collectionPages.current.delete(key);
+      collectionPages.current.set(key, {time:Date.now(), data});
+      if (collectionPages.current.size > 20) collectionPages.current.delete(collectionPages.current.keys().next().value);
+    }
     if (!picker || !data || data.query !== query.trim() || data.after !== cursor) return;
-    setError(data.collectionPickerError || '');
-    setRows(previous => cursor ? [...previous, ...(data.collections || []).filter(item => !previous.some(row => row.id === item.id))] : data.collections || []);
-    setPagination({hasMore:!!data.hasMore,nextCursor:data.nextCursor||''});
-  }, [collectionFetcher.data, picker, query, cursor]);
+    showPage(data);
+  }, [collectionFetcher.data]);
   const activeIndex = Math.max(0, value.findIndex(item => (item.id || item.handle) === activeId));
   const active = value[activeIndex];
   const groups = active?.groups?.length ? active.groups : emptyGroups();
@@ -47,6 +67,7 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   const selectTab = item => { setActiveId(item.id || item.handle); setPage(0); };
   const pick = (items, limit, done) => {
     setError(''); setSelected(items); setQuery(''); setCursor(''); setRows([]);setPagination({hasMore:false,nextCursor:''});
+    setLoadingCollections(true);
     setPicker({limit,done});
   };
   const chooseMain = () => pick(value, 4, selected => { onChange(selected.map(item => ({ ...value.find(c => c.id === item.id), ...item, groups: value.find(c => c.id === item.id)?.groups || emptyGroups() }))); setPage(0); });
@@ -59,13 +80,13 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   return <section className="cs-editor" aria-label="Compact UI collections" id="compact-collection-settings">
     <dialog ref={dialog} className="cs-picker" aria-labelledby="cs-picker-title" onCancel={()=>setPicker(null)} onClose={()=>setPicker(null)} onClick={event=>{if(event.target===dialog.current){const rect=dialog.current.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)setPicker(null);}}}>
       <div className="cs-picker-heading"><div><h3 id="cs-picker-title">{picker?.limit===4?'Choose main collections':'Choose related collections'}</h3><p>Collections saved in your app catalog</p></div><button type="button" aria-label="Close collection picker" onClick={()=>setPicker(null)}>×</button></div>
-      <div className="cs-picker-search"><input autoFocus type="search" aria-label="Search saved collections" placeholder="Search collections by name or handle" value={query} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} onChange={e=>{setQuery(e.target.value);setCursor('');setRows([]);}}/></div>
-      <div className="cs-picker-results" aria-busy={collectionFetcher.state!=='idle'}>
-        {error?<div role="alert">{error}<button type="button" onClick={()=>collectionFetcher.load('/app/search/settings?collectionPicker=1&q='+encodeURIComponent(query.trim())+'&after='+encodeURIComponent(cursor))}>Retry</button></div>:null}
+      <div className="cs-picker-search"><input autoFocus type="search" aria-label="Search saved collections" placeholder="Search collections by name or handle" value={query} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} onChange={e=>{setQuery(e.target.value);setCursor('');setRows([]);setError('');setPagination({hasMore:false,nextCursor:''});setLoadingCollections(true);}}/></div>
+      <div className="cs-picker-results" aria-busy={loadingCollections}>
+        {error?<div role="alert">{error}<button type="button" onClick={()=>{setError('');setLoadingCollections(true);collectionFetcher.load('/app/search/settings?collectionPicker=1&q='+encodeURIComponent(query.trim())+'&after='+encodeURIComponent(cursor));}}>Retry</button></div>:null}
         {rows.map(item=>{const checked=selected.some(s=>s.id===item.id);return <label className="cs-picker-row" key={item.id}><input type="checkbox" checked={checked} disabled={!checked&&selected.length>=(picker?.limit||0)} onChange={()=>setSelected(items=>checked?items.filter(s=>s.id!==item.id):[...items,item])}/>{item.image?<img src={item.image} alt=""/>:<span className="cs-thumb"/>}<span><strong>{item.title}</strong><small>{item.handle}{typeof item.productCount==='number'?' · '+item.productCount+' products':''}</small></span></label>;})}
-        {!rows.length&&!error&&collectionFetcher.state==='idle'&&collectionFetcher.data?.query===query.trim()?<div className="cs-empty">{query?'No saved collections match this search. Try another name.':'No collections are saved for this store yet.'}</div>:null}
-        {collectionFetcher.state!=='idle'||(!rows.length&&!collectionFetcher.data)?<div className="cs-empty">Loading saved collections…</div>:null}
-        {pagination.hasMore&&<button type="button" className="cs-picker-more" disabled={collectionFetcher.state!=='idle'} onClick={()=>setCursor(pagination.nextCursor)}>Load more collections</button>}
+        {!rows.length&&!error&&!loadingCollections?<div className="cs-empty">{query?'No saved collections match this search. Try another name.':'No collections are saved for this store yet.'}</div>:null}
+        {loadingCollections?<div className="cs-empty">Loading saved collections…</div>:null}
+        {pagination.hasMore&&<button type="button" className="cs-picker-more" disabled={loadingCollections} onClick={()=>{setLoadingCollections(true);setCursor(pagination.nextCursor);}}>Load more collections</button>}
       </div>
       <div className="cs-picker-footer"><span>{selected.length}/{picker?.limit} selected</span><div><button type="button" onClick={()=>setPicker(null)}>Cancel</button><button type="button" className="search-config-primary" onClick={()=>{picker.done(selected.map(fromResource));setPicker(null);}}>Select collections</button></div></div>
     </dialog>

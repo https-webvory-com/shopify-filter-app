@@ -11,7 +11,8 @@ export async function createCompactSearchServer() {
   const children = Array.from({length:8},(_,i)=>resource(i+10,'Style '+(i+1)));
   const collection = c => ({...c,image:c.image.originalSrc});
   const storedCollections = [...resources,...children,...Array.from({length:50},(_,i)=>resource(i+100,'Saved Collection '+(i+1)))].map(c=>({...collection(c),productCount:25}));
-  const collectionService = {listSearchCollections:async(_shop,{query='',after=''})=>{const matches=storedCollections.filter(c=>(c.title+' '+c.handle).toLowerCase().includes(query.toLowerCase()));const start=after?matches.findIndex(c=>c.id===after)+1:0;const collections=matches.slice(start,start+40);return {query,after,collections,hasMore:matches.length>start+40,nextCursor:matches.length>start+40?collections.at(-1).id:''};}};
+  const pickerRequests=[];let pickerDelay=0;
+  const collectionService = {listSearchCollections:async(_shop,{query='',after=''})=>{pickerRequests.push({query,after});await new Promise(resolve=>setTimeout(resolve,pickerDelay));const matches=storedCollections.filter(c=>(c.title+' '+c.handle).toLowerCase().includes(query.toLowerCase()));const start=after?matches.findIndex(c=>c.id===after)+1:0;const collections=matches.slice(start,start+40);return {query,after,collections,hasMore:matches.length>start+40,nextCursor:matches.length>start+40?collections.at(-1).id:''};}};
   let saved = schema.validateSearchSettings({...schema.DEFAULT_SEARCH_SETTINGS,instantLayout:'compact',manualSuggestions:['sweater dress','matching sets','pants','homecoming dresses','going out','sweaters'],compactCollections:resources.map((r,i)=>({...collection(r),groups:groups.map(title=>({title,collections:children.map(c=>({...collection(c),title:r.title+' '+c.title,handle:r.handle+'-'+c.handle}))}))}))});
   const requests=[];
   let settingsDelay=0,settingsFailures=0,settingsCalls=0,searchDelay=0;
@@ -26,12 +27,13 @@ export async function createCompactSearchServer() {
       const request=new Request(url,{method:req.method,...(req.method==='POST'?{body:Buffer.concat(chunks),headers:req.headers}:{})});
       return respond(await(req.method==='POST'?admin.action:admin.loader)({request}));
     }
-    if(url.pathname==='/__state')return respond({saved,requests,settingsCalls});
+    if(url.pathname==='/__state')return respond({saved,requests,settingsCalls,pickerRequests});
     if(url.pathname==='/__settings-control'){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
       const control=JSON.parse(Buffer.concat(chunks).toString());
       settingsDelay=control.delay||0;settingsFailures=control.failures||0;settingsCalls=0;
       searchDelay=control.searchDelay||0;
+      pickerDelay=control.pickerDelay||0;
       return respond({ok:true});
     }
     if(url.pathname==='/api/search-settings'){

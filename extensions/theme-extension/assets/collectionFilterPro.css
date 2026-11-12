@@ -3415,12 +3415,11 @@ facet-filters-form,
   border: 0 !important;
 }
 
-/* Horizontal toolbar groups stay borderless and square in every state. */
+/* Horizontal toolbar groups keep square corners without the top highlight. */
 .cfp-horizontal-pill__btn,
 .cfp-horizontal-layout #cfp-drawer-trigger-btn,
 .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group,
 .cfp-mobile-horizontal-scrolling #cfp-sidebar .cfp-group__toggle {
-  border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
