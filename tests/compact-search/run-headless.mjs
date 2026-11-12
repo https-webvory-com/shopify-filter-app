@@ -32,6 +32,38 @@ try {
   const snapshot=async()=>{const data=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await fs.writeFile('scratch/compact-search-desktop.png',Buffer.from(data.data,'base64'));};
   await send('Page.enable');await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  const settingsControl=values=>fetch(origin+'/__settings-control',{method:'POST',body:JSON.stringify(values)});
+  const {identifier:settingsProbe}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.openLayouts=[];window.nativeSearchOpens=0;document.addEventListener('DOMContentLoaded',()=>{new MutationObserver(()=>{const m=document.querySelector('.cfp-search-modal.cfp-open');if(m)window.openLayouts.push(m.dataset.cfpLayout);}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','data-cfp-layout']});document.addEventListener('click',e=>{if(e.target.closest('header input'))window.nativeSearchOpens++;});});`});
+  for(const [settingsDelay,failures] of [[550,0],[550,1],[1800,0]]){
+    await settingsControl({delay:settingsDelay,failures});
+    await navigate(origin);await wait('!!document.getElementById("cfp-main-search-input")');
+    await evaluate('document.querySelector("header input").click()');await delay(150);
+    assert.equal(await evaluate('!!document.querySelector(".cfp-search-modal.cfp-open")'),false);
+    await wait('document.querySelector(".cfp-search-modal.cfp-open")&&document.querySelector(".cfp-search-modal").dataset.cfpLayout==="compact"');await delay(300);
+    assert.equal(await evaluate('window.nativeSearchOpens'),0);
+    assert.ok(await evaluate('window.openLayouts.length>0&&window.openLayouts.every(layout=>layout==="compact")'));
+    assert.equal((await(await fetch(origin+'/__state')).json()).settingsCalls,2,'opening performed an extra settings refresh after showing the modal');
+    await evaluate('document.querySelector("#cfp-search-close").click()');
+  }
+  await settingsControl({delay:450});await navigate(origin);await wait('!!document.getElementById("cfp-main-search-input")');
+  await evaluate('document.querySelector("header input").click()');
+  await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await delay(1100);
+  assert.equal(await evaluate('!!document.querySelector(".cfp-search-modal.cfp-open")'),false);
+  assert.equal(await evaluate('document.querySelector("header input").hasAttribute("aria-busy")'),false);
+  await settingsControl({delay:350});
+  await evaluate(`fetch('/admin').then(r=>r.json()).then(({settings})=>fetch('/admin',{method:'POST',body:new URLSearchParams({intent:'save',settings:JSON.stringify({...settings,instantSearchEnabled:false})})}))`);
+  await navigate(origin);await wait('!!document.getElementById("cfp-main-search-input")');
+  await evaluate('document.querySelector("header input").click()');
+  await wait('window.nativeSearchOpens===1');
+  assert.equal(await evaluate('!!document.querySelector(".cfp-search-modal.cfp-open")'),false);
+  await evaluate(`fetch('/admin').then(r=>r.json()).then(({settings})=>fetch('/admin',{method:'POST',body:new URLSearchParams({intent:'save',settings:JSON.stringify({...settings,instantSearchEnabled:true})})}))`);
+  await settingsControl({});await setLayout('fullscreen');await navigate(origin);await wait('window.cfpSearchSettings?.instantLayout==="fullscreen"');
+  await setLayout('compact');await settingsControl({delay:450});await evaluate('document.querySelector("header input").click()');
+  await wait('document.querySelector(".cfp-search-modal.cfp-open")');await delay(300);
+  assert.ok(await evaluate('window.openLayouts.length>0&&window.openLayouts.every(layout=>layout==="compact")'));
+  await evaluate('document.querySelector("#cfp-search-close").click()');
+  await settingsControl({});await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:settingsProbe});
+  console.log('PASS first opening waits for saved Compact layout without native/fullscreen flashes, including delayed/failed bootstrap, changed settings and Escape cancellation');
   await navigate(origin);await open();
   assert.equal(await evaluate('document.querySelectorAll("#cfp-compact-tabs [role=tab]").length'),4);
   assert.deepEqual(await evaluate('[...document.querySelectorAll(".cfp-compact-columns ol")].map(e=>e.children.length)'),[4,4,4]);
@@ -136,6 +168,7 @@ try {
   const originalSlotStyle=await evaluate("document.querySelector('#fixture-search-slot').style.cssText");
   const previousIcon=await evaluate("document.querySelector('#fixture-before-search').getBoundingClientRect().left");
   await evaluate("document.querySelector('#fixture-expanding-search svg').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}))");
+  await wait('document.querySelector(".cfp-search-modal.cfp-open")');
   const openingFrames=await evaluate("new Promise(resolve=>{const frames=[],start=performance.now();function sample(){const m=document.querySelector('.cfp-search-modal'),s=document.querySelector('#fixture-search-slot');frames.push({slotWidth:s.getBoundingClientRect().width,previous:document.querySelector('#fixture-before-search').getBoundingClientRect().left,body:m.querySelector('.cfp-search-body').getBoundingClientRect().width,opacity:Number(getComputedStyle(m).opacity),scroll:scrollY});if(performance.now()-start<350)requestAnimationFrame(sample);else resolve(frames);}sample();})");
   assert.ok(openingFrames.every(f=>f.slotWidth===24&&f.previous===previousIcon&&Math.abs(f.body-446)<1&&f.scroll===openingFrames[0].scroll),'opening moved the header or reflowed results: '+JSON.stringify({previousIcon,first:openingFrames[0],last:openingFrames.at(-1)}));
   assert.equal(openingFrames.at(-1).opacity,1);

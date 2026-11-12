@@ -14,6 +14,7 @@ export async function createCompactSearchServer() {
   const collectionService = {listSearchCollections:async(_shop,{query='',after=''})=>{const matches=storedCollections.filter(c=>(c.title+' '+c.handle).toLowerCase().includes(query.toLowerCase()));const start=after?matches.findIndex(c=>c.id===after)+1:0;const collections=matches.slice(start,start+40);return {query,after,collections,hasMore:matches.length>start+40,nextCursor:matches.length>start+40?collections.at(-1).id:''};}};
   let saved = schema.validateSearchSettings({...schema.DEFAULT_SEARCH_SETTINGS,instantLayout:'compact',manualSuggestions:['sweater dress','matching sets','pants','homecoming dresses','going out','sweaters'],compactCollections:resources.map((r,i)=>({...collection(r),groups:groups.map(title=>({title,collections:children.map(c=>({...collection(c),title:r.title+' '+c.title,handle:r.handle+'-'+c.handle}))}))}))});
   const requests=[];
+  let settingsDelay=0,settingsFailures=0,settingsCalls=0;
   const service = {getSearchSettings:async()=>saved,saveSearchSettings:async(_shop,v)=>{saved=schema.validateSearchSettings(v);return saved;},resetSearchSettings:async()=>{saved=null;}};
   const admin = await loadModule('app/routes/app.search.settings.jsx',{'../services/searchCollectionPicker.server.js':collectionService,'../components/CompactSearchSettings':{default:()=>null},'../components/SearchConfigurationLayout':{default:()=>null},react:{},'react-router':{},'@shopify/shopify-app-react-router/server':{boundary:{}},'../shopify.server':{authenticate:{admin:async()=>({session:{shop:'compact-fixture.myshopify.com'}})}},'../services/searchSettings.server.js':service,'../utils/searchSettings.js':schema});
   const bundle = await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{createBrowserRouter,RouterProvider}from'react-router';import Component from './app/routes/app.search.settings.jsx';const router=createBrowserRouter([{path:'*',loader:({request})=>fetch('/admin'+new URL(request.url).search).then(r=>r.json()),action:async({request})=>fetch('/admin',{method:'POST',body:new URLSearchParams(await request.formData())}).then(r=>r.json()),Component}]);createRoot(document.getElementById('root')).render(<RouterProvider router={router}/>);`,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'server-stubs',setup(b){b.onResolve({filter:/(?:shopify|searchSettings|searchIndex|searchCollectionPicker)\.server(?:\.js)?$|@shopify\/shopify-app-react-router\/server/},args=>({path:args.path,namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export const authenticate={};export const boundary={headers:()=>({})};export const getSearchIndexStatus=()=>({phase:"default"});export const getSearchSettings=()=>{};export const saveSearchSettings=()=>{};export const resetSearchSettings=()=>{};export const listSearchCollections=()=>{};export default {};'}));}}]});
@@ -25,8 +26,19 @@ export async function createCompactSearchServer() {
       const request=new Request(url,{method:req.method,...(req.method==='POST'?{body:Buffer.concat(chunks),headers:req.headers}:{})});
       return respond(await(req.method==='POST'?admin.action:admin.loader)({request}));
     }
-    if(url.pathname==='/__state')return respond({saved,requests});
-    if(url.pathname==='/api/search-settings')return respond({settings:saved});
+    if(url.pathname==='/__state')return respond({saved,requests,settingsCalls});
+    if(url.pathname==='/__settings-control'){
+      const chunks=[];for await(const chunk of req)chunks.push(chunk);
+      const control=JSON.parse(Buffer.concat(chunks).toString());
+      settingsDelay=control.delay||0;settingsFailures=control.failures||0;settingsCalls=0;
+      return respond({ok:true});
+    }
+    if(url.pathname==='/api/search-settings'){
+      settingsCalls++;const snapshot=saved,failed=settingsFailures>0;if(failed)settingsFailures--;
+      await new Promise(resolve=>setTimeout(resolve,settingsDelay));
+      if(failed){res.statusCode=503;return respond({error:'Fixture unavailable'});}
+      return respond({settings:snapshot});
+    }
     if(url.pathname==='/api/search-redirect')return respond({redirectUrl:null});
     if(url.pathname==='/api/search'){
       requests.push(Object.fromEntries(url.searchParams));

@@ -153,6 +153,19 @@ test('next-action settings refresh shares pending reads and clears prior values 
   assert.equal(calls,2);assert.equal(context.window.cfpSearchSettings,null);
 });
 
+test('interactive settings recovery gets a longer bounded request while bootstrap stays short',async()=>{
+  const delays=[];
+  const context={window:{Shopify:{shop:'test.myshopify.com'}},AbortController,encodeURIComponent,
+    setTimeout:(_fn,delay)=>{delays.push(delay);return delays.length;},clearTimeout(){},
+    fetch:async()=>({ok:true,json:async()=>({settings:defaults})}),
+  };
+  vm.createContext(context);vm.runInContext(asset,context);
+  await context.window.cfpSearchSettingsReady;
+  await context.window.cfpRefreshSearchSettings({timeoutMs:5000});
+  await context.window.cfpRefreshSearchSettings({timeoutMs:999999});
+  assert.deepEqual(delays,[1500,5000,1500]);
+});
+
 test('legacy instant-search disable flags are ignored on read and removed on save without resetting other settings', async () => {
   const {rows,service}=await serviceFixture();
   rows.set('legacy',{config:{...defaults,instantEnabled:false,productLimit:3,manualSuggestions:['Blue dress']}});

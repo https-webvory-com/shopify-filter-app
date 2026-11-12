@@ -31,10 +31,8 @@ if (!window.cfpSearchRedirectPromise && /\/search\/?$/i.test(window.location.pat
   })();
 }
 
-document.addEventListener("DOMContentLoaded", async function () {
-  await window.cfpSearchSettingsReady;
+document.addEventListener("DOMContentLoaded", function () {
   const searchSettings = window.cfpSearchSettings || {};
-  if(searchSettings.instantSearchEnabled===false)return;
   // Config
   const userSettings = window.CFP_InstantSearchSettings || {};
   const CONFIG = {
@@ -75,8 +73,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 
   // Search caching must never replay products from before a merchant save.
-  async function refreshSearchConfiguration() {
-    await window.cfpRefreshSearchSettings?.();
+  async function refreshSearchConfiguration(options) {
+    await window.cfpRefreshSearchSettings?.(options);
     const settings = window.cfpSearchSettings || {};
     Object.assign(CONFIG, {
       minChars: settings.minChars ?? 2,
@@ -112,6 +110,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   let compactTab = 0;
   let compactPage = 0;
   let compactConfig = '';
+  let pendingOpen = null;
 
   // Initialize
   init();
@@ -513,6 +512,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
 
       const handleEvent = (e) => {
+        if (modal?._nativeFallback) return;
         if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         // ── GATE 0: Ignore events inside our own modal/overlay ───────────────
         if (e.target.closest('.cfp-search-modal, .cfp-search-modal-overlay, [data-cfp-inline="true"].cfp-search-header')) return;
@@ -643,6 +643,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       // Handles keyboard users who tab into the search box.
       // Strictly guarded: INPUT tag + search type/name + in header + not our own modal.
       document.addEventListener('focus', (e) => {
+        if (modal?._nativeFallback) return;
         if(window.cfpSearchSettings?.instantSearchEnabled===false)return;
         const el = e.target;
         if (!el) return;
@@ -694,6 +695,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     overlay.addEventListener("click", closeModal);
     document.addEventListener('pointerdown', e => {
+      if (pendingOpen && !pendingOpen.trigger?.contains(e.target)) closeModal();
       if (modal.dataset.cfpLayout === 'compact' && modal.classList.contains('cfp-open') && !modal.contains(e.target) && !modal._trigger?.contains(e.target)) closeModal();
     });
     document.addEventListener("keydown", (e) => {
@@ -704,7 +706,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }
-      if (e.key === "Escape" && modal.classList.contains("cfp-open")) {
+      if (e.key === "Escape" && (pendingOpen || modal.classList.contains("cfp-open"))) {
         closeModal();
       }
     });
@@ -759,11 +761,33 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   function openModal(triggerElement) {
-    if(CONFIG.enabled===false)return;
-    // Already open — don't re-open
-    if (modal.classList.contains('cfp-open')) return;
+    if (modal.classList.contains('cfp-open') || pendingOpen) return;
+    const trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
+    const request = { trigger, busy: trigger?.getAttribute('aria-busy') };
+    pendingOpen = request;
+    trigger?.setAttribute('aria-busy', 'true');
+    return openConfiguredModal(request);
+  }
 
-    modal._trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
+  function restorePendingTrigger(request) {
+    if (request.busy === null) request.trigger?.removeAttribute('aria-busy');
+    else if (request.busy !== undefined) request.trigger?.setAttribute('aria-busy', request.busy);
+  }
+
+  async function openConfiguredModal(request) {
+    await window.cfpSearchSettingsReady;
+    if (pendingOpen !== request) return;
+    await refreshSearchConfiguration({timeoutMs:5000});
+    if (pendingOpen !== request) return;
+    pendingOpen = null;
+    restorePendingTrigger(request);
+    if (CONFIG.enabled === false) {
+      modal._nativeFallback = true;
+      try { request.trigger?.click(); } finally { modal._nativeFallback = false; }
+      return;
+    }
+
+    modal._trigger = request.trigger;
     modal.style.top = '0px';
     applySearchDisplaySettings();
     if (modal.dataset.cfpLayout === 'compact') {
@@ -792,7 +816,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Load default view if input is empty
     if (mainInput.value.trim().length === 0) {
-      fetchDefaultView();
+      fetchDefaultView(true);
     }
 
     // Focus the input after transition
@@ -800,6 +824,10 @@ document.addEventListener("DOMContentLoaded", async function () {
   }
 
   function closeModal() {
+    if (pendingOpen) {
+      restorePendingTrigger(pendingOpen);
+      pendingOpen = null;
+    }
     if (!modal.classList.contains('cfp-open')) return; // Already closed
 
     overlay.classList.remove('cfp-open');
@@ -954,12 +982,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   }
 
-  async function fetchDefaultView() {
+  async function fetchDefaultView(configurationReady = false) {
     window.cfpActiveInstantSearchId = null;
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const viewAll = document.getElementById('cfp-view-all-results');
     if (viewAll) viewAll.hidden = true;
-    await refreshSearchConfiguration();
+    if (!configurationReady) await refreshSearchConfiguration();
     renderLoading(true);
 
     try {

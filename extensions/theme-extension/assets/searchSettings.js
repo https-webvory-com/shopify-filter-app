@@ -8,15 +8,15 @@
   window.cfpSearchPriceUnit=function(value){const unit=window.cfpSearchSettings?.priceUnit;return unit?String(value)+' '+String(unit):String(value);};
   if (window.cfpSearchSettingsReady) return;
   let pending;
-  window.cfpRefreshSearchSettings = function () {
+  window.cfpRefreshSearchSettings = function (options) {
     if (pending) return pending;
-    pending = load().finally(() => { pending = null; });
+    pending = load(options).finally(() => { pending = null; });
     return pending;
   };
-  async function load() {
+  async function load(options) {
     if (!window.Shopify?.shop) return null;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1500);
+    const timer = setTimeout(() => controller.abort(), options?.timeoutMs === 5000 ? 5000 : 1500);
     try {
       const response = await fetch('https://aisearchfilter.webvory.com/api/search-settings?shop=' + encodeURIComponent(window.Shopify.shop), { signal: controller.signal, cache: 'no-store' });
       if (!response.ok) return null;
