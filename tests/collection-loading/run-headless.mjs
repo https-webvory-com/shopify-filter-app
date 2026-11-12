@@ -597,8 +597,8 @@ try{
       filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',config:{}}],
       globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).scrollbarWidth"),'none');
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar'),'::-webkit-scrollbar').width"),'0px');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar')).scrollbarWidth"),'thin');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar'),'::-webkit-scrollbar').width"),'4px');
     const wheel=async deltaY=>{
       const point=await evaluate("(()=>{const r=document.querySelector('#cfp-sidebar').getBoundingClientRect();return {x:r.left+70,y:Math.max(r.top+80,150)};})()");
       await send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});

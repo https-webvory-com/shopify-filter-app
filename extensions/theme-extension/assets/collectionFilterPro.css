@@ -2820,12 +2820,25 @@ facet-filters-form,
     box-sizing: border-box !important;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: auto !important;
-    scrollbar-width: none !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #b8b8b8 transparent;
   }
 
   .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
+    width: 4px;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb {
+    background: #b8b8b8;
+    border-radius: 4px;
+  }
+
+  .cfp-vertical-layout #cfp-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #888;
   }
 
   .cfp-vertical-layout #cfp-sidebar.cfp-sidebar--open {
