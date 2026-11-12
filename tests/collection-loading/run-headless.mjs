@@ -787,6 +787,7 @@ try{
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier});await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});}
   });
   await test('applied filters wait for filter controls on a cold horizontal load',async()=>{
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     const {identifier}=await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.appliedBeforeControls=[];new MutationObserver(()=>{const row=document.querySelector('#cfp-breadcrumbs');if(row?.getBoundingClientRect().height>0&&!document.querySelector('#cfp-horizontal-filters .cfp-horizontal-pill'))appliedBeforeControls.push(row.textContent);}).observe(document,{subtree:true,childList:true,attributes:true});`});
     try{
       await control({reset:true,realToolbar:true,productCount:70,cardSnapshots:true,publishedPages:true,delay:0,priceDelay:0,imageDelay:0,headRenderer:true,savedFilterDelay:1500,
