@@ -44,8 +44,9 @@ export async function createCompactSearchServer() {
     if(url.pathname==='/api/search'){
       requests.push(Object.fromEntries(url.searchParams));
       const q=url.searchParams.get('q')||'';
+      const suggestions=q==='silver'?['Silver Dress','Silver','<link rel="stylesheet" href="https://assets.reviews.io/style.css"><script>document.write("silver")</script>','&lt;div&gt;Silver widget&lt;/div&gt;','silver '+ 'x'.repeat(400)]:q==='nothing'?[]:[q+' dress',q+' style'];
       await new Promise(r=>setTimeout(r,searchDelay||(q==='slow'?500:40)));
-      return respond({products:q==='nothing'?[]:Array.from({length:6},(_,i)=>({id:String(i+1),title:(q||'Popular')+' Dress '+(i+1),handle:'dress-'+(i+1),vendor:'Fixture',images:['https://cdn.shopify.com/fixture.jpg'],priceMin:29,priceMax:29,available:true,variants:[{id:String(i+1),price:29,available:true}]})),suggestions:q==='nothing'?[]:[q+' dress',q+' style'],matchCount:q==='nothing'?0:42,contextualPricingApplied:true});
+      return respond({products:q==='nothing'?[]:Array.from({length:6},(_,i)=>({id:String(i+1),title:(q||'Popular')+' Dress '+(i+1),handle:'dress-'+(i+1),vendor:'Fixture',images:['https://cdn.shopify.com/fixture.jpg'],priceMin:29,priceMax:29,available:true,variants:[{id:String(i+1),price:29,available:true}]})),suggestions,matchCount:q==='nothing'?0:42,contextualPricingApplied:true});
     }
     if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json'){
       if(searchDelay)await new Promise(resolve=>setTimeout(resolve,searchDelay));

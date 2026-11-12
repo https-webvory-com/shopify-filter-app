@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {transform} from 'esbuild';
-import {buildSearchSuggestions} from '../../app/utils/searchSuggestions.js';
+import {buildSearchSuggestions,cleanSuggestionText} from '../../app/utils/searchSuggestions.js';
 import * as instantSearchCard from '../../app/utils/instantSearchCard.js';
 import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
 import { createHash } from 'node:crypto';
@@ -129,6 +129,18 @@ test('suggestions include product names and matching color, without case duplica
  assert.deepEqual(buildSearchSuggestions('wat',[{title:'Minimal Smartwatch For Watch Lover'}],[]),['Minimal Smartwatch For Watch Lover']);
  assert.equal(buildSearchSuggestions('',products).length,0);
  assert.equal(buildSearchSuggestions('dress',Array.from({length:10},(_,i)=>({title:'Dress '+i}))).length,6);
+});
+
+test('suggestion labels reject widget HTML and code while preserving plain text on server and browser',()=>{
+ const f=fixture();
+ const invalid=['<link rel="stylesheet" href="https://assets.reviews.io/style.css"><script>document.write("Silver")</script>',
+  '&lt;div&gt;Silver reviews&lt;/div&gt;','&amp;lt;script&amp;gt;Silver&amp;lt;/script&amp;gt;','&#60;iframe&#62;Silver&#60;/iframe&#62;',
+  'document.getElementById("Silver")','x'.repeat(301),null,{}];
+ for(const value of invalid){assert.equal(cleanSuggestionText(value),'');assert.equal(f.context.cleanSuggestionText(value),'');}
+ for(const value of ['Silver','Silver Dresses','Silver & Gold','Fits < 10 inches','銀色のドレス','x'.repeat(300)]){
+  assert.equal(cleanSuggestionText(value),value);assert.equal(f.context.cleanSuggestionText(value),value);
+ }
+ assert.deepEqual(buildSearchSuggestions('silver',[],[...invalid,'Silver','Silver Dresses'],2),['Silver','Silver Dresses']);
 });
 test('suggestions are not held behind slow product rendering',async()=>{
  const f=fixture();let resolve;f.context.renderProducts=()=>new Promise(r=>{resolve=r;});

@@ -9,6 +9,7 @@ import * as configuration from '../../app/utils/searchConfiguration.js';
 import * as semantic from '../../app/utils/semanticSearch.js';
 import * as sku from '../../app/utils/skuSearch.js';
 import {readSearchIndexExtras} from '../../app/utils/searchIndexExtras.js';
+import * as suggestionText from '../../app/utils/searchSuggestions.js';
 
 const shop='one.myshopify.com',other='two.myshopify.com';
 const defaults=schema.DEFAULT_SEARCH_SETTINGS;
@@ -100,7 +101,7 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const queue={getJob:async()=>null,add:async(name,data,options)=>jobs.push({name,data:plain(data),options:plain(options)})};
  const mocks={'node:crypto':{createHash,randomUUID},'../db.server.js':{__esModule:true,default:prisma},'./redis.server.js':{__esModule:true,default:redis},'./meiliClient.server.js':{__esModule:true,default:client},'./shopCache.server.js':{getCached:async(_key,read)=>read()},'../utils/searchSettings.js':schema,'../utils/searchConfiguration.js':configuration,'../utils/semanticSearch.js':semantic,'../utils/searchIndexExtras.js':{readSearchIndexExtras},'../utils/skuSearch.js':sku,'../utils/embeddingHold.js':{withHeldEmbeddingsForIndex:async(_index,docs)=>docs}};
  const source=(await fs.readFile('app/services/searchIndex.server.js','utf8')).replace("await import('./queue.server.js')",'injectedQueue');
- const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{searchIndexQueue:queue},require:name=>{if(!(name in mocks))throw Error(name);return mocks[name];}};
+ const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{searchIndexQueue:queue},require:name=>{if(name==='../utils/searchSuggestions.js')return suggestionText;if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext((await transform(source,{format:'cjs'})).code,context);
  return {service:context.module.exports,rows,cache,indexes,jobs,calls,catalog,fail:()=>{fail=true;},async drain(){let count=0;while(jobs.length){const job=jobs.shift();if(job.name==='SEARCH_INDEX_RETIRE')continue;await context.module.exports.processSearchIndexJob(job.data);if(++count>20)throw Error('Unbounded worker');}}};
 }
@@ -116,6 +117,14 @@ test('background preparation serves the previous index until every bounded batch
  assert.equal(f.rows.get(shop).config._index.phase,'ready');
  const otherContext=await f.service.getSearchIndexContext(other);assert.equal(otherContext.uid,'products');
  assert.equal(f.calls.find(c=>c[0]==='settings')[2].searchableAttributes[0],'cfp_field_000');
+});
+
+test('configured suggestions skip review widget markup before applying the suggestion limit',async()=>{
+ const f=await fixture(settings({stopwords:['the']}),[{...product(1),title:'Silver Dress',
+  'metafield_reviews.widget':'<link rel="stylesheet" href="https://assets.reviews.io/style.css"><script>document.write("silver")</script>',
+  'metafield_custom.color':'Silver','metafield_custom.collection':'Silver Dresses'}]);
+ await f.service.scheduleSearchIndex(shop);await f.drain();
+ assert.deepEqual(plain(await f.service.configuredSuggestions(shop,'silver',3)),['Silver Dress','Silver','Silver Dresses']);
 });
 
 test('default search settings build a private index when a shop has synonyms',async()=>{

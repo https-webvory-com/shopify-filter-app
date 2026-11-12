@@ -9,6 +9,7 @@ import {semanticEmbedderSettings} from '../utils/semanticSearch.js';
 import {readSearchIndexExtras} from '../utils/searchIndexExtras.js';
 import {isProductCodeQuery} from '../utils/skuSearch.js';
 import {withHeldEmbeddingsForIndex} from '../utils/embeddingHold.js';
+import {cleanSuggestionText} from '../utils/searchSuggestions.js';
 
 const validShop=shop=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop||'');
 const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
@@ -147,7 +148,7 @@ export async function configuredSuggestions(shop,query,limit,filter=[]){
  const {q,...params}=options;
  const result=await client.index(context.uid).search(q,params);
  const words=q.toLowerCase().split(/\s+/).filter(Boolean),values=[];
- for(const product of result.hits||[])for(const field of names)for(const value of product[field]||[])if(words.some(word=>String(value).toLowerCase().includes(word)))values.push(String(value));
+ for(const product of result.hits||[])for(const field of names)for(const value of product[field]||[]){const text=cleanSuggestionText(String(value));if(text&&words.some(word=>text.toLowerCase().includes(word)))values.push(text);}
  return [...new Set(values)].slice(0,limit);
 }
 async function indexSettings(config){

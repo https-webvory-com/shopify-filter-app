@@ -186,12 +186,12 @@ function recentFixture(config, storageValue = '[]') {
   vm.runInContext(instant.slice(instant.indexOf('  function highlightSearchText'), instant.indexOf('  // UI Elements')) + instant.slice(instant.indexOf('  function saveRecentSearch'), instant.indexOf('  function openModal')) + instant.slice(instant.indexOf('  function renderRecentSearches'), instant.indexOf('  async function performSearch')), context);
   return { context, element, stored: () => JSON.parse(storageValue) };
 }
-test('manual suggestions render in order as escaped search links; zero suggestions hide typed section', () => {
-  const f = recentFixture({ manualSuggestions: ['<script>', 'Blue Dress'], suggestionLimit: 0 });
+test('manual suggestions omit markup and render plain text in order as escaped links; zero suggestions hide typed section', () => {
+  const f = recentFixture({ manualSuggestions: ['<script>', 'Fits < 10 inches', 'Blue Dress'], suggestionLimit: 0 });
   f.context.renderRecentSearches('');
   const html = f.element('cfp-recent-searches-list').innerHTML;
-  assert.ok(html.includes('&lt;script&gt;')); assert.ok(!html.includes('<script>'));
-  assert.ok(html.indexOf('&lt;script&gt;') < html.indexOf('Blue Dress'));
+  assert.ok(!html.includes('script')); assert.ok(html.includes('Fits &lt; 10 inches'));
+  assert.ok(html.indexOf('Fits &lt; 10 inches') < html.indexOf('Blue Dress'));
   f.context.renderSuggestions(['Blue'], 'blue');
   assert.equal(f.element('cfp-recent-searches-container').style.display, 'none');
 });

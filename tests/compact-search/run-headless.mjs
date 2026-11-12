@@ -125,6 +125,11 @@ try {
   assert.ok(await evaluate('document.querySelector(".cfp-search-product-image-wrap").getBoundingClientRect().height<=64'));
   assert.equal(await evaluate('document.querySelector("#cfp-view-all-results").getAttribute("href")'),'/search?q=blue%20dress');
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#cfp-search-pages")).display'),'none');
+  await input('silver');await wait('document.querySelector("#cfp-search-products").innerText.includes("silver Dress")');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".cfp-suggestion-text")].map(e=>e.textContent)'),['Silver Dress','Silver']);
+  assert.equal(await evaluate('document.querySelector("#cfp-recent-searches-list").textContent.includes("document.write")'),false);
+  assert.equal(await evaluate('document.querySelectorAll(".cfp-search-result-card").length'),6);
+  console.log('PASS suggestions from an unsanitized API omit raw/encoded review-widget HTML and oversized text while keeping silver results and valid labels');
   await evaluate(`fetch('/admin').then(r=>r.json()).then(({settings})=>fetch('/admin',{method:'POST',body:new URLSearchParams({intent:'save',settings:JSON.stringify({...settings,showPages:true})})}))`);
   await input('page dress');await wait('document.querySelector("#cfp-search-pages").innerText.includes("Dress styling guide")');
   assert.ok(await evaluate('document.querySelector("#cfp-pages-title").getBoundingClientRect().top<document.querySelector("#cfp-compact-products-title").getBoundingClientRect().top'));

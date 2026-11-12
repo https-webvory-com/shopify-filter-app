@@ -103,6 +103,15 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(value).split(new RegExp('(' + escapedQuery + ')', 'gi')).map((part, index) => index % 2 ? '<strong>' + escape(part) + '</strong>' : escape(part)).join('');
   }
 
+  function cleanSuggestionText(value) {
+    if (typeof value !== 'string') return '';
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 300) return '';
+    const probe = text.replace(/&(?:amp;)*lt;|&#0*60;|&#x0*3c;/gi, '<').replace(/&(?:amp;)*gt;|&#0*62;|&#x0*3e;/gi, '>');
+    if (/<\/?[a-z][^>]*>|<!--|<!doctype\b/i.test(probe) || /\b(?:document|window)\s*\.\s*(?:write|getElementById|createElement|addEventListener)\s*\(/i.test(probe)) return '';
+    return text;
+  }
+
   // UI Elements
   let modal = null;
   let overlay = null;
@@ -1132,7 +1141,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function renderSuggestions(suggestions, query) {
-    suggestions = suggestions.slice(0, query ? (CONFIG.suggestionLimit ?? 6) : 10);
+    suggestions = (Array.isArray(suggestions) ? suggestions : []).map(cleanSuggestionText).filter(Boolean).slice(0, query ? (CONFIG.suggestionLimit ?? 6) : 10);
     if (!suggestions.length) {
       const container = document.getElementById('cfp-recent-searches-container');
       if (container) container.style.display = 'none';
