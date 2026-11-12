@@ -974,10 +974,17 @@ document.addEventListener("DOMContentLoaded", function () {
     const body = document.getElementById("cfp-search-body");
     const productsGrid = document.getElementById("cfp-search-products");
     const collectionsList = document.getElementById("cfp-search-collections");
+    productsGrid.setAttribute('aria-busy', String(isLoading));
+    collectionsList?.setAttribute('aria-busy', String(isLoading));
     
     loader.style.display = "none"; // Hide old spinner entirely
     if (isLoading) {
       body.classList.add("cfp-has-results"); // Keep body visible for skeletons
+      if (window.cfpSearchSettings?.instantLayout === 'compact') {
+        productsGrid.innerHTML = Array.from({length:CONFIG.productLimit},()=>`<div class="cfp-compact-loading-card" aria-hidden="true"><span class="cfp-compact-loading-image cfp-compact-loading-fill"></span><span class="cfp-compact-loading-copy"><span class="cfp-compact-loading-line cfp-compact-loading-fill"></span><span class="cfp-compact-loading-line cfp-compact-loading-fill"></span><span class="cfp-compact-loading-price cfp-compact-loading-fill"></span></span></div>`).join('');
+        if (collectionsList) collectionsList.innerHTML = Array.from({length:Math.min(3,CONFIG.collectionLimit??5)},()=>'<li class="cfp-compact-loading-chip cfp-compact-loading-fill" aria-hidden="true"></li>').join('');
+        return;
+      }
       
       let skeletonProducts = '';
       for(let i=0; i<CONFIG.productLimit; i++) {

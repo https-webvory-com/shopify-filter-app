@@ -96,6 +96,16 @@ try {
   assert.equal(await evaluate('document.querySelector(".cfp-compact-columns a").getAttribute("href")'),'/collections/men-style-1');
   assert.equal(await evaluate('document.querySelector(".cfp-compact-pagination span").textContent'),'1 / 2');
   console.log('PASS compact tabs show only assigned links, paginate and reset on tab switch');
+  await settingsControl({searchDelay:1800});await input('placeholder dress');
+  await wait('document.querySelectorAll(".cfp-compact-loading-card").length===6');
+  const loading=await evaluate('(()=>{const i=document.querySelector(".cfp-compact-loading-image"),c=document.querySelector(".cfp-compact-loading-chip"),body=document.querySelector(".cfp-search-body");return {imageWidth:i.getBoundingClientRect().width,imageHeight:i.getBoundingClientRect().height,chipWidth:c.getBoundingClientRect().width,chipHeight:c.getBoundingClientRect().height,scrollbar:getComputedStyle(body).scrollbarWidth,busy:document.querySelector("#cfp-search-products").getAttribute("aria-busy"),oldCards:document.querySelectorAll("#cfp-search-products .cfp-skeleton-card").length};})()');
+  assert.equal(loading.imageWidth,43);assert.equal(loading.imageHeight,64);assert.equal(loading.chipWidth,92);assert.equal(loading.chipHeight,24);assert.equal(loading.scrollbar,'thin');assert.equal(loading.busy,'true');assert.equal(loading.oldCards,0);
+  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".cfp-compact-loading-fill")).animationName'),'none');
+  await send('Emulation.setEmulatedMedia',{features:[]});
+  await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(data=>fs.writeFile('scratch/compact-refined-placeholder.png',Buffer.from(data.data,'base64')));
+  await settingsControl({});
+  console.log('PASS compact loading skeletons match thumbnail-and-text results, use collection chips and a thin scrollbar, and respect reduced motion');
   await input('blue dress');
   await wait('document.querySelectorAll(".cfp-search-result-card").length===6&&document.querySelector("#cfp-view-all-results").textContent.includes("42")');
   const compactResults=await evaluate('[...document.querySelectorAll(".cfp-search-product-card")].map(e=>({url:e.getAttribute("href"),title:e.querySelector(".cfp-search-product-title")?.textContent||""}))');

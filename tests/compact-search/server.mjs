@@ -14,7 +14,7 @@ export async function createCompactSearchServer() {
   const collectionService = {listSearchCollections:async(_shop,{query='',after=''})=>{const matches=storedCollections.filter(c=>(c.title+' '+c.handle).toLowerCase().includes(query.toLowerCase()));const start=after?matches.findIndex(c=>c.id===after)+1:0;const collections=matches.slice(start,start+40);return {query,after,collections,hasMore:matches.length>start+40,nextCursor:matches.length>start+40?collections.at(-1).id:''};}};
   let saved = schema.validateSearchSettings({...schema.DEFAULT_SEARCH_SETTINGS,instantLayout:'compact',manualSuggestions:['sweater dress','matching sets','pants','homecoming dresses','going out','sweaters'],compactCollections:resources.map((r,i)=>({...collection(r),groups:groups.map(title=>({title,collections:children.map(c=>({...collection(c),title:r.title+' '+c.title,handle:r.handle+'-'+c.handle}))}))}))});
   const requests=[];
-  let settingsDelay=0,settingsFailures=0,settingsCalls=0;
+  let settingsDelay=0,settingsFailures=0,settingsCalls=0,searchDelay=0;
   const service = {getSearchSettings:async()=>saved,saveSearchSettings:async(_shop,v)=>{saved=schema.validateSearchSettings(v);return saved;},resetSearchSettings:async()=>{saved=null;}};
   const admin = await loadModule('app/routes/app.search.settings.jsx',{'../services/searchCollectionPicker.server.js':collectionService,'../components/CompactSearchSettings':{default:()=>null},'../components/SearchConfigurationLayout':{default:()=>null},react:{},'react-router':{},'@shopify/shopify-app-react-router/server':{boundary:{}},'../shopify.server':{authenticate:{admin:async()=>({session:{shop:'compact-fixture.myshopify.com'}})}},'../services/searchSettings.server.js':service,'../utils/searchSettings.js':schema});
   const bundle = await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{createBrowserRouter,RouterProvider}from'react-router';import Component from './app/routes/app.search.settings.jsx';const router=createBrowserRouter([{path:'*',loader:({request})=>fetch('/admin'+new URL(request.url).search).then(r=>r.json()),action:async({request})=>fetch('/admin',{method:'POST',body:new URLSearchParams(await request.formData())}).then(r=>r.json()),Component}]);createRoot(document.getElementById('root')).render(<RouterProvider router={router}/>);`,resolveDir:process.cwd(),loader:'jsx'},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'server-stubs',setup(b){b.onResolve({filter:/(?:shopify|searchSettings|searchIndex|searchCollectionPicker)\.server(?:\.js)?$|@shopify\/shopify-app-react-router\/server/},args=>({path:args.path,namespace:'stub'}));b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export const authenticate={};export const boundary={headers:()=>({})};export const getSearchIndexStatus=()=>({phase:"default"});export const getSearchSettings=()=>{};export const saveSearchSettings=()=>{};export const resetSearchSettings=()=>{};export const listSearchCollections=()=>{};export default {};'}));}}]});
@@ -31,6 +31,7 @@ export async function createCompactSearchServer() {
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
       const control=JSON.parse(Buffer.concat(chunks).toString());
       settingsDelay=control.delay||0;settingsFailures=control.failures||0;settingsCalls=0;
+      searchDelay=control.searchDelay||0;
       return respond({ok:true});
     }
     if(url.pathname==='/api/search-settings'){
@@ -43,10 +44,13 @@ export async function createCompactSearchServer() {
     if(url.pathname==='/api/search'){
       requests.push(Object.fromEntries(url.searchParams));
       const q=url.searchParams.get('q')||'';
-      await new Promise(r=>setTimeout(r,q==='slow'?500:40));
+      await new Promise(r=>setTimeout(r,searchDelay||(q==='slow'?500:40)));
       return respond({products:q==='nothing'?[]:Array.from({length:6},(_,i)=>({id:String(i+1),title:(q||'Popular')+' Dress '+(i+1),handle:'dress-'+(i+1),vendor:'Fixture',images:['https://cdn.shopify.com/fixture.jpg'],priceMin:29,priceMax:29,available:true,variants:[{id:String(i+1),price:29,available:true}]})),suggestions:q==='nothing'?[]:[q+' dress',q+' style'],matchCount:q==='nothing'?0:42,contextualPricingApplied:true});
     }
-    if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json')return respond({collections:children,resources:{results:{collections:children,pages:url.searchParams.get('resources[type]')==='page'?[{title:'Dress styling guide',url:'/pages/dress-styling-guide'}]:[]}}});
+    if(url.pathname==='/collections.json'||url.pathname==='/search/suggest.json'){
+      if(searchDelay)await new Promise(resolve=>setTimeout(resolve,searchDelay));
+      return respond({collections:children,resources:{results:{collections:children,pages:url.searchParams.get('resources[type]')==='page'?[{title:'Dress styling guide',url:'/pages/dress-styling-guide'}]:[]}}});
+    }
     if(url.pathname.startsWith('/assets/')){const name=url.pathname.slice(8);if(!['instantSearch.js','instantSearch.css','searchSettings.js'].includes(name)){res.writeHead(404);return res.end();}res.setHeader('Content-Type',name.endsWith('.css')?'text/css':'application/javascript');return res.end((await fs.readFile('extensions/theme-extension/assets/'+name,'utf8')).replaceAll('https://aisearchfilter.webvory.com',''));}
     if(url.pathname==='/admin.js'){res.setHeader('Content-Type','application/javascript');return res.end(bundle.outputFiles[0].text);}
     res.setHeader('Content-Type','text/html');
