@@ -112,8 +112,6 @@ document.addEventListener("DOMContentLoaded", async function () {
   let compactTab = 0;
   let compactPage = 0;
   let compactConfig = '';
-  let compactHeader = null;
-  let compactHeaderRestore = null;
 
   // Initialize
   init();
@@ -332,143 +330,38 @@ document.addEventListener("DOMContentLoaded", async function () {
     positionCompactPanel();
   }
 
-  const compactSlotProperties = ['width','min-width','max-width','height','min-height','max-height','flex-basis','flex-shrink','transition','position','overflow'];
-  function restoreCompactInput(state) {
-    if (!state?.inputHeader) return;
-    modal.prepend(state.inputHeader);
-    state.inputHeader.removeAttribute('data-cfp-inline');
-    state.inputHeader.style.removeProperty('--cfp-compact-panel-width');
-    modal.removeAttribute('aria-owns');
-    delete modal.dataset.cfpInline;
-    delete overlay.dataset.cfpInline;
-    state.inputHeader = null;
-  }
-  function restoreCompactSlot(state) {
-    if (!state?.slot) return;
-    for (const [key,value,priority] of state.styles) {
-      if (value) state.slot.style.setProperty(key,value,priority); else state.slot.style.removeProperty(key);
-    }
-    state.active = false;
-  }
-  function releaseCompactHeader(animate = false) {
-    if (compactHeaderRestore) {
-      clearTimeout(compactHeaderRestore.timer);restoreCompactSlot(compactHeaderRestore.state);compactHeaderRestore = null;
-    }
-    const state = compactHeader;compactHeader = null;
-    if (!state) return;
-    restoreCompactInput(state);
-    state.observer?.disconnect();
-    if (state.visibility) state.trigger.style.setProperty('visibility',state.visibility,state.visibilityPriority);
-    else state.trigger.style.removeProperty('visibility');
-    if (animate && state.active && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      state.slot.style.setProperty('transition','width .22s ease, min-width .22s ease, max-width .22s ease, flex-basis .22s ease','important');
-      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,state.startWidth + 'px','important');
-      const pending = {state,timer:setTimeout(()=>{restoreCompactSlot(state);if(compactHeaderRestore===pending)compactHeaderRestore=null;},240)};
-      compactHeaderRestore = pending;
-    } else restoreCompactSlot(state);
-  }
-  function prepareCompactHeader(trigger) {
-    releaseCompactHeader();
-    if (!trigger?.getBoundingClientRect) return;
-    const icon = trigger.querySelector?.('svg');
-    const iconRect = icon?.getBoundingClientRect();
-    const anchor = iconRect?.width && iconRect?.height ? iconRect : trigger.getBoundingClientRect();
-    const header = trigger.closest('header, [role="banner"], sticky-header, .site-header');
-    let slot = trigger, candidate = null;
-    while (header && slot && slot !== header) {
-      let parent = slot.parentElement;
-      while (parent && getComputedStyle(parent).display === 'contents') parent = parent.parentElement;
-      if (!parent || !header.contains(parent)) break;
-      if (['flex','inline-flex','grid','inline-grid'].includes(getComputedStyle(parent).display)) {
-        if (!['absolute','fixed'].includes(getComputedStyle(slot).position)) candidate = slot;
-        break;
-      }
-      slot = parent;
-    }
-    const state = {trigger,anchor,slot:candidate,active:false,visibility:trigger.style.getPropertyValue('visibility'),visibilityPriority:trigger.style.getPropertyPriority('visibility'),
-      styles:candidate?compactSlotProperties.map(key=>[key,candidate.style.getPropertyValue(key),candidate.style.getPropertyPriority(key)]):[]};
-    compactHeader = state;
-    trigger.style.setProperty('visibility','hidden','important');
-  }
-  function syncCompactHeaderSpace(width) {
-    const state = compactHeader;
-    if (!state?.slot?.isConnected) return null;
-    if (window.innerWidth <= 768) {
-      restoreCompactInput(state);state.observer?.disconnect();restoreCompactSlot(state);return null;
-    }
-    if (!state.active) {
-      const rect = state.slot.getBoundingClientRect();
-      if (!rect.width || rect.width > 80) return null;
-      state.startWidth = rect.width;
-      state.anchorOffset = state.anchor.top + state.anchor.height / 2 - rect.top;
-      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,rect.width+'px','important');
-      for (const key of ['height','min-height','max-height']) state.slot.style.setProperty(key,rect.height+'px','important');
-      state.slot.style.setProperty('flex-shrink','0','important');
-      state.slot.style.setProperty('transition',window.matchMedia('(prefers-reduced-motion: reduce)').matches?'none':'width .4s cubic-bezier(.22,1,.36,1), min-width .4s cubic-bezier(.22,1,.36,1), max-width .4s cubic-bezier(.22,1,.36,1), flex-basis .4s cubic-bezier(.22,1,.36,1)','important');
-      void state.slot.offsetWidth;state.active = true;
-      if (window.ResizeObserver) {
-        state.observer ||= new ResizeObserver(()=>{if(modal?.classList.contains('cfp-open'))positionCompactPanel();});
-        state.observer.observe(state.slot);
-      }
-    }
-    // Use the existing input in the expanded header slot, rather than a second
-    // search row inside the results popup. Interactive trigger elements cannot host it.
-    if (state.slot !== state.trigger && !state.inputHeader) {
-      state.inputHeader = modal.querySelector('.cfp-search-header');
-      if (state.inputHeader) {
-        if (getComputedStyle(state.slot).position === 'static') state.slot.style.setProperty('position','relative','important');
-        state.slot.style.setProperty('overflow','visible','important');
-        state.inputHeader.dataset.cfpInline = 'true';
-        state.inputHeader.id = 'cfp-inline-search-header';
-        modal.setAttribute('aria-owns','cfp-inline-search-header');
-        state.slot.append(state.inputHeader);
-        modal.dataset.cfpInline = 'true';
-        overlay.dataset.cfpInline = 'true';
-      }
-    }
-    state.inputHeader?.style.setProperty('--cfp-compact-panel-width',width+'px');
-    // Mount and measure the collapsed field before assigning its expanded
-    // width. Otherwise a cold first opening can coalesce both sizes into one.
-    if (modal.classList.contains('cfp-open')) {
-      for (const key of ['width','min-width','max-width','flex-basis']) state.slot.style.setProperty(key,width+'px','important');
-    } else void state.slot.offsetWidth;
-    const rect = state.slot.getBoundingClientRect();
-    return {left:rect.right-state.anchor.width,right:rect.right,top:rect.top+state.anchorOffset-state.anchor.height/2,
-      bottom:rect.top+state.anchorOffset+state.anchor.height/2,width:state.anchor.width,height:state.anchor.height};
-  }
   function positionCompactPanel() {
-    if (!modal || modal.dataset.cfpLayout !== 'compact') {
-      releaseCompactHeader();
-      if (modal) for (const key of ['left','right','bottom','width','max-height','transform-origin','--cfp-compact-panel-width','--cfp-compact-panel-height','--cfp-compact-trigger-width']) modal.style.removeProperty(key);
-      if (modal) {modal.style.top='0px';delete modal.dataset.cfpPlacement;}
+    if (!modal) return;
+    if (modal.dataset.cfpLayout !== 'compact') {
+      for (const key of ['left','right','bottom','width','max-height','transform-origin','--cfp-compact-panel-width','--cfp-compact-panel-height','--cfp-compact-pointer-x']) modal.style.removeProperty(key);
+      modal.style.top='0px';delete modal.dataset.cfpPlacement;delete modal.dataset.cfpAnchored;
       return;
     }
-    if (compactHeaderRestore && !modal.classList.contains('cfp-open')) return;
-    const viewport = window.visualViewport;
+    const viewport=window.visualViewport;
     const x=viewport?.offsetLeft||0,y=viewport?.offsetTop||0;
     const viewportWidth=viewport?.width||window.innerWidth,viewportHeight=viewport?.height||window.innerHeight;
-    const margin=8,barHeight=50,width=Math.min(448,Math.max(0,viewportWidth-margin*2));
-    const reserved = syncCompactHeaderSpace(width);
+    const margin=8,gap=12,width=Math.min(448,Math.max(0,viewportWidth-margin*2));
     const icon=modal._trigger?.querySelector?.('svg'),iconRect=icon?.getBoundingClientRect();
-    const bounds=reserved||(iconRect?.width&&iconRect?.height?iconRect:modal._trigger?.getBoundingClientRect());
+    const bounds=iconRect?.width&&iconRect?.height?iconRect:modal._trigger?.getBoundingClientRect();
     const anchor=bounds?.width&&bounds?.height&&bounds.bottom>y&&bounds.top<y+viewportHeight&&bounds.right>x&&bounds.left<x+viewportWidth?bounds:null;
-    const left=Math.max(x+margin,Math.min(anchor?anchor.right-width:x+viewportWidth-width-24,x+viewportWidth-width-margin));
-    const center=anchor?anchor.top+anchor.height/2:y+(viewportWidth<=600?37:89);
-    const barTop=Math.max(y+margin,Math.min(center-barHeight/2,y+viewportHeight-margin-barHeight));
-    const below=Math.max(0,y+viewportHeight-margin-barTop),above=Math.max(0,barTop+barHeight-y-margin);
+    const centerX=anchor?anchor.left+anchor.width/2:x+viewportWidth-32;
+    const left=Math.max(x+margin,Math.min(centerX-width+24,x+viewportWidth-width-margin));
+    const anchorBottom=anchor?.bottom??(y+(viewportWidth<=600?50:100));
+    const anchorTop=anchor?.top??anchorBottom;
+    const below=Math.max(0,y+viewportHeight-margin-anchorBottom-gap),above=Math.max(0,anchorTop-gap-y-margin);
     const opensAbove=below<Math.min(240,viewportHeight-margin*2)&&above>below;
-    // Keep viewport-edge/mobile fallbacks inside the popup when the header
-    // cannot safely contain a full-width field.
-    if (compactHeader?.inputHeader && (opensAbove || Math.abs(left-(compactHeader.slot.getBoundingClientRect().right-width))>1)) restoreCompactInput(compactHeader);
-    const inline = !!compactHeader?.inputHeader;
+    const height=Math.min(600,opensAbove?above:below);
+    const pointerX=Math.max(18,Math.min(centerX-left,width-18));
     modal.dataset.cfpPlacement=opensAbove?'above':'below';
-    modal.style.left='auto';modal.style.right=window.innerWidth-left-width+'px';modal.style.width=width+'px';
-    modal.style.top=opensAbove?'auto':(inline?compactHeader.inputHeader.getBoundingClientRect().bottom:barTop)+'px';modal.style.bottom=opensAbove?window.innerHeight-barTop-barHeight+'px':'auto';
-    modal.style.maxHeight=Math.min(600,opensAbove?above:below)+'px';
+    modal.dataset.cfpAnchored=String(!!anchor);
+    modal.style.left=left+'px';modal.style.right='auto';modal.style.width=width+'px';
+    modal.style.top=opensAbove?'auto':Math.min(anchorBottom+gap,y+viewportHeight-margin)+'px';
+    modal.style.bottom=opensAbove?window.innerHeight-anchorTop+gap+'px':'auto';
+    modal.style.maxHeight=height+'px';
     modal.style.setProperty('--cfp-compact-panel-width',width+'px');
-    modal.style.setProperty('--cfp-compact-panel-height',(Math.min(600,opensAbove?above:below)-(inline?barHeight:0))+'px');
-    modal.style.setProperty('--cfp-compact-trigger-width',Math.min(50,anchor?.width||50)+'px');
-    modal.style.transformOrigin=(anchor?anchor.left+anchor.width/2-left:width/2)+'px '+(opensAbove?'calc(100% - 25px)':(center-barTop)+'px');
+    modal.style.setProperty('--cfp-compact-panel-height',height+'px');
+    modal.style.setProperty('--cfp-compact-pointer-x',pointerX+'px');
+    modal.style.transformOrigin=pointerX+'px '+(opensAbove?'100%':'0px');
   }
 
   function renderCompactNavigation() {
@@ -801,12 +694,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     });
     overlay.addEventListener("click", closeModal);
     document.addEventListener('pointerdown', e => {
-      if (modal.dataset.cfpInline === 'true' && modal.classList.contains('cfp-open') && !modal.contains(e.target) && !compactHeader?.inputHeader?.contains(e.target)) closeModal();
+      if (modal.dataset.cfpLayout === 'compact' && modal.classList.contains('cfp-open') && !modal.contains(e.target) && !modal._trigger?.contains(e.target)) closeModal();
     });
     document.addEventListener("keydown", (e) => {
       if (document.querySelector('.cfp-native-quick-view[open]')) return;
       if (e.key === 'Tab' && modal.dataset.cfpLayout === 'compact' && modal.classList.contains('cfp-open')) {
-        const controls = [...(compactHeader?.inputHeader?.querySelectorAll('button:not(:disabled),input,a[href]')||[]),...modal.querySelectorAll('button:not(:disabled),input,a[href]')].filter(el => el.tabIndex >= 0 && el.getClientRects().length);
+        const controls = [...modal.querySelectorAll('button:not(:disabled),input,a[href]')].filter(el => el.tabIndex >= 0 && el.getClientRects().length);
         const first = controls[0], last = controls[controls.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
@@ -871,12 +764,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (modal.classList.contains('cfp-open')) return;
 
     modal._trigger = triggerElement?.closest?.('button,a,summary,input,[role="button"]') || triggerElement;
-    if (window.cfpSearchSettings?.instantLayout === 'compact') prepareCompactHeader(modal._trigger);
     modal.style.top = '0px';
     applySearchDisplaySettings();
     if (modal.dataset.cfpLayout === 'compact') {
-      // Start from the icon width even when settings arrived during a prior
-      // layout transition or the shopper immediately reopens the search.
+      // Settle the anchored position before the first opening transition.
       modal.style.setProperty('transition','none','important');
       void modal.offsetWidth;
       modal.style.removeProperty('transition');
@@ -888,6 +779,13 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Prevent background scrolling.
     // Save any existing overflow value so we can restore it precisely on close.
     modal._prevBodyOverflow = document.body.style.overflow;
+    // Keep the existing scrollbar space while the compact popup locks scrolling.
+    // Otherwise fixed header icons move when the page scrollbar disappears.
+    const root = document.documentElement;
+    if (modal.dataset.cfpLayout === 'compact' && window.innerWidth > root.clientWidth && getComputedStyle(root).scrollbarGutter === 'auto') {
+      modal._compactScrollGutter = [root.style.getPropertyValue('scrollbar-gutter'), root.style.getPropertyPriority('scrollbar-gutter')];
+      root.style.setProperty('scrollbar-gutter', 'stable');
+    }
     document.body.style.overflow = 'hidden';
     document.body.classList.add('cfp-search-active');
     if (modal.dataset.cfpLayout === 'compact') positionCompactPanel();
@@ -906,11 +804,16 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     overlay.classList.remove('cfp-open');
     modal.classList.remove('cfp-open');
-    releaseCompactHeader(true);
 
     // Restore body overflow to what it was before we set it
     // (avoids breaking other modals that also use overflow:hidden)
     document.body.style.overflow = modal._prevBodyOverflow || '';
+    if (modal._compactScrollGutter) {
+      const [value, priority] = modal._compactScrollGutter;
+      if (value) document.documentElement.style.setProperty('scrollbar-gutter', value, priority);
+      else document.documentElement.style.removeProperty('scrollbar-gutter');
+      modal._compactScrollGutter = null;
+    }
     document.body.classList.remove('cfp-search-active');
     if (modal.dataset.cfpLayout === 'compact' && modal._trigger?.isConnected) {
       // Avoid the theme-input focus listener reopening the panel on close.
