@@ -131,7 +131,8 @@ export function validateCompactCollections(value) {
     if (seen.has(main.handle)) throw Error('Choose different main collections.');
     seen.add(main.handle);
     if (!Array.isArray(item.groups) || item.groups.length > 3) throw Error('Use up to three groups per main collection.');
-    return { ...main, groups: item.groups.map(group => {
+    const tabLabel = text(item.tabLabel ?? '', 'Main collection tab text', 60);
+    return { ...main, ...(tabLabel ? { tabLabel } : {}), groups: item.groups.map(group => {
       if (!group || typeof group !== 'object') throw Error('Invalid related collection group.');
       const title = text(group.title, 'Group title', 60);
       if (!title || !Array.isArray(group.collections) || group.collections.length > 12) throw Error('Choose up to 12 related collections per group.');

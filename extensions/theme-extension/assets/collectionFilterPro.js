@@ -3048,6 +3048,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             const btn = restoredPill.querySelector('.cfp-horizontal-pill__btn');
             if (pop) {
               pop.classList.add('is-open');
+              positionHorizontalFilterPopover(pop);
               const scrollArea = pop.querySelector('.cfp-scroll-area');
               if (scrollArea && openPopoverScrollTop > 0) {
                 scrollArea.scrollTop = openPopoverScrollTop;
@@ -3133,6 +3134,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (typeof window.cfpSyncPillsLayout !== 'function' && isHorizontalFilterLayout() && cfpLastSettings.length) {
           renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
         }
+        document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(positionHorizontalFilterPopover);
       }, 150);
     }, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleStickyOffsets, { passive: true });
@@ -3299,6 +3301,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           });
           if (!wasOpen && popover) {
             popover.classList.add('is-open');
+            positionHorizontalFilterPopover(popover);
             btn.setAttribute('aria-expanded', 'true');
           }
         };
@@ -4102,6 +4105,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function isHorizontalPopoverLayout() {
     return isHorizontalFilterLayout() || isMobileHorizontalFilterLayout();
+  }
+
+  function positionHorizontalFilterPopover(popover) {
+    popover.style.left = '0px';
+    const rect = popover.getBoundingClientRect();
+    const shift = Math.min(0, document.documentElement.clientWidth - 16 - rect.right);
+    popover.style.left = `${Math.max(16 - rect.left, shift)}px`;
   }
 
   function positionMobileFilterPanel(toggle, content) {

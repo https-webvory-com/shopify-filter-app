@@ -27,3 +27,14 @@ test('compact collection settings reject oversized groups, duplicate tabs and un
     else assert.throws(()=>settings({compactCollections:value}));
   }
 });
+
+test('main compact tab text is optional, validated and independent of collection identity', () => {
+  const renamed = settings({compactCollections:[{...main,tabLabel:'  Shop dresses & more  '}]});
+  assert.equal(renamed.compactCollections[0].tabLabel,'Shop dresses & more');
+  assert.equal(renamed.compactCollections[0].title,main.title);
+  assert.equal(renamed.compactCollections[0].handle,main.handle);
+  assert.deepEqual(renamed.compactCollections[0].groups,main.groups);
+  assert.deepEqual(settings(JSON.parse(JSON.stringify(renamed))),renamed);
+  assert.deepEqual(settings({compactCollections:[{...main,tabLabel:'  '}]}).compactCollections,[main]);
+  for(const tabLabel of [42,{},'x'.repeat(61),'bad\nlabel'])assert.throws(()=>settings({compactCollections:[{...main,tabLabel}]}),/Main collection tab text/);
+});

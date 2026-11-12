@@ -451,6 +451,32 @@ try{
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
+  await test('horizontal dropdown gives color names room and places counts on a second line',async()=>{
+    const colors=['Black','Blue','Burgundy','Champagne','Green','Navy','Pink','Silver'];
+    const filterSettings=[...Array.from({length:6},(_,i)=>({id:'wide-'+i,isEnabled:true,filterType:'vendor',label:'Designers '+i,config:{}})),
+      {id:'wide-color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{multipleSelection:true,swatchConfig:{showLabel:true}}}];
+    await control({reset:true,realToolbar:true,productCount:30,precompute:true,filterSettings,
+      productFields:Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Color',values:colors}],
+        variantPrices:colors.map((color,j)=>({id:String((i+1)*100+j),price:20,available:true,option1:color}))}])),
+      globalSettings:{desktopFilterLayout:'horizontal',showProductCount:true,showFilterOptionsWithOneItem:true},apiDelay:0,imageDelay:0,priceDelay:0});
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});await navigate();
+    await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
+    for(const width of [1440,1024,900,769]){
+      await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
+      await evaluate("(()=>{const p=document.querySelector('[data-group=\"option-Color\"]');if(p.closest('#cfp-horizontal-extra-filters')&&!p.closest('#cfp-horizontal-extra-filters').classList.contains('is-expanded'))document.querySelector('#cfp-drawer-trigger-btn').click();if(!p.querySelector('.is-open'))p.querySelector('button').click();})()");
+      const geometry=await evaluate("(()=>{const p=document.querySelector('[data-group=\"option-Color\"] .is-open'),r=p.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width,scroll:document.documentElement.scrollWidth,items:[...p.querySelectorAll('.cfp-color-swatch')].map(e=>{const l=e.querySelector('.cfp-swatch-label'),c=e.querySelector('.cfp-checkbox__count'),a=l.getBoundingClientRect(),b=c.getBoundingClientRect();return {label:l.textContent,labelHeight:a.height,lineHeight:parseFloat(getComputedStyle(l).lineHeight),labelBottom:a.bottom,countTop:b.top,labelLeft:a.left,countLeft:b.left};})};})()");
+      assert.equal(geometry.width,420);assert.ok(geometry.left>=15&&geometry.right<=width-15,JSON.stringify(geometry));
+      assert.ok(geometry.scroll<=width+1,JSON.stringify(geometry));
+      assert.equal(geometry.items.length,8);
+      for(const item of geometry.items){assert.ok(item.labelHeight<=item.lineHeight+1,JSON.stringify(item));assert.ok(item.countTop>=item.labelBottom,JSON.stringify(item));assert.ok(Math.abs(item.countLeft-item.labelLeft)<1,JSON.stringify(item));}
+    }
+    await fs.writeFile('scratch/horizontal-wide-colors.png',Buffer.from(await send('Page.captureScreenshot',{format:'png'}).then(r=>r.data),'base64'));
+    await evaluate("document.querySelector('[data-group=\"option-Color\"] .is-open input').click()");
+    await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&!!document.querySelector('.cfp-breadcrumb-chip')");
+    assert.equal(await evaluate("document.querySelector('[data-group=\"option-Color\"] .is-open').getBoundingClientRect().width"),420);
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+  });
   await test('horizontal filters recover missing toolbar containers and remain usable when resized',async()=>{
     const filterSettings=Array.from({length:8},(_,i)=>({id:'horizontal-'+i,isEnabled:true,filterType:'vendor',label:'Filter option group '+(i+1),displayMode:'List',config:{}}));
     for(const realToolbar of [false,true]){

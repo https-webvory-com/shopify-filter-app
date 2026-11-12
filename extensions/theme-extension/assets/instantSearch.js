@@ -491,7 +491,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (isCompact && !hasQuery) document.getElementById('cfp-did-you-mean-container').style.display = 'none';
     if (!enabled) return;
     compactTab = Math.min(compactTab, collections.length - 1);
-    tabs.innerHTML = collections.map((c,i) => `<button type="button" role="tab" id="cfp-compact-tab-${i}" aria-selected="${i === compactTab}" aria-controls="cfp-compact-browse" tabindex="${i === compactTab ? 0 : -1}">${highlightSearchText(c.title,'')}</button>`).join('');
+    tabs.innerHTML = collections.map((c,i) => `<button type="button" role="tab" id="cfp-compact-tab-${i}" aria-selected="${i === compactTab}" aria-controls="cfp-compact-browse" tabindex="${i === compactTab ? 0 : -1}">${highlightSearchText(c.tabLabel?.trim() || c.title,'')}</button>`).join('');
     const selectTab = index => { compactTab = index; compactPage = 0; renderCompactNavigation(); };
     tabs.querySelectorAll('button').forEach((button,i) => {
       button.addEventListener('click', () => { selectTab(i); tabs.querySelectorAll('button')[i].focus(); });
