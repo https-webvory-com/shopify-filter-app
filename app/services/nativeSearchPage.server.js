@@ -69,7 +69,7 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
   let pins = [];
   if (pinIds.length) {
     const rows = await prisma.product.findMany({ where: { shop, status: { equals: 'active', mode: 'insensitive' },
-      id: { in: pinIds } }, include: { variants: true } });
+      id: { in: pinIds } }, include: { variants: true,...(parsedQuery?.searchCollectionId?{collections:{select:{collectionId:true}}}:{}) } });
     const valid = new Map(rows.map(p => [gid(p.id), normal(p)]));
     for (const id of pinIds) {
       const p = valid.get(id);

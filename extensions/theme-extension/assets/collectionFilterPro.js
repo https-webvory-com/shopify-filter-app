@@ -1604,6 +1604,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
     // Update count labels
     updateProductCount(totalCount);
+    if(!partialPrefix&&Number.isFinite(totalCount)){
+      document.body.classList.toggle('cfp-empty-search-results',templateName==='search'&&!!searchTerms&&totalCount===0&&products.length===0);
+    }
 
     if (templateName === 'search') {
       document.title = document.title.replace(/\d+\s*results?/i, `${totalCount} result${totalCount === 1 ? '' : 's'}`);

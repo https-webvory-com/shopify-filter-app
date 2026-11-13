@@ -15,6 +15,7 @@ const analytics=source.slice(source.indexOf('  function commitInstantSearch'),so
 const helpers=source.slice(source.indexOf('  // Search caching'),source.indexOf('  // UI Elements'));
 const search=source.slice(source.indexOf('  async function performSearch'),source.indexOf('  function renderCollections'));
 const defaults=source.slice(source.indexOf('  async function fetchDefaultView'),source.indexOf('  function renderRecentSearches'));
+const navigation=source.slice(source.indexOf('  // Full screen navigation'),source.indexOf('  async function performSearch'));
 function storage(){
  const values=new Map();
  return {values,get length(){return values.size;},key:i=>Array.from(values.keys())[i],getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
@@ -23,7 +24,8 @@ function fixture(store=storage()){
  const calls=[];const elements=new Map();
  const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'blue dress',style:{},classList:{add(){},remove(){}},addEventListener(){}});return elements.get(id);};
  const context={applySearchDisplaySettings(){},renderPages(){},closeModal(){},sessionStorage:store,Date,URL,location:{href:'https://shop.test/'},window:{Shopify:{country:'US',currency:{active:'USD'},locale:'en'}},document:{getElementById:element},mainInput:element('cfp-main-search-input'),shopDomain:'fixture',CONFIG:{apiUrl:'https://api.test/api/search',productLimit:6},console:{error(){}},renderRecentSearches(){},renderLoading:flag=>calls.push(['loading',flag]),renderCollections:()=>calls.push(['collections']),renderProducts:async()=>calls.push(['products']),renderSuggestions:suggestions=>calls.push(['suggestions',Array.from(suggestions)]),fetch:async url=>({ok:true,status:200,json:async()=>String(url).includes('/api/search')?{products:[{title:'Blue dress'}],suggestions:['Blue formal dress']}:{resources:{results:{collections:[]}}}})};
- vm.createContext(context);vm.runInContext(analytics+helpers+search+defaults,context);
+ context.URLSearchParams=URLSearchParams;context.setTimeout=setTimeout;context.clearTimeout=clearTimeout;
+ vm.createContext(context);vm.runInContext(analytics+helpers+navigation+search+defaults,context);
  return {context,calls,element,store};
 }
 

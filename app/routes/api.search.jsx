@@ -30,10 +30,14 @@ export const loader = async ({ request }) => {
   let query = url.searchParams.get("q") || "";
   let limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10) || 10));
   const sortBy = url.searchParams.get("sortBy");
+  const collectionHandle=url.searchParams.get('collection')||'';
+  const categoriesOnly=url.searchParams.get('categoryTabs')==='1';
+  const categoryCount=url.searchParams.get('categoryCount')==='1';
 
   if (!shop) {
     return data({ error: "Missing shop parameter" }, { status: 400 });
   }
+  if(collectionHandle&&(!query.trim()||collectionHandle.length>200||!/^[a-z0-9][a-z0-9-]*$/i.test(collectionHandle)))return data({error:'Invalid search collection'},{status:400,headers:{'Access-Control-Allow-Origin':'*'}});
 
   const isAllowed = await rateLimit(request);
   if (!isAllowed) {
@@ -49,7 +53,7 @@ export const loader = async ({ request }) => {
 
   try {
     const searchQuery = query ? query.trim() : "";
-    const [globalSettings, parsedQuery, pinningRule, merchandisingRule, searchContext] = await Promise.all([
+    let [globalSettings, parsedQuery, pinningRule, merchandisingRule, searchContext] = await Promise.all([
       getCached(`globalSettings:${shop}`, () => getFilterGlobalSettings(shop)),
       searchQuery ? parseQuery(searchQuery, shop) : null,
       getActivePinningRuleForSearch(shop, query, "instant"),
@@ -64,6 +68,12 @@ export const loader = async ({ request }) => {
     let effectiveSort = sortBy || null;
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
+    if(collectionHandle){
+      const collection=await getCached(`searchCollection:${shop}:${collectionHandle}`,()=>prisma.collection.findFirst({where:{shop,handle:collectionHandle},select:{id:true}}),30);
+      if(!collection)return data({query,products:[],suggestions:[],totalCount:0,matchCount:0},{headers:{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store'}});
+      parsedQuery={...(parsedQuery||{}),searchCollectionId:collection.id};
+      meiliFilters.push(`(collections = ${JSON.stringify(collection.id)} OR collections = ${JSON.stringify(collection.id.split('/').pop())})`);
+    }
     const emptyQueryRule=!searchQuery&&!pinningRule?.applyToAll&&pinningRule?.searchQueries?.includes('')?pinningRule:null;
     let emptyProducts=emptyQueryRule?.products;
     if(typeof emptyProducts==='string')try{emptyProducts=JSON.parse(emptyProducts);}catch{emptyProducts=[];}
@@ -120,7 +130,7 @@ export const loader = async ({ request }) => {
     // Search settings with a dedicated index already provide suggestions.
     // Start that read alongside product ranking and avoid three legacy facet
     // searches when the configured index is ready.
-    const configuredSuggestionPromise = suggestionLimit > 0
+    const configuredSuggestionPromise = !categoriesOnly&&!categoryCount&&suggestionLimit > 0
       ? configuredSuggestions(shop, searchQuery, suggestionLimit, meiliFilters)
           .catch(error => { console.error('Configured search suggestions unavailable:', error.name); return []; })
       : Promise.resolve([]);
@@ -151,6 +161,11 @@ export const loader = async ({ request }) => {
     }
 
     // 2. Fetch Active Pinning Rule
+    if(categoriesOnly){
+      const {searchCollectionCandidates}=await import('../services/searchNavigation.server.js');
+      const collections=searchQuery?await searchCollectionCandidates(shop,cleanSearchQuery,meiliSearchParams):[];
+      return data({collections},{headers:{...searchCacheHeaders(request),'Access-Control-Allow-Origin':'*'}});
+    }
 
     const rankingKey = `searchInstantRanking:${shop}:${createHash('sha256').update(JSON.stringify([
       cleanSearchQuery, meiliSearchParams, effectiveSort, limit, parsedQuery?.colorIntent,
@@ -163,12 +178,18 @@ export const loader = async ({ request }) => {
         rule: merchandisingRule, pinningRule:typedPinningRule, parsedQuery, globalSettings, limit,
         mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
       }), 60, { maxBytes: 2_000_000 }) : null;
+    const directOptions=categoryCount?{...meiliSearchParams,page:1,hitsPerPage:1,facets:[],attributesToRetrieve:['id'],attributesToHighlight:[]}:meiliSearchParams;
     const directCacheKey = `searchInstant:${shop}:${createHash('sha256').update(JSON.stringify([
-      cleanSearchQuery, meiliSearchParams,
+      cleanSearchQuery, directOptions,
     ])).digest('hex')}`;
     const meiliRes = ranking ? { hits: ranking.products, semanticHitCount: ranking.semanticHitCount }
-      : await getCached(directCacheKey, () => semanticSearch(cleanSearchQuery, meiliSearchParams), 30);
+      : await getCached(directCacheKey, () => semanticSearch(cleanSearchQuery, directOptions), 30);
     const rankingMs = Date.now() - startedAt - bootstrapMs;
+    if(categoryCount){
+      const matchCount=ranking?.total??meiliRes.totalHits;
+      if(!Number.isSafeInteger(matchCount)||matchCount<0)throw Error('Exact search collection count unavailable');
+      return data({matchCount},{headers:{...searchCacheHeaders(request),'Access-Control-Allow-Origin':'*'}});
+    }
 
     const didYouMean = spellingCorrection(cleanSearchQuery, meiliRes.hits, meiliRes.semanticHitCount);
 

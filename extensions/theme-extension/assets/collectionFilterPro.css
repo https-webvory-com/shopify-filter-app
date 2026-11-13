@@ -23,6 +23,11 @@
 }
 
 /* Loading skeletons reserve space; completed collections size to their content. */
+body.cfp-empty-search-results #cfp-top-bar,
+body.cfp-empty-search-results #cfp-sidebar{display:none!important;}
+body.cfp-empty-search-results .cfp-layout-wrapper{grid-template-columns:minmax(0,1fr)!important;}
+body.cfp-empty-search-results .cfp-main-content{grid-column:1 / -1!important;}
+body.cfp-empty-search-results #cfp-products-container{grid-column:1 / -1!important;}
 .cfp-v1-app-container,
 #cfp-v1-app-container {
   min-height: 0 !important;
