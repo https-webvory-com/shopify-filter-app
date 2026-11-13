@@ -362,7 +362,7 @@ facet-filters-form,
   cursor: pointer;
   font-family: 'Poppins', sans-serif !important;
   font-size: 13px !important;
-  font-weight: 700 !important;
+  font-weight: 500 !important;
   color: #111111 !important;
   letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
@@ -2395,7 +2395,7 @@ facet-filters-form,
 .cfp-horizontal-pill.has-active .cfp-horizontal-pill__btn {
   border-color: #000000;
   color: #000000;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .cfp-horizontal-pill.has-active .cfp-horizontal-pill__btn::before {
@@ -2415,7 +2415,7 @@ facet-filters-form,
 
 .cfp-horizontal-pill.has-active .cfp-horizontal-pill__btn {
   border-color: #111827;
-  font-weight: 600;
+  font-weight: 500;
   background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
 }
 
@@ -3296,7 +3296,7 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-group__toggle {
     min-height: 36px;
     padding: 8px 0 !important;
-    font: 600 14px/1.4 Arial, Helvetica, sans-serif !important;
+    font: 500 14px/1.4 Arial, Helvetica, sans-serif !important;
     text-transform: none !important;
     letter-spacing: normal !important;
     color: #111 !important;
