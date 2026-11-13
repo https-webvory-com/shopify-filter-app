@@ -7,6 +7,42 @@ const fallbackStopwords = new Set(['for', 'the', 'a', 'with']);
 const withoutFallbackStopwords = query => String(query || '').split(/\s+/u)
   .filter(token => !fallbackStopwords.has(token.toLowerCase())).join(' ').trim();
 
+// Count a large lexical union without repeatedly sorting its entire prefix.
+// Retrieve only the smaller branches, then subtract their exact intersection
+// with the largest branch. The budget selects this strategy; it never limits
+// the matching products or substitutes an estimated count.
+async function countSynonymUnion(indexUid, texts, scope) {
+  const {facets,attributesToHighlight,...params}=scope;
+  const query=text=>({indexUid,q:text,...params,attributesToRetrieve:[],attributesToHighlight:[],matchingStrategy:'all'});
+  const counted=await meiliClient.multiSearch({queries:texts.map(text=>({...query(text),page:1,hitsPerPage:1}))});
+  const totals=counted.results?.map(result=>result.totalHits);
+  if(totals?.length!==texts.length||totals.some(n=>!Number.isSafeInteger(n)||n<0))return null;
+  const capacity=await getCached('synonymCountCapacity:'+indexUid,async()=>
+    (await meiliClient.index(indexUid).getSettings()).pagination?.maxTotalHits??1000,30);
+  if(totals.some(n=>n>=capacity))return null;
+  const largest=totals.indexOf(Math.max(...totals));
+  if(totals.reduce((sum,n,i)=>sum+(i===largest?0:n),0)>1000)return null;
+  const smaller=texts.map((text,i)=>({text,total:totals[i],i})).filter(branch=>branch.i!==largest&&branch.total>0);
+  const ids=new Set();
+  if(smaller.length){
+    const fetched=await meiliClient.multiSearch({queries:smaller.map(({text,total})=>({...query(text),limit:total,attributesToRetrieve:['id']}))});
+    for(const [i,branch]of smaller.entries()){
+      const hits=fetched.results?.[i]?.hits;
+      if(hits?.length!==branch.total||hits.some(hit=>hit.id==null)||new Set(hits.map(hit=>String(hit.id))).size!==branch.total)throw Error('Synonym matches changed during counting');
+      for(const hit of hits)ids.add(String(hit.id));
+    }
+  }
+  let overlap=0;
+  if(ids.size){
+    const base=query(texts[largest]);
+    const result=await meiliClient.multiSearch({queries:[{...base,page:1,hitsPerPage:1,
+      filter:[...(Array.isArray(base.filter)?base.filter:[base.filter].filter(Boolean)),`id IN ${JSON.stringify([...ids])}`]}]});
+    overlap=result.results?.[0]?.totalHits;
+    if(!Number.isSafeInteger(overlap)||overlap<0||overlap>ids.size||overlap>totals[largest])throw Error('Synonym intersection changed during counting');
+  }
+  return {total:totals[largest]+ids.size-overlap,metadata:counted.results[largest]};
+}
+
 // Engine multiword synonyms require a phrase match. Explicit query branches
 // also find terms in separate attributes (e.g. White color + Dress title).
 async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
@@ -16,6 +52,15 @@ async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
   if(options.page!=null||options.hitsPerPage!=null){
     const {page=1,hitsPerPage=20,offset:_offset,limit:_limit,...scope}=options;
     const start=Math.max(0,page-1)*hitsPerPage,selected=[];let total=0,first;
+    if(!scope.hybrid&&Array.isArray(scope.attributesToRetrieve)&&scope.attributesToRetrieve.length===0){
+      const counted=await countSynonymUnion(indexUid,[...new Set([q,..._cfpSynonymQueries])],scope);
+      if(counted){
+        const metadata=scope.facets?.length?await runQuery({indexUid,q,_cfpSynonymQueries,...scope,offset:0,limit:1}):counted.metadata;
+        const {estimatedTotalHits,offset,limit,...result}=metadata;
+        return {...result,query:q,hits:Array.from({length:Math.min(hitsPerPage,Math.max(0,counted.total-start))},()=>({})),
+          totalHits:counted.total,totalPages:hitsPerPage?Math.ceil(counted.total/hitsPerPage):0,page,hitsPerPage};
+      }
+    }
     for(let offset=0;;offset+=1000){
       const result=await runQuery({indexUid,q,_cfpSynonymQueries,...scope,offset,limit:1000,...(offset?{facets:[],...(!(offset<start+hitsPerPage&&offset+1000>start)?{attributesToRetrieve:['id']}:{})}:{})});
       first??=result;

@@ -1837,33 +1837,11 @@ facet-filters-form,
   transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Inner top animated border on hover sliding down from top into the button matching filter pills */
-.cfp-custom-sort__trigger::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: #000000;
-  transform: translateY(-100%);
-  transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-  border-top-left-radius: 3px;
-  border-top-right-radius: 3px;
-  pointer-events: none;
-  z-index: 2;
-}
-
 .cfp-custom-sort__trigger:hover,
 .cfp-custom-sort.is-open .cfp-custom-sort__trigger {
   background: var(--cfp-filter-pill-bg, var(--cfp-surface, #ffffff));
   border-color: #000000;
   color: #000000;
-}
-
-.cfp-custom-sort__trigger:hover::before,
-.cfp-custom-sort.is-open .cfp-custom-sort__trigger::before {
-  transform: translateY(0);
 }
 
 .cfp-custom-sort {
@@ -2468,18 +2446,12 @@ facet-filters-form,
 .cfp-horizontal-pill__popover-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f3f4f6;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
-.cfp-horizontal-pill__popover-title {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: #4b5563;
-  letter-spacing: 0.05em;
+.cfp-horizontal-pill__popover-header:empty {
+  display: none;
 }
 
 .cfp-horizontal-pill__popover-clear {

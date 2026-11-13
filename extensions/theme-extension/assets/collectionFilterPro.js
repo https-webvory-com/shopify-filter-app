@@ -2938,16 +2938,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       horizontalPills.push(`
         <div class="cfp-horizontal-pill ${hasActivePillSelections ? 'has-active' : ''}" data-group="${type}-${key || ''}" data-multiple="true" ${!navigation && !config.multipleSelection ? 'data-single-select="true"' : ''}>
-          <button type="button" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
+          <button type="button" id="${hPopoverId}-trigger" class="cfp-horizontal-pill__btn" aria-expanded="false" aria-controls="${hPopoverId}">
             <span>${setting.label}</span>
             ${activeCount > 0 ? `<span class="cfp-horizontal-pill__count">${activeCount}</span>` : ''}
             <svg class="cfp-pill-chevron" viewBox="0 0 20 20" width="12" height="12"><path d="M5 8l5 5 5-5z"/></svg>
           </button>
-          <div class="cfp-horizontal-pill__popover" id="${hPopoverId}">
-            <div class="cfp-horizontal-pill__popover-header">
-              <span class="cfp-horizontal-pill__popover-title">${setting.label}</span>
-              ${hasActivePillSelections ? `<button type="button" class="cfp-clear-group cfp-horizontal-pill__popover-clear" data-type="${type}" data-key="${key || ''}">Clear</button>` : ''}
-            </div>
+          <div class="cfp-horizontal-pill__popover" id="${hPopoverId}" role="group" aria-labelledby="${hPopoverId}-trigger">
+            <div class="cfp-horizontal-pill__popover-header">${hasActivePillSelections ? `<button type="button" class="cfp-clear-group cfp-horizontal-pill__popover-clear" data-type="${type}" data-key="${key || ''}">Clear</button>` : ''}</div>
             <div class="cfp-horizontal-pill__popover-body">
               ${groupContent}
             </div>

@@ -3,6 +3,47 @@ import assert from "node:assert/strict";
 import { geminiEmbedder, withSemanticSearch, semanticFallback, semanticProvider, semanticEmbedderSettings, semanticRelayEmbedder } from "../../app/utils/semanticSearch.js";
 import { loadModule } from './helpers/search-ranking.mjs';
 
+test('large lexical synonym counts deduplicate smaller branches and subtract their exact overlap',async()=>{
+ const calls=[],base={filter:["shop = 'owner.myshopify.com'",'available = true'],attributesToRetrieve:[],attributesToHighlight:['tags'],page:1,hitsPerPage:1};
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:'private-owner',_cfpSynonymQueries:['small-a','small-b']}))},
+  './meiliClient.server':{default:{index:()=>({getSettings:async()=>({pagination:{maxTotalHits:100000}})}),multiSearch:async request=>{
+   request=JSON.parse(JSON.stringify(request));
+   calls.push(request);assert.equal(request.federation,undefined,'count must avoid increasing federated offsets');
+   for(const q of request.queries){assert.equal(q.indexUid,'private-owner');assert.equal(q.matchingStrategy,'all');assert.deepEqual(q.attributesToHighlight,[]);assert.deepEqual(q.filter.slice(0,2),base.filter);}
+   if(calls.length===1)return {results:[22903,300,400].map(totalHits=>({totalHits,estimatedTotalHits:999999,hits:[{}]}))};
+   if(calls.length===2)return {results:[{hits:Array.from({length:300},(_,i)=>({id:String(i)}))},{hits:Array.from({length:400},(_,i)=>({id:String(i+200)}))}]};
+   assert.equal(request.queries.length,1);assert.equal(request.queries[0].q,'large');
+   const ids=JSON.parse(request.queries[0].filter.at(-1).slice(6));assert.equal(ids.length,600);
+   return {results:[{totalHits:450,hits:[{}]}]};
+  }}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider},
+ });
+ const {results:[result]}=await service.searchPageBatch([{q:'large',...base}],false);
+ assert.equal(result.totalHits,23053);assert.equal(result.totalPages,23053);assert.deepEqual(JSON.parse(JSON.stringify(result.hits)),[{}]);assert.equal(calls.length,3);
+});
+
+test('balanced or capacity-limited synonym counts keep the complete union scan',async()=>{
+ for(const capacity of [100000,1500]){
+ const calls=[];
+ const service=await loadModule('app/services/semanticSearch.server.js',{
+  './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:'private-owner',_cfpSynonymQueries:['other']}))},
+  './meiliClient.server':{default:{index:()=>({getSettings:async()=>({pagination:{maxTotalHits:capacity}})}),multiSearch:async request=>{
+   calls.push(request);
+   if(!request.federation)return {results:[{totalHits:1500},{totalHits:1600}]};
+   const length=request.federation.offset===0?1000:901;
+   return {hits:Array.from({length},()=>({})),estimatedTotalHits:999999};
+  }}},
+  './shopCache.server':{getCached:async(_key,read)=>read()},
+  '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider},
+ });
+ const {results:[result]}=await service.searchPageBatch([{q:'large',page:1,hitsPerPage:1,attributesToRetrieve:[]}],false);
+ assert.equal(result.totalHits,1901);assert.equal(calls.length,3);
+ assert.deepEqual(calls.slice(1).map(request=>request.federation.offset),[0,1000]);
+ }
+});
+
 test('edited multiword synonym branches retain filters, facets and pagination without stale alternatives',async()=>{
  let replacement='white dress';const calls=[];
  const service=await loadModule('app/services/semanticSearch.server.js',{
