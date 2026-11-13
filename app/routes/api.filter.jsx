@@ -37,7 +37,7 @@ import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
 import {normalizePriceFilter} from '../utils/filterPresentation.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
-import {mappedFacetValue,expandMappedFacetValues} from '../utils/facetNormalization.js';
+import {createFacetValueMapper,expandMappedFacetValues} from '../utils/facetNormalization.js';
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
@@ -1738,7 +1738,7 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 16. Build facet counts from Meilisearch distribution ──────────
-    const getTargetValue = (type, rawValue) => mappedFacetValue(type,rawValue,mergedValues);
+    const getTargetValue = createFacetValueMapper(mergedValues);
     const normalizedGroups = new Map();
     for (const [field, values] of Object.entries(facetDistribution)) {
       const type = ({vendor:'vendor',productType:'product_type',tags:'tags',title:'title'})[field] ||

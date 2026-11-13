@@ -21,6 +21,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let clearBtn = null;
   let activeCount = null;
   let sidebarHome = null;
+  let drawerMotionVersion = 0;
+  let drawerMotionAnimations = [];
+  let drawerCloseTimer;
 
   function syncFilterSurfacePlacement() {
     if (!sidebar || !document.body) return;
@@ -937,6 +940,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
         let data = null;
+        // Filters do not depend on the card response. Start their canonical
+        // read now so a slow product request cannot delay both serially.
+        const searchFacetsRead = queryParams.get('responseProfile') === 'search-fast-cards-v1'
+          ? (() => {
+            const request = new URL(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
+            request.searchParams.delete('responseProfile');
+            return fetchCollectionResponse(request.toString(), fetchSignal)
+              .then(response => response.json().then(body => ({ status: response.status, body })))
+              .then(result => ({ result }), error => ({ error }));
+          })() : null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
         if (window._cfpEarlyFetch && templateName !== 'search' && !collectionQuery && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
@@ -1047,7 +1060,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2){
         sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
-          ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal)
+          ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)
           :completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
       if (data.products) {
@@ -1113,15 +1126,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     container.parentElement?.insertBefore(notice, container);
   }
 
-  async function completeSearchFacets(cards,requestUrl,signal){
+  async function completeSearchFacets(cards,requestUrl,signal,pendingRead){
     if(signal.aborted)return;
     const request=new URL(requestUrl);request.searchParams.delete('responseProfile');
     const signature=JSON.stringify(cards.products);
     try{
-      const response=await fetchCollectionResponse(request.toString(),signal);
+      const pending=pendingRead?await pendingRead:null;
+      if(pending?.error)throw pending.error;
+      const response=pending?null:await fetchCollectionResponse(request.toString(),signal);
       if(signal.aborted)return;
-      const full=await response.json();
-      if(response.status!==200||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Search filters unavailable');
+      const full=pending?pending.result.body:await response.json();
+      if((pending?pending.result.status:response.status)!==200||!full.settings||!full.facets||!Array.isArray(full.products))throw Error('Search filters unavailable');
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();
@@ -1248,6 +1263,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       document.body.style.overflow = '';
       if (overlay) overlay.classList.remove('cfp-overlay--visible');
       if (sidebar) {
+        stopDrawerMotion();
+        sidebar.inert = false;
         sidebar.setAttribute('aria-hidden', 'false');
         sidebar.classList.remove('cfp-sidebar--open');
       }
@@ -1285,6 +1302,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if (layout !== 'vertical') closeSidebar();
     }
     if (mobile && settings.mobileFilterLayout === 'horizontal-scrolling') {
+      stopDrawerMotion();
+      if (sidebar) sidebar.inert = false;
       document.body.style.overflow = '';
       overlay?.classList.remove('cfp-overlay--visible');
       sidebar?.classList.remove('cfp-sidebar--open');
@@ -3220,6 +3239,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
+        if (sidebar?.classList.contains('cfp-sidebar--open') && !isInlineFilterLayout()) {
+          event.preventDefault();
+          closeSidebar();
+          return;
+        }
         document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(p => {
           p.classList.remove('is-open');
           const pBtn = p.parentElement ? p.parentElement.querySelector('.cfp-horizontal-pill__btn') : null;
@@ -4253,6 +4277,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         triggerBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
       }
       if (sidebar) {
+        stopDrawerMotion();
+        sidebar.inert = false;
         sidebar.classList.remove('cfp-sidebar--open');
         sidebar.setAttribute('aria-hidden', 'true');
       }
@@ -4264,10 +4290,30 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   function syncDrawerViewport() {
-    if (!sidebar?.classList.contains('cfp-sidebar--open') || !window.matchMedia('(max-width: 991px)').matches) return;
+    if (!(sidebar?.classList.contains('cfp-sidebar--open') || sidebar?.classList.contains('cfp-sidebar--closing')) || !window.matchMedia('(max-width: 991px)').matches) return;
     const viewport = window.visualViewport;
     sidebar.style.setProperty('--cfp-drawer-height', `${viewport?.height || window.innerHeight}px`);
     sidebar.style.setProperty('--cfp-drawer-top', `${viewport?.offsetTop || 0}px`);
+  }
+
+  function stopDrawerMotion() {
+    drawerMotionVersion++;
+    clearTimeout(drawerCloseTimer);
+    drawerMotionAnimations.forEach(animation => animation.cancel());
+    drawerMotionAnimations = [];
+    sidebar?.classList.remove('cfp-sidebar--closing');
+    overlay?.classList.remove('cfp-overlay--closing');
+  }
+
+  function animateDrawerTo(transform, opacity, previousTransform, previousOpacity) {
+    const animation = sidebar.animate([
+      { transform: previousTransform }, { transform },
+    ], { duration: 320, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' });
+    drawerMotionAnimations.push(animation);
+    if (overlay?.animate) drawerMotionAnimations.push(overlay.animate([
+      { opacity: previousOpacity }, { opacity },
+    ], { duration: 220, easing: 'ease-out', fill: 'forwards' }));
+    return animation;
   }
 
   function openSidebar() {
@@ -4276,9 +4322,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       return;
     }
     syncFilterSurfacePlacement();
+    const reopening = sidebar.classList.contains('cfp-sidebar--closing');
+    const previousTransform = reopening ? getComputedStyle(sidebar).transform : null;
+    const previousOpacity = reopening && overlay ? getComputedStyle(overlay).opacity : null;
+    if (reopening) stopDrawerMotion();
+    sidebar.inert = false;
     sidebar.classList.add('cfp-sidebar--open');
     syncDrawerViewport();
     if (overlay) overlay.classList.add('cfp-overlay--visible');
+    if (reopening && sidebar.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const version = drawerMotionVersion;
+      const animation = animateDrawerTo('translate3d(0,0,0)', 1, previousTransform, previousOpacity);
+      animation.finished.then(() => { if (version === drawerMotionVersion) stopDrawerMotion(); }, () => {});
+    }
     sidebar.removeAttribute('aria-hidden');
     if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
     document.body.style.overflow = 'hidden';
@@ -4288,6 +4344,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function closeSidebar() {
     if (!sidebar) return;
+    if (sidebar.classList.contains('cfp-sidebar--closing')) return;
     if (document.activeElement && sidebar.contains(document.activeElement)) {
       document.activeElement.blur();
     }
@@ -4296,9 +4353,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       closeHorizontalFilterGroups();
       return;
     }
+    const shouldAnimate = sidebar.classList.contains('cfp-sidebar--open') &&
+      getComputedStyle(sidebar).display !== 'none' && sidebar.animate &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const previousTransform = shouldAnimate ? getComputedStyle(sidebar).transform : null;
+    const previousOpacity = shouldAnimate && overlay ? getComputedStyle(overlay).opacity : null;
+    stopDrawerMotion();
+    const version = drawerMotionVersion;
+    if (shouldAnimate) {
+      sidebar.classList.add('cfp-sidebar--closing');
+      overlay?.classList.add('cfp-overlay--closing');
+    }
     sidebar.classList.remove('cfp-sidebar--open');
-    sidebar.style.removeProperty('--cfp-drawer-height');
-    sidebar.style.removeProperty('--cfp-drawer-top');
     if (overlay) overlay.classList.remove('cfp-overlay--visible');
     sidebar.setAttribute('aria-hidden', 'true');
     closeHorizontalFilterGroups();
@@ -4306,8 +4372,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       triggerBtn.setAttribute('aria-expanded', 'false');
       try { triggerBtn.focus(); } catch(e) {}
     }
-    document.body.style.overflow = '';
-    if (pendingFilterScroll) scrollAfterFilterChange();
+    sidebar.inert = true;
+    const finish = () => {
+      if (version !== drawerMotionVersion) return;
+      stopDrawerMotion();
+      sidebar.inert = false;
+      sidebar.style.removeProperty('--cfp-drawer-height');
+      sidebar.style.removeProperty('--cfp-drawer-top');
+      document.body.style.overflow = '';
+      if (pendingFilterScroll) scrollAfterFilterChange();
+    };
+    if (shouldAnimate) {
+      const animation = animateDrawerTo('translate3d(-100%,0,0)', 0, previousTransform, previousOpacity);
+      animation.finished.then(finish, finish);
+      drawerCloseTimer = setTimeout(finish, 400);
+    } else finish();
   }
 
   // â”€â”€ 8. Independent App Block Injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

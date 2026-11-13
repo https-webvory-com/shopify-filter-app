@@ -28,6 +28,32 @@ export function mappedFacetValue(type, rawValue, mergedValues = []) {
   return rule ? facetDisplayValue(rule.targetValue) : isSizeFacet(type) ? canonicalSize(rawValue) || rawValue : rawValue;
 }
 
+// Build once per response. Large catalogs can have thousands of distinct tags
+// and colors; repeatedly normalizing every saved rule for each value is costly.
+export function createFacetValueMapper(mergedValues = []) {
+  const rules = new Map();
+  for (const rule of mergedValues) {
+    const type = facetValueKey(rule.filterType);
+    if (!rules.has(type)) rules.set(type, new Map());
+    const values = rules.get(type);
+    for (const source of rule.sourceValues || []) {
+      const key = facetValueKey(source);
+      if (!values.has(key)) values.set(key, facetDisplayValue(rule.targetValue));
+    }
+  }
+  const types = new Map();
+  return (type, rawValue) => {
+    if (!types.has(type)) types.set(type, { rules: rules.get(facetValueKey(type)), size: isSizeFacet(type), values: new Map() });
+    const entry = types.get(type);
+    if (!entry.values.has(rawValue)) {
+      const key = facetValueKey(rawValue);
+      entry.values.set(rawValue, entry.rules?.has(key) ? entry.rules.get(key)
+        : entry.size ? canonicalSize(rawValue) || rawValue : rawValue);
+    }
+    return entry.values.get(rawValue);
+  };
+}
+
 export function expandMappedFacetValues(type, selected, mergedValues = []) {
   const key = facetValueKey(selected);
   const configured = mergedValues.filter(item => facetValueKey(item.filterType) === facetValueKey(type) &&
