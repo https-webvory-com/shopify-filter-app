@@ -1439,6 +1439,22 @@ document.addEventListener("DOMContentLoaded", function () {
     contextualPricingApplied = true;
 
     if (products.length === 0) {
+      if (query && window.cfpSearchSettings?.instantLayout === 'compact') {
+        grid.innerHTML = `<div class="cfp-search-no-results cfp-search-no-results--compact" role="status">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg>
+          <strong>No products found for “${instantEscapeHtml(query)}”</strong>
+          <p>Check the spelling or try a different keyword.</p>
+          <button type="button" id="cfp-search-clear-empty">Clear search</button>
+        </div>`;
+        const heading = document.getElementById('cfp-compact-products-title');
+        if (heading) heading.hidden = true;
+        document.getElementById('cfp-search-clear-empty').addEventListener('click', () => {
+          mainInput.value = '';
+          mainInput.dispatchEvent(new Event('input', { bubbles: true }));
+          mainInput.focus();
+        });
+        return;
+      }
       const emptyStateSvg = `<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path><circle cx="9" cy="14" r="1" fill="#94a3b8"></circle><circle cx="15" cy="14" r="1" fill="#94a3b8"></circle><path d="M10 18c1-1 3-1 4 0"></path></svg>`;
       
       grid.innerHTML = query 
