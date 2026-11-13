@@ -64,6 +64,8 @@ export const loader = async ({ request }) => {
     let effectiveSort = sortBy || null;
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
+    const emptyPinnedIds=!searchQuery&&searchContext.settings?.instantLayout==='fullscreen'?(searchContext.settings.emptySearchProducts||[]).map(product=>product.id.split('/').pop()):[];
+    if(emptyPinnedIds.length)meiliFilters.push('id IN '+JSON.stringify(emptyPinnedIds));
     if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
 
     if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
@@ -149,7 +151,7 @@ export const loader = async ({ request }) => {
       parsedQuery?.skuProductIds, url.searchParams.get('country') || '', url.searchParams.get('locale') || '',
       url.searchParams.get('customer_tags') || '',
     ])).digest('hex')}`;
-    const ranking = pinningRule || merchandisingRule
+    const ranking = !emptyPinnedIds.length && (pinningRule || merchandisingRule)
       ? await getCached(rankingKey, async () => rankSearchResults({
         shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy: effectiveSort },
         rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
@@ -230,6 +232,11 @@ export const loader = async ({ request }) => {
     let pinnedIds = [];
     const mergedResults = ranking ? ranking.products : organicProducts;
     if (ranking) pinnedIds = mergedResults.filter(p => p.isPinned).map(p => p.id);
+    if(emptyPinnedIds.length){
+      const positions=new Map(emptyPinnedIds.map((id,index)=>[id,index]));
+      mergedResults.sort((a,b)=>positions.get(String(a.id).split('/').pop())-positions.get(String(b.id).split('/').pop()));
+      pinnedIds.push(...mergedResults.map(product=>product.id));
+    }
 
     // ✅ No extra Prisma query for handles/images/variants — Meili has it all
     let activeResults = mergedResults

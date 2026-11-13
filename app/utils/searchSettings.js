@@ -33,6 +33,7 @@ export const DEFAULT_SEARCH_SETTINGS = Object.freeze(Object.fromEntries([
   ...Object.entries(SEARCH_SETTING_FIELDS).map(([key, field]) => [key, field[1]]),
   ['manualSuggestions', []],
   ['compactCollections', []],
+  ['emptySearchProducts', []],
   ...Object.entries(advancedDefaults),...Object.entries(enumDefaults),
   ['searchResultsPath','/search'],['searchBoxSelector',''],['priceUnit',''],['fixedImageWidth',600],
   ['returnedMetafields',[]],['stopwords',[]],['tokenDelimiters',[]],['tentativeDelimiters',[]],['fields',DEFAULT_SEARCH_FIELD_CONFIG],
@@ -53,6 +54,17 @@ export function validateSearchSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid search settings.');
   const result = {};
   result.compactCollections = validateCompactCollections(input.compactCollections ?? []);
+  const emptyProducts=input.emptySearchProducts??[];
+  if(!Array.isArray(emptyProducts)||emptyProducts.length>20)throw Error('Choose up to 20 empty-search products.');
+  const productIds=new Set();
+  result.emptySearchProducts=emptyProducts.map(product=>{
+    if(!product||typeof product!=='object'||typeof product.id!=='string'||product.id.length>100||!/^gid:\/\/shopify\/Product\/\d+$/.test(product.id)||productIds.has(product.id))throw Error('Invalid or duplicate empty-search product.');
+    productIds.add(product.id);
+    let image=product.image??'';
+    if(typeof image!=='string'||image.length>2048)throw Error('Invalid product image.');
+    if(image){try{const url=new URL(image);if(url.protocol!=='https:'||url.username||url.password)throw Error();image=url.href;}catch{throw Error('Product images must use HTTPS.');}}
+    return {id:product.id,title:text(product.title,'Product title',500),image};
+  });
   for (const [key, [label, fallback, min, max]] of Object.entries(SEARCH_SETTING_FIELDS)) {
     const value = input[key];
     if (typeof fallback === 'boolean') {
