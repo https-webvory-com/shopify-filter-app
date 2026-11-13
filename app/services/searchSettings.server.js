@@ -8,17 +8,25 @@ export async function getSearchSettings(shop) {
   return row ? validateSearchSettings(row.config) : null;
 }
 
-export async function saveSearchSettings(shop, input,{preserveEmptyPins=false}={}) {
+export async function saveSearchSettings(shop, input,{preserveEmptyPins=false,preserveCompactCollections=false,compactCollectionsBase}={}) {
   const config = validateSearchSettings(input);
   const previous=await prisma.searchSetting.findUnique({where:{shop}});
   if(preserveEmptyPins)config.emptySearchProducts=previous?.config?.emptySearchProducts||[];
+  if(preserveCompactCollections)config.compactCollections=previous?.config?.compactCollections||[];
   const saved={...config,...(previous?.config?._index?{_index:previous.config._index}:{})};
   if(preserveEmptyPins&&previous){
-    await prisma.$executeRaw`UPDATE "SearchSetting" SET config=${JSON.stringify(config)}::jsonb
+    const checkCompactVersion=!preserveCompactCollections&&compactCollectionsBase!==undefined;
+    const updated=await prisma.$executeRaw`UPDATE "SearchSetting" SET config=${JSON.stringify(config)}::jsonb
       || CASE WHEN config ? '_index' THEN jsonb_build_object('_index',config->'_index') ELSE '{}'::jsonb END
-      || jsonb_build_object('emptySearchProducts',COALESCE(config->'emptySearchProducts','[]'::jsonb)),"updatedAt"=NOW() WHERE shop=${shop}`;
+      || jsonb_build_object('emptySearchProducts',COALESCE(config->'emptySearchProducts','[]'::jsonb))
+      || CASE WHEN ${preserveCompactCollections} THEN jsonb_build_object('compactCollections',COALESCE(config->'compactCollections','[]'::jsonb)) ELSE '{}'::jsonb END
+      || CASE WHEN jsonb_array_length(COALESCE(config->'compactCollections','[]'::jsonb))>0
+        THEN jsonb_build_object('_compactCollectionsBackup',jsonb_build_object('collections',config->'compactCollections','savedAt',NOW()))
+        WHEN config ? '_compactCollectionsBackup' THEN jsonb_build_object('_compactCollectionsBackup',config->'_compactCollectionsBackup') ELSE '{}'::jsonb END,
+      "updatedAt"=NOW() WHERE shop=${shop} AND (${!checkCompactVersion} OR COALESCE(config->'compactCollections','[]'::jsonb)=${JSON.stringify(compactCollectionsBase??[])}::jsonb)`;
+    if(updated!==1)throw Error('Compact collections changed in another tab. Reload settings before saving your menu.');
     const latest=await prisma.searchSetting.findUnique({where:{shop}});
-    config.emptySearchProducts=latest?validateSearchSettings(latest.config).emptySearchProducts:[];
+    if(latest)Object.assign(config,validateSearchSettings(latest.config));
   }else await prisma.searchSetting.upsert({ where: { shop }, create: { shop, config:saved }, update: { config:saved } });
   await resetSearchIndexContext(shop);
   if(requiresCustomSearchIndex(config)||previous?.config?._index)await scheduleSearchIndex(shop);

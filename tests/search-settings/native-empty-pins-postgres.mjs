@@ -36,6 +36,18 @@ try{
   await settingsService.saveSearchSettings(shop,{...original,productLimit:9},{preserveEmptyPins:true});
   const saved=await db.searchSetting.findUnique({where:{shop}});
   assert.deepEqual(saved.config.emptySearchProducts,[]);assert.equal(saved.config.productLimit,9);assert.deepEqual(saved.config._index,original._index);
+  const menu=[{id:'gid://shopify/Collection/10',title:'Evening',handle:'evening',image:'',groups:[{title:'Occasion',collections:[{id:'gid://shopify/Collection/11',title:'Prom',handle:'prom',image:''}]}]}];
+  await db.searchSetting.update({where:{shop},data:{config:{...saved.config,compactCollections:menu}}});
+  for(const enabled of [false,true]){
+    const result=await settingsService.saveSearchSettings(shop,{...original,instantSearchEnabled:enabled},{preserveEmptyPins:true,preserveCompactCollections:true});
+    assert.equal(result.instantSearchEnabled,enabled);assert.deepEqual(JSON.parse(JSON.stringify(result.compactCollections)),menu);
+    assert.deepEqual((await db.searchSetting.findUnique({where:{shop}})).config._compactCollectionsBackup.collections,menu);
+  }
+  await assert.rejects(settingsService.saveSearchSettings(shop,{...original,compactCollections:[]},{preserveEmptyPins:true,compactCollectionsBase:[]}),/changed in another tab/);
+  assert.deepEqual((await db.searchSetting.findUnique({where:{shop}})).config.compactCollections,menu);
+  await settingsService.saveSearchSettings(shop,{...original,compactCollections:[]},{preserveEmptyPins:true,compactCollectionsBase:menu});
+  const cleared=await db.searchSetting.findUnique({where:{shop}});assert.deepEqual(cleared.config.compactCollections,[]);assert.deepEqual(cleared.config._compactCollectionsBackup.collections,menu);assert.deepEqual(cleared.config._index,original._index);
+  assert.deepEqual((await db.searchSetting.findUnique({where:{shop:other}})).config,original);
   await db.searchSetting.update({where:{shop},data:{config:original}});
   await settingsService.resetSearchSettings(shop);
   assert.deepEqual((await db.searchSetting.findUnique({where:{shop}})).config.emptySearchProducts,[product]);

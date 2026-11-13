@@ -414,11 +414,23 @@
 }
 
 .cfp-search-no-results {
+  grid-column: 1 / -1;
+  box-sizing: border-box;
   text-align: center;
   padding: 40px;
   color: #64748b;
   width: 100%;
 }
+
+.cfp-search-error{grid-column:1/-1;box-sizing:border-box;min-width:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px 20px;text-align:center;color:#64748b;}
+.cfp-search-error__icon{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#f5f5f5;color:#737373;margin-bottom:4px;}
+.cfp-search-error strong{font-size:15px;line-height:1.5;font-weight:600;color:#242424;}
+.cfp-search-error p{margin:0;max-width:260px;font-size:13px;line-height:1.6;}
+.cfp-search-error button{margin-top:8px;padding:9px 18px;min-height:38px;border:1px solid #d6d6d6;border-radius:8px;background:#fff;color:#242424;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+.cfp-search-error button:hover{background:#f5f5f5;border-color:#a3a3a3;}
+.cfp-search-error button:focus-visible{outline:2px solid #242424;outline-offset:3px;}
+.cfp-search-error button:disabled{opacity:.6;cursor:wait;}
+.cfp-search-modal[data-cfp-layout="compact"] .cfp-search-error{min-height:190px;padding:24px 12px;}
 
 /* ── Recent searches ────────────────────────────────────────────────────────── */
 .cfp-recent-searches-list {

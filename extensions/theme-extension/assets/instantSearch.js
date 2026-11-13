@@ -1299,13 +1299,37 @@ document.addEventListener("DOMContentLoaded", function () {
       if (mainInput.value.trim().toLowerCase() === trimmedQuery) {
         const viewAll = document.getElementById('cfp-view-all-results');
         if (viewAll) viewAll.hidden = true;
-        document.getElementById("cfp-search-products").innerHTML = 
-          `<div class="cfp-search-no-results">Something went wrong. Please try again.</div>`;
-        document.getElementById("cfp-search-collections").innerHTML = "";
+        renderSearchError();
       }
     } finally {
       if (mainInput.value.trim().toLowerCase() === trimmedQuery) renderLoading(false);
     }
+  }
+
+  function renderSearchError() {
+    const grid = document.getElementById('cfp-search-products');
+    grid.innerHTML = `<div class="cfp-search-error" role="status">
+      <span class="cfp-search-error__icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4M10.5 7.5v3m0 3h.01"/></svg></span>
+      <strong>We couldn't load your search</strong>
+      <p>Please try again in a moment.</p>
+      <button type="button" id="cfp-search-retry">Try again</button>
+    </div>`;
+    for (const id of ['cfp-search-collections','cfp-search-pages']) {
+      const element = document.getElementById(id);
+      if (element) element.innerHTML = '';
+    }
+    for (const id of ['cfp-collections-title','cfp-pages-title','cfp-did-you-mean-container']) {
+      const element = document.getElementById(id);
+      if (element) element.style.display = 'none';
+    }
+    const productsTitle = document.getElementById('cfp-compact-products-title');
+    if (productsTitle) productsTitle.hidden = true;
+    document.getElementById('cfp-search-retry').addEventListener('click', event => {
+      const query = mainInput.value.trim();
+      if (query.length < CONFIG.minChars) return;
+      event.currentTarget.disabled = true;
+      performSearch(query);
+    });
   }
 
   function renderPages(data,query=''){

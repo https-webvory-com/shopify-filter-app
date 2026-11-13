@@ -38,8 +38,14 @@ export const action = async ({ request }) => {
   let settings;
   try { settings = validateSearchSettings(JSON.parse(String(form.get('settings') || ''))); }
   catch (error) { return { error: error instanceof SyntaxError ? 'Invalid search settings.' : error.message }; }
-  try { const saved=await saveSearchSettings(session.shop, settings,{preserveEmptyPins:true}); return { success: true, settings:saved,indexStatus:await getSearchIndexStatus(session.shop) }; }
-  catch { return { error: 'Could not save search settings. Please retry.' }; }
+  const preserveCompactCollections=form.get('compactCollectionsChanged')!=='true';
+  let compactCollectionsBase;
+  if(!preserveCompactCollections){
+    try{compactCollectionsBase=validateSearchSettings({...DEFAULT_SEARCH_SETTINGS,compactCollections:JSON.parse(String(form.get('compactCollectionsBase')||''))}).compactCollections;}
+    catch{return {error:'Reload search settings before editing your Compact collections.'};}
+  }
+  try { const saved=await saveSearchSettings(session.shop, settings,{preserveEmptyPins:true,preserveCompactCollections,compactCollectionsBase}); return { success: true, settings:saved,indexStatus:await getSearchIndexStatus(session.shop) }; }
+  catch(error) { return { error: error.message==='Compact collections changed in another tab. Reload settings before saving your menu.'?error.message:'Could not save search settings. Please retry.' }; }
 };
 
 const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: 10, border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
@@ -60,6 +66,7 @@ export default function SearchSettings() {
   const fetcher = useFetcher();
   const indexFetcher=useFetcher();
   const [values, setValues] = useState(loaded.settings || DEFAULT_SEARCH_SETTINGS);
+  const [savedCompactCollections,setSavedCompactCollections]=useState(loaded.settings?.compactCollections||[]);
   const [manual, setManual] = useState((loaded.settings?.manualSuggestions || []).join('\n'));
   const [tab,setTab]=useState('instant');
   const [indexStatus,setIndexStatus]=useState(loaded.indexStatus);
@@ -69,6 +76,7 @@ export default function SearchSettings() {
   useEffect(() => {
     if (fetcher.state === 'idle' && fetcher.data?.success) {
       setValues(fetcher.data.settings || DEFAULT_SEARCH_SETTINGS);
+      setSavedCompactCollections(fetcher.data.settings?.compactCollections||[]);
       setManual((fetcher.data.settings?.manualSuggestions || []).join('\n'));
       setIndexStatus(fetcher.data.indexStatus);
     }
@@ -98,7 +106,7 @@ export default function SearchSettings() {
       <fetcher.Form method="post" onSubmit={e => {
         if (e.nativeEvent.submitter?.value === 'reset') return;
         e.preventDefault();
-        fetcher.submit({ intent: 'save', settings: JSON.stringify({ ...values, manualSuggestions: manual.split(/\r?\n/).map(s => s.trim()).filter(Boolean) }) }, { method: 'post' });
+        fetcher.submit({ intent: 'save', compactCollectionsChanged:String(JSON.stringify(values.compactCollections)!==JSON.stringify(savedCompactCollections)),compactCollectionsBase:JSON.stringify(savedCompactCollections),settings: JSON.stringify({ ...values, manualSuggestions: manual.split(/\r?\n/).map(s => s.trim()).filter(Boolean) }) }, { method: 'post' });
       }} style={{ display: 'grid', gap: 20 }}>
         {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
         {fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
