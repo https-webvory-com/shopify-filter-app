@@ -10,7 +10,7 @@ function fixture({failed=false,partial=false}={}){
  const calls=[],products=Array.from({length:1501},(_,i)=>({id:'gid://shopify/Product/'+i,bestSellingScore:i,trendingScore:i}));let pending,release;
  const context={module:{exports:{}},exports:{},console:{log(){},error:(...args)=>calls.push(['error',...args])},
   fixtureInvalidate:async(shop,options)=>calls.push(['invalidate',shop,options.kind,...options.collectionIds]),
-  require:name=>({__esModule:true,default:name==='../db.server.js'?{product:{findMany:async options=>{calls.push(['page',options.take,options.cursor?.id]);const start=options.cursor?products.findIndex(p=>p.id===options.cursor.id)+1:0;return products.slice(start,start+options.take);}},productCollection:{findMany:async({where})=>{calls.push(['scope',where.product.shop,where.productId?.in]);return [{collectionId:'gid://shopify/Collection/1'}];}}}:name==='./meiliClient.server.js'?{
+  require:name=>({__esModule:true,default:name==='../db.server.js'?{product:{findMany:async options=>{calls.push(['page',options.take,options.cursor?.id]);const start=options.cursor?products.findIndex(p=>p.id===options.cursor.id)+1:0;return products.slice(start,start+options.take);}},$queryRaw:async(strings,...parameters)=>{assert.match(strings.join('?'),/SELECT DISTINCT pc\."collectionId"/);assert.match(strings.join('?'),/p\.shop=/);calls.push(['scope',parameters[0],parameters[1]]);return [{collectionId:'gid://shopify/Collection/1'}];},productCollection:{findMany:async()=>{throw Error('Full membership materialization is not allowed');}}}:name==='./meiliClient.server.js'?{
    index:()=>({updateDocuments:async docs=>{calls.push(['write',docs.length]);return {taskUid:calls.length};}}),
    tasks:{waitForTask:async id=>{calls.push(['wait',id]);if(!pending){pending=true;await new Promise(resolve=>release=resolve);}return {status:failed||partial&&id===2?'failed':'succeeded'};}},
   }: {}}),
@@ -23,7 +23,7 @@ test('incremental score writes select only changed products and send exact exter
  const writes=[],invalidations=[],queries=[],shop='fixture.myshopify.com';
  const products=[{id:'gid://shopify/Product/1',tags:['TopProm'],bestSellingScore:3,trendingScore:4}];
  const ctx={module:{exports:{}},exports:{},console:{log(){},error(){}},fixtureInvalidate:async(_shop,options)=>invalidations.push(options),require:name=>({__esModule:true,default:name==='../db.server.js'?{
-  product:{findMany:async options=>{queries.push(options);return products;}},productCollection:{findMany:async()=>[]},
+  product:{findMany:async options=>{queries.push(options);return products;}},$queryRaw:async(strings,...parameters)=>{assert.equal(parameters[0],shop);assert.deepEqual(Array.from(parameters[1]),['gid://shopify/Product/1']);assert.match(strings.join('?'),/pc\."productId"=ANY\(/);return [];},productCollection:{findMany:async()=>{throw Error('Full membership materialization is not allowed');}},
  }:name==='./meiliClient.server.js'?{index:()=>({updateDocuments:async docs=>{writes.push(docs);return {taskUid:1};},getDocuments:async()=>({results:[{id:'1',shop,tags:['TopProm']}]})}),tasks:{waitForTask:async()=>({status:'succeeded'})}}:{}})};
  vm.runInNewContext(compiled,ctx);await ctx.module.exports.pushScoresToMeili(shop,['gid://shopify/Product/1']);
  assert.deepEqual(Array.from(queries[0].where.id.in),['gid://shopify/Product/1']);assert.equal(writes[0].length,1);

@@ -309,7 +309,11 @@ export async function pushScoresToMeili(shop, changedProductIds=null) {
     }
     if(succeeded||!scoreTasks.length){
       const {invalidateShop}=await import('./shopCache.server.js');
-      const memberships=await prisma.productCollection.findMany({where:{product:{shop},...(changedIds?{productId:{in:changedIds}}:{})},select:{collectionId:true},distinct:['collectionId']});
+      // Prisma distinct deduplicates fetched memberships in memory. A full
+      // catalog can have millions of links; return only collection IDs from SQL.
+      const memberships=changedIds
+        ? await prisma.$queryRaw`SELECT DISTINCT pc."collectionId" FROM "ProductCollection" pc JOIN "Product" p ON p.id=pc."productId" WHERE p.shop=${shop} AND pc."productId"=ANY(${changedIds}::text[])`
+        : await prisma.$queryRaw`SELECT DISTINCT pc."collectionId" FROM "ProductCollection" pc JOIN "Product" p ON p.id=pc."productId" WHERE p.shop=${shop}`;
       // Use visible index tags, which may differ from a concurrent DB sync.
       // An unavailable/incomplete proof retains broad invalidation.
       let externalProof;const scoreIndex=meiliClient.index('products');
