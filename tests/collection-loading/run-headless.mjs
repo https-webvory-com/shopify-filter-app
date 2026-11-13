@@ -110,7 +110,7 @@ try{
       }
       await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);
       await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
-      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),390);
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').parentElement.tagName"),'BODY');
       await evaluate("document.querySelector('#cfp-apply-btn').click()");
       assert.deepEqual(await cards(),products);assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'Mobile overflow after '+desktopFilterLayout+': '+JSON.stringify(await evaluate('({scroll:document.documentElement.scrollWidth,viewport:innerWidth})')));

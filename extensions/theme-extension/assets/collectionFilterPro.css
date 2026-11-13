@@ -1636,9 +1636,9 @@ facet-filters-form,
     left: -100% !important;
     right: auto !important;
     bottom: 0 !important;
-    width: min(var(--cfp-drawer-width), 90vw) !important;
+    width: 100vw !important;
     min-width: 0 !important;
-    max-width: min(var(--cfp-drawer-width), 90vw) !important;
+    max-width: 100vw !important;
     box-sizing: border-box !important;
     height: 100vh !important;
     max-height: 100vh !important;
