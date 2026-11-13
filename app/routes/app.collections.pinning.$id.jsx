@@ -17,6 +17,7 @@ import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinPr
 import PinSearchField from "../components/merchandising/PinSearchField";
 import PinProductImage from "../components/merchandising/PinProductImage";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import {usePickerRequest} from '../hooks/usePickerRequest';
 
 export const action = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -194,7 +195,7 @@ export default function PinningEditor() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
-  const fetcher = useFetcher();
+  const fetcher = usePickerRequest('collection');
   const shopify = useAppBridge();
   const actionData = useActionData();
   useEffect(() => {
@@ -251,6 +252,7 @@ export default function PinningEditor() {
     }
   };
   const [searchQuery, setSearchQuery] = useState("");
+  fetcher.context.current={collections:JSON.stringify(selectedCollections),applyToAll:String(applyToAll)};
   const [searchField, setSearchField] = useState("title");
   const [pinnedSearchQuery, setPinnedSearchQuery] = useState("");
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
@@ -405,7 +407,7 @@ export default function PinningEditor() {
   }, [products]); // Run whenever a product is pinned/unpinned
 
   useEffect(() => {
-    if (fetcher.data?.products) {
+    if (fetcher.data?.products && fetcher.data.query===searchQuery.trim() && fetcher.data.searchField===searchField) {
       setSearchResults(fetcher.data.products);
       if (fetcher.data.totalCount !== undefined) {
         setTotalCount(fetcher.data.totalCount);
@@ -762,7 +764,7 @@ export default function PinningEditor() {
             >
               {searchResults.length === 0 ? (
                 <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
-                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : (searchQuery ? "No products found." : "No products available.")}
+                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : fetcher.data?.error || (searchQuery ? "No products found." : "No products available.")}
                 </div>
               ) : (
                 <>

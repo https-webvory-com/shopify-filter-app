@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {useFetcher} from 'react-router';
+import {usePickerRequest} from '../hooks/usePickerRequest';
 
 const styles=`
 .esp,.esp-dialog{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -19,7 +19,7 @@ function Stock({product}){
 }
 
 export default function EmptySearchProducts({value,onChange,disabled,stockOnly=false}){
-  const picker=useFetcher(),[open,setOpen]=useState(false),[query,setQuery]=useState('');
+  const picker=usePickerRequest('products'),[open,setOpen]=useState(false),[query,setQuery]=useState('');
   const dialog=useRef(null),input=useRef(null),load=picker.load;
   useEffect(()=>{if(open){dialog.current?.showModal();input.current?.focus();}else if(dialog.current?.open)dialog.current.close();},[open]);
   useEffect(()=>{if(!open)return;const timer=setTimeout(()=>load('?productPicker=1&q='+encodeURIComponent(query.trim())),150);return()=>clearTimeout(timer);},[open,query,load]);

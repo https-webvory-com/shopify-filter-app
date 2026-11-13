@@ -67,7 +67,8 @@ async function mockedModule(file, mocks) {
       if(name==='../services/searchCollectionPicker.server.js')return {getEmptySearchProductState:async(_shop,products)=>({products,stockOnly:false})};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === '../utils/csvImportReport.js') return csvImportReport;
-      if (name === "../services/searchPicker.server.js") return {};
+      if (name === "../services/searchPicker.server.js") return mocks[name]||{};
+      if (name === '../hooks/usePickerRequest') return {};
       if (name === "../utils/reorderSearchPins.js") return {};
       if (name in mocks) return mocks[name];
       if (name === '../services/shopCache.server.js' || name === '../services/shopCache.server') return { invalidateShop: async () => {} };
@@ -111,6 +112,7 @@ for (const section of ["collections", "search"]) {
     const route = await mockedModule(`app/routes/app.${section}.pinning.$id.jsx`, {
       "../shopify.server": { authenticate: { admin: async () => ({ session: { shop } }) } },
       "../db.server": { __esModule: true, default: prisma },
+      '../services/searchPicker.server.js':{searchPickerPage:async(tenant,target,options)=>{calls.push({tenant,target,options});return {products:[],totalCount:12};}},
     });
     for (const id of ["new", "rule-1"]) {
       for (const searchField of ["title", "tags"]) {
@@ -121,6 +123,9 @@ for (const section of ["collections", "search"]) {
         }).forEach(([key, value]) => form.set(key, value));
         const response = await route.action({ request: new Request("https://fixture.test", { method: "POST", body: form }), params: { id } });
         assert.equal((await response.json()).totalCount, 12);
+        if(section==='search'){
+          assert.equal(calls[0].tenant,shop);assert.equal(calls[0].target,'');assert.equal(calls[0].options.query.trim(),'SUMMER');assert.equal(calls[0].options.searchField,searchField);assert.equal(calls[0].options.skip,9);assert.deepEqual(Array.from(calls[0].options.excludedIds),['product-1']);continue;
+        }
         const where = JSON.parse(JSON.stringify(calls[1].where));
         assert.equal(where.shop, shop);
         assert.equal(where.status, "active");

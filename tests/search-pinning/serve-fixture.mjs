@@ -21,7 +21,10 @@ const prisma = {product:{findMany:async({where,skip=0,take})=>eligible(where).sl
   pinnedProductRule:{findFirst:async()=>rule,create:async({data})=>{rule={id:'fixture',...data};return rule;},update:async({data})=>{rule={...rule,...data};return rule;}}};
 const ranking=await loadRanking(prisma,async(q,options)=>{const matches=docs.filter(p=>p.title.toLowerCase().includes(q.toLowerCase().includes('green')?'green':'red'));
   return {hits:matches.slice(options.offset||0,(options.offset||0)+options.limit),estimatedTotalHits:matches.length};});
-const picker=await loadModule('app/services/searchPicker.server.js',{'./queryParser.server.js':{parseQuery:async()=>null},'./searchRanking.server.js':ranking});
+const picker={searchPickerPage:async(_shop,target,{query='',skip=0,limit=9,excludedIds=[]}={})=>{
+ const matches=rows.filter(p=>(!target||p.title.toLowerCase().includes(target.toLowerCase().includes('green')?'green':'red'))&&p.title.toLowerCase().includes(query.trim().toLowerCase())&&!excludedIds.includes(p.id));
+ return {products:matches.slice(skip,skip+limit).map(p=>({...p,image:catalogImageUrls(p.images)[0]||null})),totalCount:matches.length,nonMatchingPinnedIds:excludedIds.filter(id=>!rows.some(p=>p.id===id&&(!target||p.title.toLowerCase().includes(target.toLowerCase().includes('green')?'green':'red'))))};
+}};
 const admin=await loadModule('app/routes/app.search.pinning.$id.jsx',{'react-router':{redirect:()=>({redirect:true})},react:{},'@shopify/app-bridge-react':{},'@shopify/shopify-app-react-router/server':{},
   '../services/shopCache.server':{invalidateShop:async()=>{}},
   '../shopify.server':{authenticate:{admin:async()=>({session:{shop}})}},'../db.server':{default:prisma},'../utils/availablePins.server.js':{availablePins},
@@ -32,12 +35,15 @@ await fs.writeFile('scratch/pinning-admin-entry.jsx',`import React from 'react';
 function endpoint(request){const u=new URL(request.url),out=new URL('/admin',u);out.search=u.search;out.searchParams.set('ruleId',u.pathname.endsWith('/new')?'new':'fixture');return out.pathname+out.search;}
 const router=createBrowserRouter([{path:'/list-ui',loader:async()=>({pinningRules:await(await fetch('/list-state')).json()}),Component:Index},{path:'/collection-list-ui',loader:async()=>({pinningRules:await(await fetch('/list-state')).json(),collections:[]}),Component:CollectionIndex},{path:'*',loader:({request})=>fetch(endpoint(request)).then(r=>r.json()),action:async({request})=>{const d=await fetch(endpoint(request),{method:'POST',body:new URLSearchParams(await request.formData())}).then(r=>r.json());return d.redirect?redirect('/admin-ui'):d;},Component}]);createRoot(document.getElementById('root')).render(<RouterProvider router={router}/>);`);
 await build({entryPoints:['scratch/pinning-admin-entry.jsx'],outfile:'scratch/pinning-admin.js',bundle:true,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},plugins:[{name:'fixture',setup(b){
-  b.onResolve({filter:/(?:db|shopify|searchPicker|shopCache)\.server(?:\.js)?$|@shopify\/shopify-app-react-router\/server|@shopify\/app-bridge-react/},args=>({path:args.path,namespace:'stub'}));
-  b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export const useAppBridge=()=>({toast:{show:()=>{}}});export const authenticate={};export const boundary={headers:()=>({})};export const searchPickerProducts=()=>{};export const invalidateShop=()=>{};export default {};'}));
+  b.onResolve({filter:/\.server(?:\.js)?$|@shopify\/shopify-app-react-router\/server|@shopify\/app-bridge-react/},args=>({path:args.path,namespace:'stub'}));
+  b.onLoad({filter:/.*/,namespace:'stub'},()=>({contents:'export const useAppBridge=()=>({toast:{show:()=>{}}});export const authenticate={};export const boundary={headers:()=>({})};'+['searchPickerProducts','searchPickerPage','invalidateShop','availablePins','pinProductImageFallbacks','pinProductSearchFilter','pinProductTagSuggestions','listSearchProducts','getEmptySearchProductState','legacyEmptySearchProducts','saveEmptySearchPin'].map(name=>'export const '+name+'=()=>{};').join('')+'export default {};'}));
 }}]});
 const server=http.createServer(async(req,res)=>{try{
   const url=new URL(req.url,'http://127.0.0.1');
-  if(url.pathname==='/admin') {const chunks=[];for await(const chunk of req)chunks.push(chunk);const request=new Request(url,{method:req.method,...(req.method==='POST'?{body:Buffer.concat(chunks),headers:req.headers}:{})});
+  if(url.pathname==='/admin'||url.pathname==='/app/product-picker') {
+    if(url.pathname==='/app/product-picker'&&rule.pickerFailures>0){rule.pickerFailures--;res.writeHead(504,{'Content-Type':'text/html'}).end('Gateway timeout');return;}
+    if(url.pathname==='/app/product-picker'&&rule.pickerDelay)await new Promise(resolve=>setTimeout(resolve,rule.pickerDelay));
+    const chunks=[];for await(const chunk of req)chunks.push(chunk);const request=new Request(url,{method:req.method,...(req.method==='POST'?{body:Buffer.concat(chunks),headers:req.headers}:{})});
     const result = await (req.method==='POST'?admin.action:admin.loader)({request,params:{id:url.searchParams.get('ruleId')||'fixture'}});
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result instanceof Response ? await result.json() : result));return;}
   if(url.pathname==='/list-state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rule.listRules||[rule]));return;}

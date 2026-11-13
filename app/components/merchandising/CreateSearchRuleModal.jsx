@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import Tooltip from "../ui/Tooltip";
+import {usePickerRequest} from '../../hooks/usePickerRequest';
 const TooltipIcon = ({ text }) => (
   <Tooltip content={text}>
     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "6px", cursor: "help", width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0", color: "#64748b", fontSize: "10px", fontWeight: "bold" }}>?</span>
@@ -14,7 +15,7 @@ export default function CreateSearchRuleModal({
   shopifyLocations = [], shopifyProductTypes = [], shopifyTags = [], shopifyProducts = [], shopifySkus = [], shopifyBarcodes = []
 }) {
   const fetcher = useFetcher();
-  const productFetcher = useFetcher();
+  const productFetcher = usePickerRequest('merchandising');
   const shopify = useAppBridge();
   const [ruleName, setRuleName] = useState("");
   const [customerTags, setCustomerTags] = useState("");
@@ -25,9 +26,6 @@ export default function CreateSearchRuleModal({
   const [searchQueryInput, setSearchQueryInput] = useState("");
   const [searchQueries, setSearchQueries] = useState([]);
   const queryKey = JSON.stringify(searchQueries);
-  useEffect(() => {
-    if (isOpen && searchQueries.length) productFetcher.submit({ actionType: 'searchProducts', searchQueries: queryKey }, { method: 'post' });
-  }, [isOpen, queryKey]);
 
   const [isDateRangeChecked, setIsDateRangeChecked] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -43,6 +41,11 @@ export default function CreateSearchRuleModal({
   const [openVendorDropdownIndex, setOpenVendorDropdownIndex] = useState(null);
   const [dropdownSearch, setDropdownSearch] = useState("");
   const [dropdownLimit, setDropdownLimit] = useState(50);
+  useEffect(()=>{
+    if(!isOpen||!searchQueries.length||openVendorDropdownIndex===null||ruleRules[openVendorDropdownIndex]?.field!=='Product')return;
+    const timer=setTimeout(()=>productFetcher.submit({actionType:'searchProducts',searchQueries:queryKey,q:dropdownSearch.trim()},{method:'post'}),150);
+    return()=>clearTimeout(timer);
+  },[isOpen,queryKey,openVendorDropdownIndex,dropdownSearch,ruleRules[openVendorDropdownIndex]?.field]);
 
   const handleClose = () => {
     setRuleName("");
@@ -687,7 +690,7 @@ export default function CreateSearchRuleModal({
                                         style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}
                                         onScroll={(e) => {
                                           const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 50;
-                                          if (bottom) {
+                                          if (bottom && (r.field!=='Product'||!searchQueries.length)) {
                                             setDropdownLimit(prev => prev + 50);
                                           }
                                         }}
@@ -700,7 +703,7 @@ export default function CreateSearchRuleModal({
                                           else if (r.field === "Tags") currentOptions = shopifyTags || [];
                                           else if (r.field === "Locations") currentOptions = shopifyLocations || [];
                                           else if (r.field === "Product") currentOptions = searchQueries.length
-                                            ? (productFetcher.data?.queryKey === queryKey ? productFetcher.data.products || [] : [])
+                                            ? (productFetcher.data?.queryKey === queryKey&&productFetcher.data?.query===dropdownSearch.trim() ? productFetcher.data.products || [] : [])
                                             : shopifyProducts || [];
                                           else if (r.field === "SKU") currentOptions = shopifySkus || [];
                                           else if (r.field === "Barcode") currentOptions = shopifyBarcodes || [];
@@ -761,6 +764,7 @@ export default function CreateSearchRuleModal({
                                                       ? productFetcher.data.error : 'No options found.'}
                                                 </div>
                                               )}
+                                              {r.field==='Product'&&searchQueries.length>0&&productFetcher.data?.hasMore&&<div style={{padding:'12px',fontSize:12,color:'#64748b'}}>Showing the first 50 matches. Search by product name to narrow the list.</div>}
                                             </>
                                           );
                                         })()}

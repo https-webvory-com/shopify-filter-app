@@ -86,7 +86,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
   const pinIds = [...new Set(pins.map(p => p.id))];
   if (pinIds.length) {
     const rows = await prisma.product.findMany({ where: { shop,
-      status: { equals: 'active', mode: 'insensitive' }, id: { in: pinIds } }, include: { variants: true,...(parsedQuery?.searchCollectionId?{collections:{select:{collectionId:true}}}:{}) } });
+      status: { equals: 'active', mode: 'insensitive' }, id: { in: pinIds } }, include: { variants: true } });
     const valid = new Map(rows.map(p => [p.id, p]));
     // DB validation is authoritative for saved pins, including deleted/stale hits.
     for (let i = products.length - 1; i >= 0; i--) {

@@ -25,13 +25,15 @@ export const action = async ({ request }) => {
   const actionType = formData.get("actionType");
 
   if (actionType === 'searchProducts') {
-    const queries = JSON.parse(formData.get('searchQueries') || '[]');
+    let queries=[];const query=String(formData.get('q')||'').trim();
     try {
-      const products = await searchPickerProducts(shop, queries);
-      return { queryKey: JSON.stringify(queries), products: products.map(p => ({ title: p.title,
+      queries=JSON.parse(formData.get('searchQueries')||'[]');
+      if(!Array.isArray(queries)||queries.length>20||queries.some(term=>typeof term!=='string'))throw Error('Invalid picker queries');
+      const products = await searchPickerProducts(shop, queries,{query,limit:50});
+      return { query,queryKey: JSON.stringify(queries),hasMore:products.length>=50, products: products.slice(0,50).map(p => ({ title: p.title,
         image: p.images?.[0]?.url || p.images?.[0]?.src || p.images?.[0] || null })) };
     } catch {
-      return { queryKey: JSON.stringify(queries), products: [], error: 'Could not load matching products. Please retry.' };
+      return { query,queryKey: JSON.stringify(queries), products: [], error: 'Could not load matching products. Please retry.' };
     }
   }
 

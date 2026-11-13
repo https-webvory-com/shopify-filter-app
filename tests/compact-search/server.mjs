@@ -22,6 +22,7 @@ export async function createCompactSearchServer() {
   const server=http.createServer(async(req,res)=>{try{
     const url=new URL(req.url,'http://127.0.0.1');
     const respond=(body)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(body));};
+    if(url.pathname==='/app/product-picker'&&url.searchParams.get('scope')==='collections')return respond(await collectionService.listSearchCollections('compact-fixture.myshopify.com',{query:url.searchParams.get('q')||'',after:url.searchParams.get('after')||''}));
     if(url.pathname==='/admin'){
       const chunks=[];for await(const c of req)chunks.push(c);
       const request=new Request(url,{method:req.method,...(req.method==='POST'?{body:Buffer.concat(chunks),headers:req.headers}:{})});

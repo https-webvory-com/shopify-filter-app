@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useFetcher } from 'react-router';
+import {usePickerRequest} from '../hooks/usePickerRequest';
 import CompactSearchSortable from './CompactSearchSortable';
 
 const groupNames = ['Top Searches', 'Trending', 'Occasion'];
@@ -14,7 +14,7 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
   const [cursor, setCursor] = useState('');
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({hasMore:false,nextCursor:''});
-  const collectionFetcher = useFetcher();
+  const collectionFetcher = usePickerRequest('collections');
   const collectionPages = useRef(new Map());
   const [loadingCollections, setLoadingCollections] = useState(false);
   const pageKey = (search, after) => JSON.stringify([search, after]);

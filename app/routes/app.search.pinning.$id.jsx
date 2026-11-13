@@ -6,7 +6,6 @@ import {
   useSubmit,
   useNavigation,
   useActionData,
-  useFetcher,
   redirect,
 } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -14,17 +13,17 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { availablePins } from "../utils/availablePins.server.js";
 import { pinProductImageFallbacks } from "../utils/pinProductImageFallbacks.server.js";
-import { catalogImageUrls } from "../utils/pinProductImages.js";
-import { pinProductSearchFilter, pinProductTagSuggestions } from "../utils/pinProductSearch.server";
+import { pinProductTagSuggestions } from "../utils/pinProductSearch.server";
 import PinSearchField from "../components/merchandising/PinSearchField";
 import PinProductImage from "../components/merchandising/PinProductImage";
-import { searchPickerProducts } from "../services/searchPicker.server.js";
+import { searchPickerPage } from "../services/searchPicker.server.js";
 import { reorderSearchPins } from "../utils/reorderSearchPins.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import EmptySearchProducts from '../components/EmptySearchProducts';
 import {listSearchProducts,getEmptySearchProductState} from '../services/searchCollectionPicker.server.js';
 import {legacyEmptySearchProducts,saveEmptySearchPin} from '../services/emptySearchPins.server.js';
 import {isEmptySearchPin} from '../utils/emptySearchPins.js';
+import {usePickerRequest} from '../hooks/usePickerRequest';
 
 export function parseSearchPinTarget(raw, applyToAll = false) {
   if (applyToAll) return [];
@@ -51,67 +50,26 @@ export const action = async ({ request, params }) => {
   }
 
   if (intent === "search") {
+    const targetQueryKey=String(formData.get('targetQueries')||'[]');
+    try{
     const query = formData.get("q") || "";
-    const collectionsStr = formData.get("collections");
-    const collections = collectionsStr ? JSON.parse(collectionsStr) : [];
-    const applyToSearchType = formData.get("applyToSearchType") || "both";
-
-    const whereClause = { shop, status: "active", variants: { some: { available: true } } };
-
-    Object.assign(whereClause, await pinProductSearchFilter(
-      prisma, shop, query, formData.get("searchField"),
-    ));
-
     const targetQueries = JSON.parse(formData.get('targetQueries') || '[]');
     if (!targetQueries.length && formData.get('applyToAll') === 'false' && formData.has('targetQueries')) {
       return Response.json({ products: [], totalCount: 0, targetQueryKey: JSON.stringify(targetQueries), nonMatchingPinnedIds: [] });
     }
-    let targetIds = null;
-    if (targetQueries.length) {
-      let matches;
-      try { matches = await searchPickerProducts(shop, targetQueries, { idsOnly: true }); }
-      catch {
-        return Response.json({ products: [], totalCount: 0, targetQueryKey: JSON.stringify(targetQueries),
-          error: 'Could not load matching products. Please retry.', nonMatchingPinnedIds: [] });
-      }
-      targetIds = matches.map(p => p.id);
-      whereClause.AND = [...(whereClause.AND || []), { id: { in: targetIds } }];
-    }
+    if(!Array.isArray(targetQueries)||targetQueries.length>1||targetQueries.some(term=>typeof term!=='string'))throw Error('Invalid search target');
 
 
     const skip = parseInt(formData.get("skip") || "0", 10);
     const excludedIdsStr = formData.get("excludedIds");
     const excludedIds = excludedIdsStr ? JSON.parse(excludedIdsStr) : [];
     
-    if (excludedIds.length > 0) {
-      whereClause.id = { notIn: excludedIds };
+    const result=await searchPickerPage(shop,targetQueries[0]||'',{query,searchField:formData.get('searchField')||'title',skip,limit:9,excludedIds});
+    return Response.json({...result,targetQueryKey:JSON.stringify(targetQueries)});
+    }catch(error){
+      console.error('Search pin picker failed:',error.code||error.name);
+      return Response.json({products:[],totalCount:0,targetQueryKey,error:'Could not load matching products. Please retry.',nonMatchingPinnedIds:[]});
     }
-
-    const totalCount = await prisma.product.count({ where: whereClause });
-
-    const productsResult = await prisma.product.findMany({
-      where: whereClause,
-      take: 9,
-      skip: skip,
-      select: {
-        id: true,
-        title: true,
-        handle: true,
-        images: true,
-      },
-    });
-
-    const products = productsResult.map((p) => {
-      return {
-        id: p.id,
-        title: p.title,
-        handle: p.handle,
-        image: catalogImageUrls(p.images)[0] || null,
-      };
-    });
-
-    return Response.json({ products, totalCount, targetQueryKey: JSON.stringify(targetQueries),
-      nonMatchingPinnedIds: targetIds ? excludedIds.filter(id => !targetIds.includes(id)) : [] });
   }
 
   if (intent === "save") {
@@ -220,7 +178,7 @@ export default function PinningEditor() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
-  const fetcher = useFetcher();
+  const fetcher = usePickerRequest('search');
   const shopify = useAppBridge();
 
   const initialSearchQueries =
@@ -278,6 +236,7 @@ export default function PinningEditor() {
     }
   };
   const [searchQuery, setSearchQuery] = useState("");
+  fetcher.context.current={targetQueries:JSON.stringify(applyToAll?[]:searchQueries),applyToAll:String(applyToAll)};
   const [searchField, setSearchField] = useState("title");
   const [pinnedSearchQuery, setPinnedSearchQuery] = useState("");
   const [selectedPinnedIds, setSelectedPinnedIds] = useState([]);
@@ -432,7 +391,7 @@ export default function PinningEditor() {
   }, [products]); // Run whenever a product is pinned/unpinned
 
   useEffect(() => {
-    if (fetcher.data?.products && (applyToAll || searchQueries.length > 0) && fetcher.data.targetQueryKey === targetQueryKey) {
+    if (fetcher.data?.products && (applyToAll || searchQueries.length > 0) && fetcher.data.targetQueryKey === targetQueryKey && fetcher.data.query===searchQuery.trim() && fetcher.data.searchField===searchField) {
       if (fetcher.data.totalCount !== undefined) {
         setTotalCount(fetcher.data.totalCount);
         const lastPage = Math.max(0, Math.ceil(fetcher.data.totalCount / 9) - 1);

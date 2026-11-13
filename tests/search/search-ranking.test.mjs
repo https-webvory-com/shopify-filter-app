@@ -303,13 +303,13 @@ test('authenticated pin picker retains target-query scope when searching by titl
     '../utils/availablePins.server.js': {}, '../components/merchandising/PinSearchField': {}, '../utils/reorderSearchPins.js': { reorderSearchPins },
     '../utils/pinProductImageFallbacks.server.js': {}, '../utils/pinProductImages.js': { catalogImageUrls: images => images || [] }, '../components/merchandising/PinProductImage': {},
     '../utils/pinProductSearch.server': { pinProductSearchFilter: async () => ({ title: { contains: 'Green' } }) },
-    '../services/searchPicker.server.js': { searchPickerProducts: async (tenant, queries) => { assert.equal(tenant, shop); assert.deepEqual(Array.from(queries), ['green dresses']); return [{ id: gid(1) }]; } },
+    '../services/searchPicker.server.js': { searchPickerPage: async (tenant, query,options) => { calls.push({tenant,query,options});return {products:[{id:gid(1)}],totalCount:1,nonMatchingPinnedIds:[gid(9)]}; } },
   });
   const response = await route.action({ params: { id: 'new' }, request: new Request('https://fixture/admin', { method: 'POST',
     body: new URLSearchParams({ intent: 'search', q: 'Green', targetQueries: '["green dresses"]', excludedIds: JSON.stringify([gid(9)]) }) }) });
   const r = await response.json();
-  assert.equal(calls[0].shop, shop); assert.deepEqual(Array.from(calls[0].AND[0].id.in), [gid(1)]);
-  assert.deepEqual(Array.from(calls[0].id.notIn), [gid(9)]); assert.deepEqual(r.nonMatchingPinnedIds, [gid(9)]);
+  assert.equal(calls[0].tenant, shop);assert.equal(calls[0].query,'green dresses');assert.equal(calls[0].options.query,'Green');
+  assert.deepEqual(Array.from(calls[0].options.excludedIds), [gid(9)]); assert.deepEqual(r.nonMatchingPinnedIds, [gid(9)]);
 });
 
 test('pin picker ID retrieval preserves complete hybrid membership with small payloads and distinct cache entries', async () => {

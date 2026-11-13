@@ -1,10 +1,6 @@
 // Explicit pins can come from outside the Meilisearch result set. Apply the
 // same shopper filters to their saved variants before inserting them.
 export function pinnedProductMatchesAppliedIntent(product, parsedQuery) {
-  if(parsedQuery?.searchCollectionId){
-    const id=String(parsedQuery.searchCollectionId).split('/').pop();
-    if(!product.collections?.some(link=>String(typeof link==='string'?link:link.collectionId||link.collection?.id||link.id||'').split('/').pop()===id))return false;
-  }
   const applied = parsedQuery?.appliedIntent;
   if (!applied?.price && !applied?.size) return true;
   let options = product.options || [];

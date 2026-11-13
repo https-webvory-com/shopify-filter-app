@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import {usePickerRequest} from '../../hooks/usePickerRequest';
 
 const fields = [
   { value: "title", label: "Title", operator: "contains", placeholder: "Enter product title" },
@@ -8,7 +8,7 @@ const fields = [
 ];
 
 export default function PinSearchField({ value, onChange, query, onQueryChange }) {
-  const fetcher = useFetcher();
+  const fetcher = usePickerRequest('tags');
   const submit = fetcher.submit;
   const [open, setOpen] = useState(null);
   const [highlighted, setHighlighted] = useState(0);
@@ -82,7 +82,7 @@ export default function PinSearchField({ value, onChange, query, onQueryChange }
           style={{ display: "block", width: "100%", border: 0, textAlign: "left", padding: "9px 12px", borderRadius: 4, background: index === highlighted ? "#f1f5f9" : "#fff", color: "#334155", cursor: "pointer" }}>
           {open === "fields" ? option.label : option}
         </button>)}
-        {open === "tags" && !tags.length && <div role="status" style={{ padding: "9px 12px", color: "#64748b", fontSize: 13 }}>{fetcher.state !== "idle" || fetcher.data?.query !== query ? "Loading tags?" : "No matching tags"}</div>}
+        {open === "tags" && !tags.length && <div role="status" style={{ padding: "9px 12px", color: "#64748b", fontSize: 13 }}>{fetcher.state !== "idle" || fetcher.data?.query !== query ? "Loading tags?" : fetcher.data?.error || "No matching tags"}</div>}
       </div>}
     </div>
   );

@@ -122,8 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let pendingOpen = null;
 
   // Initialize
-  // Let the local rendering state initialize before creating the modal.
-  Promise.resolve().then(init);
+  init();
 
   function init() {
     injectStyles();
@@ -299,8 +298,6 @@ document.addEventListener("DOMContentLoaded", function () {
       <div id="cfp-compact-tabs" class="cfp-compact-tabs" role="tablist" aria-label="Main collections" hidden></div>
       <div class="cfp-search-body" id="cfp-search-body">
         <div class="cfp-search-column-left">
-          <div id="cfp-full-results-header" class="cfp-full-results-header" hidden><h2 id="cfp-full-results-heading">Products</h2></div>
-          <div id="cfp-full-category-tabs" class="cfp-full-category-tabs" role="tablist" aria-label="Search collections" hidden></div>
           <div class="cfp-search-section-title" id="cfp-compact-products-title" style="display:none" hidden>Products</div>
           <div class="cfp-search-product-grid" id="cfp-search-products">
             <!-- Products will be rendered here -->
@@ -319,7 +316,6 @@ document.addEventListener("DOMContentLoaded", function () {
           <ul class="cfp-search-collections-list" id="cfp-search-collections">
             <!-- Collections will be rendered here -->
           </ul>
-          <div id="cfp-full-popular" class="cfp-full-popular" hidden><div class="cfp-search-section-title">Popular searches</div><div id="cfp-full-popular-chips"></div></div>
           <div class="cfp-search-section-title" id="cfp-pages-title" style="display:none">Pages</div>
           <ul class="cfp-search-collections-list" id="cfp-search-pages" style="display:none"></ul>
         </div>
@@ -338,11 +334,6 @@ document.addEventListener("DOMContentLoaded", function () {
     modal.dataset.cfpProductColumn=settings.productColumn||'left';
     modal.style.setProperty('--cfp-instant-columns',String(settings.instantColumns||4));
     overlay.dataset.cfpLayout=modal.dataset.cfpLayout;
-    const full=modal.dataset.cfpLayout==='fullscreen',header=document.getElementById('cfp-full-results-header'),link=document.getElementById('cfp-view-all-results');
-    header.hidden=!full;
-    (full?header:document.querySelector('.cfp-search-column-left')).appendChild(link);
-    if(!full){if(fullNavigation.query)resetFullNavigation();}
-    else renderPopularSearches();
     renderCompactNavigation();
     positionCompactPanel();
   }
@@ -735,8 +726,6 @@ document.addEventListener("DOMContentLoaded", function () {
     mainInput.addEventListener("input", (e) => {
       const query = e.target.value.trim();
       clearTimeout(debounceTimer);
-      clearTimeout(fullNavigationTimer);fullSearchVersion++;
-      if(query.length<CONFIG.minChars&&fullNavigation.query)resetFullNavigation();
       window.cfpActiveInstantSearchId = null;
       window.cfpActiveInstantSearchQuery = null;
 
@@ -870,7 +859,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function closeModal() {
-    clearTimeout(fullNavigationTimer);
     if (pendingOpen) {
       restorePendingTrigger(pendingOpen);
       pendingOpen = null;
@@ -1050,7 +1038,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function fetchDefaultView(configurationReady = false) {
-    resetFullNavigation();
     window.cfpActiveInstantSearchId = null;
     mainInput._cfpQueryActive = false;
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
@@ -1120,7 +1107,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    if (CONFIG.manualSuggestions?.length) { if(isFullSearch()){if(container)container.style.display='none';renderPopularSearches();}else renderSuggestions(CONFIG.manualSuggestions, ''); return; }
+    if (CONFIG.manualSuggestions?.length) { renderSuggestions(CONFIG.manualSuggestions, ''); return; }
     const searches = readRecentSearches();
     if (searches.length === 0) {
       if (container) container.style.display = "none";
@@ -1129,7 +1116,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (container) container.style.display = "block";
-    if (collectionsTitle) collectionsTitle.style.display = isFullSearch() ? 'block' : 'none';
+    if (collectionsTitle) collectionsTitle.style.display = "none";
 
     let html = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -1205,96 +1192,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if(list) list.innerHTML = html;
   }
 
-  // Full screen navigation is optional and never blocks the product response.
-  let fullNavigation={query:'',total:0,collections:[],active:''},fullNavigationTimer,fullSearchVersion=0;
-  let fullPopularPromise;
-  const fullNavigationCache=new Map();
-  function isFullSearch(){return window.cfpSearchSettings?.instantLayout!=='compact';}
-  function resetFullNavigation(){
-    clearTimeout(fullNavigationTimer);fullSearchVersion++;
-    fullNavigation={query:'',total:0,collections:[],active:''};
-    const tabs=document.getElementById('cfp-full-category-tabs');if(tabs){tabs.hidden=true;tabs.innerHTML='';}
-    const heading=document.getElementById('cfp-full-results-heading');if(heading)heading.textContent='Products';
-    const popular=document.getElementById('cfp-full-popular');if(popular&&!isFullSearch())popular.hidden=true;
-  }
-  function fullSearchParameters(query){
-    const params=new URLSearchParams({shop:shopDomain,isSearch:'true',searchType:'instant',q:query,suggestionLimit:'0',locale:window.Shopify?.locale||''});
-    if(window.Shopify?.country)params.set('country',window.Shopify.country);
-    if(window.cfpCustomerTags)params.set('customer_tags',window.cfpCustomerTags);
-    return params;
-  }
-  function renderFullCategoryTabs(){
-    const tabs=document.getElementById('cfp-full-category-tabs');if(!tabs)return;
-    const state=fullNavigation;
-    tabs.hidden=!isFullSearch()||!state.query||!state.collections.length;
-    if(tabs.hidden){tabs.innerHTML='';return;}
-    const entries=[{handle:'',title:'All results',count:state.total},...state.collections];
-    tabs.innerHTML=entries.map(entry=>`<button type="button" role="tab" aria-controls="cfp-search-products" aria-selected="${entry.handle===state.active}" tabindex="${entry.handle===state.active?0:-1}">${instantEscapeHtml(entry.title)} <span>(${entry.count.toLocaleString()})</span></button>`).join('');
-    tabs.querySelectorAll('button').forEach((button,index)=>{
-      const select=next=>{performSearch(state.query,entries[next].handle);};
-      button.addEventListener('click',()=>select(index));
-      button.addEventListener('keydown',event=>{
-        if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-        event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?entries.length-1:(index+(event.key==='ArrowRight'?1:-1)+entries.length)%entries.length;
-        select(next);tabs.querySelectorAll('button')[next]?.focus();
-      });
-    });
-  }
-  function scheduleFullCategories(query,total){
-    if(!isFullSearch())return;
-    fullNavigation.total=total;
-    clearTimeout(fullNavigationTimer);
-    const params=fullSearchParameters(query),key=params.toString();
-    const current=()=>isFullSearch()&&mainInput.value.trim()===query&&fullNavigation.query===query;
-    const cached=fullNavigationCache.get(key);
-    if(cached&&Date.now()-cached.at<30000){fullNavigation.total=cached.total;fullNavigation.collections=cached.collections;renderFullCategoryTabs();return;}
-    fullNavigationTimer=setTimeout(async()=>{
-      try{
-        params.set('categoryTabs','1');
-        const data=await fetchSearchJSON(`${CONFIG.apiUrl}?${params}`);
-        if(!current())return;
-        const allParams=fullSearchParameters(query);allParams.set('categoryCount','1');allParams.set('limit','1');
-        const [all,collections]=await Promise.all([fetchSearchJSON(`${CONFIG.apiUrl}?${allParams}`),Promise.all((data.collections||[]).slice(0,4).map(async collection=>{
-          if(!/^[a-z0-9][a-z0-9-]*$/i.test(collection.handle||''))return null;
-          const scoped=fullSearchParameters(query);scoped.set('collection',collection.handle);scoped.set('limit','1');scoped.set('categoryCount','1');
-          try{const result=await fetchSearchJSON(`${CONFIG.apiUrl}?${scoped}`);return Number.isSafeInteger(result.matchCount)&&result.matchCount>0?{...collection,count:result.matchCount}:null;}catch{return null;}
-        }))]);
-        if(!current())return;
-        if(!Number.isSafeInteger(all.matchCount)||all.matchCount<0)return;
-        fullNavigation.total=all.matchCount;
-        const valid=collections.filter(Boolean);fullNavigationCache.set(key,{at:Date.now(),total:all.matchCount,collections:valid});
-        if(fullNavigationCache.size>20)fullNavigationCache.delete(fullNavigationCache.keys().next().value);
-        fullNavigation.collections=valid;renderFullCategoryTabs();
-      }catch{/* Optional navigation must leave successful products usable. */}
-    },700);
-  }
-  function renderPopularSearches(){
-    const section=document.getElementById('cfp-full-popular'),chips=document.getElementById('cfp-full-popular-chips');
-    if(!section||!chips||!isFullSearch()){if(section)section.hidden=true;return;}
-    const render=values=>{
-      if(!isFullSearch())return;
-      const terms=[...new Set(values.map(cleanSuggestionText).filter(Boolean))].slice(0,10);
-      section.hidden=!terms.length;
-      chips.innerHTML=terms.map(term=>`<button type="button">${instantEscapeHtml(term)}</button>`).join('');
-      chips.querySelectorAll('button').forEach((button,index)=>button.addEventListener('click',()=>{mainInput.value=terms[index];mainInput.dispatchEvent(new Event('input',{bubbles:true}));mainInput.focus();}));
-    };
-    if(CONFIG.manualSuggestions?.length){render(CONFIG.manualSuggestions);return;}
-    fullPopularPromise??=fetchSearchJSON(`${CONFIG.apiUrl.replace(/\/search(?:\?.*)?$/,'/search-navigation')}?shop=${encodeURIComponent(shopDomain)}`).catch(()=>({popularSearches:[]}));
-    fullPopularPromise.then(data=>{if(!CONFIG.manualSuggestions?.length)render(data.popularSearches||[]);});
-  }
-  async function performSearch(query, collectionHandle='') {
+  async function performSearch(query) {
     const trimmedQuery = query.trim().toLowerCase();
     if (query.trim().length < CONFIG.minChars) return;
-    const version=++fullSearchVersion;
-    if(isFullSearch()){
-      if(fullNavigation.query!==query){clearTimeout(fullNavigationTimer);fullNavigation={query,total:0,collections:[],active:''};}
-      fullNavigation.active=collectionHandle;renderFullCategoryTabs();
-      const heading=document.getElementById('cfp-full-results-heading');if(heading)heading.textContent=`Search results for “${query}”`;
-    }
     
     await refreshSearchConfiguration();
     if(CONFIG.enabled===false){closeModal();return;}
-    if (mainInput.value.trim() !== query || version!==fullSearchVersion) return;
+    if (mainInput.value.trim() !== query) return;
     if (query.length < CONFIG.minChars) {
       window.cfpActiveInstantSearchId = null;
       document.getElementById('cfp-search-body').classList.remove('cfp-has-results');
@@ -1319,7 +1223,7 @@ document.addEventListener("DOMContentLoaded", function () {
       countryParam += `&locale=${encodeURIComponent(window.Shopify?.locale || '')}`;
       if (window.cfpCustomerTags) countryParam += `&customer_tags=${encodeURIComponent(window.cfpCustomerTags)}`;
       const productsPromise = fetchSearchJSON(
-        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}&suggestionLimit=${CONFIG.suggestionLimit ?? 6}${countryParam}${isFullSearch()&&collectionHandle?'&collection='+encodeURIComponent(collectionHandle):''}`
+        `${CONFIG.apiUrl}?shop=${shopDomain}&isSearch=true&searchType=instant&q=${encodeURIComponent(query)}&limit=${CONFIG.productLimit}&suggestionLimit=${CONFIG.suggestionLimit ?? 6}${countryParam}`
       );
 
       // 2. Fetch collections from Shopify Predictive Search API in background
@@ -1334,7 +1238,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // 4. Update UI with fresh data if user hasn't changed query
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value.trim().toLowerCase() : "";
-      if (currentQuery === trimmedQuery && version===fullSearchVersion) {
+      if (currentQuery === trimmedQuery) {
         const searchId = window.CfpAnalytics?.newSearchId?.();
         if (searchId) {
           window.CfpAnalytics?.track('autocomplete_impression', { search_id: searchId });
@@ -1372,36 +1276,33 @@ document.addEventListener("DOMContentLoaded", function () {
            if (container) container.style.display = "none";
         }
         await renderProducts(productsData, query, false, productsData ? productsData.contextualPricingApplied : false);
-        if(version!==fullSearchVersion||mainInput.value.trim().toLowerCase()!==trimmedQuery)return;
         renderLoading(false);
-        if(isFullSearch()&&!collectionHandle)scheduleFullCategories(query,Number.isSafeInteger(productsData.matchCount)?productsData.matchCount:0);
         const viewAll = document.getElementById('cfp-view-all-results');
         if (viewAll) {
           const count = Number.isSafeInteger(productsData?.matchCount) ? productsData.matchCount : productsData?.totalCount;
           viewAll.hidden = !productsData?.products?.length;
           if (!viewAll.hidden) {
             viewAll.href = window.cfpSearchResultUrl?.(query) || `/search?q=${encodeURIComponent(query)}`;
-            if(isFullSearch()&&collectionHandle){const url=new URL(viewAll.href,location.origin);const collection=fullNavigation.collections.find(item=>item.handle===collectionHandle);if(collection)url.searchParams.set('collections',collection.title);viewAll.href=url.href;}
             viewAll.textContent = Number.isSafeInteger(count) && count >= productsData.products.length
               ? `View all ${count.toLocaleString()} results` : 'View all results';
           }
         }
       }
       const [collectionsData,pagesData] = await Promise.all([collectionsPromise,pagesPromise]);
-      if (mainInput.value.trim().toLowerCase() === trimmedQuery && version===fullSearchVersion) {
+      if (mainInput.value.trim().toLowerCase() === trimmedQuery) {
         renderCollections(collectionsData, query);
         renderPages(pagesData,query);
       }
 
     } catch (error) {
       console.error("Instant Search Error:", error);
-      if (mainInput.value.trim().toLowerCase() === trimmedQuery && version===fullSearchVersion) {
+      if (mainInput.value.trim().toLowerCase() === trimmedQuery) {
         const viewAll = document.getElementById('cfp-view-all-results');
         if (viewAll) viewAll.hidden = true;
         renderSearchError();
       }
     } finally {
-      if (mainInput.value.trim().toLowerCase() === trimmedQuery && version===fullSearchVersion) renderLoading(false);
+      if (mainInput.value.trim().toLowerCase() === trimmedQuery) renderLoading(false);
     }
   }
 
@@ -1469,38 +1370,44 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (titleElement && (window.cfpSearchSettings?.instantLayout === 'compact' || titleElement.textContent === 'Categories')) titleElement.textContent = 'Collections';
 
-    const root=window.Shopify?.routes?.root||'/',missing=[];
-    list.innerHTML=collections.slice(0,CONFIG.collectionLimit??5).flatMap(collection=>{
-      try{
-        const url=new URL(collection.url||root+'collections/'+encodeURIComponent(collection.handle),location.origin);
-        if(url.origin!==location.origin||!url.pathname.includes('/collections/'))return [];
-        const handle=decodeURIComponent(url.pathname.split('/collections/')[1].split('/')[0]);
-        const image=collectionThumbnail(collection.featured_image||collection.image||collection.images?.[0]);
-        if(!image)missing.push(handle);
-        return `<li><a class="cfp-full-collection-link" data-handle="${instantEscapeHtml(handle)}" href="${instantEscapeHtml(url.pathname+url.search)}"><span class="cfp-full-collection-image">${image?`<img src="${instantEscapeHtml(image)}" alt="" width="48" height="58" loading="lazy">`:''}</span><span>${highlightSearchText(collection.title,query)}</span><span class="cfp-full-collection-arrow" aria-hidden="true">›</span></a></li>`;
-      }catch{return [];}
-    }).join('');
-    if(titleElement){titleElement.textContent='Collections';titleElement.style.display=list.children.length?'block':'none';}
-    const links=[...list.querySelectorAll('.cfp-full-collection-link')];
-    links.forEach(link=>link.querySelector('img')?.addEventListener('error',event=>event.currentTarget.remove(),{once:true}));
-    if(isFullSearch()&&missing.length){
-      const endpoint=CONFIG.apiUrl.replace(/\/search(?:\?.*)?$/,'/search-navigation');
-      fetchSearchJSON(`${endpoint}?shop=${encodeURIComponent(shopDomain)}&handles=${encodeURIComponent(missing.slice(0,8).join(','))}`).then(data=>{
-        if(!isFullSearch())return;
-        for(const collection of data.collections||[]){
-          const image=collectionThumbnail(collection.image);if(!image)continue;
-          const link=links.find(link=>link.dataset.handle===collection.handle);
-          if(!link?.isConnected||link.querySelector('img'))continue;
-          const img=document.createElement('img');img.src=image;img.alt='';img.width=48;img.height=58;img.loading='lazy';img.addEventListener('error',()=>img.remove(),{once:true});link.querySelector('.cfp-full-collection-image').appendChild(img);
-        }
-      }).catch(()=>{});
+    if (query && query.trim().length > 0) {
+      if (titleElement) titleElement.style.display = "none";
+    } else {
+      if (titleElement) titleElement.style.display = "block";
     }
-  }
 
-  function collectionThumbnail(value){
-    const candidate=typeof value==='string'?value:value?.url||value?.src||'';
-    if(!candidate.trim())return '';
-    try{const url=new URL(candidate,location.origin);return url.protocol==='https:'&&!url.username&&!url.password?url.href:'';}catch{return '';}
+    if (collections.length === 0 && (!query || query.trim().length === 0)) {
+      list.innerHTML = `<li style="color: #64748b; font-size: 14px;">No collections found.</li>`;
+      return;
+    }
+
+    let html = "";
+
+    // If there is a query, show the exact search term at the top
+    if (query && query.trim().length > 0) {
+      html += `
+        <li>
+          <a href="${window.cfpSearchResultUrl?.(query)||'/search?q='+encodeURIComponent(query)}" style="font-weight: 700; color: #000;">
+            ${highlightSearchText(query, '')}
+          </a>
+        </li>
+      `;
+    }
+
+    collections.slice(0, CONFIG.collectionLimit ?? 5).forEach((c) => {
+      const collectionUrl = c.url || `/collections/${c.handle}`;
+      const displayTitle = highlightSearchText(c.title, query);
+
+      html += `
+        <li>
+          <a href="${collectionUrl}">
+            ${displayTitle}
+          </a>
+        </li>
+      `;
+    });
+
+    list.innerHTML = html;
   }
 
   let marketRenderVersion = 0;
