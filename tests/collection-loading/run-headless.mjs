@@ -2002,6 +2002,23 @@ try{
       assert.equal(await evaluate("!!document.querySelector('.cfp-breadcrumb-chip')"),enabled,'active attribute breadcrumbs');
     }
   });
+  await test('filter hover counts follow the product count setting across layouts and option styles',async()=>{
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    const productFields=Object.fromEntries(Array.from({length:30},(_,i)=>[String(i+1),{options:[{name:'Color',values:['Blue','Red']},{name:'Size',values:['S','M']}]}]));
+    const filterSettings=[
+      {id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',displayMode:'List',config:{}},
+      {id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',displayMode:'Swatch',config:{swatchConfig:{showLabel:true}}},
+      {id:'size',isEnabled:true,filterType:'option',filterKey:'Size',label:'Size',displayMode:'Box',config:{}},
+      {id:'availability',isEnabled:true,filterType:'availability',label:'Availability',config:{}}
+    ];
+    for(const layout of ['vertical','horizontal','drawer'])for(const enabled of [false,true]){
+      await control({reset:true,hold:false,productCount:30,productFields,filterSettings,globalSettings:{desktopFilterLayout:layout,showProductCount:enabled,showFilterOptionsWithOneItem:true}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25 && !document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      const groups=await evaluate(`['.cfp-checkbox:has(input[name=vendor])','.cfp-color-swatch','.cfp-button-chip','.cfp-checkbox:has(input[name=availability])'].map(selector=>[...document.querySelectorAll(selector)].map(el=>({title:el.title,count:el.querySelector('.cfp-checkbox__count')?.textContent.trim()})))`);
+      for(const [index,group] of groups.entries()){assert.ok(group.length,'missing filter style '+index+' in '+layout);for(const option of group){assert.ok(option.title.trim());assert.equal(/ \(\d+\)$/.test(option.title),enabled,layout+' tooltip '+option.title);if(enabled)assert.ok(option.title.endsWith(' ('+option.count+')'));else assert.equal(option.count,undefined);}}
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+    }
+  });
   await test('selected color breadcrumb shows only the bold color name',async()=>{
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
     const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
