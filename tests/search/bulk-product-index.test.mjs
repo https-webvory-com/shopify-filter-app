@@ -14,6 +14,15 @@ const rows = [one,
   { __parentId: one.id, url: 'https://cdn.shopify.com/image.jpg' }, two];
 const fetcher = async () => new Response(rows.map(row => JSON.stringify(row)).join('\n'));
 
+test('unavailable bulk downloads request a fresh export while temporary server failures retain the checkpoint',async()=>{
+ for(const status of [403,404,410,503])await assert.rejects(streamBulkProductIndex({url:'https://storage.googleapis.com/catalog',count:2,skip:1,onProduct:async()=>{},fetcher:async()=>new Response('',{status})}),error=>error.restartProductScan===([403,404,410].includes(status)));
+});
+
+test('a pruned historical bulk operation can regenerate its export without accepting another operation ID',async()=>{
+ await assert.rejects(bulkProductIndexStatus({graphql:async()=>({json:async()=>({data:{bulkOperation:null}})})},id),error=>error.restartProductScan===true);
+ await assert.rejects(bulkProductIndexStatus({graphql:async()=>({json:async()=>({data:{bulkOperation:{id:'gid://shopify/BulkOperation/999'}}})})},id),error=>error.restartProductScan===false);
+});
+
 test('bulk index query covers complete child connections and uses grouped JSONL', async () => {
   assert.equal((BULK_PRODUCT_QUERY.match(/edges\s*\{/g) || []).length, 5);
   let variables;

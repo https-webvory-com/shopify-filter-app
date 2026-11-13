@@ -54,7 +54,7 @@ export async function bulkProductIndexStatus(admin, id) {
   const data = await graphql(admin, `query BulkProductIndexStatus($id: ID!) {
     bulkOperation(id: $id) { id status url errorCode rootObjectCount objectCount }
   }`, { id });
-  if (data.bulkOperation?.id !== id) throw Error('Bulk product operation is unavailable');
+  if (data.bulkOperation?.id !== id) throw Object.assign(Error('Bulk product operation is unavailable'),{restartProductScan:data.bulkOperation==null});
   const operation = data.bulkOperation;
   if (['CREATED', 'RUNNING'].includes(operation.status)) return { status: 'pending' };
   if (operation.status !== 'COMPLETED') throw Error(`Bulk product operation ${operation.status || 'failed'}`);
@@ -85,7 +85,8 @@ export async function streamBulkProductIndex({ url, count, objectCount, onProduc
   let response;
   try { response = await fetcher(url, { signal: controller.signal }); }
   finally { clearTimeout(headerTimer); }
-  if (!response.ok || !response.body) throw Error('Could not download bulk product index');
+  if (!response.ok || !response.body) throw Object.assign(Error('Could not download bulk product index'),
+    {restartProductScan:[403,404,410].includes(response.status)});
   const input = Readable.fromWeb(response.body);
   // An idle timeout aborts the body after the caller has stopped awaiting the
   // next line. Keep that expected late stream error from escaping the worker.
