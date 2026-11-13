@@ -942,7 +942,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         let data = null;
         // Filters do not depend on the card response. Start their canonical
         // read now so a slow product request cannot delay both serially.
-        const searchFacetsRead = queryParams.get('responseProfile') === 'search-fast-cards-v1'
+        const searchFacetsRead = queryParams.get('responseProfile') === 'search-fast-cards-v1' && searchTerms.trim()
           ? (() => {
             const request = new URL(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
             request.searchParams.delete('responseProfile');
