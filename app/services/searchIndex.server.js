@@ -102,12 +102,12 @@ export async function getSearchIndexContext(shop){
  if(!validShop(shop))return {uid:'products',settings:null,custom:false};
  const revision=await redis.get(revisionKey(shop))||'0';
  return getCached('searchIndexContext:'+shop+':'+revision,async()=>{
-  const row=await prisma.searchSetting.findUnique({where:{shop}});if(!row)return {uid:'products',settings:null,custom:false};
+  const row=await prisma.searchSetting.findUnique({where:{shop}});if(!row)return {uid:'products',settings:null,custom:false,layout:'fullscreen'};
   const desired=validateSearchSettings(row.config),active=stateOf(row).active;
   const synonymRules=await prisma.synonym.findMany({where:{shop,isActive:true},select:{word:true,synonyms:true}});
   // A partial build never replaces a complete serving index.
-  if(active?.uid&&active.config){const prepared=validateSearchSettings(active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},custom:true,revision,synonymRules};}
-  return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,custom:false,revision,synonymRules};
+  if(active?.uid&&active.config){const prepared=validateSearchSettings(active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},layout:desired.instantLayout,custom:true,revision,synonymRules};}
+  return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,layout:desired.instantLayout,custom:false,revision,synonymRules};
  },15);
 }
 export function searchQueryShop(query){

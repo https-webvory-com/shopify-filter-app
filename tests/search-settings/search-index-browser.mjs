@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+import {createEditorFixture} from './editor-fixture.mjs';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE?pathToFileURL(process.env.PLAYWRIGHT_MODULE).href:'playwright');
+const fixture=await createEditorFixture(),browser=await chromium.launch({channel:'chrome',headless:true}),page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];
+page.on('pageerror',error=>errors.push(error.message));
+try{
+  await page.goto(fixture.origin+'/app/search/settings');await page.getByRole('tab',{name:'Search index',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Search index settings',exact:true});await panel.waitFor();
+  await panel.getByRole('spinbutton',{name:'Product title priority',exact:true}).fill('0.8');
+  await panel.getByRole('checkbox',{name:'Product title suggestions',exact:true}).uncheck();
+  await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Product title settings',exact:true});await dialog.waitFor();
+  await dialog.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');
+  await dialog.getByRole('button',{name:'Add display transformations rule'}).click();
+  await dialog.getByRole('button',{name:'Add display transformations rule'}).click();
+  await dialog.getByRole('combobox',{name:'Display transformations rule 2',exact:true}).selectOption('remove-prefix');
+  await dialog.getByRole('textbox',{name:'Text to remove',exact:true}).fill('SALE - ');
+  await dialog.getByRole('button',{name:'Add search-only transformations rule'}).click();
+  await dialog.getByRole('combobox',{name:'Search-only transformations rule 1',exact:true}).selectOption('uppercase');
+  await dialog.getByRole('textbox',{name:'Try a sample value',exact:true}).fill('  SALE - Satin Dress|Evening  ');
+  assert.deepEqual(await dialog.locator('.six-preview-list li').allTextContents(),['SATIN DRESS','EVENING']);
+  await dialog.screenshot({path:'scratch/search-index-advanced-desktop.png'});
+  await dialog.getByRole('button',{name:'Apply field settings',exact:true}).click();
+  await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();await dialog.getByRole('textbox',{name:'Split values by',exact:true}).fill(',');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();assert.equal(await dialog.getByRole('textbox',{name:'Split values by',exact:true}).inputValue(),'|');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await panel.getByRole('button',{name:'Add search field'}).click();await panel.getByRole('combobox',{name:'New field type',exact:true}).selectOption('productMetafield');await panel.getByRole('textbox',{name:'New field name',exact:true}).fill('custom.occasion');await panel.getByLabel('Label (optional)',{exact:true}).fill('Occasion');await panel.getByRole('button',{name:'Add field',exact:true}).click();
+  await panel.getByRole('button',{name:'Configure Occasion',exact:true}).click();const custom=page.getByRole('dialog',{name:'Occasion settings',exact:true});await custom.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');assert.deepEqual(await custom.locator('.six-preview-list li').allTextContents(),['Prom','Wedding','Evening']);await custom.getByRole('button',{name:'Apply field settings',exact:true}).click();
+  await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.getByText('Search settings saved.',{exact:true}).waitFor();
+  assert.equal(fixture.state.settings.fields[0].weight,.8);assert.equal(fixture.state.settings.fields[0].suggest,false);assert.equal(fixture.state.settings.fields[0].delimiter,'|');assert.equal(fixture.state.settings.fields.at(-1).key,'productMetafield:custom.occasion');
+  await page.reload();await page.getByRole('tab',{name:'Search index',exact:true}).click();assert.equal(await panel.getByRole('spinbutton',{name:'Product title priority',exact:true}).inputValue(),'0.8');
+  await panel.getByRole('textbox',{name:'Find search fields',exact:true}).fill('SKU');assert.equal(await panel.locator('.six-field-name').count(),1);await panel.getByRole('button',{name:/Configure Variants/}).click();const sku=page.getByRole('dialog');await sku.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');await sku.getByRole('checkbox',{name:'Treat values as numbers',exact:true}).check();await sku.getByRole('textbox',{name:'Try a sample value',exact:true}).fill('0012|not-a-number|13');assert.deepEqual(await sku.locator('.six-preview-list li').allTextContents(),['12','13']);await sku.getByRole('button',{name:'Cancel',exact:true}).click();
+  await panel.getByRole('textbox',{name:'Find search fields',exact:true}).fill('');await panel.screenshot({path:'scratch/search-index-page-desktop.png'});
+  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();await dialog.waitFor();assert.ok(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth));await dialog.screenshot({path:'scratch/search-index-advanced-mobile.png'});await page.keyboard.press('Escape');assert.equal(await page.locator('dialog[open]').count(),0);
+  assert.deepEqual(errors,[]);console.log('PASS Search Index UI: priorities, field scopes, advanced draft/apply/cancel, ordered transformations, exact split/numeric preview, custom fields, save/reload, field search, mobile/Escape, no browser errors');
+}finally{await browser.close();await fixture.close();}

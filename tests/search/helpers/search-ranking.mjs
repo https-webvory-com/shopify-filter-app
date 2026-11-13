@@ -22,6 +22,7 @@ import * as searchConfiguration from '../../../app/utils/searchConfiguration.js'
 import * as marketPricingIndex from '../../../app/utils/marketPricingIndex.js';
 import * as variantSize from '../../../app/utils/variantSize.js';
 import * as searchPinnedIntent from '../../../app/utils/searchPinnedIntent.js';
+import * as emptySearchPins from '../../../app/utils/emptySearchPins.js';
 import * as queryIntent from '../../../app/utils/queryIntent.js';
 import * as filterWidths from '../../../app/utils/filterWidths.js';
 
@@ -36,10 +37,13 @@ export async function loadModule(file, mocks) {
     if(name==='node:crypto')return {createHash};
     if(name==='../utils/searchConfiguration.js')return searchConfiguration;
     if(name==='../components/EmptySearchProducts')return mocks[name]||{default:()=>null};
-    if(name==='../services/searchCollectionPicker.server.js')return mocks[name]||{listSearchCollections:async()=>({query:'',after:'',collections:[],hasMore:false,nextCursor:''})};
+    if(name==='../components/SearchIndexSettings')return mocks[name]||{default:()=>null};
+    if(name==='../services/searchCollectionPicker.server.js')return mocks[name]||{listSearchCollections:async()=>({query:'',after:'',collections:[],hasMore:false,nextCursor:''}),getEmptySearchProductState:async(_shop,products)=>({products,stockOnly:false}),listSearchProducts:async()=>({query:'',products:[]}),validateSelectedSearchProducts:async(_shop,products)=>products};
+    if(name==='../services/emptySearchPins.server.js')return mocks[name]||{isEmptySearchPin:rule=>!rule?.applyToAll&&rule?.searchQueries?.length===1&&rule.searchQueries[0]==='',legacyEmptySearchProducts:async()=>[],saveEmptySearchPin:async()=>null};
     if(name==='../utils/marketPricingIndex.js')return marketPricingIndex;
     if(name==='../utils/variantSize.js')return variantSize;
     if(name==='../utils/searchPinnedIntent.js')return searchPinnedIntent;
+    if(name==='../utils/emptySearchPins.js')return emptySearchPins;
     if(name==='../utils/queryIntent.js')return queryIntent;
     if(!(name in mocks)&&(name==='./searchIndex.server.js'||name==='../services/searchIndex.server.js'))return {prepareConfiguredSearchQueries:async queries=>queries.map(({_cfpSearchSurface,...q})=>({...q,indexUid:q.indexUid||'products'})),getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false}),scheduleSearchIndex:async()=>{},resetSearchIndexContext:async()=>{},retireSearchIndexes:async()=>{},syncConfiguredSearchSynonyms:async()=>{},getSearchIndexStatus:async()=>({phase:'default'}),configuredSuggestions:async()=>null};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;

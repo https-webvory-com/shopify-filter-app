@@ -31,18 +31,18 @@ test('picker and saved selections require active products from the authenticated
   assert.equal(selected.stockOnly,true);assert.equal(selected.products[0].available,false);assert.equal(selected.products[1].missing,true);
 });
 
-async function routeFixture({pins=[pin(2),pin(1)],stockOnly=false,layout='fullscreen'}={}){
+async function routeFixture({pins=[pin(2),pin(1)],stockOnly=false,layout='fullscreen',rule=null,building=false}={}){
   const queries=[];
   const docs=[{id:'1',shop,status:'ACTIVE',available:true,title:'First',variantPrices:[]},{id:'2',shop,status:'ACTIVE',available:false,title:'Second',variantPrices:[]},{id:'3',shop,status:'ACTIVE',available:true,title:'Automatic',variantPrices:[]},{id:'4',shop:'other.myshopify.com',status:'ACTIVE',available:true,title:'Other shop',variantPrices:[]}];
   const route=await loadModule('app/routes/api.search.jsx',{
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{default:{}},
     '../utils/searchColor.js':color,
     '../services/queryParser.server.js':{parseQuery:async()=>null},'../utils/spellingCorrection.js':{spellingCorrection:()=>null},'../utils/searchSuggestions.js':{buildSearchSuggestions:()=>[]},
-    '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null},
+    '../services/merchandising.server':{getActivePinningRuleForSearch:async()=>rule,getActiveRuleForSearch:async()=>null},
     '../services/searchRanking.server.js':{},'../services/meiliClient.server':{default:{}},'../services/filterSettings.server':{},
     '../services/shopCache.server':{getCached:async(key,read)=>key.startsWith('globalSettings')?{showOnlyInStock:stockOnly}:read()},
     '../services/rateLimiter.server':{rateLimit:async()=>true},'../services/suggestionBlacklist.server.js':{getActiveSuggestionBlacklist:async()=>[]},
-    '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:{...schema.DEFAULT_SEARCH_SETTINGS,instantLayout:layout,emptySearchProducts:pins}}),configuredSuggestions:async()=>[]},
+    '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',layout,settings:building?null:{...schema.DEFAULT_SEARCH_SETTINGS,instantLayout:layout,emptySearchProducts:pins}}),configuredSuggestions:async()=>[]},
     '../services/semanticSearch.server':{semanticSearch:async(query,options)=>{queries.push({query,options});const filter=options.filter.find(f=>f.startsWith('id IN '));const ids=filter?JSON.parse(filter.slice(6)):null;return {hits:docs.filter(doc=>doc.shop===shop&&doc.status==='ACTIVE'&&(!stockOnly||doc.available)&&(!ids||ids.includes(doc.id)))};}},
   });
   return {queries,read:async(q='',limit=6)=>{
@@ -65,4 +65,11 @@ test('typed searches and automatic defaults are unaffected; unavailable pins res
   const compact=await routeFixture({layout:'compact'});const compactResult=await compact.read();assert.equal(compactResult.products.length,3);assert.equal(compactResult.pinnedCount,0);assert.ok(!compact.queries[0].options.filter.some(f=>f.startsWith('id IN ')));
   const stock=await routeFixture({stockOnly:true});assert.deepEqual((await stock.read()).products.map(p=>p.id),[gid(1)]);assert.ok(stock.queries[0].options.filter.includes('available = true'));
   const missing=await routeFixture({pins:[pin(99)]});assert.deepEqual((await missing.read()).products,[]);
+});
+
+test('native empty-query pins replace the legacy selection only on Full screen instant search',async()=>{
+  const rule={applyToAll:false,searchQueries:[''],products:[pin(2),pin(1)]};
+  const full=await routeFixture({pins:[pin(3)],rule});assert.deepEqual((await full.read()).products.map(p=>p.id),[gid(2),gid(1)]);
+  const compact=await routeFixture({layout:'compact',rule});assert.equal((await compact.read()).pinnedCount,0);
+  const preparing=await routeFixture({layout:'compact',rule,building:true});assert.equal((await preparing.read()).pinnedCount,0);
 });

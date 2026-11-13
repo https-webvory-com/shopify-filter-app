@@ -21,16 +21,20 @@ import PinProductImage from "../components/merchandising/PinProductImage";
 import { searchPickerProducts } from "../services/searchPicker.server.js";
 import { reorderSearchPins } from "../utils/reorderSearchPins.js";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import EmptySearchProducts from '../components/EmptySearchProducts';
+import {listSearchProducts,getEmptySearchProductState} from '../services/searchCollectionPicker.server.js';
+import {legacyEmptySearchProducts,saveEmptySearchPin} from '../services/emptySearchPins.server.js';
+import {isEmptySearchPin} from '../utils/emptySearchPins.js';
 
 export function parseSearchPinTarget(raw, applyToAll = false) {
   if (applyToAll) return [];
   let terms;
   try { terms = typeof raw === 'string' ? JSON.parse(raw) : raw; }
   catch { throw new Error('Enter exactly one search term.'); }
-  if (!Array.isArray(terms) || terms.length !== 1 || typeof terms[0] !== 'string' || !terms[0].trim()) {
+  if (!Array.isArray(terms) || terms.length>1 || (terms.length===1&&typeof terms[0] !== 'string')) {
     throw new Error('Enter exactly one search term.');
   }
-  return [terms[0].trim()];
+  return [(terms[0]||'').trim()];
 }
 
 export const action = async ({ request, params }) => {
@@ -120,9 +124,16 @@ export const action = async ({ request, params }) => {
     try {
       searchQueries = parseSearchPinTarget(searchQueriesJSON, applyToAll);
       products = JSON.parse(productsJSON);
-      if (!Array.isArray(products) || !products.length) throw new Error('Please pin at least one product.');
+      if (!Array.isArray(products) || (!products.length&&!(searchQueries.length===1&&searchQueries[0]===''))) throw new Error('Please pin at least one product.');
     } catch (error) {
       return Response.json({ error: error.message === 'Enter exactly one search term.' ? error.message : 'Please pin at least one product.' }, { status: 400 });
+    }
+
+    if(!applyToAll&&searchQueries[0]===''){
+      try{await saveEmptySearchPin(shop,{id:ruleId,products,enabled:formData.get('applyToInstantSearch')!=='false'});}
+      catch(error){return Response.json({error:error.message?.includes('empty search pin already exists')?error.message:'Could not save empty-search pins. Check the selected products and retry.'},{status:400});}
+      await invalidateShop(shop);
+      return redirect('/app/search/pinning');
     }
 
     const data = {
@@ -157,6 +168,10 @@ export const loader = async ({ request, params }) => {
   const ruleId = params.id;
 
   const url = new URL(request.url);
+  if(url.searchParams.get('productPicker')==='1'){
+    const query=url.searchParams.get('q')||'';
+    try{return await listSearchProducts(shop,{query});}catch{return {query,products:[],productPickerError:'Could not load products. Please retry.'};}
+  }
   const searchSearchQueries = url.searchParams.get("searchQueries");
     
   let defaultParams = null;
@@ -178,20 +193,29 @@ export const loader = async ({ request, params }) => {
     });
   }
 
-  let pinImageFallbacks = {};
-  if (rule) {
+  let pinImageFallbacks = {},stockOnly=false;
+  const emptyTarget=rule?isEmptySearchPin(rule):ruleId==='new'&&!defaultParams?.applyToAll&&!defaultParams?.searchQueries?.length;
+  if(emptyTarget){
+    if(!rule)rule=await prisma.pinnedProductRule.findFirst({where:{shop,ruleType:'search',applyToAll:false,searchQueries:{has:''}},orderBy:{createdAt:'desc'}});
+    let products=rule?.products||await legacyEmptySearchProducts(shop);
+    if(typeof products==='string')try{products=JSON.parse(products);}catch{products=[];}
+    const state=await getEmptySearchProductState(shop,Array.isArray(products)?products:[]);
+    rule={...rule,name:'Empty search pin',searchQueries:[''],applyToAll:false,applyToSearchType:rule?.applyToSearchType||'instant',products:state.products};
+    stockOnly=state.stockOnly;
+  }
+  if (rule&&!emptyTarget) {
     const products = await availablePins(prisma, shop, rule.products);
     pinImageFallbacks = await pinProductImageFallbacks(prisma, shop, products);
     rule = { ...rule, products };
   }
 
-  return { rule, defaultParams, pinImageFallbacks };
+  return { rule, defaultParams, pinImageFallbacks,stockOnly };
 };
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);
 
 export default function PinningEditor() {
-  const { rule, defaultParams, pinImageFallbacks } = useLoaderData();
+  const { rule, defaultParams, pinImageFallbacks,stockOnly } = useLoaderData();
   const actionData = useActionData();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -223,6 +247,7 @@ export default function PinningEditor() {
   const searchQueries = searchTerm.trim() ? [searchTerm.trim()] : [];
   const initialApplyToAll = rule?.applyToAll ?? defaultParams?.applyToAll ?? false;
   const [applyToAll, setApplyToAll] = useState(initialApplyToAll);
+  const emptySearch=!applyToAll&&!searchTerm.trim();
   const targetQueryKey = JSON.stringify(applyToAll ? [] : searchQueries);
   const nonMatchingPinCount = fetcher.data?.targetQueryKey === targetQueryKey
     ? fetcher.data.nonMatchingPinnedIds?.length || 0 : 0;
@@ -539,12 +564,7 @@ export default function PinningEditor() {
   };
 
   const handleSave = () => {
-    if (!applyToAll && searchQueries.length === 0) {
-      shopify.toast.show("Please enter one search term", { isError: true });
-      return;
-    }
-
-    if (products.length === 0) {
+    if (products.length === 0&&!emptySearch) {
       shopify.toast.show("Please pin at least one product", { isError: true });
       return;
     }
@@ -553,11 +573,12 @@ export default function PinningEditor() {
     if (applyToInstantSearch && !applyToSearchResults) applyToSearchType = "instant";
     if (!applyToInstantSearch && applyToSearchResults) applyToSearchType = "page";
     if (!applyToInstantSearch && !applyToSearchResults) applyToSearchType = "none";
+    if(emptySearch)applyToSearchType=applyToInstantSearch?'instant':'none';
 
     const formData = new FormData();
     formData.append("intent", "save");
     formData.append("applyToAll", String(applyToAll));
-    formData.append("name", name);
+    formData.append("name", emptySearch?'Empty search pin':name);
     formData.append("searchQueries", JSON.stringify(searchQueries));
     formData.append("applyToSearchType", applyToSearchType);
     formData.append("applyToInstantSearch", applyToInstantSearch.toString());
@@ -568,7 +589,7 @@ export default function PinningEditor() {
   };
 
   return (
-    <s-page heading={name} fullWidth>
+    <s-page heading={emptySearch?'Empty search pin':name} fullWidth>
       <style>{`
         s-page {
           max-width: none !important;
@@ -597,7 +618,7 @@ export default function PinningEditor() {
           visibility: visible;
         }
       `}</style>
-      <ui-title-bar title={name}>
+      <ui-title-bar title={emptySearch?'Empty search pin':name}>
         <button
           variant="breadcrumb"
           onClick={() => navigate("/app/search/pinning")}
@@ -660,6 +681,8 @@ export default function PinningEditor() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexWrap: "wrap",
+            gap: "16px",
             background: "#fff",
             padding: "16px 24px",
             borderRadius: "8px",
@@ -667,10 +690,12 @@ export default function PinningEditor() {
             marginBottom: "20px",
           }}
         >
-          <div>
+          <div style={{minWidth:0,maxWidth:'100%'}}>
             <input
               type="text"
-              value={name}
+              value={emptySearch?'Empty search pin':name}
+              readOnly={emptySearch}
+              aria-label="Pin name"
               onChange={(e) => setName(e.target.value)}
               style={{
                 fontSize: "20px",
@@ -680,6 +705,8 @@ export default function PinningEditor() {
                 background: "transparent",
                 outline: "none",
                 width: "300px",
+                maxWidth: "100%",
+                boxSizing: "border-box",
               }}
             />
           </div>
@@ -719,7 +746,10 @@ export default function PinningEditor() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "20px" }}>
+        {emptySearch?<section style={{display:'grid',gap:18}} aria-label="Empty search query pinning">
+          <div style={{background:'#fff',padding:20,borderRadius:12,border:'1px solid #e8e1f1'}}><label htmlFor="empty-pin-term" style={{display:'grid',gap:8,fontSize:13,fontWeight:600}}>Search term<input id="empty-pin-term" value={searchTerm} placeholder="Leave blank for empty search" onChange={event=>setSearchTerm(event.target.value)} style={{padding:11,border:'1px solid #ded3e9',borderRadius:8}}/></label><p style={{fontSize:12,color:'#877892'}}>No term means these products appear before typing in Full screen UI. Enter a term to create a keyword pin instead.</p><label style={{fontSize:12}}><input type="checkbox" checked={applyToInstantSearch} onChange={event=>setApplyToInstantSearch(event.target.checked)}/> Apply to Full screen instant search</label>{actionData?.error&&<p role="alert">{actionData.error}</p>}</div>
+          <EmptySearchProducts value={products} onChange={setProducts} disabled={isSaving} stockOnly={stockOnly}/>
+        </section>:<div style={{ display: "flex", gap: "20px" }}>
           {/* Left Pane: Search */}
           <div
             style={{
@@ -1283,7 +1313,7 @@ export default function PinningEditor() {
               )}
             </div>
           </div>
-        </div>
+        </div>}
       </div>
       {isUnsavedModalOpen && (
         <div

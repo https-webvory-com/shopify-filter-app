@@ -9,6 +9,7 @@ import { availablePins } from "../../app/utils/availablePins.server.js";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
 import { pinProductSearchFilter, pinProductTagSuggestions } from "../../app/utils/pinProductSearch.server.js";
 import { catalogImageUrls } from "../../app/utils/pinProductImages.js";
+import * as emptySearchPins from '../../app/utils/emptySearchPins.js';
 import {
   searchPinScopeFromCsv,
   searchPinScopeToCsv,
@@ -61,6 +62,9 @@ async function mockedModule(file, mocks) {
     URL,
     console,
     require(name) {
+      if(name==='../utils/emptySearchPins.js')return emptySearchPins;
+      if(name==='../services/emptySearchPins.server.js')return {legacyEmptySearchProducts:async()=>[],saveEmptySearchPin:async()=>null};
+      if(name==='../services/searchCollectionPicker.server.js')return {getEmptySearchProductState:async(_shop,products)=>({products,stockOnly:false})};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === '../utils/csvImportReport.js') return csvImportReport;
       if (name === "../services/searchPicker.server.js") return {};

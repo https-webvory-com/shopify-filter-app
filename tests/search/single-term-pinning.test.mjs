@@ -13,6 +13,7 @@ async function fixture(initial = { id: 'existing', shop: 'fixture.myshopify.com'
     findMany: async ({ where }) => saved.shop === where.shop && saved.ruleType === where.ruleType && saved.status === where.status ? [saved] : [],
   } };
   const route = await loadModule('app/routes/app.search.pinning.$id.jsx', {
+    '../services/emptySearchPins.server.js':{legacyEmptySearchProducts:async()=>[],saveEmptySearchPin:async(shop,{products,enabled})=>{assert.equal(shop,'fixture.myshopify.com');writes.push({type:'empty',products});saved={...saved,name:'Empty search query',searchQueries:[''],applyToAll:false,applyToSearchType:enabled?'instant':'none',products};}},
     '../services/shopCache.server': { invalidateShop: async () => {} },
     '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
     '../db.server': { default: prisma }, '../utils/availablePins.server.js': { availablePins: async (_db, _shop, products) => products },
@@ -50,12 +51,23 @@ test('after editing, pins match the replacement term and stop matching the previ
     assert.equal((await f.service.getActivePinningRuleForSearch('fixture.myshopify.com', ' GREEN DRESSES ', type)).id, 'existing');
   }
 });
-test('multiple, empty, malformed or non-string terms are rejected before any database write', async () => {
-  for (const value of ['["blue","green"]', '["blue","blue"]', '[]', '[""]', '["   "]', 'null', '{}', '"blue"', '[null]', '[1]', '{broken']) {
+test('multiple, malformed or non-string terms are rejected before any database write', async () => {
+  for (const value of ['["blue","green"]', '["blue","blue"]', 'null', '{}', '"blue"', '[null]', '[1]', '{broken']) {
     const f = await fixture(); const before = JSON.stringify(f.saved());
     const result = await f.submit(value); assert.equal(result.status, 400, value);
     assert.equal((await result.json()).error, 'Enter exactly one search term.'); assert.equal(f.writes.length, 0);
     assert.equal(JSON.stringify(f.saved()), before);
+  }
+});
+
+test('blank and whitespace-only terms become empty-query pins and do not match keyword searches or search pages',async()=>{
+  for(const value of ['[]','[""]','["   "]']){
+    const f=await fixture({id:'existing',shop:'fixture.myshopify.com',ruleType:'search',status:true,searchQueries:['blue']});
+    assert.equal((await f.submit(value,{id:'new'})).status,302);
+    assert.deepEqual(Array.from(f.saved().searchQueries),['']);assert.equal(f.saved().applyToAll,false);
+    assert.ok(await f.service.getActivePinningRuleForSearch('fixture.myshopify.com','','instant'));
+    assert.equal(await f.service.getActivePinningRuleForSearch('fixture.myshopify.com','blue','instant'),null);
+    assert.equal(await f.service.getActivePinningRuleForSearch('fixture.myshopify.com','','page'),null);
   }
 });
 test('legacy multi-term rules are read intact and only collapse after an explicit single-term save', async () => {

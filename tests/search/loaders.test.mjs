@@ -8,6 +8,7 @@ import { transform } from "esbuild";
 import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
 import * as marketRuleCountries from "../../app/utils/marketRuleCountries.js";
 import * as merchandisingMarketInvalidation from "../../app/utils/merchandisingMarketInvalidation.js";
+import * as emptySearchPins from '../../app/utils/emptySearchPins.js';
 
 const shop = "fixture.myshopify.com";
 const request = new Request("https://fixture.test/app/search");
@@ -20,6 +21,8 @@ async function loadRoute(file, { authenticate, prisma }) {
     module: { exports: {} }, exports: {}, Response,
     console: { error() {} },
     require(name) {
+      if(name==='../utils/emptySearchPins.js')return emptySearchPins;
+      if(name==='../services/emptySearchPins.server.js')return {legacyEmptySearchProducts:async()=>[]};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
       if (name === '../services/merchandisingImport.server.js') return {};

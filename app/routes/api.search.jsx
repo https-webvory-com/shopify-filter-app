@@ -64,7 +64,12 @@ export const loader = async ({ request }) => {
     let effectiveSort = sortBy || null;
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
-    const emptyPinnedIds=!searchQuery&&searchContext.settings?.instantLayout==='fullscreen'?(searchContext.settings.emptySearchProducts||[]).map(product=>product.id.split('/').pop()):[];
+    const emptyQueryRule=!searchQuery&&!pinningRule?.applyToAll&&pinningRule?.searchQueries?.includes('')?pinningRule:null;
+    let emptyProducts=emptyQueryRule?.products;
+    if(typeof emptyProducts==='string')try{emptyProducts=JSON.parse(emptyProducts);}catch{emptyProducts=[];}
+    const emptySelection=emptyQueryRule?(Array.isArray(emptyProducts)?emptyProducts:[]):(searchContext.settings?.emptySearchProducts||[]);
+    const emptyPinnedIds=!searchQuery&&(searchContext.layout??searchContext.settings?.instantLayout??'fullscreen')==='fullscreen'?emptySelection.map(product=>String(product.id).split('/').pop()):[];
+    const typedPinningRule=searchQuery?pinningRule:null;
     if(emptyPinnedIds.length)limit=emptyPinnedIds.length;
     if(emptyPinnedIds.length)meiliFilters.push('id IN '+JSON.stringify(emptyPinnedIds));
     if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
@@ -152,10 +157,10 @@ export const loader = async ({ request }) => {
       parsedQuery?.skuProductIds, url.searchParams.get('country') || '', url.searchParams.get('locale') || '',
       url.searchParams.get('customer_tags') || '',
     ])).digest('hex')}`;
-    const ranking = !emptyPinnedIds.length && (pinningRule || merchandisingRule)
+    const ranking = !emptyPinnedIds.length && (typedPinningRule || merchandisingRule)
       ? await getCached(rankingKey, async () => rankSearchResults({
         shop, query: cleanSearchQuery, options: { ...meiliSearchParams, sortBy: effectiveSort },
-        rule: merchandisingRule, pinningRule, parsedQuery, globalSettings, limit,
+        rule: merchandisingRule, pinningRule:typedPinningRule, parsedQuery, globalSettings, limit,
         mergedValues: await getCached(`mergedValues:${shop}`, () => prisma.mergedValue.findMany({ where: { shop, isActive: true } })),
       }), 60, { maxBytes: 2_000_000 }) : null;
     const directCacheKey = `searchInstant:${shop}:${createHash('sha256').update(JSON.stringify([

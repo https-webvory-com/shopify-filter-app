@@ -6,9 +6,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import SearchConfigurationLayout from '../components/SearchConfigurationLayout';
 import CompactSearchSettings from '../components/CompactSearchSettings';
-import EmptySearchProducts from '../components/EmptySearchProducts';
+import SearchIndexSettings from '../components/SearchIndexSettings';
 import {getSearchIndexStatus} from '../services/searchIndex.server.js';
-import { listSearchCollections, listSearchProducts, validateSelectedSearchProducts, getEmptySearchProductState } from '../services/searchCollectionPicker.server.js';
+import { listSearchCollections, listSearchProducts } from '../services/searchCollectionPicker.server.js';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -24,8 +24,7 @@ export const loader = async ({ request }) => {
     catch { return { query, after, collections: [], hasMore: false, nextCursor: '', collectionPickerError: 'Could not load saved collections. Please retry.' }; }
   }
   const [settings,indexStatus]=await Promise.all([getSearchSettings(session.shop),getSearchIndexStatus(session.shop)]);
-  const selection=settings?.emptySearchProducts.length?await getEmptySearchProductState(session.shop,settings.emptySearchProducts):null;
-  return {settings:settings&&selection?{...settings,emptySearchProducts:selection.products}:settings,indexStatus,emptySearchStockOnly:selection?.stockOnly===true};
+  return {settings,indexStatus};
 };
 
 export const action = async ({ request }) => {
@@ -39,11 +38,7 @@ export const action = async ({ request }) => {
   let settings;
   try { settings = validateSearchSettings(JSON.parse(String(form.get('settings') || ''))); }
   catch (error) { return { error: error instanceof SyntaxError ? 'Invalid search settings.' : error.message }; }
-  if(settings.emptySearchProducts.length){
-    try{settings.emptySearchProducts=await validateSelectedSearchProducts(session.shop,settings.emptySearchProducts);}
-    catch(error){return {error:error.message==='One of the selected products is no longer active in this store. Remove it and save again.'?error.message:'Could not verify selected products. Please retry.'};}
-  }
-  try { await saveSearchSettings(session.shop, settings); return { success: true, settings,indexStatus:await getSearchIndexStatus(session.shop) }; }
+  try { const saved=await saveSearchSettings(session.shop, settings,{preserveEmptyPins:true}); return { success: true, settings:saved,indexStatus:await getSearchIndexStatus(session.shop) }; }
   catch { return { error: 'Could not save search settings. Please retry.' }; }
 };
 
@@ -67,8 +62,6 @@ export default function SearchSettings() {
   const [values, setValues] = useState(loaded.settings || DEFAULT_SEARCH_SETTINGS);
   const [manual, setManual] = useState((loaded.settings?.manualSuggestions || []).join('\n'));
   const [tab,setTab]=useState('instant');
-  const [newField,setNewField]=useState('');
-  const [newFieldType,setNewFieldType]=useState('option');
   const [indexStatus,setIndexStatus]=useState(loaded.indexStatus);
   const busy = fetcher.state !== 'idle';
   useEffect(()=>{if(indexFetcher.data?.indexStatus)setIndexStatus(indexFetcher.data.indexStatus);},[indexFetcher.data]);
@@ -91,8 +84,6 @@ export default function SearchSettings() {
   const select=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<select aria-label={label} value={values[key]} disabled={busy} onChange={e=>update(key,e.target.value)} style={fieldStyle}>{SEARCH_ENUM_FIELDS[key].map(value=><option key={value} value={value}>{key==='instantLayout'?({fullscreen:'Full screen UI',compact:'Compact UI'}[value]):value.replaceAll('-',' ')}</option>)}</select></label>;
   const textField=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<input type={key==='fixedImageWidth'?'number':'text'} value={values[key]} disabled={busy} onChange={e=>update(key,key==='fixedImageWidth'?Number(e.target.value):e.target.value)} style={fieldStyle}/></label>;
   const listField=(key,label,help)=> <label style={{display:'grid',gap:6}}>{label}<textarea rows={3} value={(values[key]||[]).join('\n')} disabled={busy} onChange={e=>update(key,e.target.value.split('\n'))} style={fieldStyle}/><small>{help||'One entry per line.'}</small></label>;
-  const updateField=(index,patch)=>setValues(v=>({...v,fields:v.fields.map((field,i)=>i===index?{...field,...patch}:field)}));
-  const transformEditor=(index,key)=> <div style={{display:'grid',gap:8}}><strong>{key==='transforms'?'Transform displayed field values':'Transform values used for searching'}</strong>{values.fields[index][key].map((rule,i)=><div key={i} style={{display:'flex',gap:6,flexWrap:'wrap'}}><select aria-label="Transformation" value={rule.type} onChange={e=>updateField(index,{[key]:values.fields[index][key].map((r,j)=>j===i?{type:e.target.value,value:'',replacement:''}:r)})}>{['trim','trim-start','trim-end','lowercase','uppercase','strip-html','remove-prefix','remove-suffix','replace'].map(type=><option key={type}>{type}</option>)}</select>{['remove-prefix','remove-suffix','replace'].includes(rule.type)&&<input aria-label="Text to transform" value={rule.value} onChange={e=>updateField(index,{[key]:values.fields[index][key].map((r,j)=>j===i?{...r,value:e.target.value}:r)})}/>} {rule.type==='replace'&&<input aria-label="Replacement text" value={rule.replacement} onChange={e=>updateField(index,{[key]:values.fields[index][key].map((r,j)=>j===i?{...r,replacement:e.target.value}:r)})}/>}<button type="button" onClick={()=>updateField(index,{[key]:values.fields[index][key].filter((_,j)=>j!==i)})}>Remove</button></div>)}<button type="button" disabled={values.fields[index][key].length>=10} onClick={()=>updateField(index,{[key]:[...values.fields[index][key],{type:'trim'}]})}>Add transformation</button></div>;
   return (
     <s-page heading="Search Settings" full-width="true">
       <ui-title-bar title="Search Settings">
@@ -112,13 +103,7 @@ export default function SearchSettings() {
         {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
         {fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
         {indexStatus&&['queued','building','failed'].includes(indexStatus.phase)&&<p role="status" style={{padding:12,background:indexStatus.phase==='failed'?'#fff4e5':'#eef6ff'}}>{indexStatus.phase==='failed'?indexStatus.error:`Preparing search index: ${indexStatus.processed} of ${indexStatus.total??'…'} products. The previous complete search remains available until preparation finishes.`}</p>}
-        {tab==='index'&&<>
-        <fieldset disabled={busy} className="search-config-card" style={{display:'grid',gap:16,margin:0}}><legend>Searchable fields</legend><p>Choose fields independently for product results and suggestions. Higher weights give fields higher search priority; a weight of zero disables the field. Index changes prepare in the background before becoming active.</p>
-        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr><th>Field</th><th>Weight (0–1)</th><th>Results</th><th>Suggestions</th><th>Advanced</th></tr></thead><tbody>{values.fields.map((row,index)=><tr key={row.key} style={{borderBottom:'1px solid #ddd'}}><td>{row.label}<small style={{display:'block'}}>{row.key}</small></td><td><input type="number" min="0" max="1" step="0.05" value={row.weight} style={{width:80}} aria-label={row.label+' weight'} onChange={e=>updateField(index,{weight:e.target.value===''?'':Number(e.target.value)})}/></td>{['search','suggest'].map(key=><td key={key}><input type="checkbox" checked={row[key]} aria-label={row.label+' '+key} onChange={e=>updateField(index,{[key]:e.target.checked})}/></td>)}<td><details><summary>Settings</summary><div style={{display:'grid',gap:12,padding:12,minWidth:250}}><label>Split values by <input value={row.delimiter} maxLength={10} onChange={e=>updateField(index,{delimiter:e.target.value})}/></label><label><input type="checkbox" checked={row.numeric} onChange={e=>updateField(index,{numeric:e.target.checked})}/> Treat values as numbers</label>{transformEditor(index,'transforms')}{transformEditor(index,'indexTransforms')}<button type="button" onClick={()=>update('fields',values.fields.filter((_,i)=>i!==index))}>Remove field</button></div></details></td></tr>)}</tbody></table></div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><select aria-label="New field type" value={newFieldType} onChange={e=>setNewFieldType(e.target.value)}><option value="option">Product option</option><option value="productMetafield">Product metafield</option><option value="variantMetafield">Variant metafield</option></select><input aria-label="New field name" value={newField} onChange={e=>setNewField(e.target.value)} placeholder={newFieldType==='option'?'Color':'namespace.key'}/><button type="button" onClick={()=>{const key=newFieldType+':'+newField.trim();if(!newField.trim()||values.fields.some(f=>f.key===key))return;update('fields',[...values.fields,{key,label:newField.trim(),weight:.5,search:true,suggest:false,numeric:false,delimiter:'',transforms:[],indexTransforms:[]}]);setNewField('');}}>Add search field</button></div>
-        </fieldset>
-        <fieldset disabled={busy} className="search-config-card" style={{display:'grid',gap:16,margin:0}}><legend>Index and tokenization</legend>{listField('stopwords','Stopwords','Words ignored during text matching, one per line.')}{listField('tokenDelimiters','Token delimiters','One character per line. These always separate words.')}{listField('tentativeDelimiters','Tentative delimiters','One character per line. These separate words when next to whitespace.')}{select('productDateType','Product date used for date sorting')}{['hideUnavailableVariants','omitProductMetafields','omitProductMetaobjects','omitVariantMetafields','omitVariantMetaobjects'].map(field)}</fieldset>
-        </>}
+        {tab==='index'&&<SearchIndexSettings value={values} onChange={setValues} disabled={busy} indexStatus={indexStatus}/>}
         {tab==='instant'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="instant-search-heading">
           <div className="settings-section-title"><h2 id="instant-search-heading">Instant search experience</h2>{field('instantSearchEnabled')}</div>
           <p className="settings-help">Compact UI opens a small search panel at your header. Full screen UI keeps the original wide search experience.</p>
@@ -131,7 +116,6 @@ export default function SearchSettings() {
             <details className="settings-detail"><summary>Compact search behavior</summary><div className="search-config-fields">{['productLimit','suggestionLimit','minChars','showPopularProducts','popularProductLimit'].map(field)}{textField('searchBoxSelector','Custom search box selector')}</div></details>
           </section>}
           {values.instantLayout==='fullscreen'&&<section aria-label="Full screen UI settings" style={{display:'grid',gap:16}}>
-          <EmptySearchProducts value={values.emptySearchProducts} onChange={products=>update('emptySearchProducts',products)} disabled={busy} stockOnly={loaded.emptySearchStockOnly}/>
           <h3 className="settings-subheading">Full screen search suggestions</h3>
           <div className="search-config-fields">{['productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
           <p style={{ margin: 0 }}>A count of zero hides that suggestion section. Recent searches are stored in the customer’s browser.</p>

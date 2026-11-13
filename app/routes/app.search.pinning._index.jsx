@@ -18,6 +18,8 @@ import FilterModal from "../components/merchandising/FilterModal";
 import CustomizeColumnsModal from "../components/merchandising/CustomizeColumnsModal";
 import ImportSearchPinsModal from "../components/merchandising/ImportSearchPinsModal";
 import ExportSearchPinsModal from "../components/merchandising/ExportSearchPinsModal";
+import {legacyEmptySearchProducts} from '../services/emptySearchPins.server.js';
+import {isEmptySearchPin} from '../utils/emptySearchPins.js';
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -84,13 +86,14 @@ export const loader = async ({ request }) => {
     orderBy: { createdAt: "desc" },
   });
 
-  return { pinningRules };
+  const legacyEmptyProducts=pinningRules.some(isEmptySearchPin)?[]:await legacyEmptySearchProducts(shop);
+  return { pinningRules,legacyEmptyProducts };
 };
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);
 
 export default function PinningIndex() {
-  const { pinningRules } = useLoaderData();
+  const { pinningRules,legacyEmptyProducts=[] } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -184,7 +187,11 @@ export default function PinningIndex() {
   };
 
   const proceedToCreate = () => {
-    if (!createApplyToAll && !createSearchQuery.trim()) return;
+    if (!createApplyToAll && !createSearchQuery.trim()) {
+      const existing=pinningRules.find(isEmptySearchPin);
+      navigate('/app/search/pinning/'+(existing?.id||'new'));
+      return;
+    }
     if (createApplyToAll) {
       const existingAll = pinningRules.find(r => r.applyToAll);
       if (existingAll) {
@@ -304,6 +311,7 @@ export default function PinningIndex() {
         }}
       >
         {/* Header */}
+        {legacyEmptyProducts.length>0&&<section aria-label="Existing empty search pin" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap',padding:20,border:'1px solid #e6ddf2',borderRadius:12,background:'#fff',marginBottom:20}}><div><strong style={{color:'#4c277c'}}>Empty search pin</strong><p style={{fontSize:12,color:'#877892',margin:'6px 0 0'}}>{legacyEmptyProducts.length} saved products · Only shown in Full screen search UI</p></div><button type="button" onClick={()=>navigate('/app/search/pinning/new')} style={{border:'1px solid #d8c5f0',color:'#6d28d9',background:'#f8f3ff',borderRadius:8,padding:'9px 14px'}}>Edit empty search pins</button></section>}
         <div
           style={{
             display: "flex",
@@ -983,13 +991,15 @@ export default function PinningIndex() {
                 
                 <div style={{ padding: "20px" }}>
                   <label htmlFor="create-pin-term" style={{ display: "block", marginBottom: "12px", fontSize: "14px", color: "#475569" }}>
-                    Enter the search term where you want to pin products.
+                    Enter a search term, or leave it blank for empty search pinning.
                   </label>
                   <input id="create-pin-term" type="text" value={createSearchQuery}
                     onChange={event => setCreateSearchQuery(event.target.value)}
                     onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); proceedToCreate(); } }}
                     placeholder="e.g. blue dresses"
                     style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px" }} />
+
+                  {!createApplyToAll&&!createSearchQuery.trim()&&<p role="note" style={{padding:12,borderRadius:8,background:'#f5efff',color:'#7954a2',fontSize:12,lineHeight:1.6,margin:'12px 0 0'}}><strong>Empty search pin</strong><br/>Leaving the search term blank creates an empty search pin. This rule appears only in Full screen search UI, before the customer types. It does not apply to Compact UI or the search results page.</p>}
 
                 </div>
 
@@ -1018,16 +1028,15 @@ export default function PinningIndex() {
                   </button>
                   <button
                     onClick={proceedToCreate}
-                    disabled={createSearchQueries.length === 0}
                     style={{
-                      background: createSearchQueries.length === 0 ? "#cbd5e1" : "#5B21B6",
+                      background: "#5B21B6",
                       color: "#fff",
                       border: "none",
                       padding: "8px 16px",
                       borderRadius: "6px",
                       fontWeight: "500",
                       fontSize: "14px",
-                      cursor: createSearchQueries.length === 0 ? "not-allowed" : "pointer",
+                      cursor: "pointer",
                     }}
                   >
                     Continue
@@ -1237,6 +1246,7 @@ export default function PinningIndex() {
                               rule.applyToAll ? "All searches" : rule.searchQueries && rule.searchQueries.length > 0
                                 ? rule.searchQueries.join(", ")
                                 : "None";
+                            const targetText=isEmptySearchPin(rule)?'Empty search query':collText;
                             return (
                               <td
                                 key="col"
@@ -1296,7 +1306,7 @@ export default function PinningIndex() {
                                     >
                                       {rule.name || "Pinning Rule"}
                                     </span>
-                                    {rule.name !== collText && (
+                                    {rule.name !== targetText && (
                                       <div
                                         style={{
                                           fontSize: "12px",
@@ -1304,7 +1314,7 @@ export default function PinningIndex() {
                                           marginTop: "4px",
                                         }}
                                       >
-                                        {collText}
+                                        {targetText}
                                       </div>
                                     )}
                                   </div>

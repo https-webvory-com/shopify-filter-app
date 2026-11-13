@@ -305,7 +305,7 @@ export async function getActivePinningRuleForSearch(
   searchQuery,
   searchType = "page",
 ) {
-  if (!shop || !searchQuery) return null;
+  if (!shop || typeof searchQuery!=='string' || (!searchQuery.trim()&&searchType!=='instant')) return null;
 
   const activeRules = await prisma.pinnedProductRule.findMany({
     where: {
@@ -338,7 +338,7 @@ export async function getActivePinningRuleForSearch(
     }
   }
 
-  return allSearchesRule;
+  return queryLower.trim()?allSearchesRule:null;
 }
 
 /**
