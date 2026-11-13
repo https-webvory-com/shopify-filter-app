@@ -373,7 +373,7 @@ export async function createLoadingServer({redisLayer}={}) {
           .replace(headAsyncScripts,inlineFilters.replaceAll('127.0.0.1:PORT','127.0.0.1:'+server.address().port)+headAsyncScripts)
           .replace('<script src="/assets/marketPricing.js">','<span id="cfp-collection-ready" hidden></span><script defer src="/assets/marketPricing.js">')
           .replace('<script src="/assets/collectionWidget.js">','<script defer src="/assets/collectionWidget.js">');
-        }if(state.early){const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+inline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}
+        }if(state.early){const scopedInline=url.pathname==='/search'?inline.replace('var collHandle = "fixture"','var collHandle = ""').replace('var collId = "1"','var collId = ""'):inline;const earlyScript='<script>window.Shopify=window.Shopify||{locale:"en",country:"US"};'+scopedInline+'</script>';body=state.earlyBeforeStyles?body.replace('<link rel="stylesheet"',earlyScript+'<link rel="stylesheet"'):body.replace('<script src="/assets/marketPricing.js">',earlyScript+'<script src="/assets/marketPricing.js">');}res.end(body);return;}
       res.writeHead(404).end();
     }catch(error){if(res.headersSent){res.destroy();return;}res.writeHead(500,{'Content-Type':'application/json'}).end(JSON.stringify({error:error.message}));}
   });

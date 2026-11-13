@@ -16,19 +16,25 @@ function run(search) {
   const requests = [];
   const window = {location: {pathname: '/search', search}, Shopify: {locale: 'en', country: 'GB'}};
   const context = {window, document: {documentElement: {lang: 'en'}}, URLSearchParams, AbortController, URL,
-    fetch: (url) => { requests.push(new URL(url)); return Promise.resolve({ok: true}); }, setTimeout, clearTimeout};
+    fetch: (url) => { requests.push(new URL(url)); return Promise.resolve({ok: true,status:200,json:async()=>({settings:[],facets:{}})}); }, setTimeout, clearTimeout};
   vm.runInNewContext(bootstrap, context);
   return {requests, window};
 }
 
 test('search starts its scoped first page before deferred storefront scripts', async () => {
   const {requests, window} = run('?q=formal+dress');
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   assert.equal(requests[0].searchParams.get('isSearch'), 'true');
   assert.equal(requests[0].searchParams.get('collectionHandle'), 'search');
   assert.equal(requests[0].searchParams.get('q'), 'formal dress');
   assert.equal(requests[0].searchParams.get('limit'), '25');
   assert.ok(window._cfpEarlySearch?.promise);
+  assert.ok(window._cfpEarlySearch?.facetsPromise);
+  assert.equal(requests.filter(url=>url.searchParams.get('responseProfile')==='search-fast-cards-v1').length,1);
+  const cards=new URL(window._cfpEarlySearch.url),facets=new URL(window._cfpEarlySearch.facetsUrl);
+  cards.searchParams.delete('responseProfile');
+  assert.equal(cards.href,facets.href,'early filters use the identical tenant, query, market, sort and page scope');
+  assert.equal((await window._cfpEarlySearch.facetsPromise).status,200);
   await window._cfpEarlySearch.promise;
 });
 
@@ -41,6 +47,10 @@ test('search with shopper filters leaves its complete request to the renderer', 
 
 test('search reload with a sort parameter still starts its matching early request', () => {
   const {requests} = run('?q=formal+dress&sortBy=relevance');
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   assert.equal(requests[0].searchParams.get('sortBy'), 'relevance');
+});
+
+test('empty and whitespace search pages do not prefetch duplicate products or facets', () => {
+  for(const query of ['?q=','?q=+++'])assert.equal(run(query).requests.length,0);
 });

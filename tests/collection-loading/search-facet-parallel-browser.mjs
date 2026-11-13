@@ -5,8 +5,8 @@ const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href)
 const fixture=await createLoadingServer();await new Promise(resolve=>fixture.server.listen(0,'127.0.0.1',resolve));
 const origin='http://127.0.0.1:'+fixture.server.address().port,browser=await chromium.launch({channel:'chrome',headless:true});
 try{
- for(const [query,failFirst] of [['dress',false],['dress',true],['',false]]){
-  await fetch(origin+'/__control',{method:'POST',body:JSON.stringify({reset:true,delay:1,imageDelay:0,realToolbar:true,filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',displayMode:'List',config:{}}],globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true}})});
+ for(const [query,failFirst,early] of [['dress',false,false],['dress',true,false],['',false,false],['dress',false,true]]){
+  await fetch(origin+'/__control',{method:'POST',body:JSON.stringify({reset:true,early,delay:1,imageDelay:0,realToolbar:true,filterSettings:[{id:'vendor',isEnabled:true,filterType:'vendor',label:'Brand',displayMode:'List',config:{}}],globalSettings:{desktopFilterLayout:'vertical',showFilterOptionsWithOneItem:true}})});
   const page=await browser.newPage(),errors=[],starts=[];let cardFinished=0,fullReads=0;page.setDefaultTimeout(10000);
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/filter?**',async route=>{

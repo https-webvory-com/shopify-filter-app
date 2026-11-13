@@ -946,8 +946,19 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           ? (() => {
             const request = new URL(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
             request.searchParams.delete('responseProfile');
-            return fetchCollectionResponse(request.toString(), fetchSignal)
-              .then(response => response.json().then(body => ({ status: response.status, body })))
+            const read = () => fetchCollectionResponse(request.toString(), fetchSignal)
+              .then(response => response.json().then(body => ({ status: response.status, body })));
+            const early = window._cfpEarlySearch;
+            let pending;
+            if (early?.facetsUrl && early.facetsPromise) {
+              const earlyUrl = new URL(early.facetsUrl, window.location.href), currentUrl = new URL(request);
+              earlyUrl.searchParams.sort();currentUrl.searchParams.sort();
+              if (earlyUrl.toString() === currentUrl.toString()) {
+                fetchSignal.addEventListener('abort', () => early.controller.abort(), {once:true});
+                pending = Promise.resolve(early.facetsPromise).then(result => result || read());
+              }
+            }
+            return (pending || read())
               .then(result => ({ result }), error => ({ error }));
           })() : null;
         // Early collection responses lack search scope, settings, filters and page size.
