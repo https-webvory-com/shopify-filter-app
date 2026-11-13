@@ -27,6 +27,11 @@ try{
     await fetch(origin+'/__settings-control',{method:'POST',body:JSON.stringify({searchDelay:800})});
     await type('party');await type('pa');await page.waitForTimeout(900);assert.equal(await page.locator('#cfp-view-all-results').isVisible(),false);assert.equal(await page.locator('#cfp-search-products').getAttribute('aria-busy'),'false');
     await fetch(origin+'/__settings-control',{method:'POST',body:'{}'});
+    await type('Long "Evening" <Dress> with Sleeves');await page.waitForFunction(()=>document.getElementById('cfp-view-all-results')?.hidden===false);
+    const card=page.locator('.cfp-search-result-card').first(),title=await card.locator('.cfp-search-product-title').textContent();
+    assert.equal(await card.getAttribute('title'),layout==='compact'?title:null,layout+' full product-name tooltip');
+    await card.hover();assert.equal(await card.getAttribute('title'),layout==='compact'?title:null);
+    assert.equal(await card.locator('dress').count(),0,'product title must remain escaped text');
     assert.deepEqual(errors,[]);console.log('PASS '+layout+' minimum '+minimum+': zero requests/repaints below setting, search at exact threshold, delete below threshold, resume, stale response ignored');
   }
 }finally{await browser.close();await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});}

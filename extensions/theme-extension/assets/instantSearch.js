@@ -1657,7 +1657,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       html += `
-        <div class="cfp-product-card cfp-search-result-card" data-cfp-product-id="${instantEscapeHtml(p.id)}" data-cfp-position="${productIndex + 1}" style="position:relative; width: 100%;">
+        <div class="cfp-product-card cfp-search-result-card"${window.cfpSearchSettings?.instantLayout==='compact'?` title="${instantEscapeHtml(p.title)}"`:''} data-cfp-product-id="${instantEscapeHtml(p.id)}" data-cfp-position="${productIndex + 1}" style="position:relative; width: 100%;">
           <div class="cfp-search-product-image-wrapper" style="position: relative;">
             <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
               <div class="cfp-search-product-image-wrap">
