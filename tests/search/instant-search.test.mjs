@@ -27,6 +27,19 @@ function fixture(store=storage()){
  return {context,calls,element,store};
 }
 
+test('configured minimum blocks requests and loading before the threshold for every allowed value',async()=>{
+ for(const minimum of [1,2,3,4,5]){
+  const f=fixture();let refreshes=0,searches=0;
+  f.context.CONFIG.minChars=minimum;f.context.window.cfpSearchSettings={minChars:minimum,collectionLimit:0};
+  f.context.window.cfpRefreshSearchSettings=async()=>{refreshes++;};
+  f.context.fetch=async()=>{searches++;return {ok:true,json:async()=>({products:[]})};};
+  const short='dress'.slice(0,minimum-1);f.context.mainInput.value=short;
+  await f.context.performSearch(short);assert.equal(refreshes,0);assert.equal(searches,0);assert.deepEqual(f.calls,[]);
+  const query='dress'.slice(0,minimum);f.context.mainInput.value=query;
+  await f.context.performSearch(query);assert.equal(refreshes,1);assert.equal(searches,1);assert.ok(f.calls.some(call=>call[0]==='loading'&&call[1]===true));
+ }
+});
+
 test('Full screen empty search derives card count from pins and ignores removed legacy controls; Compact keeps them',async()=>{
  const f=fixture(),requests=[];
  f.context.mainInput.value='';

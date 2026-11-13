@@ -3,7 +3,7 @@ export const SEARCH_SETTING_FIELDS = {
   suggestionLimit: ['Search suggestions', 6, 0, 10],
   collectionLimit: ['Collection suggestions', 5, 0, 10],
   recentLimit: ['Recent searches', 4, 0, 10],
-  minChars: ['Characters before searching', 2, 1, 5],
+  minChars: ['Minimum characters to start search', 2, 1, 5],
   pageSize: ['Products per search results page', 25, 1, 40],
   showSearchInput: ['Show search box on the results page', true],
   showVendor: ['Show vendor on search results', true],

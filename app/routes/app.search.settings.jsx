@@ -82,7 +82,7 @@ export default function SearchSettings() {
   };
   const update=(key,value)=>setValues(v=>({...v,[key]:value}));
   const select=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<select aria-label={label} value={values[key]} disabled={busy} onChange={e=>update(key,e.target.value)} style={fieldStyle}>{SEARCH_ENUM_FIELDS[key].map(value=><option key={value} value={value}>{key==='instantLayout'?({fullscreen:'Full screen UI',compact:'Compact UI'}[value]):value.replaceAll('-',' ')}</option>)}</select></label>;
-  const textField=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<input type={key==='fixedImageWidth'?'number':'text'} value={values[key]} disabled={busy} onChange={e=>update(key,key==='fixedImageWidth'?Number(e.target.value):e.target.value)} style={fieldStyle}/></label>;
+  const textField=(key,label)=> <label style={{display:'grid',gap:6}}>{label}<input type={key==='fixedImageWidth'?'number':'text'} value={values[key]} disabled={busy} onChange={e=>update(key,key==='fixedImageWidth'?Number(e.target.value):e.target.value)} style={fieldStyle}/>{key==='searchBoxSelector'&&<small>Optional: CSS selector of the theme button or input that opens search, for example .header-search. Leave blank for automatic detection.</small>}</label>;
   const listField=(key,label,help)=> <label style={{display:'grid',gap:6}}>{label}<textarea rows={3} value={(values[key]||[]).join('\n')} disabled={busy} onChange={e=>update(key,e.target.value.split('\n'))} style={fieldStyle}/><small>{help||'One entry per line.'}</small></label>;
   return (
     <s-page heading="Search Settings" full-width="true">
@@ -113,7 +113,7 @@ export default function SearchSettings() {
             <h3 className="settings-subheading">Compact hot searches</h3>
             <label style={{display:'grid',gap:6}}>Hot searches<textarea name="manualSuggestions" value={manual} onChange={e=>setManual(e.target.value)} rows={4} maxLength={1100} style={fieldStyle}/></label>
             <p className="settings-help">Enter up to 10 terms, one per line. They appear in the Compact panel before a customer starts typing. Blacklisted terms stay hidden.</p>
-            <details className="settings-detail"><summary>Compact search behavior</summary><div className="search-config-fields">{['productLimit','suggestionLimit','minChars','showPopularProducts','popularProductLimit'].map(field)}{textField('searchBoxSelector','Custom search box selector')}</div></details>
+            <details className="settings-detail"><summary>Compact search behavior</summary><div className="search-config-fields">{['productLimit','suggestionLimit','minChars','showPopularProducts','popularProductLimit'].map(field)}{textField('searchBoxSelector','Search button selector (CSS)')}</div></details>
           </section>}
           {values.instantLayout==='fullscreen'&&<section aria-label="Full screen UI settings" style={{display:'grid',gap:16}}>
           <h3 className="settings-subheading">Full screen search suggestions</h3>
@@ -122,7 +122,7 @@ export default function SearchSettings() {
           <label style={{ display: 'grid', gap: 6 }}>Manual suggestions<textarea name="manualSuggestions" value={manual} onChange={e => setManual(e.target.value)} rows={5} maxLength={1100} style={fieldStyle} /></label>
           <p style={{ margin: 0 }}>Enter up to 10 search terms, one per line. They appear in this order when the search box is empty, replacing recent searches. Blacklisted terms stay hidden.</p>
           {field('showPages')}{field('pageLimit')}
-          <details className="settings-detail"><summary>Full screen display settings</summary><div className="search-config-fields">{select('productColumn','Product column position')}{field('instantColumns')}{textField('searchBoxSelector','Custom search box selector')}</div></details>
+          <details className="settings-detail"><summary>Full screen display settings</summary><div className="search-config-fields">{select('productColumn','Product column position')}{field('instantColumns')}{textField('searchBoxSelector','Search button selector (CSS)')}</div></details>
           </section>}
         </fieldset>}
         {tab==='results'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="search-results-heading">

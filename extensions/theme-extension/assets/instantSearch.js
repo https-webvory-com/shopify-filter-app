@@ -381,11 +381,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const config = JSON.stringify(collections);
     if (config !== compactConfig) { compactConfig = config; compactTab = 0; compactPage = 0; }
     const isCompact = settings.instantLayout === 'compact';
-    const hasQuery = !!mainInput.value.trim();
+    const hasInput = !!mainInput.value.trim();
+    const hasQuery = mainInput.value.trim().length >= CONFIG.minChars;
     const enabled = isCompact && collections.length > 0;
     const active = enabled && !hasQuery;
     modal.dataset.cfpSearching = String(isCompact && hasQuery);
-    document.getElementById('cfp-compact-search-clear').hidden = !(isCompact && hasQuery);
+    document.getElementById('cfp-compact-search-clear').hidden = !(isCompact && hasInput);
     document.getElementById('cfp-compact-products-title').hidden = !(isCompact && hasQuery);
     modal.dataset.cfpBrowsing = String(active);
     tabs.hidden = !enabled; browse.hidden = !active;
@@ -724,13 +725,28 @@ document.addEventListener("DOMContentLoaded", function () {
     let debounceTimer;
     mainInput.addEventListener("input", (e) => {
       const query = e.target.value.trim();
-      renderCompactNavigation();
       clearTimeout(debounceTimer);
       window.cfpActiveInstantSearchId = null;
       window.cfpActiveInstantSearchQuery = null;
 
       if (!query) {
+        mainInput._cfpQueryActive = false;
+        renderCompactNavigation();
         fetchDefaultView();
+        return;
+      }
+
+      if (query.length < CONFIG.minChars) {
+        // Keep the initial view steady while the customer is still typing.
+        // Leaving a previous search clears it once, without another request.
+        if (mainInput._cfpQueryActive) {
+          mainInput._cfpQueryActive = false;
+          renderLoading(false);
+          document.getElementById('cfp-search-body').classList.remove('cfp-has-results');
+          const viewAll = document.getElementById('cfp-view-all-results');
+          if (viewAll) viewAll.hidden = true;
+          renderCompactNavigation();
+        }
         return;
       }
 
@@ -1023,6 +1039,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function fetchDefaultView(configurationReady = false) {
     window.cfpActiveInstantSearchId = null;
+    mainInput._cfpQueryActive = false;
     document.getElementById("cfp-search-body").classList.add("cfp-has-results");
     const viewAll = document.getElementById('cfp-view-all-results');
     if (viewAll) viewAll.hidden = true;
@@ -1058,7 +1075,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // 4. Update UI with fresh data if user hasn't typed anything yet
       const inputEl = document.getElementById("cfp-main-search-input");
       const currentQuery = inputEl ? inputEl.value : "";
-      if (!currentQuery) {
+      if (currentQuery.trim().length < CONFIG.minChars && !mainInput._cfpQueryActive) {
         renderPages({resources:{results:{pages:[]}}});
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
@@ -1075,7 +1092,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
     } finally {
-      if (!mainInput.value.trim()) renderLoading(false);
+      if (mainInput.value.trim().length < CONFIG.minChars) renderLoading(false);
     }
   }
 
@@ -1177,7 +1194,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function performSearch(query) {
     const trimmedQuery = query.trim().toLowerCase();
-    document.getElementById("cfp-search-body").classList.add("cfp-has-results");
+    if (query.trim().length < CONFIG.minChars) return;
     
     await refreshSearchConfiguration();
     if(CONFIG.enabled===false){closeModal();return;}
@@ -1189,6 +1206,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (viewAll) viewAll.hidden = true;
       return;
     }
+    mainInput._cfpQueryActive = true;
+    document.getElementById('cfp-search-body').classList.add('cfp-has-results');
     renderRecentSearches(query);
     renderLoading(true);
     const currentViewAll = document.getElementById('cfp-view-all-results');
