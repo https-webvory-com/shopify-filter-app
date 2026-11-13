@@ -28,7 +28,7 @@ export const loader = async ({ request }) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   let query = url.searchParams.get("q") || "";
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10) || 10));
+  let limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "10", 10) || 10));
   const sortBy = url.searchParams.get("sortBy");
 
   if (!shop) {
@@ -65,6 +65,7 @@ export const loader = async ({ request }) => {
 
     let meiliFilters = [`shop = '${shop.replace(/'/g, "\\'")}'`, "status = 'ACTIVE'"];
     const emptyPinnedIds=!searchQuery&&searchContext.settings?.instantLayout==='fullscreen'?(searchContext.settings.emptySearchProducts||[]).map(product=>product.id.split('/').pop()):[];
+    if(emptyPinnedIds.length)limit=emptyPinnedIds.length;
     if(emptyPinnedIds.length)meiliFilters.push('id IN '+JSON.stringify(emptyPinnedIds));
     if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
 

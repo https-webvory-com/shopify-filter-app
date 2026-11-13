@@ -4,17 +4,29 @@ const productCard=row=>{
   const first=Array.isArray(row.images)?row.images[0]:null;
   const candidate=typeof first==='string'?first:first?.src||first?.url||'';
   let image='';try{const url=new URL(candidate);if(url.protocol==='https:'&&!url.username&&!url.password)image=url.href;}catch{}
-  return {id:row.id,title:row.title,image};
+  return {id:row.id,title:row.title,image,available:row.variants?.length>0};
 };
+const productSelect={id:true,title:true,images:true,variants:{where:{available:true},take:1,select:{id:true}}};
+export async function getEmptySearchProductState(shop,products){
+  const [rows,settings]=await Promise.all([
+    products.length?prisma.product.findMany({where:{shop,id:{in:products.map(p=>p.id)},status:{in:['ACTIVE','active']}},select:productSelect}):[],
+    prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}}),
+  ]);
+  const byId=new Map(rows.map(row=>[row.id,productCard(row)]));
+  return {products:products.map(p=>byId.get(p.id)||{...p,available:false,missing:true}),stockOnly:settings?.showOnlyInStock===true};
+}
 export async function listSearchProducts(shop,{query=''}={}){
   const q=String(query).trim();
   if(q.length>120||/[\u0000-\u001f\u007f]/u.test(q))throw Error('Invalid product search.');
-  const rows=await prisma.product.findMany({where:{shop,status:{in:['ACTIVE','active']},...(q?{OR:[{title:{contains:q,mode:'insensitive'}},{handle:{contains:q,mode:'insensitive'}}]}:{})},orderBy:[{title:'asc'},{id:'asc'}],take:21,select:{id:true,title:true,images:true}});
-  return {query:q,products:rows.slice(0,20).map(productCard),hasMore:rows.length>20};
+  const [rows,settings]=await Promise.all([
+    prisma.product.findMany({where:{shop,status:{in:['ACTIVE','active']},...(q?{OR:[{title:{contains:q,mode:'insensitive'}},{handle:{contains:q,mode:'insensitive'}}]}:{})},orderBy:[{title:'asc'},{id:'asc'}],take:21,select:productSelect}),
+    prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}}),
+  ]);
+  return {query:q,products:rows.slice(0,20).map(productCard),hasMore:rows.length>20,stockOnly:settings?.showOnlyInStock===true};
 }
 export async function validateSelectedSearchProducts(shop,products){
   if(!products.length)return [];
-  const rows=await prisma.product.findMany({where:{shop,id:{in:products.map(p=>p.id)},status:{in:['ACTIVE','active']}},select:{id:true,title:true,images:true}});
+  const rows=await prisma.product.findMany({where:{shop,id:{in:products.map(p=>p.id)},status:{in:['ACTIVE','active']}},select:productSelect});
   const byId=new Map(rows.map(row=>[row.id,productCard(row)]));
   if(products.some(p=>!byId.has(p.id)))throw Error('One of the selected products is no longer active in this store. Remove it and save again.');
   return products.map(p=>byId.get(p.id));

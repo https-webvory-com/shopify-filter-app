@@ -26,6 +26,20 @@ function fixture(store=storage()){
  vm.createContext(context);vm.runInContext(analytics+helpers+search+defaults,context);
  return {context,calls,element,store};
 }
+
+test('Full screen empty search derives card count from pins and ignores removed legacy controls; Compact keeps them',async()=>{
+ const f=fixture(),requests=[];
+ f.context.mainInput.value='';
+ f.context.fetch=async url=>{requests.push(String(url));return {ok:true,json:async()=>({products:[]})};};
+ const selected=Array.from({length:8},(_,id)=>({id:'gid://shopify/Product/'+(id+1)}));
+ f.context.window.cfpSearchSettings={instantLayout:'fullscreen',showPopularProducts:false,popularProductLimit:1,collectionLimit:0,emptySearchProducts:selected};
+ await f.context.fetchDefaultView();
+ assert.equal(new URL(requests[0]).searchParams.get('limit'),'8');
+ f.context.window.cfpSearchSettings.emptySearchProducts=[];requests.length=0;await f.context.fetchDefaultView();
+ assert.equal(new URL(requests[0]).searchParams.get('limit'),'6');
+ f.context.window.cfpSearchSettings.instantLayout='compact';requests.length=0;await f.context.fetchDefaultView();assert.equal(requests.length,0);
+ f.context.window.cfpSearchSettings.showPopularProducts=true;await f.context.fetchDefaultView();assert.equal(new URL(requests[0]).searchParams.get('limit'),'1');
+});
 test('instant typing records autocomplete, then counts only the engaged query',async()=>{
  const f=fixture(),events=[];
  f.context.window.CfpAnalytics={newSearchId:(()=>{let id=0;return()=>`search_${++id}`;})(),

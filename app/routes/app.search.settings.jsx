@@ -6,8 +6,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import SearchConfigurationLayout from '../components/SearchConfigurationLayout';
 import CompactSearchSettings from '../components/CompactSearchSettings';
+import EmptySearchProducts from '../components/EmptySearchProducts';
 import {getSearchIndexStatus} from '../services/searchIndex.server.js';
-import { listSearchCollections, listSearchProducts, validateSelectedSearchProducts } from '../services/searchCollectionPicker.server.js';
+import { listSearchCollections, listSearchProducts, validateSelectedSearchProducts, getEmptySearchProductState } from '../services/searchCollectionPicker.server.js';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -22,7 +23,9 @@ export const loader = async ({ request }) => {
     try { return await listSearchCollections(session.shop, { query, after }); }
     catch { return { query, after, collections: [], hasMore: false, nextCursor: '', collectionPickerError: 'Could not load saved collections. Please retry.' }; }
   }
-  return { settings: await getSearchSettings(session.shop),indexStatus:await getSearchIndexStatus(session.shop) };
+  const [settings,indexStatus]=await Promise.all([getSearchSettings(session.shop),getSearchIndexStatus(session.shop)]);
+  const selection=settings?.emptySearchProducts.length?await getEmptySearchProductState(session.shop,settings.emptySearchProducts):null;
+  return {settings:settings&&selection?{...settings,emptySearchProducts:selection.products}:settings,indexStatus,emptySearchStockOnly:selection?.stockOnly===true};
 };
 
 export const action = async ({ request }) => {
@@ -45,20 +48,6 @@ export const action = async ({ request }) => {
 };
 
 const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: 10, border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
-function EmptySearchProducts({value,onChange,disabled}){
-  const picker=useFetcher(),[open,setOpen]=useState(false),[query,setQuery]=useState('');
-  const load=picker.load;
-  useEffect(()=>{if(!open)return;const timer=setTimeout(()=>load('?productPicker=1&q='+encodeURIComponent(query.trim())),150);return()=>clearTimeout(timer);},[open,query,load]);
-  const current=picker.data?.query===query.trim()?picker.data:null;
-  const move=(index,offset)=>{const next=[...value];[next[index],next[index+offset]]=[next[index+offset],next[index]];onChange(next);};
-  return <section aria-label="Pinned products for empty search" style={{display:'grid',gap:12,border:'1px solid #e8e1f1',padding:16,borderRadius:12}}>
-    <strong>Pinned products when Full screen search is empty</strong>
-    <p className="settings-help">Choose up to 20 products and arrange their order. Keep “Show popular products when search is empty” enabled to display these cards. Selected products replace the automatic Best selling cards, up to the product count above. With no selections, Best selling is used. Unavailable or removed products may be omitted. Typed searches keep their existing pinning rules.</p>
-    <ol style={{margin:0,paddingLeft:24}}>{value.map((product,index)=><li key={product.id} style={{padding:'8px 0'}}><div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>{product.image&&<img src={product.image} alt="" width="30" height="40" style={{objectFit:'cover'}}/>}<span style={{flex:1}}>{product.title}</span><button type="button" disabled={disabled||index===0} aria-label={'Move '+product.title+' up'} onClick={()=>move(index,-1)}>↑</button><button type="button" disabled={disabled||index===value.length-1} aria-label={'Move '+product.title+' down'} onClick={()=>move(index,1)}>↓</button><button type="button" disabled={disabled} onClick={()=>onChange(value.filter(p=>p.id!==product.id))}>Remove</button></div></li>)}</ol>
-    <button type="button" disabled={disabled} aria-expanded={open} onClick={()=>setOpen(!open)}>{open?'Close product picker':'Choose products'}</button>
-    {open&&<div style={{display:'grid',gap:10}}><label>Find products<input value={query} maxLength={120} disabled={disabled} onChange={event=>setQuery(event.target.value)} placeholder="Search by product name" style={fieldStyle}/></label>{!current||picker.state!=='idle'?<p role="status">Loading products…</p>:current.productPickerError?<p role="alert">{current.productPickerError} <button type="button" onClick={()=>load('?productPicker=1&q='+encodeURIComponent(query.trim()))}>Retry</button></p>:<><ul style={{listStyle:'none',margin:0,padding:0,maxHeight:300,overflowY:'auto'}}>{current.products.map(product=>{const selected=value.some(p=>p.id===product.id);return <li key={product.id} style={{display:'flex',alignItems:'center',gap:10,padding:8,borderBottom:'1px solid #eee'}}>{product.image&&<img src={product.image} alt="" width="30" height="40" style={{objectFit:'cover'}}/>}<span style={{flex:1}}>{product.title}</span><button type="button" disabled={disabled||selected||value.length>=20} onClick={()=>onChange([...value,product])}>{selected?'Selected':'Pin product'}</button></li>;})}</ul>{!current.products.length&&<p>No matching active products.</p>}{current.hasMore&&<p className="settings-help">Showing 20 products. Type a name to narrow the list.</p>}</>}</div>}
-  </section>;
-}
 const settingsStyles = `
 .cs-editor .cs-tab-text{display:grid;gap:6px;margin:0 0 20px;font-size:13px;font-weight:600}.cs-editor .cs-tab-text input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #c9cccf;border-radius:6px;font:inherit}.cs-editor .cs-tab-text small{line-height:1.5}
 .cs-editor .cs-sortable-tab{display:flex;align-items:center;border:1px solid #e8e1f1;border-radius:10px;background:#fff;min-width:0}.cs-editor .cs-sortable-tab:has([aria-selected=true]){background:#f5f0ff;border-color:#8b5cf6;box-shadow:0 0 0 1px #8b5cf6}.cs-editor .cs-tabs .cs-sortable-tab>button[role=tab]{border:0!important;box-shadow:none!important;background:transparent!important;padding-left:4px}.cs-editor button.cs-drag-handle{display:inline-flex;align-items:center;justify-content:center;flex:none;padding:5px;border:0;border-radius:6px;background:transparent;color:#9a8daa;cursor:grab;touch-action:none}.cs-editor button.cs-drag-handle:hover{background:#ede9fe;color:#5b21b6}.cs-editor button.cs-drag-handle:active{cursor:grabbing}.cs-editor [data-dragging=true]{box-shadow:0 8px 25px #3b176526;border-radius:12px;background:#faf8ff}.cs-editor .cs-main-actions{align-items:center}.cs-editor .cs-collection-row>.cs-drag-handle{margin-left:-5px}
@@ -134,15 +123,23 @@ export default function SearchSettings() {
           <div className="settings-section-title"><h2 id="instant-search-heading">Instant search experience</h2>{field('instantSearchEnabled')}</div>
           <p className="settings-help">Compact UI opens a small search panel at your header. Full screen UI keeps the original wide search experience.</p>
           <div className="settings-mode-grid">{[['compact','Compact UI','A small panel with collection tabs, hot searches and ranked image links.'],['fullscreen','Full screen UI','Your original wide search with product cards and suggestions.']].map(([mode,title,description])=><button key={mode} type="button" className="settings-mode" aria-pressed={values.instantLayout===mode} disabled={busy} onClick={()=>update('instantLayout',mode)}><span className="settings-mini" data-mode={mode}><span className="settings-mini-panel"><i/><i/><b/></span></span><span className="settings-mode-copy"><strong>{title}</strong><small>{description}</small></span><span className="settings-mode-check" aria-hidden="true">✓</span></button>)}</div>
-          {values.instantLayout==='compact'?<CompactSearchSettings value={values.compactCollections||[]} suggestions={manual.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)} disabled={busy} onChange={value=>update('compactCollections',value)}/>:<p className="settings-help">Choose Compact UI above to select your four main collections and preview the search panel.</p>}
-          <h3 className="settings-subheading">Suggestions and search behavior</h3>
+          {values.instantLayout==='compact'&&<section aria-label="Compact UI settings" style={{display:'grid',gap:16}}>
+            <CompactSearchSettings value={values.compactCollections||[]} suggestions={manual.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)} disabled={busy} onChange={value=>update('compactCollections',value)}/>
+            <h3 className="settings-subheading">Compact hot searches</h3>
+            <label style={{display:'grid',gap:6}}>Hot searches<textarea name="manualSuggestions" value={manual} onChange={e=>setManual(e.target.value)} rows={4} maxLength={1100} style={fieldStyle}/></label>
+            <p className="settings-help">Enter up to 10 terms, one per line. They appear in the Compact panel before a customer starts typing. Blacklisted terms stay hidden.</p>
+            <details className="settings-detail"><summary>Compact search behavior</summary><div className="search-config-fields">{['productLimit','suggestionLimit','minChars','showPopularProducts','popularProductLimit'].map(field)}{textField('searchBoxSelector','Custom search box selector')}</div></details>
+          </section>}
+          {values.instantLayout==='fullscreen'&&<section aria-label="Full screen UI settings" style={{display:'grid',gap:16}}>
+          <EmptySearchProducts value={values.emptySearchProducts} onChange={products=>update('emptySearchProducts',products)} disabled={busy} stockOnly={loaded.emptySearchStockOnly}/>
+          <h3 className="settings-subheading">Full screen search suggestions</h3>
           <div className="search-config-fields">{['productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
           <p style={{ margin: 0 }}>A count of zero hides that suggestion section. Recent searches are stored in the customer’s browser.</p>
           <label style={{ display: 'grid', gap: 6 }}>Manual suggestions<textarea name="manualSuggestions" value={manual} onChange={e => setManual(e.target.value)} rows={5} maxLength={1100} style={fieldStyle} /></label>
           <p style={{ margin: 0 }}>Enter up to 10 search terms, one per line. They appear in this order when the search box is empty, replacing recent searches. Blacklisted terms stay hidden.</p>
-          {field('showPages')}{field('pageLimit')}{field('showPopularProducts')}{field('popularProductLimit')}
-          {values.instantLayout==='fullscreen'&&<EmptySearchProducts value={values.emptySearchProducts} onChange={products=>update('emptySearchProducts',products)} disabled={busy}/>}
-          <details className="settings-detail"><summary>Advanced display settings</summary><div className="search-config-fields">{values.instantLayout==='fullscreen'&&<>{select('productColumn','Product column position')}{field('instantColumns')}</>}{textField('searchBoxSelector','Custom search box selector')}</div></details>
+          {field('showPages')}{field('pageLimit')}
+          <details className="settings-detail"><summary>Full screen display settings</summary><div className="search-config-fields">{select('productColumn','Product column position')}{field('instantColumns')}{textField('searchBoxSelector','Custom search box selector')}</div></details>
+          </section>}
         </fieldset>}
         {tab==='results'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="search-results-heading">
           <h2 id="search-results-heading">Search results page</h2>

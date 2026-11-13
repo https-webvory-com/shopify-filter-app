@@ -45,7 +45,7 @@ document.addEventListener("DOMContentLoaded", function () {
     manualSuggestions: searchSettings.manualSuggestions || [],
     customSelector: searchSettings.searchBoxSelector || userSettings.customTriggerSelector || "",
     enabled:searchSettings.instantSearchEnabled!==false,showPages:searchSettings.showPages===true,pageLimit:searchSettings.pageLimit??3,
-    showPopularProducts:searchSettings.showPopularProducts!==false,popularProductLimit:searchSettings.popularProductLimit??(searchSettings.productLimit??6),
+    showPopularProducts:searchSettings.instantLayout==='compact'?searchSettings.showPopularProducts!==false:true,popularProductLimit:searchSettings.instantLayout==='compact'?(searchSettings.popularProductLimit??(searchSettings.productLimit??6)):(searchSettings.emptySearchProducts?.length||6),
     apiUrl: `${API_DOMAIN}/api/search`,
   };
 
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", function () {
       recentLimit: settings.recentLimit ?? 4,
       manualSuggestions: settings.manualSuggestions || [],
       enabled:settings.instantSearchEnabled!==false,showPages:settings.showPages===true,pageLimit:settings.pageLimit??3,
-      showPopularProducts:settings.showPopularProducts!==false,popularProductLimit:settings.popularProductLimit??(settings.productLimit??6),
+      showPopularProducts:settings.instantLayout==='compact'?settings.showPopularProducts!==false:true,popularProductLimit:settings.instantLayout==='compact'?(settings.popularProductLimit??(settings.productLimit??6)):(settings.emptySearchProducts?.length||6),
       customSelector:settings.searchBoxSelector||window.CFP_InstantSearchSettings?.customTriggerSelector||'',
     });
     applySearchDisplaySettings();

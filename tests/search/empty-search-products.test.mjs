@@ -18,14 +18,17 @@ test('empty-search products preserve selected order and validate IDs, limits and
 
 test('picker and saved selections require active products from the authenticated store',async()=>{
   const calls=[];
-  const service=await loadModule('app/services/searchCollectionPicker.server.js',{'../db.server':{default:{product:{findMany:async options=>{calls.push(options);return [{id:gid(1),title:'Snowboard',images:['https://example.com/a.jpg']}];}}}}});
+  const service=await loadModule('app/services/searchCollectionPicker.server.js',{'../db.server':{default:{filterGlobalSetting:{findUnique:async()=>({showOnlyInStock:true})},product:{findMany:async options=>{calls.push(options);return [{id:gid(1),title:'Snowboard',images:['https://example.com/a.jpg'],variants:[]}];}}}}});
   const page=await service.listSearchProducts(shop,{query:'snow'});
   assert.equal(calls[0].where.shop,shop);assert.deepEqual(Array.from(calls[0].where.status.in),['ACTIVE','active']);
   assert.equal(calls[0].take,21);assert.equal(page.products[0].image,'https://example.com/a.jpg');
+  assert.equal(page.products[0].available,false);assert.equal(page.stockOnly,true);assert.equal(calls[0].select.variants.take,1);
   assert.equal((await service.validateSelectedSearchProducts(shop,[pin(1)]))[0].title,'Snowboard');
   assert.equal(calls[1].where.shop,shop);assert.deepEqual(Array.from(calls[1].where.id.in),[gid(1)]);
   await assert.rejects(service.validateSelectedSearchProducts(shop,[pin(2)]),/no longer active/);
   await assert.rejects(service.listSearchProducts(shop,{query:'a'.repeat(121)}),/Invalid/);
+  const selected=await service.getEmptySearchProductState(shop,[pin(1),pin(2)]);
+  assert.equal(selected.stockOnly,true);assert.equal(selected.products[0].available,false);assert.equal(selected.products[1].missing,true);
 });
 
 async function routeFixture({pins=[pin(2),pin(1)],stockOnly=false,layout='fullscreen'}={}){
@@ -47,10 +50,10 @@ async function routeFixture({pins=[pin(2),pin(1)],stockOnly=false,layout='fullsc
     assert.equal(response.status,200);return response.json();
   }};
 }
-test('empty search returns only chosen products in saved order and respects the card limit',async()=>{
+test('empty search returns every chosen product in saved order regardless of the old card count',async()=>{
   const fixture=await routeFixture();
   const result=await fixture.read('   ',1);
-  assert.deepEqual(result.products.map(p=>p.id),[gid(2)]);assert.equal(result.pinnedCount,1);
+  assert.deepEqual(result.products.map(p=>p.id),[gid(2),gid(1)]);assert.equal(result.pinnedCount,2);
   const filters=fixture.queries[0].options.filter;assert.ok(filters.includes("shop = '"+shop+"'"));assert.ok(filters.includes("status = 'ACTIVE'"));
   assert.deepEqual(JSON.parse(filters.find(f=>f.startsWith('id IN ')).slice(6)),['2','1']);
   assert.deepEqual((await fixture.read()).products.map(p=>p.id),[gid(2),gid(1)]);

@@ -63,7 +63,7 @@ export function validateSearchSettings(input) {
     let image=product.image??'';
     if(typeof image!=='string'||image.length>2048)throw Error('Invalid product image.');
     if(image){try{const url=new URL(image);if(url.protocol!=='https:'||url.username||url.password)throw Error();image=url.href;}catch{throw Error('Product images must use HTTPS.');}}
-    return {id:product.id,title:text(product.title,'Product title',500),image};
+    return {id:product.id,title:text(product.title,'Product title',500),image,...(typeof product.available==='boolean'?{available:product.available}:{})};
   });
   for (const [key, [label, fallback, min, max]] of Object.entries(SEARCH_SETTING_FIELDS)) {
     const value = input[key];
