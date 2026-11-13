@@ -122,7 +122,7 @@ try{
     await send('Emulation.setDeviceMetricsOverride',{width:769,height:900,deviceScaleFactor:1,mobile:false});await delay(350);
     assert.ok(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width<=document.querySelector('.cfp-layout-wrapper').getBoundingClientRect().width-260"));
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(350);await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
-    assert.ok(await evaluate("Math.abs(document.querySelector('#cfp-sidebar').getBoundingClientRect().width-innerWidth*.9)<1"));
+    assert.ok(await evaluate("Math.abs(document.querySelector('#cfp-sidebar').getBoundingClientRect().width-innerWidth)<1"));
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.deepEqual(await evaluate('browserErrors'),[]);
     await evaluate("document.querySelector('#cfp-apply-btn').click()");
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
