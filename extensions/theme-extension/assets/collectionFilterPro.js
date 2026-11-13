@@ -212,7 +212,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (select) select.value = activeFilters.sortBy;
   }
 
+  function shouldUpdateBrowserURL() {
+    return templateName !== 'search' || window.cfpSearchSettings?.changeBrowserUrl !== false;
+  }
+
   function syncStateToURL() {
+    if (templateName === 'search' && window.cfpSearchSettings?.changeBrowserUrl === false) return;
     const params = new URLSearchParams(window.location.search);
     params.delete('rankingToken');
 
@@ -274,7 +279,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     params.delete('sortBy');
     if (value === (templateName === 'search' ? 'relevance' : 'best-selling')) params.delete('sort_by');
     else params.set('sort_by', value);
-    window.history.pushState(null, '', window.location.pathname + (params.toString() ? '?' + params : ''));
+    if (shouldUpdateBrowserURL()) window.history.pushState(null, '', window.location.pathname + (params.toString() ? '?' + params : ''));
     fetchAndRenderData();
   }
 
@@ -904,7 +909,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if(rankingToken&&['collection-cards-v1','collection-preview-v1'].includes(queryParams.get('responseProfile')))queryParams.set('responseProfile','collection-v2');
       const displayUrl = new URL(window.location.href);
       displayUrl.searchParams.delete('rankingToken');
-      window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
+      if (displayUrl.pathname + displayUrl.search !== window.location.pathname + window.location.search) window.history.replaceState(null, '', displayUrl.pathname + displayUrl.search);
       // Add loading state to sidebar
       if(!filtersReady||hasSelectedFilters)sidebar.classList.add('cfp-loading');
         let cachedBrowserResult = null;
