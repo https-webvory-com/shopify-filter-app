@@ -669,17 +669,17 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       const responseJson = await response.json();
 
       if (responseJson.errors) {
-        throw new Error(
+        throw Object.assign(new Error(
           "GraphQL Errors: " + JSON.stringify(responseJson.errors),
-        );
+        ), { restartProductScan: responseJson.errors.some(error => /cursor.*(invalid|expired)|(invalid|expired).*cursor/i.test(error.message || '')) });
       }
 
       const productsData = responseJson.data?.products;
       if (!productsData) throw new Error("Shopify returned no product connection");
       if (typeof productsData.pageInfo?.hasNextPage !== "boolean" || (productsData.pageInfo.hasNextPage && (!productsData.pageInfo.endCursor || productsData.pageInfo.endCursor === cursor))) {
-        throw new Error("Shopify pagination stopped returning a valid next cursor");
+        throw Object.assign(new Error("Shopify pagination stopped returning a valid next cursor"), {restartProductScan:true});
       }
-      if (productsData.nodes.length === 0 && productsData.pageInfo.hasNextPage) throw new Error("Shopify pagination stopped with an empty intermediate page");
+      if (productsData.nodes.length === 0 && productsData.pageInfo.hasNextPage) throw Object.assign(new Error("Shopify pagination stopped with an empty intermediate page"), {restartProductScan:true});
       if (productsData.nodes.length === 0) {
         hasNextPage = false;
         break;
@@ -868,7 +868,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       // Recount to allow legitimate catalog deletions while rejecting an early end.
       const currentTotal = await shopifyProductCount(admin);
       if ((job.productsProcessed || 0) < currentTotal) {
-        throw new Error(`Shopify pagination stopped with unread products: ${job.productsProcessed || 0} / ${currentTotal}`);
+        throw Object.assign(new Error(`Shopify pagination stopped with unread products: ${job.productsProcessed || 0} / ${currentTotal}`), {restartProductScan:true,expectedTotal:currentTotal});
       }
       await prisma.syncJob.update({ where: { id: jobId }, data: { totalProducts: currentTotal } });
       await autoSeedOptionFilters(shop);

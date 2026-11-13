@@ -44,9 +44,20 @@ export async function processProductSyncJob(job, token) {
   } catch (error) {
     if (error instanceof DelayedError) throw error;
     const retrying = job.attemptsMade + 1 < (job.opts.attempts || 1);
-    await prisma.syncJob.update({ where: { id: syncJobId }, data: { status: retrying ? "IN_PROGRESS" : "FAILED", lastError: syncErrorMessage(error), retryCount: job.attemptsMade + 1 } });
+    const restartScan=retrying&&error.restartProductScan===true&&(job.data.scanRestarts||0)<2;
+    if(restartScan)await job.updateData({...job.data,scanRestarts:(job.data.scanRestarts||0)+1});
+    await prisma.syncJob.update({ where: { id: syncJobId }, data: {
+      status: retrying ? "IN_PROGRESS" : "FAILED", lastError: syncErrorMessage(error), retryCount: job.attemptsMade + 1,
+      ...(restartScan?{cursor:null,productsProcessed:0,...(Number.isSafeInteger(error.expectedTotal)?{totalProducts:error.expectedTotal}:{})}:{}),
+    } });
     throw error;
   }
+}
+
+export async function recordProductSyncQueueFailure(job,error) {
+  if(!job?.data?.syncJobId||!job.data.shop||await job.getState()!=='failed')return;
+  await prisma.syncJob.updateMany({where:{id:job.data.syncJobId,shop:job.data.shop,status:'IN_PROGRESS'},
+    data:{status:'FAILED',lastError:syncErrorMessage(error)}});
 }
 
 export function initProductSyncWorker() {
@@ -54,11 +65,15 @@ export function initProductSyncWorker() {
     global.__productSyncWorker = new Worker("productSyncQueue", processProductSyncJob, {
       connection: { ...redisOptions, maxRetriesPerRequest: null },
       concurrency: 2,
-      lockDuration: 60000,
+      lockDuration: 180000,
+      lockRenewTime: 15000,
       maxStalledCount: 5,
     });
     global.__productSyncWorker.on("error", error => console.error("CFP Product sync worker:", error.message));
-    global.__productSyncWorker.on("failed", (job,error) => console.error("CFP Product sync retry:", job?.id, error.message));
+    global.__productSyncWorker.on("failed", (job,error) => {
+      console.error("CFP Product sync retry:", job?.id, error.message);
+      void recordProductSyncQueueFailure(job,error).catch(failure=>console.error('CFP Product sync failure reporting:',failure.name));
+    });
   }
   return global.__productSyncWorker;
 }

@@ -306,7 +306,7 @@ facet-filters-form,
   display: flex;
   align-items: center !important;
   gap: 8px;
-  font-family: 'Playfair Display', serif !important;
+  font-family: var(--cfp-store-font-family, var(--font-body-family, inherit)) !important;
   font-size: 18px !important;
   font-weight: 400 !important;
   color: var(--cfp-text) !important;

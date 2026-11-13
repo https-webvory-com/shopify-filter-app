@@ -113,7 +113,7 @@ test("queued errors let the worker decide retry status without briefly reporting
 
 test("an early empty page at 21800 cannot complete a 48860 product sync", async () => {
   const f = await fixture({processed:21800,total:48860});
-  await assert.rejects(f.run(), /unread products: 21800 \/ 48860/);
+  await assert.rejects(f.run(), error=>error.restartProductScan===true&&error.expectedTotal===48860&&/unread products: 21800 \/ 48860/.test(error.message));
   assert.equal(f.updates.at(-1).status, "FAILED");
   assert.ok(!f.updates.some(update => update.status === "COMPLETED" || update.completedAt));
 });

@@ -44,6 +44,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function queryElements() {
     sidebar = document.getElementById('cfp-sidebar');
+    if(sidebar&&document.body&&typeof window.getComputedStyle==='function'&&sidebar.style?.setProperty){
+      sidebar.style.setProperty('--cfp-store-font-family',window.getComputedStyle(document.body).fontFamily);
+    }
     topBar = document.getElementById('cfp-top-bar');
     overlay = document.getElementById('cfp-overlay');
     triggerBtn = document.getElementById('cfp-drawer-trigger-btn');

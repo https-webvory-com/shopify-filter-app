@@ -5,7 +5,7 @@ export const productSyncQueue = global.__productSyncQueue ||= new Queue("product
   connection: redisOptions,
   defaultJobOptions: {
     attempts: 10,
-    backoff: { type: "fixed", delay: 15000 },
+    backoff: { type: "exponential", delay: 15000 },
     removeOnComplete: { count: 200 },
     removeOnFail: { count: 1000 },
   },
@@ -16,7 +16,10 @@ export async function enqueueProductSync(jobId, shop) {
   const existing = await productSyncQueue.getJob(jobId);
   if (existing) {
     const state = await existing.getState();
-    if (state === "failed") { await existing.retry("failed", { resetAttemptsMade: true, resetAttemptsStarted: true }); return existing; }
+    if (state === "failed") {
+      await existing.updateData({...existing.data,scanRestarts:0});
+      await existing.retry("failed", { resetAttemptsMade: true, resetAttemptsStarted: true }); return existing;
+    }
     if (state !== "completed") return existing;
     await existing.remove();
   }

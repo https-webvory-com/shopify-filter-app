@@ -1,6 +1,7 @@
 export function syncErrorMessage(error) {
   const text = String(error?.message || error || "").toLowerCase();
   const code = String(error?.code || error?.cause?.code || "").toLowerCase();
+  if (/stalled more than allowable|missing lock|lock renewal/.test(text)) return "The sync worker was interrupted. Saved progress is retained and can be resumed.";
   if (/disk full|no space|enospc/.test(text + code)) return "The server is out of disk space. Sync cannot continue until space is available.";
   if (/429|throttl|rate.limit|quota|resource_exhausted/.test(text)) return "The service request limit was reached. Sync will retry after a short wait.";
   if (/unauthor|access denied|permission|invalid.api.key|access token|401|403/.test(text)) return "A service rejected access. Check the store connection and service credentials.";
