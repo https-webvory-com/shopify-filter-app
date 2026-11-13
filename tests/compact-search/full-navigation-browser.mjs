@@ -14,7 +14,7 @@ try{
   await page.route('**/search/suggest.json?**',route=>route.fulfill({json:{resources:{results:{collections:[{title:'Formal',handle:'formal',url:'/collections/formal'}],pages:[]}}}}));
   await page.route('**/api/search?**',async route=>{
    const params=new URL(route.request().url()).searchParams;requests.push(Object.fromEntries(params));
-   if(params.get('categoryTabs'))return route.fulfill({json:{collections:[{id:'1',handle:'prom',title:'Prom'},{id:'2',handle:'formal',title:'Formal'},{id:'3',handle:'wedding',title:'Wedding'}]}});
+   if(params.get('categoryTabs'))return route.fulfill({json:{collections:[{id:'1',handle:'prom',title:'Prom'},{id:'2',handle:'formal',title:'Formal with sleeves & evening occasions'},{id:'3',handle:'wedding',title:'Wedding'}]}});
    const collection=params.get('collection'),q=params.get('q');
    if(collection==='prom'&&params.get('limit')!=='1')await new Promise(resolve=>setTimeout(resolve,450));
    return route.fulfill({json:{products:[{id:'1',title:(collection||'All')+' '+(q||'default'),handle:'dress',images:['https://cdn.shopify.com/dress.jpg'],priceMin:29,available:true,variants:[]}],matchCount:collection==='prom'?12:collection==='formal'?8:collection==='wedding'?4:42,suggestions:[]}});
@@ -24,6 +24,7 @@ try{
   const tabs=page.locator('#cfp-full-category-tabs');
   if(layout==='fullscreen'){
    await tabs.getByRole('tab',{name:'Prom (12)',exact:true}).waitFor();assert.equal(await tabs.getByRole('tab').count(),4);
+   assert.ok(await tabs.evaluate(el=>el.scrollWidth<=el.clientWidth),'category tabs wrap without horizontal scrolling');
    const geometry=await page.locator('#cfp-view-all-results').evaluate(el=>({top:el.getBoundingClientRect().top,products:document.getElementById('cfp-search-products').getBoundingClientRect().top,scroll:document.documentElement.scrollWidth}));assert.ok(geometry.top<geometry.products);assert.ok(geometry.scroll<=width,JSON.stringify(geometry));
    await page.locator('.cfp-full-collection-link img').waitFor({state:'attached'});assert.equal(await page.locator('.cfp-full-collection-link img').getAttribute('src'),'https://cdn.shopify.com/formal.jpg');
    assert.equal(await page.locator('#cfp-full-popular-chips button').count(),2);

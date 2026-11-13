@@ -163,7 +163,7 @@ export const loader = async ({ request }) => {
     // 2. Fetch Active Pinning Rule
     if(categoriesOnly){
       const {searchCollectionCandidates}=await import('../services/searchNavigation.server.js');
-      const collections=searchQuery?await searchCollectionCandidates(shop,cleanSearchQuery,meiliSearchParams):[];
+      const collections=searchQuery?await searchCollectionCandidates(shop,cleanSearchQuery,meiliSearchParams,searchContext.settings?.compactCollections||[]):[];
       return data({collections},{headers:{...searchCacheHeaders(request),'Access-Control-Allow-Origin':'*'}});
     }
 

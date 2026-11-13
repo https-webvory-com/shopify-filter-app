@@ -20,14 +20,20 @@ export async function searchCollectionCards(shop,{ids=[],handles=[]}={}){
    AND (c.id=ANY(${ids}::text[]) OR c.handle=ANY(${handles}::text[])) LIMIT 40`;
  return rows.map(row=>({id:row.id,title:row.title,handle:row.handle,image:httpsImage(row.images)}));
 }
-export async function searchCollectionCandidates(shop,query,options){
- const signature=createHash('sha256').update(JSON.stringify([query,options])).digest('hex');
+export async function searchCollectionCandidates(shop,query,options,preferred=[]){
+ const signature=createHash('sha256').update(JSON.stringify([query,options,preferred.map(collection=>collection.id)])).digest('hex');
  return getCached(`searchCollectionCandidates:${shop}:${signature}`,async()=>{
   const result=await keywordSearch(query,{...options,limit:0,attributesToRetrieve:[],attributesToHighlight:[],facets:['collections']});
-  const entries=Object.entries(result.facetDistribution?.collections||{}).filter(([id])=>/^(?:gid:\/\/shopify\/Collection\/)?\d+$/.test(id)).sort((a,b)=>b[1]-a[1]).slice(0,20);
-  const ids=[...new Set(entries.map(([id])=>id.startsWith('gid:')?id:'gid://shopify/Collection/'+id))];
+  const entries=Object.entries(result.facetDistribution?.collections||{}).filter(([id,count])=>count>0&&/^(?:gid:\/\/shopify\/Collection\/)?\d+$/.test(id)).sort((a,b)=>b[1]-a[1]);
+  const matching=new Set(entries.map(([id])=>id.startsWith('gid:')?id:'gid://shopify/Collection/'+id));
+  // Reuse the merchant's curated main collection categories when available.
+  // Never expose maintenance/index collections or duplicate the All results tab.
+  const curated=preferred.map(collection=>String(collection.id)).filter(id=>matching.has(id));
+  const ids=[...new Set([...curated,...matching])].slice(0,40);
   const cards=await searchCollectionCards(shop,{ids});const byId=new Map(cards.map(card=>[card.id,card]));
-  return ids.map(id=>byId.get(id)).filter(Boolean).slice(0,4);
+  const publicCategory=card=>card&&!/\b(?:do[ -]?not[ -]?delete|filter[ -]?index|search[ -]?index|smart[ -]?products[ -]?filter)\b/i.test(card.title+' '+card.handle)&&!/^(?:all|all products|shop all|all dresses)$/i.test(card.title.trim());
+  const selected=curated.map(id=>byId.get(id)).filter(publicCategory);
+  return (selected.length?selected:ids.map(id=>byId.get(id)).filter(publicCategory)).slice(0,4);
  },30,{maxBytes:50000});
 }
 export async function popularSearchQueries(shop){

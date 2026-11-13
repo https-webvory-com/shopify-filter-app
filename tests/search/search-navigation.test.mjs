@@ -36,6 +36,18 @@ test('popular searches aggregate successful queries across visitors and discard 
  assert.deepEqual(Array.from(await service.popularSearchQueries('a.myshopify.com')),['prom dress','wedding guest']);
  assert.match(query.sql,/COUNT\(DISTINCT "anonId"\)>=3/);assert.match(query.sql,/hits>0/);assert.ok(query.values.includes('a.myshopify.com'));
 });
+test('category tabs prefer matching merchant categories and omit internal index and All collections',async()=>{
+ const cards=[['1','All'],['2','Smart Products Filter Index - Do not delete'],['3','Ultimate Search - Do not delete'],['4','Prom Dresses'],['5','Formal Dresses'],['6','Wedding Dresses']].map(([id,title])=>({id:'gid://shopify/Collection/'+id,title,handle:title.toLowerCase().replaceAll(' ','-'),images:[]}));
+ const service=await loadModule('app/services/searchNavigation.server.js',{
+  '../db.server.js':{default:{$queryRaw:async()=>cards}},'./shopCache.server.js':{getCached:async(_key,read)=>read()},
+  './semanticSearch.server.js':{keywordSearch:async()=>({facetDistribution:{collections:Object.fromEntries(cards.map((card,index)=>[card.id,100-index]))}})},'../utils/searchSuggestions.js':suggestions,
+ });
+ const preferred=[cards[5],cards[4],cards[3],{id:'gid://shopify/Collection/999'}];
+ const result=await service.searchCollectionCandidates('a.myshopify.com','dress',{},preferred);
+ assert.deepEqual(Array.from(result,card=>card.title),['Wedding Dresses','Formal Dresses','Prom Dresses']);
+ const automatic=await service.searchCollectionCandidates('a.myshopify.com','dress',{});
+ assert.deepEqual(Array.from(automatic,card=>card.title),['Prom Dresses','Formal Dresses','Wedding Dresses']);
+});
 test('navigation endpoint validates handles and applies the shop suggestion blacklist',async()=>{
  let calls=0;
  const route=await loadModule('app/routes/api.search-navigation.jsx',{
