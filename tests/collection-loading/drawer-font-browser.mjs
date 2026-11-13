@@ -11,6 +11,7 @@ try{for(const family of ['Arial','Courier New'])for(const width of [390,768,1440
  await page.goto(origin+'/collections/fixture');await page.locator('#cfp-drawer-trigger-btn').waitFor({state:'visible'});await page.locator('#cfp-drawer-trigger-btn').click();
  const fonts=await page.evaluate(()=>({body:getComputedStyle(document.body).fontFamily,title:getComputedStyle(document.querySelector('.cfp-sidebar__title')).fontFamily,parent:document.querySelector('#cfp-sidebar').parentElement.tagName}));
  assert.equal(fonts.title,fonts.body);assert.equal(fonts.parent,'BODY');
+ await page.locator('#cfp-sidebar').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished.catch(()=>{}))));
  const geometry=await page.locator('#cfp-sidebar').evaluate(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};});
  if(width<=768){assert.ok(Math.abs(geometry.left)<1,JSON.stringify(geometry));assert.ok(Math.abs(geometry.right-width)<1,JSON.stringify(geometry));assert.ok(Math.abs(geometry.width-width)<1,JSON.stringify(geometry));}else assert.equal(geometry.width,420);
  console.log('PASS '+family+' drawer at '+width+'px: store font and '+(width<=768?'full screen width':'saved desktop width'));await page.close();

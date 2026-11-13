@@ -28,6 +28,13 @@ body.cfp-empty-search-results #cfp-sidebar{display:none!important;}
 body.cfp-empty-search-results .cfp-layout-wrapper{grid-template-columns:minmax(0,1fr)!important;}
 body.cfp-empty-search-results .cfp-main-content{grid-column:1 / -1!important;}
 body.cfp-empty-search-results #cfp-products-container{grid-column:1 / -1!important;}
+/* Keyframes animate even when the drawer starts at display:none. */
+@keyframes cfpDrawerEnter{from{transform:translate3d(-100%,0,0)}to{transform:translate3d(0,0,0)}}
+@keyframes cfpDrawerBackdropEnter{from{opacity:0}to{opacity:1}}
+body.cfp-drawer-layout #cfp-sidebar.cfp-sidebar--open{animation:var(--cfp-drawer-enter-animation,cfpDrawerEnter 320ms cubic-bezier(.22,.61,.36,1) both)!important;}
+#cfp-overlay.cfp-overlay--visible{animation:var(--cfp-drawer-backdrop-animation,cfpDrawerBackdropEnter 220ms ease-out both)!important;}
+@media(max-width:768px){body:not(.cfp-mobile-horizontal-scrolling) #cfp-sidebar.cfp-sidebar--open{animation:var(--cfp-drawer-enter-animation,cfpDrawerEnter 320ms cubic-bezier(.22,.61,.36,1) both)!important;}}
+@media(prefers-reduced-motion:reduce){body{--cfp-drawer-enter-animation:none;--cfp-drawer-backdrop-animation:none;}}
 .cfp-v1-app-container,
 #cfp-v1-app-container {
   min-height: 0 !important;
@@ -258,7 +265,7 @@ facet-filters-form,
   }
   .cfp-overlay.cfp-overlay--visible {
     display: block !important;
-    opacity: 1 !important;
+    opacity: 1;
     pointer-events: all !important;
   }
 }
@@ -1493,21 +1500,10 @@ facet-filters-form,
   transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Inner top animated border on hover sliding down from top into the button matching filter pills and sort */
+/* Keep the filter trigger free of the old thick hover/active stripe. */
 .cfp-drawer-trigger-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: #000000;
-  transform: translateY(-100%);
-  transition: transform 0.22s cubic-bezier(0.25, 1, 0.5, 1);
-  border-top-left-radius: 3px;
-  border-top-right-radius: 3px;
-  pointer-events: none;
-  z-index: 2;
+  content: none !important;
+  display: none !important;
 }
 
 .cfp-drawer-trigger-btn:hover,
@@ -1517,10 +1513,6 @@ facet-filters-form,
   color: #000000;
 }
 
-.cfp-drawer-trigger-btn:hover::before,
-.cfp-drawer-trigger-btn[aria-expanded="true"]::before {
-  transform: translateY(0);
-}
 
 @media (max-width: 768px) {
   .cfp-top-bar {
@@ -1623,7 +1615,7 @@ facet-filters-form,
     background: rgba(0,0,0,.45) !important;
     backdrop-filter: none !important;
     z-index: 2147483646 !important;
-    opacity: 0 !important;
+    opacity: 0;
     visibility: hidden !important;
     pointer-events: none !important;
     transition: opacity var(--cfp-transition) !important;
@@ -1631,7 +1623,7 @@ facet-filters-form,
   }
   .cfp-overlay--visible {
     display: block !important;
-    opacity: 1 !important;
+    opacity: 1;
     visibility: visible !important;
     pointer-events: auto !important;
   }
@@ -1813,7 +1805,7 @@ facet-filters-form,
   background: #eaeaea;
 }
 
-.cfp-overlay--visible { display: block !important; opacity: 1 !important; z-index: 999998 !important; }
+.cfp-overlay--visible { display: block !important; opacity: 1; z-index: 999998 !important; }
 .cfp-close-btn { display: flex !important; }
 .cfp-sidebar__header { display: flex !important; }
 
