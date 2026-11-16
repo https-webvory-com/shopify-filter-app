@@ -1246,6 +1246,15 @@ facet-filters-form,
   text-align: center;
 }
 
+.cfp-product-card__title.cfp-product-card__sku {
+  height: auto;
+  -webkit-line-clamp: 1;
+}
+
+.cfp-product-card__sku ~ .cfp-product-swatches {
+  margin-top: 6px !important;
+}
+
 .cfp-product-card__price-row {
     display: flex;
     align-items: center !important;
