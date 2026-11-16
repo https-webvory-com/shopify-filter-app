@@ -98,6 +98,39 @@ test('products render while optional collection suggestions are still loading',a
  assert.equal(f.element('cfp-view-all-results').textContent,'View all 42 results');
  releaseCollections();await pending;
 });
+
+test('Full screen collection results render before a slow product response',async()=>{
+ const f=fixture();let releaseProducts;
+ f.context.window.cfpSearchSettings={instantLayout:'fullscreen'};
+ f.context.fetch=async url=>String(url).includes('/api/search')
+  ?await new Promise(resolve=>{releaseProducts=()=>resolve({ok:true,status:200,json:async()=>({products:[{title:'Dress'}],suggestions:[]})});})
+  :{ok:true,status:200,json:async()=>({resources:{results:{collections:[{title:'Prom Dresses',handle:'prom'}]}}})};
+ const pending=f.context.performSearch('blue dress');
+ for(let attempt=0;attempt<30&&!f.calls.some(x=>x[0]==='collections');attempt++)await new Promise(resolve=>setTimeout(resolve,1));
+ assert.ok(f.calls.some(x=>x[0]==='collections'),'collections must not wait for products');
+ assert.ok(!f.calls.some(x=>x[0]==='products'));
+ releaseProducts();await pending;
+ assert.equal(f.calls.filter(x=>x[0]==='collections').length,1,'do not repaint collection pills when products finish');
+});
+
+test('returning to the same query cannot let an older response replace the latest search',async()=>{
+ const f=fixture(),releases=[],rendered=[];
+ f.context.renderProducts=async data=>rendered.push(data.products[0].title);
+ let request=0;
+ f.context.fetch=async url=>{
+  if(!String(url).includes('/api/search'))return {ok:true,json:async()=>({resources:{results:{collections:[]}}})};
+  request++;
+  if(request<=2)return await new Promise(resolve=>releases.push(()=>resolve({ok:true,json:async()=>({products:[{title:'Old response'}]})})));
+  return {ok:true,json:async()=>({products:[{title:'Latest response'}]})};
+ };
+ const first=f.context.performSearch('blue dress');
+ while(releases.length<1)await new Promise(resolve=>setTimeout(resolve,1));
+ f.context.mainInput.value='red dress';const second=f.context.performSearch('red dress');
+ while(releases.length<2)await new Promise(resolve=>setTimeout(resolve,1));
+ f.context.mainInput.value='blue dress';await f.context.performSearch('blue dress');
+ releases.forEach(release=>release());await Promise.all([first,second]);
+ assert.deepEqual(rendered,['Latest response']);
+});
 test('blocked storage still allows typed and default searches',async()=>{
  const f=fixture({getItem(){throw Error('SecurityError');},get length(){throw Error('SecurityError');}});
  await f.context.performSearch('blue dress');

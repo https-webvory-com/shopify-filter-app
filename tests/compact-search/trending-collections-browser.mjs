@@ -15,7 +15,7 @@ try{
   await page.goto(origin);await page.locator('#cfp-main-search-input').waitFor({state:'attached'});
   await page.locator('header input').click();
   await page.waitForFunction(layout=>document.querySelector('.cfp-search-modal')?.dataset.cfpLayout===layout,layout);
-  const verify=async()=>{
+  const verify=async(query='')=>{
    await page.locator('#cfp-search-collections a').first().waitFor({state:layout==='fullscreen'?'visible':'attached'});
    const state=await page.evaluate(()=>{
     const list=document.getElementById('cfp-search-collections'),heading=document.getElementById('cfp-collections-title'),grid=document.getElementById('cfp-search-products'),a=list.querySelector('a'),s=getComputedStyle(a);
@@ -25,14 +25,14 @@ try{
    assert.ok(state.headingNext);
    if(layout==='fullscreen'){
     assert.ok((await page.locator('.cfp-search-section-title').evaluateAll(nodes=>nodes.map(x=>getComputedStyle(x).color))).every(x=>x==='rgb(0, 0, 0)'),'all Full screen section headings match Windsor black');
-    assert.equal(state.parent,'cfp-search-column-left');assert.equal(state.heading,'Trending collections');assert.ok(state.above);
+    assert.equal(state.parent,'cfp-search-column-left');assert.equal(state.heading,query?'Collection results':'Trending collections');assert.ok(state.above);
     assert.equal(state.pill.background,'rgb(242, 241, 241)');assert.equal(state.pill.border,'0px');assert.equal(state.pill.padding,'8px 16px');assert.equal(state.pill.lineHeight,'18px');assert.equal(state.overflow,false);assert.equal(state.titleClamp,'2');
    }else assert.equal(state.parent,'cfp-search-column-right');
   };
   await page.waitForFunction(()=>document.querySelector('#cfp-search-products .cfp-search-product-title'));
   await verify();
   await page.locator('#cfp-main-search-input').fill('dress');
-  await page.locator('#cfp-view-all-results').waitFor();await verify();
+  await page.locator('#cfp-view-all-results').waitFor();await verify('dress');
   if(layout==='fullscreen')await page.screenshot({path:`scratch/trending-collections-${column}-${width}.png`});
   assert.deepEqual(errors,[]);
   await page.close();console.log(`PASS ${layout} ${column} ${width}: collection placement, styling, links, search and product title preserved`);
