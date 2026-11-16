@@ -78,7 +78,7 @@
         img.src=resize(360);if(selection.image.includes('cdn.shopify.com')){img.srcset=[180,360,540].map(width=>resize(width)+' '+width+'w').join(', ');img.sizes='(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw';}
         const selectedId=new URL(selection.url,location.origin).searchParams.get('variant');
         const sku=product.variants?.find(variant=>String(variant.id).split('/').pop()===selectedId)?.sku||product.variants?.find(variant=>variant.sku)?.sku||product.sku||'';
-        title.textContent=payload.globalSettings?.isWholesale?sku:product.title;link.append(img,title);card.append(link);grid.append(card);
+        title.textContent=payload.globalSettings?.isWholesale?(String(sku).match(/\d{1,4}/)?.[0]||''):product.title;link.append(img,title);card.append(link);grid.append(card);
       }
       rendered=payload.products.length;
       grid.insertAdjacentHTML('beforeend','<div class="cfp-first-row-placeholder cfp-sk-card" aria-hidden="true"><span class="cfp-sk-image cfp-sk-anim"></span><span class="cfp-sk-title cfp-sk-anim"></span></div>'.repeat(missing));

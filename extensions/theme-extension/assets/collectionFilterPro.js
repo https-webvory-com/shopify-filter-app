@@ -1486,7 +1486,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const sku = card.querySelector('.cfp-product-card__sku');
     if (sku) {
       const selectedId = new URL(card.querySelector('.cfp-product-card__link').href, location.origin).searchParams.get('variant');
-      sku.textContent = product.variants?.find(variant => String(variant.id).split('/').pop() === selectedId)?.sku || product.variants?.find(variant => variant.sku)?.sku || product.sku || '';
+      const value = product.variants?.find(variant => String(variant.id).split('/').pop() === selectedId)?.sku || product.variants?.find(variant => variant.sku)?.sku || product.sku || '';
+      sku.textContent = String(value).match(/\d{1,4}/)?.[0] || '';
     }
     const row = card.querySelector('.cfp-product-card__price-row');
     if (!row) return;
@@ -2135,7 +2136,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const cardVariantId = new URL(productUrl, location.origin).searchParams.get('variant');
       const cardSku = product.variants?.find(variant => String(variant.id).split('/').pop() === cardVariantId)?.sku || matchedVariant?.sku || product.variants?.find(variant => variant.sku)?.sku || product.sku || '';
       const cardIdentityHtml = globalSettings?.isWholesale
-        ? `<h3 class="cfp-product-card__title cfp-product-card__sku">${escapeCardHtml(cardSku)}</h3>`
+        ? `<h3 class="cfp-product-card__title cfp-product-card__sku">${escapeCardHtml(String(cardSku).match(/\d{1,4}/)?.[0] || '')}</h3>`
         : `<h3 class="cfp-product-card__title">${titleHtml}</h3>`;
 
       if(previewOnly&&!pricePreview)return `

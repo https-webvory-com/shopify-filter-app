@@ -3313,7 +3313,7 @@ facet-filters-form,
   .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__label,
   .cfp-vertical-layout #cfp-sidebar .cfp-swatch-label { font: 400 14px/1.4 Arial, Helvetica, sans-serif !important; color: #111 !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__box { width: 16px !important; height: 16px !important; min-width: 16px !important; border-radius: 2px !important; border: 1px solid #999 !important; }
-  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox input:checked ~ .cfp-checkbox__box { background: #111 !important; border-color: #111 !important; }
+  .cfp-vertical-layout #cfp-sidebar .cfp-checkbox input:checked ~ .cfp-checkbox__box { background-color: #111 !important; border-color: #111 !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-checkbox__count { color: #666 !important; font-size: 12px !important; background: transparent !important; padding: 0 !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-button-grid { gap: 8px !important; }
   .cfp-vertical-layout #cfp-sidebar .cfp-button-chip > span {
