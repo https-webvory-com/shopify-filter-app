@@ -531,8 +531,10 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         }
         const rFrom = r.from !== undefined ? r.from : (r.min || "");
         const rTo = r.to !== undefined ? r.to : (r.max || "");
-        let label = (r.label || "").replace("{0}", rFrom);
-        if (rTo) label = label.replace("{1}", rTo);
+        let template = r.label || (type === 'price' ? (rTo === '' || rTo == null ? 'From {0}' : '{0} - {1}') : '');
+        if(type === 'price' && (rTo === '' || rTo == null) && template.includes('{1}'))template='From {0}';
+        let label = template.replace("{0}", rFrom);
+        if (rTo || type === 'price' && rTo === 0) label = label.replace("{1}", rTo);
         return { label, count: totalCount };
       });
     }

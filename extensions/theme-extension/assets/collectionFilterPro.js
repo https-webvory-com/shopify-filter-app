@@ -81,6 +81,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     if (sortType === 'Product count - Highest to lowest') return (b.count || 0) - (a.count || 0) || alpha;
     if (sortType === 'Product count - Lowest to highest') return (a.count || 0) - (b.count || 0) || alpha;
     if (sortType === 'Label - ZA') return -alpha;
+    if (sortType === 'Automatic' && type === 'price') {
+      const l=String(a.value).split(':').map(Number),r=String(b.value).split(':').map(Number);
+      return l[0]-r[0] || l[1]-r[1] || alpha;
+    }
     if (sortType === 'Automatic' && type === 'option' && /^color$/i.test(key || '')) return (b.count || 0) - (a.count || 0) || alpha;
     if (sortType === 'Automatic' && type === 'option' && /^size$/i.test(key || '')) {
       const l = sizeOrder(a.value || a.label), r = sizeOrder(b.value || b.label);
@@ -1170,9 +1174,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
     if(signal.aborted)return;
     const prefix=cards.cfpCards?.prefix===true;
-    const facetsOnly=cards.cfpCards?.filtered===true&&!prefix;
+    const direct=cards.cfpCards?.directSort;
+    const directSort=direct?.version===1&&(direct.collectionId===null||typeof direct.collectionId==='string')&&direct.sortBy===new URL(requestUrl).searchParams.get('sortBy');
+    const facetsOnly=cards.cfpCards?.filtered===true&&!prefix&&!directSort;
     const request=new URL(requestUrl);request.searchParams.set('responseProfile',facetsOnly?'collection-facets-v1':'collection-v1');
-    if(prefix)request.searchParams.delete('rankingToken');else request.searchParams.set('rankingToken',cards.rankingToken);
+    if(prefix||directSort)request.searchParams.delete('rankingToken');else request.searchParams.set('rankingToken',cards.rankingToken);
     const signature=JSON.stringify(cards.products);
     const presentationKeys=['showQuickViewCollection','secondImageOnHover','isWholesale'];
     const presentation=JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]));
@@ -1185,7 +1191,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
       let full=await response.json();
       if(prefix)full=await waitForCollectionOrder(full,request.toString(),signal);
-      if((!prefix&&response.status!==200)||(!prefix&&full.rankingToken!==cards.rankingToken)||!full.rankingToken||!full.settings||!full.facets||(!full.cfpFacetsOnly&&!Array.isArray(full.products)))throw Error('Filters unavailable');
+      const directReady=directSort&&full.cfpDirectSort?.version===1&&full.cfpDirectSort.collectionId===direct.collectionId&&full.cfpDirectSort.sortBy===direct.sortBy&&!full.rankingToken;
+      const rankingReady=prefix?!!full.rankingToken:directSort?directReady:!!full.rankingToken&&full.rankingToken===cards.rankingToken;
+      if((!prefix&&response.status!==200)||!rankingReady||!full.settings||!full.facets||(!full.cfpFacetsOnly&&!Array.isArray(full.products)))throw Error('Filters unavailable');
       if(signal.aborted)return;
       if(prefix){
         // The early pins occupy page one only. Subsequent canonical pages,
@@ -2557,7 +2565,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             let maxStrDisp = Math.round(maxRaw * rate).toString();
 
             // Prepend symbol if label doesn't already include it
-            const rawLabel = (r.label || "").replace(/₹/g, 'Rs. ');
+            let rawLabel = (r.label || (Number.isFinite(Number(maxRaw))?'{0} - {1}':'From {0}')).replace(/₹/g, 'Rs. ');
+            if(!Number.isFinite(Number(maxRaw))&&rawLabel.includes('{1}'))rawLabel='From {0}';
             if (!rawLabel.includes('$') && !rawLabel.includes(symbol)) {
                minStrDisp = symbol + minStrDisp;
                maxStrDisp = symbol + maxStrDisp;
@@ -2657,8 +2666,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           // Treat that legacy default as Automatic until the merchant selects an explicit order.
           const legacyOptionDefault = type === 'option' && /^(color|size)$/i.test(key || '') &&
             !adv.sortModeExplicit && (!adv.sortType || adv.sortType === 'Label - AZ');
+          const legacyPriceDefault = type === 'price' && !adv.sortModeExplicit && (!adv.sortType || adv.sortType === 'Label - AZ');
           items = [...items].sort((a, b) => compareFilterOptions(a, b,
-            legacyOptionDefault ? 'Automatic' : adv.sortType || 'Label - AZ', type, key));
+            legacyOptionDefault || legacyPriceDefault ? 'Automatic' : adv.sortType || 'Label - AZ', type, key));
         }
 
         if (items.length === 0) return;

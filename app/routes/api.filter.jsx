@@ -1678,6 +1678,7 @@ export const loader = async ({ request, context }) => {
       }
       return data({products,totalCount:pinnedPrefix?null:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
       mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters,
+        ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
       debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
@@ -1946,6 +1947,7 @@ export const loader = async ({ request, context }) => {
 
     const responsePayload = {
       rankingToken: rankingSession?.token ?? null,
+      ...(directSort?{cfpDirectSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
       products,
       totalCount:pinnedPrefix?null:totalCount,
       ...(pinnedPrefix?{collectionPinnedPrefix:true}:{}),
