@@ -55,6 +55,39 @@ test('Full screen empty search derives card count from pins and ignores removed 
  f.context.window.cfpSearchSettings.instantLayout='compact';requests.length=0;await f.context.fetchDefaultView();assert.equal(requests.length,0);
  f.context.window.cfpSearchSettings.showPopularProducts=true;await f.context.fetchDefaultView();assert.equal(new URL(requests[0]).searchParams.get('limit'),'1');
 });
+
+test('Full screen collection phrases fall back to related published collection matches with deduplication',async()=>{
+ const f=fixture(),requests=[];f.context.mainInput.value='blue prom';f.context.mainInput._cfpSearchVersion=1;
+ f.context.window.cfpSearchSettings={instantLayout:'fullscreen'};f.context.CONFIG.collectionLimit=2;
+ const prom={id:1,title:'Prom Dresses',url:'/collections/prom-dresses'};
+ f.context.fetch=async url=>{const q=new URL(url,'https://fixture.test').searchParams.get('q');requests.push(q);return {ok:true,json:async()=>({resources:{results:{collections:q==='blue prom'?[]:q==='prom'?[prom]:[prom,{id:2,title:'Blue Dresses',url:'/collections/blue'}]}}})};};
+ const result=await f.context.fetchSearchCollections('blue prom',1);
+ assert.deepEqual(requests,['blue prom','prom','blue']);assert.deepEqual(Array.from(result.resources.results.collections,c=>c.title),['Prom Dresses','Blue Dresses']);
+});
+
+test('collection fallback preserves exact phrase results and Compact behavior, and makes no requests when hidden',async()=>{
+ for(const layout of ['fullscreen','compact']){
+  const f=fixture(),requests=[];f.context.mainInput.value='blue prom';f.context.window.cfpSearchSettings={instantLayout:layout};
+  f.context.fetch=async url=>{requests.push(url);return {ok:true,json:async()=>({resources:{results:{collections:layout==='fullscreen'?[{id:1,title:'Blue Prom Dresses'}]:[]}}})};};
+  await f.context.fetchSearchCollections('blue prom');assert.equal(requests.length,1);
+  f.context.CONFIG.collectionLimit=0;await f.context.fetchSearchCollections('blue prom');assert.equal(requests.length,1);
+ }
+});
+
+test('a longer collection phrase can fall back to its category when neither shorter phrase matches',async()=>{
+ const f=fixture(),requests=[];f.context.mainInput.value='light blue prom';
+ f.context.fetch=async url=>{const q=new URL(url,'https://fixture.test').searchParams.get('q');requests.push(q);return {ok:true,json:async()=>({resources:{results:{collections:q==='prom'?[{id:1,title:'Prom Dresses'}]:[]}}})};};
+ const result=await f.context.fetchSearchCollections('light blue prom');
+ assert.deepEqual(requests,['light blue prom','blue prom','light blue','prom']);assert.equal(result.resources.results.collections[0].title,'Prom Dresses');
+});
+
+test('collection phrase fallback does not start requests for a stale query or invent matches',async()=>{
+ const f=fixture(),requests=[];f.context.mainInput.value='blue prom';f.context.mainInput._cfpSearchVersion=1;
+ f.context.fetch=async url=>{requests.push(url);f.context.mainInput._cfpSearchVersion=2;f.context.mainInput.value='formal';return {ok:true,json:async()=>({resources:{results:{collections:[]}}})};};
+ const stale=await f.context.fetchSearchCollections('blue prom',1);assert.equal(requests.length,1);assert.deepEqual(Array.from(stale.resources.results.collections),[]);
+ f.context.mainInput.value='unmatched phrase';f.context.fetch=async url=>({ok:true,json:async()=>({resources:{results:{collections:[]}}})});
+ const empty=await f.context.fetchSearchCollections('unmatched phrase',2);assert.deepEqual(Array.from(empty.resources.results.collections),[]);
+});
 test('instant typing records autocomplete, then counts only the engaged query',async()=>{
  const f=fixture(),events=[];
  f.context.window.CfpAnalytics={newSearchId:(()=>{let id=0;return()=>`search_${++id}`;})(),
@@ -91,7 +124,9 @@ test('products render while optional collection suggestions are still loading',a
  const f=fixture();let releaseCollections;
  f.context.fetch=async url=>String(url).includes('/api/search')
    ?{ok:true,status:200,json:async()=>({products:[{title:'Blue dress'}],matchCount:42,suggestions:[]})}
-   :await new Promise(resolve=>{releaseCollections=()=>resolve({ok:true,status:200,json:async()=>({resources:{results:{collections:[]}}})});});
+   :new URL(url,'https://fixture.test').searchParams.get('q')==='blue dress'
+    ?await new Promise(resolve=>{releaseCollections=()=>resolve({ok:true,status:200,json:async()=>({resources:{results:{collections:[]}}})});})
+    :{ok:true,status:200,json:async()=>({resources:{results:{collections:[]}}})};
  const pending=f.context.performSearch('blue dress');
  for(let attempt=0;attempt<20&&!releaseCollections;attempt++)await new Promise(resolve=>setTimeout(resolve,1));
  assert.ok(releaseCollections);

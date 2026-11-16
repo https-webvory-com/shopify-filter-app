@@ -96,6 +96,30 @@ document.addEventListener("DOMContentLoaded", function () {
     return response.json();
   }
 
+  async function fetchSearchCollections(query, searchVersion) {
+    if (CONFIG.collectionLimit === 0) return {resources:{results:{collections:[]}}};
+    const root = window.Shopify?.routes?.root || '/';
+    const read = term => fetchSearchJSON(`${root}search/suggest.json?q=${encodeURIComponent(term)}&resources[type]=collection&resources[limit]=${CONFIG.collectionLimit ?? 5}`);
+    const initial = await read(query);
+    if (window.cfpSearchSettings?.instantLayout === 'compact' || initial.resources?.results?.collections?.length) return initial;
+    if (mainInput._cfpSearchVersion !== searchVersion || mainInput.value.trim().toLowerCase() !== query.trim().toLowerCase()) return initial;
+    const words = query.trim().split(/\s+/);
+    if (words.length < 2) return initial;
+    const phrases = [...new Set([words.slice(1).join(' '), words.slice(0,-1).join(' ')])].filter(term=>term.length>=2);
+    const responses = await Promise.all(phrases.map(term=>read(term).catch(()=>({resources:{results:{collections:[]}}}))));
+    const seen = new Set(), collections = [];
+    for (const response of responses) for (const collection of response.resources?.results?.collections || []) {
+      const key = String(collection.id || collection.handle || collection.url?.split('?')[0] || collection.title || '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);collections.push(collection);
+    }
+    if (!collections.length && words.length > 2 && words[words.length-1].length >= 2 && mainInput._cfpSearchVersion === searchVersion && mainInput.value.trim().toLowerCase() === query.trim().toLowerCase()) {
+      const last = await read(words[words.length-1]).catch(()=>({resources:{results:{collections:[]}}}));
+      return last;
+    }
+    return {resources:{results:{collections:collections.slice(0,CONFIG.collectionLimit ?? 5)}}};
+  }
+
   function highlightSearchText(value, query) {
     const escape = text => String(text).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
     if (!query?.trim()) return escape(value);
@@ -1283,9 +1307,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // 2. Fetch collections from Shopify Predictive Search API in background
       const rootUrl = window.Shopify && window.Shopify.routes ? window.Shopify.routes.root : "/";
-      const collectionsRequest = CONFIG.collectionLimit === 0 ? Promise.resolve({resources:{results:{collections:[]}}}) : fetchSearchJSON(
-        `${rootUrl}search/suggest.json?q=${encodeURIComponent(query)}&resources[type]=collection&resources[limit]=${CONFIG.collectionLimit ?? 5}`
-      ).catch(() => ({resources:{results:{collections:[]}}}));
+      const collectionsRequest = fetchSearchCollections(query,searchVersion).catch(() => ({resources:{results:{collections:[]}}}));
       const collectionsPromise=collectionsRequest.then(data=>{
         if(window.cfpSearchSettings?.instantLayout!=='compact'&&mainInput._cfpSearchVersion===searchVersion&&mainInput.value.trim().toLowerCase()===trimmedQuery){
           renderCollections(data,query);
