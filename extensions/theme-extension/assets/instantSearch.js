@@ -127,6 +127,13 @@ document.addEventListener("DOMContentLoaded", function () {
     return String(value).split(new RegExp('(' + escapedQuery + ')', 'gi')).map((part, index) => index % 2 ? '<strong>' + escape(part) + '</strong>' : escape(part)).join('');
   }
 
+  function highlightCollectionSearchText(value, query) {
+    const terms = [...new Set((query || '').trim().split(/\s+/).filter(Boolean))].sort((a,b)=>b.length-a.length);
+    if (!terms.length) return highlightSearchText(value, '');
+    const pattern = terms.map(term=>term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+    return String(value).split(new RegExp('(' + pattern + ')','gi')).map((part,index)=>index%2?'<strong>'+highlightSearchText(part,'')+'</strong>':highlightSearchText(part,'')).join('');
+  }
+
   function cleanSuggestionText(value) {
     if (typeof value !== 'string') return '';
     const text = value.replace(/\s+/g, ' ').trim();
@@ -817,6 +824,13 @@ document.addEventListener("DOMContentLoaded", function () {
       debounceTimer = setTimeout(() => {
         performSearch(query);
       }, CONFIG.debounceTime);
+      if (window.cfpSearchSettings?.instantLayout !== 'compact') {
+        mainInput._cfpQueryActive = true;
+        renderFullResultsHeading(query);
+        const viewAll = document.getElementById('cfp-view-all-results');
+        if (viewAll) viewAll.hidden = true;
+        renderLoading(true);
+      }
     });
 
     // Handle Enter key in our main input
@@ -1063,9 +1077,16 @@ document.addEventListener("DOMContentLoaded", function () {
     collectionsList?.setAttribute('aria-busy', String(isLoading));
     
     loader.style.display = "none"; // Hide old spinner entirely
-    if (isLoading && window.cfpSearchSettings?.instantLayout !== 'compact' && productsGrid.querySelector('.cfp-search-result-card,.cfp-search-no-results')) {
+    const fullScreen = window.cfpSearchSettings?.instantLayout !== 'compact';
+    const loadingQuery = mainInput.value.trim().toLowerCase();
+    const cardCount = loadingQuery.length >= CONFIG.minChars ? CONFIG.productLimit : (CONFIG.popularProductLimit ?? 4);
+    if (isLoading && fullScreen && productsGrid.dataset.cfpLoadingQuery === loadingQuery && productsGrid.querySelectorAll('.cfp-skeleton-card').length === cardCount) {
       body.classList.add('cfp-has-results');
       return;
+    }
+    if (fullScreen) {
+      if (isLoading) productsGrid.dataset.cfpLoadingQuery = loadingQuery;
+      else delete productsGrid.dataset.cfpLoadingQuery;
     }
     if (isLoading) {
       body.classList.add("cfp-has-results"); // Keep body visible for skeletons
@@ -1076,10 +1097,10 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       let skeletonProducts = '';
-      for(let i=0; i<CONFIG.productLimit; i++) {
+      for(let i=0; i<cardCount; i++) {
         skeletonProducts += `
-          <div class="cfp-skeleton-card" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
-            <div class="cfp-skeleton cfp-skeleton-img" style="width: 100%; aspect-ratio: 3/4; min-height: 200px; background: #e2e8f0; border-radius: 4px;">&nbsp;</div>
+          <div class="cfp-skeleton-card" aria-hidden="true" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <div class="cfp-skeleton cfp-skeleton-img" style="width: 100%; aspect-ratio: 2/3; background: #e2e8f0; border-radius: 4px;">&nbsp;</div>
             <div class="cfp-skeleton cfp-skeleton-text" style="min-height: 16px; width: 80%; background: #e2e8f0; border-radius: 4px; margin: 4px auto 0;">&nbsp;</div>
             <div class="cfp-skeleton cfp-skeleton-price" style="min-height: 16px; width: 40%; background: #e2e8f0; border-radius: 4px; margin: 0 auto;">&nbsp;</div>
           </div>
@@ -1088,11 +1109,16 @@ document.addEventListener("DOMContentLoaded", function () {
       productsGrid.innerHTML = skeletonProducts;
 
       if (collectionsList) {
+        const collectionsTitle = document.getElementById('cfp-collections-title');
+        if (collectionsTitle) {
+          collectionsTitle.textContent = loadingQuery.length >= CONFIG.minChars ? 'Collection results' : 'Trending collections';
+          collectionsTitle.style.display = CONFIG.collectionLimit === 0 ? 'none' : 'block';
+        }
         let skeletonCollections = '';
-        for(let i=0; i<5; i++) {
+        for(let i=0; i<Math.min(3,CONFIG.collectionLimit ?? 5); i++) {
           skeletonCollections += `
-            <li style="margin-bottom: 15px;">
-              <div class="cfp-skeleton cfp-skeleton-collection" style="min-height: 18px; width: 70%; background: #e2e8f0; border-radius: 4px;">&nbsp;</div>
+            <li aria-hidden="true">
+              <div class="cfp-skeleton cfp-skeleton-collection" style="height: 32px; width: 120px; margin: 0; background: #e2e8f0; border-radius: 100px;">&nbsp;</div>
             </li>
           `;
         }
@@ -1479,7 +1505,7 @@ document.addEventListener("DOMContentLoaded", function () {
         try {
           const url = new URL(collection.url || root + 'collections/' + encodeURIComponent(collection.handle), location.origin);
           if (url.origin !== location.origin || !url.pathname.includes('/collections/')) return [];
-          return `<li><a href="${instantEscapeHtml(url.pathname + url.search)}">${highlightSearchText(collection.title, query)}</a></li>`;
+          return `<li><a href="${instantEscapeHtml(url.pathname + url.search)}">${isFullScreen ? highlightCollectionSearchText(collection.title, query) : highlightSearchText(collection.title, query)}</a></li>`;
         } catch { return []; }
       });
       if (titleElement) { titleElement.textContent = isFullScreen ? (query?.trim() ? 'Collection results' : 'Trending collections') : 'Categories'; titleElement.style.display = links.length ? 'block' : 'none'; }

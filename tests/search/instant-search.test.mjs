@@ -220,6 +220,14 @@ test('highlighting treats regex characters literally and escapes markup',()=>{
  assert.equal(f.context.highlightSearchText('<Dress>','Dress'),'&lt;<strong>Dress</strong>&gt;');
  assert.doesNotThrow(()=>f.context.highlightSearchText('Dress [Blue]','['));
 });
+
+test('Full collection pills highlight matching words from a longer query and escape markup',()=>{
+ const f=fixture();
+ assert.equal(f.context.highlightCollectionSearchText('Prom Dresses','blue prom'),'<strong>Prom</strong> Dresses');
+ assert.equal(f.context.highlightCollectionSearchText('Blue Prom Dresses','blue prom'),'<strong>Blue</strong> <strong>Prom</strong> Dresses');
+ assert.equal(f.context.highlightCollectionSearchText('<Prom> (Blue)','prom (blue)'), '&lt;<strong>Prom</strong>&gt; <strong>(Blue)</strong>');
+ assert.equal(f.context.highlightCollectionSearchText('<Prom>',''),'&lt;Prom&gt;');
+});
 test('suggestions include product names and matching color, without case duplicates',()=>{
  const products=[{title:'Pleated Satin Evening Dress',status:'ACTIVE',options:[{name:'Color',values:['Blue','Red']}]},{title:'pleated satin evening dress',options:[{name:'Color',values:['Blue']}]},{title:'Hidden dress',status:'draft'}];
  assert.deepEqual(buildSearchSuggestions('blue dress',products,['Blue','blue']),['Blue Pleated Satin Evening Dress','Blue']);

@@ -1483,6 +1483,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   function updateMarketCardPrice(card, product) {
     if (!card || !product || product._marketPricingUnavailable) return;
     card._cfpMarketProduct = product;
+    const sku = card.querySelector('.cfp-product-card__sku');
+    if (sku) {
+      const selectedId = new URL(card.querySelector('.cfp-product-card__link').href, location.origin).searchParams.get('variant');
+      sku.textContent = product.variants?.find(variant => String(variant.id).split('/').pop() === selectedId)?.sku || product.variants?.find(variant => variant.sku)?.sku || product.sku || '';
+    }
     const row = card.querySelector('.cfp-product-card__price-row');
     if (!row) return;
     const href = card.querySelector('.cfp-product-card__link')?.href;
@@ -2127,12 +2132,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
       }
 
+      const cardVariantId = new URL(productUrl, location.origin).searchParams.get('variant');
+      const cardSku = product.variants?.find(variant => String(variant.id).split('/').pop() === cardVariantId)?.sku || matchedVariant?.sku || product.variants?.find(variant => variant.sku)?.sku || product.sku || '';
+      const cardIdentityHtml = globalSettings?.isWholesale
+        ? `<h3 class="cfp-product-card__title cfp-product-card__sku">${escapeCardHtml(cardSku)}</h3>`
+        : `<h3 class="cfp-product-card__title">${titleHtml}</h3>`;
+
       if(previewOnly&&!pricePreview)return `
         <div class="cfp-product-card cfp-product-card--reveal cfp-product-card--preview" data-cfp-product-id="${escapeCardHtml(product.id)}" data-cfp-position="${(activeFilters.page - 1) * PAGE_SIZE + productIndex + 1}" style="--cfp-reveal-delay:0ms;--cfp-reveal-duration:0ms">
           <div class="cfp-product-card__image-wrapper"><a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link"><div class="cfp-product-card__image-container">
             <img src="${escapeCardHtml(primaryImg)}" ${getImageSrcset(primaryImg)} alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--primary" ${productIndex<5?'fetchpriority="high"':'loading="lazy" fetchpriority="low"'} decoding="async" width="360" height="480" />
           </div></a></div>
-          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info"><h3 class="cfp-product-card__title">${titleHtml}</h3>${reviewSnippetHtml(product)}</div></a>
+          <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration:none;color:inherit;display:block"><div class="cfp-product-card__info">${cardIdentityHtml}${reviewSnippetHtml(product)}</div></a>
         </div>`;
       let badgesHtml = '';
       const searchDisplay = templateName === 'search' ? (window.cfpSearchSettings || {}) : {};
@@ -2180,7 +2191,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           <a href="${escapeCardHtml(productUrl)}" class="cfp-product-card__link" style="text-decoration: none; color: inherit; display: block;">
             <div class="cfp-product-card__info">
               ${searchDisplay.showVendor === false ? '' : `<span class="cfp-product-card__vendor">${escapeCardHtml(product.vendor)}</span>`}
-              <h3 class="cfp-product-card__title">${titleHtml}</h3>
+              ${cardIdentityHtml}
               ${reviewSnippetHtml(product)}
               ${swatchesHtml}
               ${(globalSettings && globalSettings.isWholesale && !window.cfpCustomerLoggedIn) ? '' : `

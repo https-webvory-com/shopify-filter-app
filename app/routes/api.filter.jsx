@@ -1394,6 +1394,7 @@ export const loader = async ({ request, context }) => {
             variants: {
               select: {
                 id: true,
+                sku: true,
                 available: true,
                 price: true,
                 compareAtPrice: true,
@@ -1423,6 +1424,7 @@ export const loader = async ({ request, context }) => {
               // Fix: set variantPrices so Step 13 shape mapper includes imageUrl for pinned products
               p.variantPrices = dbMatch.variants.map(v => ({
                 id: v.id,
+                sku: v.sku,
                 available: v.available,
                 price: v.price,
                 compareAtPrice: v.compareAtPrice,
@@ -1637,6 +1639,7 @@ export const loader = async ({ request, context }) => {
         _matchScore: matchScore,
         variants: localVariantPrices.map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
+          sku: v.sku,
           price: v.price,
           compareAtPrice: v.compareAtPrice,
           available: v.available,

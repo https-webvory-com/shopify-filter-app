@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync} from 'node:zlib';
-import {collectionCardsResponse} from '../../app/utils/collectionCards.js';
+import {collectionCardsResponse,collectionPreviewPayload} from '../../app/utils/collectionCards.js';
+
+test('wholesale preview cards retain SKU before the full response arrives',()=>{
+ const product={id:'1',title:'Product title',handle:'dress',variants:[{id:'100',sku:'KOS-100',available:true}]};
+ const preview=collectionPreviewPayload({products:[product],globalSettings:{isWholesale:true}});
+ assert.equal(preview.products[0].variants[0].sku,'KOS-100');
+ assert.equal(preview.globalSettings.isWholesale,true);
+});
 
 const payload={products:Array.from({length:25},(_,id)=>({id,title:'Formal collection product',variants:Array.from({length:12},(_,size)=>({id:id+'-'+size,price:149,available:true,option1:'Navy',option2:String(size)}))})),totalCount:117,globalSettings:{},rankingToken:'immutable-session'};
 test('gzip preserves every product and session field while reducing first-page transfer',async()=>{

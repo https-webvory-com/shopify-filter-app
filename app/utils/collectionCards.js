@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 // Bump when saved card presentation must be rebuilt from current documents.
-export const collectionCardPresentationVersion=3;
+export const collectionCardPresentationVersion=4;
 
 const publicKeys=new Set(['shop','collectionId','collectionHandle','country','locale','language','sortBy','page','limit','responseProfile']);
 export const acceptsCollectionPinnedPrefix=request=>(request.headers.get('accept')||'').split(',').some(value=>{const [type,...parameters]=value.trim().split(';');return type==='application/x-cfp-pinned-prefix-v3'&&!parameters.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
@@ -44,7 +44,7 @@ export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
   cfpCards:{version:1,preview:true,...(payload.collectionPinnedPrefix?{prefix:true,proof:payload.collectionPinnedPrefix}:{})},products:(payload.products||[]).slice(0,limit).map(product=>({
    ...Object.fromEntries(fields.filter(key=>Object.hasOwn(product,key)).map(key=>[key,product[key]])),
    images:(product.images||[]).slice(0,1),options:product.options,
-   variants:(product.variants||[]).map(variant=>Object.fromEntries(['id','available','option1','option2','option3','imageUrl','image'].filter(key=>Object.hasOwn(variant,key)).map(key=>[key,variant[key]]))),
+   variants:(product.variants||[]).map(variant=>Object.fromEntries(['id','sku','available','option1','option2','option3','imageUrl','image'].filter(key=>Object.hasOwn(variant,key)).map(key=>[key,variant[key]]))),
   }))};
 }
 export async function collectionCardsResponse(payload,state='miss',request,{previewLimit=25}={}){
