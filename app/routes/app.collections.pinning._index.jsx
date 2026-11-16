@@ -1,4 +1,5 @@
 import { sortPinningRules, withCollectionPinSortKeys } from "../utils/pinImportOrder.js";
+import { collectionTitleMatchesSearch } from "../utils/collectionSearchText.js";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useNavigate } from "react-router";
 import { useState, useEffect } from "react";
@@ -86,22 +87,26 @@ export const loader = async ({ request }) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const graphqlQuery = await admin.graphql(`
-    #graphql
-    query {
-      collections(first: 250) {
-        nodes {
-          id
-          title
-        }
-      }
+  const choices = new Map(), cursors = new Set();
+  try {
+    let after = null;
+    for (;;) {
+      const response = await admin.graphql(`query CollectionPinChoices($after: String) {
+        collections(first: 250, after: $after) { nodes { id title } pageInfo { hasNextPage endCursor } }
+      }`, { variables: { after } });
+      const result = await response.json(), page = result.data?.collections;
+      if (result.errors?.length || !Array.isArray(page?.nodes) || typeof page.pageInfo?.hasNextPage !== 'boolean') throw Error('Collection list is incomplete.');
+      for (const collection of page.nodes) choices.set(collection.id, { id: collection.id, title: collection.title });
+      if (!page.pageInfo.hasNextPage) break;
+      const next = page.pageInfo.endCursor;
+      if (!page.nodes.length || !next || cursors.has(next)) throw Error('Collection cursor did not advance.');
+      cursors.add(next); after = next;
     }
-  `);
-  const graphqlData = await graphqlQuery.json();
-  const collections =
-    graphqlData?.data?.collections?.nodes
-      ?.map((c) => ({ id: c.id, title: c.title }))
-      .sort((a, b) => a.title.localeCompare(b.title)) || [];
+  } catch {
+    const stored = await prisma.collection.findMany({ where: { shop }, select: { id: true, title: true } });
+    for (const collection of stored) if (!choices.has(collection.id)) choices.set(collection.id, collection);
+  }
+  const collections = [...choices.values()].sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 
   const titles = [...new Set(pinningRules.flatMap(rule => rule.collections || []))];
   const sortCollections = titles.length ? await prisma.collection.findMany({
@@ -1324,9 +1329,7 @@ export default function PinningIndex() {
 
                   {collections
                     .filter((c) =>
-                      c.title
-                        .toLowerCase()
-                        .includes(createSearchQuery.toLowerCase()),
+                      collectionTitleMatchesSearch(c.title, createSearchQuery),
                     )
                     .map((c) => (
                       <label
@@ -1395,9 +1398,7 @@ export default function PinningIndex() {
                       </label>
                     ))}
                   {collections.filter((c) =>
-                    c.title
-                      .toLowerCase()
-                      .includes(createSearchQuery.toLowerCase()),
+                    collectionTitleMatchesSearch(c.title, createSearchQuery),
                   ).length === 0 && (
                     <div
                       style={{

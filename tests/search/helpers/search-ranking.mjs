@@ -25,11 +25,13 @@ import * as searchPinnedIntent from '../../../app/utils/searchPinnedIntent.js';
 import * as emptySearchPins from '../../../app/utils/emptySearchPins.js';
 import * as queryIntent from '../../../app/utils/queryIntent.js';
 import * as filterWidths from '../../../app/utils/filterWidths.js';
+import * as collectionSearchText from '../../../app/utils/collectionSearchText.js';
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Request, Response, AbortSignal, setTimeout, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
     if(name==='../utils/filterWidths.js')return filterWidths;
+    if(name==='../utils/collectionSearchText.js')return collectionSearchText;
     if(name==='../hooks/usePickerRequest')return {usePickerRequest:()=>({})};
     if(name==='../utils/skuSearch.js')return skuSearch;
     if(name==='../utils/instantSearchCard.js')return instantSearchCard;

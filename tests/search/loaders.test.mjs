@@ -9,6 +9,7 @@ import { matchesRuleFilters } from "../../app/utils/ruleFilters.js";
 import * as marketRuleCountries from "../../app/utils/marketRuleCountries.js";
 import * as merchandisingMarketInvalidation from "../../app/utils/merchandisingMarketInvalidation.js";
 import * as emptySearchPins from '../../app/utils/emptySearchPins.js';
+import * as collectionSearchText from '../../app/utils/collectionSearchText.js';
 
 const shop = "fixture.myshopify.com";
 const request = new Request("https://fixture.test/app/search");
@@ -21,6 +22,7 @@ async function loadRoute(file, { authenticate, prisma }) {
     module: { exports: {} }, exports: {}, Response,
     console: { error() {} },
     require(name) {
+      if(name==='../utils/collectionSearchText.js')return collectionSearchText;
       if(name==='../utils/emptySearchPins.js')return emptySearchPins;
       if(name==='../services/emptySearchPins.server.js')return {legacyEmptySearchProducts:async()=>[]};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
@@ -44,10 +46,25 @@ async function loadRoute(file, { authenticate, prisma }) {
 const pinningFile = "app/routes/app.search.pinning._index.jsx";
 const merchandisingFile = "app/routes/app.search.merchandising.jsx";
 
+for(const failure of ['none','later-page','repeated-cursor'])test('collection pin choices include later collections without sync: '+failure,async()=>{
+ const initial=Array.from({length:250},(_,i)=>({id:'gid://shopify/Collection/'+(i+1),title:'Collection '+(i+1)}));
+ const target={id:'gid://shopify/Collection/454161989889',title:'A-Line Prom Dresses\u00a0'};let reads=0,fallbacks=0;
+ const route=await loadRoute('app/routes/app.collections.pinning._index.jsx',{
+  authenticate:async()=>({session:{shop},admin:{graphql:async(_query,{variables})=>{reads++;
+   if(reads===1){assert.equal(variables.after,null);return{json:async()=>({data:{collections:{nodes:initial,pageInfo:{hasNextPage:true,endCursor:'next'}}}})};}
+   assert.equal(variables.after,'next');if(failure==='later-page')throw Error('Shopify unavailable');
+   return{json:async()=>({data:{collections:{nodes:failure==='none'?[target,initial[0]]:[initial[0]],pageInfo:{hasNextPage:failure==='repeated-cursor',endCursor:'next'}}}})};
+  }}}),
+  prisma:{pinnedProductRule:{findMany:async()=>[]},collection:{findMany:async({where,select})=>{fallbacks++;assert.equal(where.shop,shop);assert.equal(select.id,true);assert.equal(select.title,true);return [initial[0],target];}}},
+ });
+ const result=await route.loader({request});assert.equal(reads,2);assert.equal(fallbacks,failure==='none'?0:1);assert.equal(result.collections.length,251);
+ assert.equal(result.collections.find(c=>c.id===target.id).title,target.title);assert.equal(new Set(result.collections.map(c=>c.id)).size,result.collections.length);
+});
+
 test('collection pin display resolves legacy IDs from the scoped catalog beyond the dropdown first page', async () => {
   const rules=[{id:'legacy',collections:['Beyond first page'],products:[]},{id:'source',collections:['Renamed'],collectionSortKey:'[1,9]',products:[]}];
   const route=await loadRoute('app/routes/app.collections.pinning._index.jsx',{
-    authenticate:async()=>({session:{shop},admin:{graphql:async()=>({json:async()=>({data:{collections:{nodes:[{id:'gid://shopify/Collection/1',title:'Dropdown collection'}]}}})})}}),
+    authenticate:async()=>({session:{shop},admin:{graphql:async()=>({json:async()=>({data:{collections:{nodes:[{id:'gid://shopify/Collection/1',title:'Dropdown collection'}],pageInfo:{hasNextPage:false,endCursor:null}}}})})}}),
     prisma:{pinnedProductRule:{findMany:async({where})=>{assert.equal(where.shop,shop);assert.equal(where.ruleType,'collection');return rules;}},
       collection:{findMany:async({where,select})=>{assert.equal(where.shop,shop);assert.deepEqual(Array.from(where.title.in),['Beyond first page','Renamed']);assert.equal(select.id,true);return [{id:'gid://shopify/Collection/999',title:'Beyond first page'}];}}},
   });

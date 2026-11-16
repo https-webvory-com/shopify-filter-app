@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router";
+import { collectionTitleMatchesSearch } from "../utils/collectionSearchText.js";
 import { useState, useEffect } from "react";
 import {
   useLoaderData,
@@ -468,7 +469,7 @@ export default function FilterGroups() {
   };
 
   const filteredCollections = collections.filter((c) =>
-    c.title.toLowerCase().includes(searchColl.toLowerCase()),
+    collectionTitleMatchesSearch(c.title, searchColl),
   );
 
   const filteredGroups = groups.filter((g) => {

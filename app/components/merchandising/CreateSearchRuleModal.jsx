@@ -1,3 +1,4 @@
+import { collectionTitleMatchesSearch } from "../../utils/collectionSearchText.js";
 import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
@@ -175,7 +176,7 @@ export default function CreateSearchRuleModal({
   };
 
   const filteredCollections = shopifyCollections.filter(c => 
-    c.title.toLowerCase().includes(searchQueryInput.toLowerCase())
+    collectionTitleMatchesSearch(c.title, searchQueryInput)
   );
 
   if (!isOpen) return null;
@@ -713,7 +714,9 @@ export default function CreateSearchRuleModal({
                                           }
                                           const filteredOptions = currentOptions.filter(v => {
                                             const text = typeof v === 'string' ? v : v.title;
-                                            return text.toLowerCase().includes((dropdownSearch || "").toLowerCase());
+                                            return r.field === 'Collections'
+                                              ? collectionTitleMatchesSearch(text, dropdownSearch)
+                                              : text.toLowerCase().includes((dropdownSearch || "").toLowerCase());
                                           }).slice(0, dropdownLimit);
                                           
                                           return (

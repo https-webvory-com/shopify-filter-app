@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { collectionTitleMatchesSearch } from "../utils/collectionSearchText.js";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -659,7 +660,7 @@ export default function FilterGroupDetail() {
   const [showCollDropdown, setShowCollDropdown] = useState(false);
   const [searchColl, setSearchColl] = useState("");
   const filteredCollections = shopifyCollections.filter((c) =>
-    c.title.toLowerCase().includes(searchColl.toLowerCase()),
+    collectionTitleMatchesSearch(c.title, searchColl),
   );
 
   const handleToggleCollection = ({ id, title }) => {
