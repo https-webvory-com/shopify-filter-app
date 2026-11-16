@@ -29,6 +29,8 @@ try{
   await page.goto(origin);await page.locator('#cfp-main-search-input').waitFor({state:'attached'});await page.locator('header input').click();
   await page.addStyleTag({content:quickViewCss});
   await page.waitForFunction(()=>document.querySelector('.cfp-search-result-card')&&document.querySelector('#cfp-search-products').getAttribute('aria-busy')==='false');
+  const gaps=await page.locator('#cfp-search-products').evaluate(el=>({columns:getComputedStyle(el).columnGap,rows:getComputedStyle(el).rowGap}));
+  assert.deepEqual(gaps,width===390?{columns:'6px',rows:'12px'}:{columns:'12px',rows:'16px'});
   await page.evaluate(()=>{window.initialCard=document.querySelector('.cfp-search-result-card');window.collectionPaints=0;new MutationObserver(rows=>{collectionPaints+=rows.filter(x=>x.type==='childList').length;}).observe(document.getElementById('cfp-search-collections'),{childList:true});});
   await page.locator('#cfp-main-search-input').fill('prom');
   assert.equal(await page.locator('#cfp-search-products .cfp-search-result-card').count(),0,'remove old cards immediately before the debounced request');
