@@ -13,6 +13,7 @@ export const SEARCH_SETTING_FIELDS = {
 export const ADVANCED_SEARCH_FIELDS={
   instantSearchEnabled:['Enable instant search',true],showPages:['Show page suggestions',false],pageLimit:['Page suggestions',3,0,10],
   showPopularProducts:['Show popular products when search is empty',true],popularProductLimit:['Popular products',6,1,20],
+  fullScreenDefaultProductLimit:['Default products before typing',4,1,20],
   instantColumns:['Products per row',4,1,6],showCollectionSearchInput:['Show search box on collection pages',false],
   changeBrowserUrl:['Update browser URL when filters change',true],smartSkuSearch:['Tolerate SKU typos and punctuation',false],
   broadMatch:['Allow broad text matching',true],hideUnavailableVariants:['Exclude unavailable variants from the search index',false],

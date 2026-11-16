@@ -125,7 +125,8 @@ export default function SearchSettings() {
           </section>}
           {values.instantLayout==='fullscreen'&&<section aria-label="Full screen UI settings" style={{display:'grid',gap:16}}>
           <h3 className="settings-subheading">Full screen search suggestions</h3>
-          <div className="search-config-fields">{['productLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
+          <div className="search-config-fields">{['productLimit', 'fullScreenDefaultProductLimit', 'suggestionLimit', 'collectionLimit', 'recentLimit', 'minChars'].map(field)}</div>
+          <p className="settings-help">Default products before typing applies when no active empty-search pin rule is set. An empty-search pin rule controls its own products.</p>
           <p style={{ margin: 0 }}>A count of zero hides that suggestion section. Recent searches are stored in the customer’s browser.</p>
           <label style={{ display: 'grid', gap: 6 }}>Manual suggestions<textarea name="manualSuggestions" value={manual} onChange={e => setManual(e.target.value)} rows={5} maxLength={1100} style={fieldStyle} /></label>
           <p style={{ margin: 0 }}>Enter up to 10 search terms, one per line. They appear in this order when the search box is empty, replacing recent searches. Blacklisted terms stay hidden.</p>

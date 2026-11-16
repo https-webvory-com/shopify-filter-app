@@ -45,11 +45,13 @@ test('Full screen empty search derives card count from pins and ignores removed 
  f.context.mainInput.value='';
  f.context.fetch=async url=>{requests.push(String(url));return {ok:true,json:async()=>({products:[]})};};
  const selected=Array.from({length:8},(_,id)=>({id:'gid://shopify/Product/'+(id+1)}));
- f.context.window.cfpSearchSettings={instantLayout:'fullscreen',showPopularProducts:false,popularProductLimit:1,collectionLimit:0,emptySearchProducts:selected};
+ f.context.window.cfpSearchSettings={instantLayout:'fullscreen',showPopularProducts:false,popularProductLimit:1,fullScreenDefaultProductLimit:2,collectionLimit:0,emptySearchProducts:selected};
  await f.context.fetchDefaultView();
  assert.equal(new URL(requests[0]).searchParams.get('limit'),'8');
- f.context.window.cfpSearchSettings.emptySearchProducts=[];requests.length=0;await f.context.fetchDefaultView();
- assert.equal(new URL(requests[0]).searchParams.get('limit'),'6');
+ f.context.window.cfpSearchSettings.emptySearchProducts=[];delete f.context.window.cfpSearchSettings.fullScreenDefaultProductLimit;requests.length=0;await f.context.fetchDefaultView();
+ assert.equal(new URL(requests[0]).searchParams.get('limit'),'4');
+ f.context.window.cfpSearchSettings.fullScreenDefaultProductLimit=7;requests.length=0;await f.context.fetchDefaultView();
+ assert.equal(new URL(requests[0]).searchParams.get('limit'),'7');
  f.context.window.cfpSearchSettings.instantLayout='compact';requests.length=0;await f.context.fetchDefaultView();assert.equal(requests.length,0);
  f.context.window.cfpSearchSettings.showPopularProducts=true;await f.context.fetchDefaultView();assert.equal(new URL(requests[0]).searchParams.get('limit'),'1');
 });

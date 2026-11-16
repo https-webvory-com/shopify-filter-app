@@ -12,6 +12,13 @@ test('defaults validate and unknown properties cannot become persisted controls'
   assert.deepEqual(validate({ ...defaults, shop: 'other', dangerous: true }), defaults);
   for (const invalid of [null, [], 'settings', {}]) assert.throws(() => validate(invalid));
 });
+
+test('Full screen default product count supports existing settings and bounded counts', () => {
+  const old={...defaults};delete old.fullScreenDefaultProductLimit;
+  assert.equal(validate(old).fullScreenDefaultProductLimit,4);
+  for(const count of [1,4,20])assert.equal(validate({...defaults,fullScreenDefaultProductLimit:count}).fullScreenDefaultProductLimit,count);
+  for(const count of [0,21,1.5,'4',null])assert.throws(()=>validate({...defaults,fullScreenDefaultProductLimit:count}));
+});
 for (const [key, [, fallback, min, max]] of Object.entries(fields)) {
   test(`${key} rejects incorrect types and accepts supported boundaries`, () => {
     for (const value of [null, undefined, 'true', '1', [], {}]) assert.throws(() => validate({ ...defaults, [key]: value }));
