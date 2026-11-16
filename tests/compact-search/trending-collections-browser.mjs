@@ -19,14 +19,14 @@ try{
    await page.locator('#cfp-search-collections a').first().waitFor({state:layout==='fullscreen'?'visible':'attached'});
    const state=await page.evaluate(()=>{
     const list=document.getElementById('cfp-search-collections'),heading=document.getElementById('cfp-collections-title'),grid=document.getElementById('cfp-search-products'),a=list.querySelector('a'),s=getComputedStyle(a);
-    return {parent:list.parentElement.className,heading:heading.textContent,headingNext:heading.nextElementSibling===list,above:grid.getBoundingClientRect().top>=list.getBoundingClientRect().bottom,pill:{background:s.backgroundColor,border:s.borderTopWidth,padding:s.padding,lineHeight:s.lineHeight},links:[...list.querySelectorAll('a')].map(x=>x.getAttribute('href')),overflow:list.scrollWidth>list.clientWidth+1,titleClamp:getComputedStyle(grid.querySelector('.cfp-search-product-title')).webkitLineClamp};
+    return {parent:list.parentElement.className,heading:heading.textContent,headingNext:heading.nextElementSibling===list,above:grid.getBoundingClientRect().top>=list.getBoundingClientRect().bottom,pill:{background:s.backgroundColor,border:s.borderTopWidth,padding:s.padding,lineHeight:s.lineHeight},links:[...list.querySelectorAll('a')].map(x=>x.getAttribute('href')),overflow:list.scrollWidth>list.clientWidth+1,wrap:getComputedStyle(list).flexWrap,titleClamp:getComputedStyle(grid.querySelector('.cfp-search-product-title')).webkitLineClamp};
    });
    assert.equal(state.links.length,4);assert.ok(state.links.every(x=>x.startsWith('/collections/')));
    assert.ok(state.headingNext);
    if(layout==='fullscreen'){
     assert.ok((await page.locator('.cfp-search-section-title').evaluateAll(nodes=>nodes.map(x=>getComputedStyle(x).color))).every(x=>x==='rgb(0, 0, 0)'),'all Full screen section headings match Windsor black');
     assert.equal(state.parent,'cfp-search-column-left');assert.equal(state.heading,query?'Collection results':'Trending collections');assert.ok(state.above);
-    assert.equal(state.pill.background,'rgb(242, 241, 241)');assert.equal(state.pill.border,'0px');assert.equal(state.pill.padding,'8px 16px');assert.equal(state.pill.lineHeight,'18px');assert.equal(state.overflow,false);assert.equal(state.titleClamp,'2');
+    assert.equal(state.pill.background,'rgb(242, 241, 241)');assert.equal(state.pill.border,'0px');assert.equal(state.pill.padding,'8px 16px');assert.equal(state.pill.lineHeight,width<=768?'16px':'18px');if(width<=768)assert.equal(state.wrap,'nowrap');else assert.equal(state.overflow,false);assert.equal(state.titleClamp,'2');
    }else assert.equal(state.parent,'cfp-search-column-right');
   };
   await page.waitForFunction(()=>document.querySelector('#cfp-search-products .cfp-search-product-title'));

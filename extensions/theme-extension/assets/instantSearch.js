@@ -282,8 +282,10 @@ document.addEventListener("DOMContentLoaded", function () {
           <svg class="cfp-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="text" id="cfp-main-search-input" aria-label="Search products" placeholder="Search for..." autocomplete="off" />
           <button type="button" id="cfp-compact-search-clear" class="cfp-compact-clear-btn" aria-label="Clear search" style="display:none" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 14 14M19 5 5 19"/></svg></button>
+          <button type="button" id="cfp-full-search-submit" class="cfp-full-search-submit" aria-label="Submit search" hidden>Go</button>
           <button id="cfp-search-close" class="cfp-search-close-btn" aria-label="Close search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <svg class="cfp-search-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <svg class="cfp-full-search-back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
           </button>
         </div>
       </div>
@@ -299,6 +301,7 @@ document.addEventListener("DOMContentLoaded", function () {
       <div class="cfp-search-body" id="cfp-search-body">
         <div class="cfp-search-column-left">
           <div class="cfp-search-section-title" id="cfp-compact-products-title" style="display:none" hidden>Products</div>
+          <div class="cfp-search-section-title cfp-full-trending-products-title" id="cfp-full-trending-products-title" hidden>Trending products</div>
           <div class="cfp-full-results-header" id="cfp-full-results-header" hidden>
             <div class="cfp-search-section-title" id="cfp-full-products-title">Product results</div>
           </div>
@@ -353,6 +356,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function positionCompactPanel() {
     if (!modal) return;
+    updateSearchInputControls();
     if (modal.dataset.cfpLayout !== 'compact') {
       for (const key of ['left','right','bottom','width','max-height','transform-origin','--cfp-compact-panel-width','--cfp-compact-panel-height','--cfp-compact-pointer-x']) modal.style.removeProperty(key);
       modal.style.top='0px';delete modal.dataset.cfpPlacement;delete modal.dataset.cfpAnchored;
@@ -399,7 +403,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const enabled = isCompact && collections.length > 0;
     const active = enabled && !hasQuery;
     modal.dataset.cfpSearching = String(isCompact && hasQuery);
-    document.getElementById('cfp-compact-search-clear').hidden = !(isCompact && hasInput);
+    updateSearchInputControls();
     document.getElementById('cfp-compact-products-title').hidden = !(isCompact && hasQuery);
     modal.dataset.cfpBrowsing = String(active);
     tabs.hidden = !enabled; browse.hidden = !active;
@@ -445,6 +449,25 @@ document.addEventListener("DOMContentLoaded", function () {
       const next = browse.querySelector(`[data-page="${direction}"]`);
       (next?.disabled ? browse.querySelector('[data-page]:not(:disabled)') : next)?.focus();
     }));
+  }
+
+  function updateSearchInputControls() {
+    if(!modal||!mainInput)return;
+    const compact=window.cfpSearchSettings?.instantLayout==='compact';
+    const query=mainInput.value.trim();
+    modal.dataset.cfpHasInput=String(!!query);
+    document.getElementById('cfp-compact-search-clear').hidden=!query;
+    const submit=document.getElementById('cfp-full-search-submit');
+    submit.hidden=compact||!query;
+    submit.disabled=query.length<CONFIG.minChars;
+    mainInput.placeholder=!compact&&window.innerWidth<=768?'What are you looking for?':'Search for...';
+  }
+
+  function submitInstantSearch() {
+    const query=mainInput.value.trim();
+    if(query.length<CONFIG.minChars)return;
+    saveRecentSearch(query);
+    window.location.href=window.cfpSearchResultUrl?.(query)||`/search?q=${encodeURIComponent(query)}`;
   }
 
   function attachListeners() {
@@ -711,6 +734,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // 2. Modal Close Listeners
     document.getElementById("cfp-search-close").addEventListener("click", closeModal);
+    document.getElementById('cfp-full-search-submit').addEventListener('click',submitInstantSearch);
     document.getElementById('cfp-compact-search-clear').addEventListener('click', () => {
       mainInput.value = '';
       mainInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -738,6 +762,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let debounceTimer;
     mainInput.addEventListener("input", (e) => {
       const query = e.target.value.trim();
+      updateSearchInputControls();
       mainInput._cfpSearchVersion=(mainInput._cfpSearchVersion||0)+1;
       clearTimeout(debounceTimer);
       window.cfpActiveInstantSearchId = null;
@@ -773,11 +798,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Handle Enter key in our main input
     mainInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
-        const query = e.target.value.trim();
-        if (query.length >= CONFIG.minChars) {
-          saveRecentSearch(query);
-          window.location.href = window.cfpSearchResultUrl?.(query)||`/search?q=${encodeURIComponent(query)}`;
-        }
+        submitInstantSearch();
       }
     });
   }
@@ -1100,6 +1121,7 @@ document.addEventListener("DOMContentLoaded", function () {
         renderRecentSearches("");
         renderCollections(collectionsData, "", true);
         await renderProducts(productsData, "", true, productsData ? productsData.contextualPricingApplied : false);
+        renderFullResultsHeading('',productsData);
       }
 
     } catch (error) {
@@ -1156,7 +1178,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </li>
       `;
     });
-    if(list) list.innerHTML = html;
+    if(list) {list.innerHTML = html;positionFullSuggestionsHeading(container,list);}
 
     if(list) {
       list.querySelectorAll('.cfp-remove-recent-btn').forEach(btn => {
@@ -1193,7 +1215,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let html = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <div class="cfp-search-section-title" style="margin-bottom: 0;">${window.cfpSearchSettings?.instantLayout === 'compact' ? (query ? 'Popular' : 'Hot Searches') : 'Search suggestions'}</div>
+        <div class="cfp-search-section-title" style="margin-bottom: 0;">${window.cfpSearchSettings?.instantLayout === 'compact' ? (query ? 'Popular' : 'Hot Searches') : (query ? 'Search suggestions' : 'Popular searches')}</div>
       </div>
     `;
     suggestions.forEach((s) => {
@@ -1209,7 +1231,15 @@ document.addEventListener("DOMContentLoaded", function () {
         </li>
       `;
     });
-    if(list) list.innerHTML = html;
+    if(list) {list.innerHTML = html;positionFullSuggestionsHeading(container,list);}
+  }
+
+  function positionFullSuggestionsHeading(container,list) {
+    container.querySelector('.cfp-full-suggestions-heading')?.remove();
+    if(window.cfpSearchSettings?.instantLayout==='compact'||!list.firstElementChild)return;
+    const heading=list.firstElementChild;
+    heading.classList.add('cfp-full-suggestions-heading');
+    container.insertBefore(heading,list);
   }
 
   async function performSearch(query) {
@@ -1347,6 +1377,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const grid=document.getElementById('cfp-search-products');
     if(!header||!link||!grid)return;
     const active=window.cfpSearchSettings?.instantLayout!=='compact'&&query?.trim().length>=CONFIG.minChars;
+    const trending=document.getElementById('cfp-full-trending-products-title');
+    if(trending)trending.hidden=active||window.cfpSearchSettings?.instantLayout==='compact'||!data?.products?.length;
     modal.dataset.cfpFullSearching=String(active);
     header.hidden=!active;
     if(active){

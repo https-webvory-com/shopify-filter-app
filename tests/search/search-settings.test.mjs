@@ -180,7 +180,7 @@ test('legacy instant-search disable flags are ignored on read and removed on sav
 const instant = await fs.readFile('extensions/theme-extension/assets/instantSearch.js', 'utf8');
 function recentFixture(config, storageValue = '[]') {
   const elements = new Map();
-  const element = id => { if (!elements.has(id)) elements.set(id, { style: {}, innerHTML: '', querySelectorAll: () => [] }); return elements.get(id); };
+  const element = id => { if (!elements.has(id)) elements.set(id, { style: {}, innerHTML: '', querySelector: () => null, querySelectorAll: () => [] }); return elements.get(id); };
   const context = { window:{}, CONFIG: config, document: { getElementById: element }, localStorage: { getItem: () => storageValue, setItem: (_k, v) => { storageValue = v; } } };
   vm.createContext(context);
   vm.runInContext(instant.slice(instant.indexOf('  function highlightSearchText'), instant.indexOf('  // UI Elements')) + instant.slice(instant.indexOf('  function saveRecentSearch'), instant.indexOf('  function openModal')) + instant.slice(instant.indexOf('  function renderRecentSearches'), instant.indexOf('  async function performSearch')), context);

@@ -348,6 +348,12 @@
   display: none;
 }
 
+.cfp-full-search-submit,
+.cfp-full-search-back-icon,
+.cfp-full-trending-products-title {
+  display: none;
+}
+
 .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-results-header:not([hidden]) {
   display: flex;
   align-items: baseline;
@@ -378,7 +384,7 @@
   display: none;
 }
 
-.cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] #cfp-recent-searches-list .cfp-search-section-title {
+.cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] #cfp-recent-searches-container .cfp-search-section-title {
   font-size: 14px;
   line-height: 18px;
   letter-spacing: 0;
@@ -702,6 +708,69 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 15px;
   }
+}
+
+@media (max-width: 768px) {
+  .cfp-search-modal[data-cfp-layout="fullscreen"] {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-header {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+    border-bottom: 0;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-input-wrapper { gap: 8px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-icon,
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-close-icon { display: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-search-back-icon { display: block; width: 20px; height: 20px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-close-btn { order: -1; padding: 0; width: 16px; height: 38px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-main-search-input { min-width: 0; font-size: 16px!important; padding: 0!important; line-height: 22px!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-has-input="true"] #cfp-compact-search-clear:not([hidden]) {
+    display: flex!important; align-items: center; justify-content: center; flex: none; padding: 2px; width: 16px; height: 16px; border: 0; border-radius: 50%; background: #92949b; color: #fff;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-compact-search-clear svg { width: 12px; height: 12px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-search-submit:not([hidden]) {
+    display: block; flex: none; border: 1px solid #111; border-radius: 3px; padding: 2px 6px; background: #fff; color: #000; font: inherit; font-size: 12px; line-height: 18px; text-transform: uppercase; cursor: pointer;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-search-submit:disabled { opacity: .5; cursor: default; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-body {
+    flex: 1 1 auto; min-height: 0; margin: 0; max-width: none; width: 100%; padding: 16px; gap: 30px; box-sizing: border-box; overflow-x: hidden;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-column-right { order: -1!important; padding: 0; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-column-right:not(:has(#cfp-recent-searches-container[style*="display: block"], #cfp-search-pages a)) { display: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-column-left { order: 0!important; padding: 0; border: 0; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-recent-searches-container { margin-bottom: 0!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-suggestions-heading { margin-bottom: 12px!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-section-title { font-size: 12px!important; font-weight: 600; line-height: 16px!important; letter-spacing: 1px!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-search-collections {
+    flex-wrap: nowrap; gap: 8px; width: calc(100% + 32px); margin-left: -16px; margin-right: -16px; margin-bottom: 30px; padding: 0 16px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; box-sizing: border-box;
+  }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-search-collections::-webkit-scrollbar { display: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-search-collections li { flex: none; max-width: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-search-collections a { padding: 8px 16px; font-size: 12px; line-height: 16px; white-space: nowrap; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-trending-products-title:not([hidden]) { display: block; margin-bottom: 12px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-full-results-header:not([hidden]) { justify-content: space-between; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px 8px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap { margin-bottom: 0; border-radius: 0; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-title { margin-top: 4px!important; min-height: 28px; font-size: 11px!important; line-height: 14px; text-align: left!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-price { margin-top: 4px!important; font-size: 11px; line-height: 14px; text-align: left!important; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-product-swatches { justify-content: flex-start; gap: 3px; margin-top: 4px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-swatch-item { width: 14px; height: 14px; padding: 1px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-quick-view-btn { min-width: 0; max-width: calc(100% - 8px); font-size: 10px; padding: 5px 8px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .wishlist-btn-container svg { width: 18px; height: 18px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-recent-searches-list .cfp-history-icon { display: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] #cfp-recent-searches-list .cfp-recent-search-link { font-size: 14px; line-height: 18px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] #cfp-recent-searches-list .cfp-recent-search-item { margin: 0 0 12px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] #cfp-recent-searches-list .cfp-recent-search-item:last-child { margin-bottom: 0; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] #cfp-recent-searches-list .cfp-recent-search-item:nth-of-type(n+6) { display: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"][data-cfp-full-searching="true"] .cfp-suggestion-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"]:not([data-cfp-full-searching="true"]) #cfp-recent-searches-list { display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"]:not([data-cfp-full-searching="true"]) #cfp-recent-searches-list .cfp-recent-search-item { flex: none; gap: 4px; margin: 0; padding: 8px 16px; border-radius: 100px; background: #f2f1f1; white-space: nowrap; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"]:not([data-cfp-full-searching="true"]) #cfp-recent-searches-list .cfp-recent-search-link { color: #000; font-size: 12px; line-height: 16px; }
+  .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-remove-recent-btn { width: 14px; height: 14px; margin-left: 4px; padding: 0; }
 }
 
 /* ==========================================================================
