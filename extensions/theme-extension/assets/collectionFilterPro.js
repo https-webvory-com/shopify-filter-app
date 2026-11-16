@@ -1708,6 +1708,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       let variantImg = null;
       let matchedVariantId = null;
       let matchedVariant = null;
+      let selectedColorHidden = false;
         if (activeFilters.options && Object.keys(activeFilters.options).length > 0) {
           const selectedValues = [];
           Object.values(activeFilters.options).forEach(arr => selectedValues.push(...arr));
@@ -2038,7 +2039,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               }
            }
 
-           matchedColorUrl = colorsArray[activeIndex][1].imgUrl;
+           // Stock-only swatches may omit the selected (sold-out) color even
+           // when the saved filter settings allow the product in results.
+           // Keep its selected image/link instead of substituting another color.
+           if (!colorWasFiltered && matchedVariant && (expandedLower.length || product.selectedVariantId)) {
+             const selectedColor = String(matchedVariant[optionKey] || '').trim().toLowerCase();
+             if (selectedColor && !colorsArray.some(([color]) => color.trim().toLowerCase() === selectedColor)) {
+               activeIndex = -1;
+               selectedColorHidden = true;
+             }
+           }
+           matchedColorUrl = colorsArray[activeIndex]?.[1].imgUrl;
 
           colorsArray.forEach(([colorName, data], index) => {
              const isHidden = index >= 5 ? 'cfp-swatch-hidden' : '';
@@ -2111,7 +2122,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           if (!product.pinnedProductImage && matchedColorUrl && (!customImage || colorWasFiltered)) {
              primaryImg = getResizedImageUrl(matchedColorUrl, 360);
           }
-          const activeVariantId = (product.selectedVariantId && matchedVariantId) || colorsArray[activeIndex][1].variantId;
+          const activeVariantId = (product.selectedVariantId && matchedVariantId) || colorsArray[activeIndex]?.[1].variantId || matchedVariantId;
           if (activeVariantId) productUrl = `/products/${product.handle}?variant=${activeVariantId}`;
         }
       }
@@ -2146,7 +2157,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       let hoverImageHtml = '';
       if (globalSettings && globalSettings.secondImageOnHover !== false && Array.isArray(product.images) && product.images.length > 1) {
-        let hoverImg = product.images[1];
+        let hoverImg = selectedColorHidden ? primaryImg : product.images[1];
         let hoverImgSrc = typeof hoverImg === 'object' && hoverImg.src ? hoverImg.src : hoverImg;
         if (typeof hoverImgSrc === 'string' && hoverImgSrc) {
            hoverImageHtml = `<img src="${escapeCardHtml(getResizedImageUrl(hoverImgSrc, 450))}" alt="${titleHtml}" class="cfp-product-card__image cfp-product-card__image--secondary" loading="lazy" decoding="async" width="450" height="600" />`;
