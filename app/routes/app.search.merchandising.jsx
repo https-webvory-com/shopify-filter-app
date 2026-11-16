@@ -233,6 +233,7 @@ export const loader = async ({ request }) => {
             id
             title
           }
+          pageInfo { hasNextPage endCursor }
         }
         locations(first: 250, includeInactive: true) {
           nodes {
@@ -253,6 +254,20 @@ export const loader = async ({ request }) => {
     graphqlData = await graphqlQuery.json();
     if (graphqlData.errors?.length) {
       throw new Error("Shopify returned errors loading merchandising options");
+    }
+    let page = graphqlData.data?.collections;
+    const cursors = new Set();
+    while (page?.pageInfo?.hasNextPage) {
+      const after = page.pageInfo.endCursor;
+      if (!page.nodes?.length || !after || cursors.has(after)) throw Error('Collection cursor did not advance.');
+      cursors.add(after);
+      const response = await admin.graphql(`query SearchRuleCollectionOptions($after: String!) {
+        collections(first: 250, after: $after) { nodes { id title } pageInfo { hasNextPage endCursor } }
+      }`, { variables: { after } });
+      const next = await response.json();
+      if (next.errors?.length || !Array.isArray(next.data?.collections?.nodes) || typeof next.data.collections.pageInfo?.hasNextPage !== 'boolean') throw Error('Collection list is incomplete.');
+      page = next.data.collections;
+      graphqlData.data.collections.nodes.push(...page.nodes);
     }
   } catch (error) {
     // Authentication responses must reach Shopify's boundary unchanged.

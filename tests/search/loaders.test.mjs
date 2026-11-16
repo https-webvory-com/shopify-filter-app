@@ -46,6 +46,12 @@ async function loadRoute(file, { authenticate, prisma }) {
 const pinningFile = "app/routes/app.search.pinning._index.jsx";
 const merchandisingFile = "app/routes/app.search.merchandising.jsx";
 
+test('search merchandising collection conditions can select collections beyond the first page',async()=>{
+ let reads=0;const target={id:'gid://shopify/Collection/454161989889',title:'A-Line Prom Dresses\u00a0'};
+ const route=await loadRoute(merchandisingFile,{authenticate:async()=>({session:{shop},admin:{graphql:async(_query,options)=>{reads++;if(reads===2)assert.equal(options.variables.after,'later');return{json:async()=>({data:{collections:{nodes:reads===1?[{id:'gid://shopify/Collection/1',title:'First'}]:[target],pageInfo:{hasNextPage:reads===1,endCursor:'later'}}}})};}}}),prisma:{product:{groupBy:async()=>[]},$queryRaw:async()=>[],merchandisingRule:{findMany:async()=>[]}}});
+ const result=await route.loader({request});assert.equal(reads,2);assert.equal(result.lookupWarning,null);assert.equal(result.shopifyCollections.find(c=>c.id===target.id).title,target.title);
+});
+
 for(const failure of ['none','later-page','repeated-cursor'])test('collection pin choices include later collections without sync: '+failure,async()=>{
  const initial=Array.from({length:250},(_,i)=>({id:'gid://shopify/Collection/'+(i+1),title:'Collection '+(i+1)}));
  const target={id:'gid://shopify/Collection/454161989889',title:'A-Line Prom Dresses\u00a0'};let reads=0,fallbacks=0;
