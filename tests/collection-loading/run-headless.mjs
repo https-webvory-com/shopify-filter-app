@@ -1880,10 +1880,10 @@ try{
       await control({reset:true,productCount:30,precompute:true,hold:true,headRenderer:true,early:true,desktopColumns:desktop,mobileColumns:mobile,assetDelay:1800,apiDelay:0,priceDelay:0,imageDelay:0,cssDelay:0});
       await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<=768});
       await send('Network.clearBrowserCache');await send('Page.navigate',{url:origin+'/collections/fixture'});
-      await wait("document.querySelectorAll('.cfp-initial-product').length>=5");
+      await wait("(()=>{const grid=document.getElementById('cfp-first-row');if(!grid||grid.querySelectorAll('.cfp-initial-product').length<5)return false;const style=getComputedStyle(grid);window.earlyGridMetrics={columns:style.gridTemplateColumns.split(' ').length,gap:style.columnGap,widget:!!window._cfpInitStarted};return true;})()");
       const metrics=selector=>evaluate(`(()=>{const grid=document.querySelector(${JSON.stringify(selector)}),style=getComputedStyle(grid);return {columns:style.gridTemplateColumns.split(' ').length,gap:style.columnGap}})()`);
-      const early=await metrics('#cfp-first-row');assert.equal(early.columns,expected,`Early grid at ${width}px`);
-      assert.equal(await evaluate('!!window._cfpInitStarted'),false);
+      const {widget,...early}=await evaluate('window.earlyGridMetrics');assert.equal(early.columns,expected,`Early grid at ${width}px`);
+      assert.equal(widget,false);
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-first-row')");
       const full=await metrics('#cfp-products-container');assert.deepEqual(full,early,`Grid handoff at ${width}px`);
       assert.deepEqual(await evaluate('browserErrors'),[]);samples.push({width,desktop,mobile,...early});

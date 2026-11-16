@@ -1373,6 +1373,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function renderSkeleton() {
     const productContainer = getProductContainer();
+    if(productContainer.querySelector('#cfp-first-row'))return;
     const previousCards = productContainer.querySelectorAll('.cfp-product-card:not(.cfp-skeleton-card)').length;
     // A new price order must not display cards from the old order while it
     // prepares. Other collection changes keep their existing retained-card UI.
@@ -1828,7 +1829,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            if (url.indexOf('cdn.shopify.com') === -1) return url;
            const widthVal = typeof targetWidth === 'number' ? targetWidth : parseInt(targetWidth) || 360;
            const finalWidth = isNaN(widthVal) ? 360 : widthVal;
-           const cleanUrl = url.replace(/([?&])width=\d+/g, '$1').replace(/&+/g, '&').replace(/\?&/, '?');
+           const cleanUrl = url.replace(/([?&])width=\d+/g, '$1').replace(/&+/g, '&').replace(/\?&/, '?').replace(/[?&]$/, '');
            return `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}width=${finalWidth}`;
         };
 
@@ -2219,7 +2220,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       grid.insertAdjacentHTML('beforeend', productsHtml);
     } else {
       grid.classList.remove('cfp-loading-retained');
-      grid.innerHTML = productsHtml;
+      const incoming=document.createElement('template');incoming.innerHTML=productsHtml;
+      const previousImages=new Map([...grid.querySelectorAll('.cfp-initial-product,.cfp-product-card[data-cfp-product-id]')].map(card=>[String(card.dataset.cfpProductId||card.dataset.productId).split('/').pop(),card.querySelector('img.cfp-product-card__image--primary,img')]));
+      const imageIdentity=value=>{try{const url=new URL(value,location.origin);url.searchParams.delete('width');url.searchParams.sort();return url.href;}catch{return value;}};
+      incoming.content.querySelectorAll('.cfp-product-card[data-cfp-product-id]').forEach(card=>{
+        const next=card.querySelector('img.cfp-product-card__image--primary'),previous=previousImages.get(String(card.dataset.cfpProductId).split('/').pop());
+        if(!next||!previous||imageIdentity(previous.src)!==imageIdentity(next.src))return;
+        for(const attribute of [...previous.attributes])if(!next.hasAttribute(attribute.name))previous.removeAttribute(attribute.name);
+        for(const attribute of [...next.attributes])if(previous.getAttribute(attribute.name)!==attribute.value)previous.setAttribute(attribute.name,attribute.value);
+        next.replaceWith(previous);
+      });
+      grid.replaceChildren(incoming.content);
       if (partialPrefix && products.length < PAGE_SIZE) {
         grid.insertAdjacentHTML('beforeend', Array.from({length:PAGE_SIZE-products.length},()=>`
           <div class="cfp-product-card cfp-skeleton-card" aria-hidden="true">

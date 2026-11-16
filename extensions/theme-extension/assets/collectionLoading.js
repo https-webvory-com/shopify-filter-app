@@ -54,9 +54,9 @@
       // The widget installs skeletons before it can adopt the early response.
       // Keep actual cards visible until their real replacements are mounted.
       if(controller.signal.aborted||document.querySelector('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)')){stop();return;}
-      const app=document.querySelector('.cfp-v1-app-container');if(!app)return;
+      const app=document.querySelector('.cfp-v1-app-container');if(!app||document.readyState==='loading'&&!document.getElementById('cfp-collection-ready'))return;
       if(!grid){
-      grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row';
+      grid=document.createElement('div');grid.id='cfp-first-row';grid.className='cfp-first-row cfp-products-grid';grid.style.gridColumn='1 / -1';grid.style.gridRow='auto';
       // Use the app block's settings before the full widget runs. Match the
       // final grid's breakpoints and spacing so early cards never reflow 4→5.
       const style=document.createElement('style');style.textContent='.cfp-first-row{display:grid;grid-template-columns:repeat(var(--cfp-cols-desktop,3),minmax(0,1fr));gap:10px;padding:0;margin:0;width:100%;box-sizing:border-box}.cfp-first-row a{display:block;color:inherit;text-decoration:none}.cfp-first-row img{display:block;width:100%;height:auto;aspect-ratio:2/3;object-fit:cover}.cfp-first-row h3{font:inherit;font-size:14px;line-height:1.4;margin:12px 0;text-align:center}@media(max-width:768px){.cfp-first-row{grid-template-columns:repeat(var(--cfp-cols-mobile,2),minmax(0,1fr));gap:16px}}@media(max-width:480px){.cfp-first-row{gap:12px}}';grid.append(style);
@@ -74,7 +74,7 @@
         if(index<rendered)continue;
         const selection=firstRowSelection(product,context.handle,payload.globalSettings),card=document.createElement('div'),link=document.createElement('a'),img=document.createElement('img'),title=document.createElement('h3');
         card.className='cfp-initial-product';card.dataset.productId=String(product.id);link.href=selection.url;img.alt=product.title;img.width=360;img.height=480;img.fetchPriority=index<5?'high':'low';if(index>=5)img.loading='lazy';img.decoding='async';
-        const resize=width=>{const clean=selection.image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?');return clean.includes('cdn.shopify.com')?clean+(clean.includes('?')?'&':'?')+'width='+width:clean;};
+        const resize=width=>{const clean=selection.image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?').replace(/[?&]$/,'');return clean.includes('cdn.shopify.com')?clean+(clean.includes('?')?'&':'?')+'width='+width:clean;};
         img.src=resize(360);if(selection.image.includes('cdn.shopify.com')){img.srcset=[180,360,540].map(width=>resize(width)+' '+width+'w').join(', ');img.sizes='(max-width: 480px) 50vw, (max-width: 900px) 33vw, 25vw';}
         const selectedId=new URL(selection.url,location.origin).searchParams.get('variant');
         const sku=product.variants?.find(variant=>String(variant.id).split('/').pop()===selectedId)?.sku||product.variants?.find(variant=>variant.sku)?.sku||product.sku||'';
@@ -82,7 +82,26 @@
       }
       rendered=payload.products.length;
       grid.insertAdjacentHTML('beforeend','<div class="cfp-first-row-placeholder cfp-sk-card" aria-hidden="true"><span class="cfp-sk-image cfp-sk-anim"></span><span class="cfp-sk-title cfp-sk-anim"></span></div>'.repeat(missing));
-      if(grid.parentElement!==app)app.prepend(grid);
+      // Use the final grid position from the outset, below the real toolbar.
+      let wrapper=app.querySelector('.cfp-layout-wrapper');
+      if(!wrapper){wrapper=document.createElement('div');wrapper.className='cfp-layout-wrapper';app.append(wrapper);}
+      if(window.cfpFullWidth){wrapper.classList.add('cfp-full-width-mode');const themeContainer=wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');if(themeContainer){themeContainer.style.maxWidth='100%';themeContainer.style.padding='0 15px';}}
+      const settings=payload.globalSettings||{},mobile=matchMedia('(max-width:768px)').matches;
+      const width=settings.verticalFilterWidth||settings.integrations?.verticalFilterWidth;
+      if(width){const cssWidth=/^\d+(?:\.\d+)?$/.test(String(width))?width+'px':String(width);if(/^\d+(?:\.\d+)?(?:px|rem|vw|%)$/.test(cssWidth))wrapper.style.setProperty('--cfp-vertical-width',cssWidth);}
+      const layout=mobile?'drawer':settings.desktopFilterLayout||settings.integrations?.desktopFilterLayout||(settings.horizontalFilters?'horizontal':'drawer');
+      document.body.classList.toggle('cfp-vertical-layout',layout==='vertical');
+      document.body.classList.toggle('cfp-horizontal-layout',layout==='horizontal');
+      document.body.classList.toggle('cfp-drawer-layout',layout==='drawer');
+      document.body.classList.toggle('cfp-vertical-style',(settings.desktopFilterLayout||settings.integrations?.desktopFilterLayout)==='vertical');
+      document.body.classList.toggle('cfp-mobile-horizontal-scrolling',mobile&&settings.mobileFilterLayout==='horizontal-scrolling');
+      const toolbar=document.getElementById('cfp-top-bar');
+      if(toolbar){if(toolbar.parentElement!==wrapper)wrapper.prepend(toolbar);toolbar.style.setProperty('display','flex','important');}
+      const sidebar=document.getElementById('cfp-sidebar');
+      if(layout==='vertical'&&sidebar&&sidebar.parentElement!==wrapper)wrapper.append(sidebar);
+      let target=document.getElementById('cfp-products-container');
+      if(!target){target=document.createElement('div');target.id='cfp-products-container';target.className='cfp-products-grid';wrapper.append(target);}
+      if(grid.parentElement!==target)target.replaceChildren(grid);
       dismissSkeleton();
     };
     const observer=new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(inspect);}});
@@ -100,7 +119,7 @@
       const base=value=>value.split('?')[0].replace(/^https?:/,'').toLowerCase();
       if(payload.cfpCards?.version!==1&&!product.variants?.some(variant=>typeof variant.imageUrl==='string'&&base(variant.imageUrl)===base(image)))continue;
       const resize=width=>{
-        const clean=image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?');
+        const clean=image.replace(/([?&])width=\d+/g,'$1').replace(/&+/g,'&').replace(/\?&/,'?').replace(/[?&]$/,'');
         return clean+(clean.includes('?')?'&':'?')+'width='+width;
       };
       const link=document.createElement('link');link.rel='preload';link.as='image';link.fetchPriority='high';
