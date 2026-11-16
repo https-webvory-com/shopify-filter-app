@@ -332,6 +332,15 @@ document.addEventListener("DOMContentLoaded", function () {
     const settings=window.cfpSearchSettings||{};
     modal.dataset.cfpLayout=settings.instantLayout==='compact'?'compact':'fullscreen';
     modal.dataset.cfpProductColumn=settings.productColumn||'left';
+    const collectionsTitle=modal.querySelector('#cfp-collections-title');
+    const collectionsList=modal.querySelector('#cfp-search-collections');
+    const collectionsAnchor=modal.dataset.cfpLayout==='fullscreen'
+      ? modal.querySelector('#cfp-compact-products-title')
+      : modal.querySelector('#cfp-pages-title');
+    if(collectionsTitle&&collectionsList&&collectionsAnchor&&
+      (collectionsAnchor.previousElementSibling!==collectionsList||collectionsList.previousElementSibling!==collectionsTitle)){
+      collectionsAnchor.before(collectionsTitle,collectionsList);
+    }
     modal.style.setProperty('--cfp-instant-columns',String(settings.instantColumns||4));
     overlay.dataset.cfpLayout=modal.dataset.cfpLayout;
     renderCompactNavigation();
