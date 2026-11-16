@@ -449,8 +449,20 @@
   transition: opacity 0.4s ease;
 }
 
+.cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap {
+  aspect-ratio: auto;
+  background: transparent;
+}
+
 .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap img {
+  display: block;
+  height: auto;
   object-fit: contain;
+}
+
+.cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap img.cfp-secondary-img {
+  height: 100%;
+  background: #fff;
 }
 
 .cfp-search-product-image-wrap img.cfp-secondary-img {
