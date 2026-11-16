@@ -1355,7 +1355,8 @@ document.addEventListener("DOMContentLoaded", function () {
       collections = data.collections;
     }
 
-    if (window.cfpSearchSettings?.instantLayout === 'compact' && query?.trim()) {
+    const isFullScreen = window.cfpSearchSettings?.instantLayout !== 'compact';
+    if (isFullScreen || query?.trim()) {
       const root = window.Shopify?.routes?.root || '/';
       const links = collections.slice(0, CONFIG.collectionLimit ?? 5).flatMap(collection => {
         try {
@@ -1364,11 +1365,11 @@ document.addEventListener("DOMContentLoaded", function () {
           return `<li><a href="${instantEscapeHtml(url.pathname + url.search)}">${highlightSearchText(collection.title, query)}</a></li>`;
         } catch { return []; }
       });
-      if (titleElement) { titleElement.textContent = 'Categories'; titleElement.style.display = links.length ? 'block' : 'none'; }
+      if (titleElement) { titleElement.textContent = isFullScreen ? 'Trending collections' : 'Categories'; titleElement.style.display = links.length ? 'block' : 'none'; }
       list.innerHTML = links.join('');
       return;
     }
-    if (titleElement && (window.cfpSearchSettings?.instantLayout === 'compact' || titleElement.textContent === 'Categories')) titleElement.textContent = 'Collections';
+    if (titleElement && (window.cfpSearchSettings?.instantLayout === 'compact' || titleElement.textContent === 'Categories' || titleElement.textContent === 'Trending collections')) titleElement.textContent = 'Collections';
 
     if (query && query.trim().length > 0) {
       if (titleElement) titleElement.style.display = "none";
