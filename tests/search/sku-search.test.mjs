@@ -80,6 +80,19 @@ test('SKU prefix delimiters and underscores are literal in PostgreSQL LIKE patte
  assert.deepEqual(where.variants.some.OR.slice(1).map(c=>c.sku.startsWith),['AB\\_1517-','AB\\_1517\\_','AB\\_1517/','AB\\_1517 ']);
 });
 
+test('numbered shopping phrases are not treated as model codes',()=>{
+ for(const query of ['2 Piece Short Prom Dresses','8th Grade Graduation Dresses','90s Prom Dresses','2-piece short prom dresses']) {
+  assert.equal(isProductCodeQuery(query),false,query);
+  assert.ok(withSemanticSearch({q:query},true).hybrid,query);
+ }
+});
+
+for(const surface of ['instant','page'])for(const query of ['2 Piece Short Prom Dresses','8th Grade Graduation Dresses','90s Prom Dresses'])test(surface+' keeps explicit pins for '+query,async()=>{
+ const f=await fixture(),body=await f.load(query,surface);
+ assert.deepEqual(body.products.map(p=>p.id),[gid(6),gid(1)]);
+ assert.ok(f.dbCalls.every(where=>!where.variants),'a descriptive query does not trigger exact SKU resolution');
+});
+
 for(const pins of [false,true])for(const surface of ['instant','page'])test(surface+' SKU 1517 returns only its product with pins='+pins,async()=>{
  const f=await fixture({pins}),body=await f.load('1517',surface);
  assert.deepEqual(body.products.map(p=>p.id),[gid(1)]);assert.equal(body.totalCount,1);
@@ -92,7 +105,7 @@ for(const surface of ['instant','page'])test(surface+' unknown SKU cannot inject
 });
 
 test('model codes stay lexical across semantic single, batch and keyword retrieval',async()=>{
- for(const q of ['1517','1517-Fuchsia-4','AB1517','1517-Steel Blue-4']){
+ for(const q of ['1517','1517-Fuchsia-4','AB1517','1517-Steel Blue-4','1517-Steel Blue-XL']){
   assert.equal(isProductCodeQuery(q),true);assert.equal(withSemanticSearch({q},true).hybrid,undefined);
  }
  assert.ok(withSemanticSearch({q:'red wedding dress size 4'},true).hybrid);
@@ -106,7 +119,7 @@ test('model codes stay lexical across semantic single, batch and keyword retriev
  assert.equal(calls.length,4);assert.ok(calls.every(c=>!c.hybrid&&c.matchingStrategy==='all'));
 });
 
-test('native search counts and facets exclude unrelated global pins for SKU/model lookups',async()=>{
+test('native search distinguishes numbered shopping phrase pins from SKU/model lookups',async()=>{
  const docs=[product(1,'1517-Fuchsia-4'),product(6,'OTHER-4')];
  const service=await loadModule('app/services/nativeSearchPage.server.js',{
   './meiliClient.server':{default:{index:()=>({getSettings:async()=>({filterableAttributes:['*']}),search:async()=>({totalHits:0})})}},
@@ -121,4 +134,8 @@ test('native search counts and facets exclude unrelated global pins for SKU/mode
  const known=await service.rankNativeSearchPage({...spec,query:'',parsedQuery:{skuProductIds:['1']}});
  assert.equal(known.total,1);assert.deepEqual(Array.from(known.products,p=>p.id),[gid(1)]);assert.equal(known.facetDistribution.vendor.Fixture,1);
  const missing=await service.rankNativeSearchPage({...spec,query:'999999'});assert.equal(missing.total,0);assert.equal(missing.products.length,0);
+ const phrase=await service.rankNativeSearchPage({...spec,query:'2 Piece Short Prom Dresses',options:{filter:["shop = 'fixture.myshopify.com'"]}});
+ assert.equal(phrase.total,2);assert.equal(phrase.pinnedCount,2);
+ assert.deepEqual(Array.from(phrase.products,p=>p.id),[gid(6),gid(1)]);
+ assert.equal(phrase.facetDistribution.vendor.Fixture,2);
 });

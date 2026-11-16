@@ -1,5 +1,13 @@
 // A single model/SKU code must not be expanded into semantic catalog matches.
-export const isProductCodeQuery=value=>typeof value==='string'&&value.trim().length<=128&&/^(?=[^\s]*\d)[a-z\d._/-]+(?: [a-z\d._/-]+)*$/i.test(value.trim());
+export function isProductCodeQuery(value){
+ if(typeof value!=='string')return false;
+ const query=value.trim();
+ if(query.length>128||!/^(?=[^\s]*\d)[a-z\d._/-]+(?: [a-z\d._/-]+)*$/i.test(query))return false;
+ const tokens=query.split(' ');
+ // Spaces can occur inside a SKU's color, such as 1517-Steel Blue-4.
+ // A numbered shopping phrase has no model/variant delimiters around it.
+ return tokens.length===1||(/[._/-]/.test(tokens[0])&&/[._/-]/.test(tokens[tokens.length-1]));
+}
 
 export function productMatchesCode(product,query){
  const value=query.trim().toLowerCase(),boundary=new RegExp('(^|[^a-z0-9])'+value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^a-z0-9])','i');
