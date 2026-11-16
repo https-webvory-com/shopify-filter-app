@@ -1434,6 +1434,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function renderCollections(data, query, isDefault = false) {
     const list = document.getElementById("cfp-search-collections");
+    const previousQuery=list?.dataset?.cfpQuery;
     if(list?.dataset)list.dataset.cfpQuery=query?.trim().toLowerCase()||'';
     const titleElement = document.getElementById("cfp-collections-title");
     if (CONFIG.collectionLimit === 0) {
@@ -1461,6 +1462,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
       if (titleElement) { titleElement.textContent = isFullScreen ? (query?.trim() ? 'Collection results' : 'Trending collections') : 'Categories'; titleElement.style.display = links.length ? 'block' : 'none'; }
       list.innerHTML = links.join('');
+      if(isFullScreen&&previousQuery!==(query?.trim().toLowerCase()||''))list.scrollLeft=0;
       return;
     }
     if (titleElement && (window.cfpSearchSettings?.instantLayout === 'compact' || titleElement.textContent === 'Categories' || titleElement.textContent === 'Trending collections')) titleElement.textContent = 'Collections';
