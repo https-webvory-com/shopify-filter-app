@@ -449,6 +449,10 @@
   transition: opacity 0.4s ease;
 }
 
+.cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap img {
+  object-fit: contain;
+}
+
 .cfp-search-product-image-wrap img.cfp-secondary-img {
   position: absolute;
   top: 0;
