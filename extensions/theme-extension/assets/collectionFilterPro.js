@@ -3199,6 +3199,14 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     setupCollapsibleToggles();
     setupDynamicFieldListeners();
     observeHorizontalToolbar();
+    // Reveal sorting in the same paint as the completed filter controls. Keep
+    // its space reserved while loading so the toolbar and products do not jump.
+    const sortControl = document.getElementById('cfp-custom-sort');
+    if (sortControl) {
+      sortControl.style.removeProperty('visibility');
+      sortControl.removeAttribute('aria-hidden');
+      sortControl.removeAttribute('inert');
+    }
   }
 
   let horizontalToolbarObserver;
