@@ -6,15 +6,39 @@ import ts from 'typescript';
 import {loadModule} from './helpers/search-ranking.mjs';
 import * as filterWidths from '../../app/utils/filterWidths.js';
 
-async function action(file, dependencies) {
+async function action(file, dependencies, exportName='action') {
   const source=await fs.readFile(file,'utf8');
   const ast=ts.createSourceFile('route.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
-  const initializer=ast.statements.find(s=>ts.isVariableStatement(s)&&s.declarationList.declarations.some(d=>d.name.getText(ast)==='action')).declarationList.declarations[0].initializer.getText(ast);
+  const initializer=ast.statements.find(s=>ts.isVariableStatement(s)&&s.declarationList.declarations.some(d=>d.name.getText(ast)===exportName)).declarationList.declarations[0].initializer.getText(ast);
   return vm.runInNewContext('('+initializer+')',{
-    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},...filterWidths,...dependencies,
+    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},URL,...filterWidths,...dependencies,
   });
 }
 const request=values=>new Request('http://fixture/admin',{method:'POST',body:new URLSearchParams(values)});
+
+test('merged filter search includes the saved title for both rows and count within the current shop',async()=>{
+ const queries=[];
+ const loader=await action('app/routes/app.filters.merged-value.jsx',{
+  prisma:{mergedValue:{findMany:async value=>{queries.push(value.where);return [];},count:async value=>{queries.push(value.where);return 0;}},
+   product:{findMany:async()=>[],groupBy:async()=>[]},$queryRaw:async()=>[]},
+ },'loader');
+ await loader({request:new Request('http://fixture/app/filters/merged-value?q=Burgundy+colours')});
+ assert.equal(queries.length,2);
+ for(const where of queries){assert.equal(where.shop,'fixture.myshopify.com');assert.ok(where.OR.some(item=>item.filterKey?.contains==='Burgundy colours'));}
+});
+
+test('renaming a merged filter persists its title, preserves mapping and scope, then invalidates storefront state',async()=>{
+ const writes=[],events=[];
+ const save=await action('app/routes/app.filters.merged-value.jsx',{
+  prisma:{mergedValue:{update:async value=>{writes.push(value);events.push('write');}}},
+  invalidateShop:async shop=>{assert.equal(shop,'fixture.myshopify.com');events.push('invalidated');},
+ });
+ assert.equal((await save({request:request({intent:'update',id:'burgundy-rule',filterKey:'  Burgundy colours  ',targetValue:'Burgundy',sourceValues:'Burgandy, Wine'})})).success,true);
+ assert.deepEqual(JSON.parse(JSON.stringify(writes[0])),{where:{id:'burgundy-rule',shop:'fixture.myshopify.com'},data:{filterKey:'Burgundy colours',targetValue:'Burgundy',sourceValues:['Burgandy','Wine']}});
+ assert.deepEqual(events,['write','invalidated']);
+ await save({request:request({intent:'update',id:'burgundy-rule',targetValue:'Burgundy',sourceValues:'Burgandy, Wine'})});
+ assert.equal(Object.hasOwn(writes[1].data,'filterKey'),false,'older mapping-only clients preserve the stored title');
+});
 
 test('toolbar color saves validate custom colors and allow restoring the page background',async()=>{
   const writes=[];

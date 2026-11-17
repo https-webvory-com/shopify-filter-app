@@ -36,6 +36,7 @@ export const loader = async ({ request }) => {
   if (search) {
     whereClause.OR = [
       { targetValue: { contains: search } },
+      { filterKey: { contains: search } },
       { filterType: { contains: search } }
     ];
   }
@@ -204,6 +205,7 @@ export const action = async ({ request }) => {
 
   if (intent === "update") {
     const id = formData.get("id");
+    const filterKey = formData.get("filterKey");
     const targetValue = formData.get("targetValue");
     const sourceValues = formData
       .get("sourceValues")
@@ -213,7 +215,7 @@ export const action = async ({ request }) => {
 
     await prisma.mergedValue.update({
       where: { id, shop },
-      data: { targetValue, sourceValues },
+      data: { targetValue, sourceValues, ...(filterKey === null ? {} : {filterKey: String(filterKey).trim()}) },
     });
     await invalidateShop(shop);
     return { success: true, intent };
@@ -702,6 +704,7 @@ export default function MergedValues() {
         {
           intent: "update",
           id: editingRule.id,
+          filterKey: filterTitle.trim(),
           targetValue: row.targetValue,
           sourceValues: row.sourceValues,
         },
