@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import AdminFilterDialogStyles from '../ui/AdminFilterDialogStyles';
 
 export default function FilterModal({ isOpen, onClose, onApply, currentMatchType = "all", currentFilters = [], targetField = "Collections" }) {
   const [matchType, setMatchType] = useState(currentMatchType);
@@ -77,7 +78,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
       `}</style>
       <div 
         onClick={(e) => e.stopPropagation()} 
-        className="filter-modal-card" 
+        className="filter-modal-card admin-filter-dialog"
         style={{ 
           background: "#fff", 
           width: "700px", 
@@ -87,6 +88,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
           flexDirection: "column" 
         }}
       >
+        <AdminFilterDialogStyles />
         
         {/* Modal Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px", borderBottom: "1px solid transparent" }}>
@@ -116,8 +118,8 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
 
         {/* Modal Body */}
         <div style={{ padding: "0 24px 24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#334155" }}>
+          <div className="admin-filter-match-line" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+            <div className="admin-filter-match-options" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#334155" }}>
               Show results matching 
               <select 
                 value={matchType}
@@ -132,6 +134,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
  
             {filters.length > 0 && (
               <button 
+                className="admin-filter-clear"
                 onClick={() => setFilters([])} 
                 style={{ 
                   background: "#fff", 
@@ -155,7 +158,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
           {/* Filters List */}
           <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
             {filters.map((filter, index) => (
-              <div key={index} style={{ display: "flex", alignItems: "center", gap: "12px", paddingRight: "8px" }}>
+              <div key={index} className="admin-filter-row" style={{ display: "flex", alignItems: "center", gap: "12px", paddingRight: "8px" }}>
                 {/* Field Dropdown */}
                 <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
                   <select 
@@ -223,7 +226,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "16px" }}>
             <button 
               onClick={addFilter}
-              className="merch-btn-primary"
+              className="merch-btn-primary admin-filter-add"
               style={{ padding: "10px 32px", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", width: filters.length === 0 ? "50%" : "100%", justifyContent: "center", height: "42px" }}
             >
               <span style={{ fontSize: "18px", lineHeight: 1 }}>+</span> Add filter
@@ -233,6 +236,7 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
           {/* Action Buttons */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "32px" }}>
             <button 
+              className="admin-filter-cancel"
               onClick={onClose}
               style={{ 
                 background: "#fff", 
@@ -248,9 +252,10 @@ export default function FilterModal({ isOpen, onClose, onApply, currentMatchType
               onMouseEnter={e => e.currentTarget.style.background = "rgba(62, 58, 177, 0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = "#fff"}
             >
-              CANCEL
+              Cancel
             </button>
             <button 
+              className="admin-filter-apply"
               onClick={() => onApply(matchType, filters)}
               style={{ 
                 background: filters.length > 0 && filters.some(f => f.field !== 'Active' && f.value === "") ? "#94a3b8" : "#5B21B6", 

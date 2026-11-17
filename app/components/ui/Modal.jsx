@@ -1,6 +1,6 @@
 import React from "react";
 
-export function Modal({ isOpen, onClose, title, children, footer, width = "600px", padding }) {
+export function Modal({ isOpen, onClose, title, children, footer, width = "600px", padding, className }) {
   if (!isOpen) return null;
 
   const headerPadding = padding ? `${padding} ${padding} 12px` : "24px 32px 16px";
@@ -23,6 +23,7 @@ export function Modal({ isOpen, onClose, title, children, footer, width = "600px
       }}
     >
       <div
+        className={className}
         style={{
           background: "#fff",
           borderRadius: "12px",

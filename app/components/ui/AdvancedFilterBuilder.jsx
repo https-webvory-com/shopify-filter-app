@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
+import AdminFilterDialogStyles from './AdminFilterDialogStyles';
 
 const FIELD_OPTIONS = [
   { value: "label", label: "Label", type: "text" },
@@ -95,6 +96,7 @@ export function AdvancedFilterBuilder({
       isOpen={isOpen}
       onClose={onClose}
       title="Filter"
+      className="admin-filter-dialog"
       width="700px"
       padding="26px"
       footer={
@@ -224,8 +226,9 @@ export function AdvancedFilterBuilder({
       <div style={{ display: "flex", flexDirection: "column", gap: "24px", padding: "8px 0" }}>
         
         {/* Header Options */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14.5px", color: "#1E1B4B", fontWeight: "600" }}>
+        <AdminFilterDialogStyles />
+        <div className="admin-filter-match-line" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="admin-filter-match-options" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14.5px", color: "#1E1B4B", fontWeight: "600" }}>
             Show results matching 
             <select
               value={matchType}
@@ -249,7 +252,7 @@ export function AdvancedFilterBuilder({
             const operators = fieldInfo.type === "boolean" ? OPERATORS_BOOLEAN : OPERATORS_TEXT;
 
             return (
-              <div key={condition.id} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div key={condition.id} className="admin-filter-row" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 
                 {/* Field Select */}
                 <select

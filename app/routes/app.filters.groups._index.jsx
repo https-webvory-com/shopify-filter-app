@@ -14,6 +14,7 @@ import { invalidateShop } from "../services/shopCache.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { ImportFilterGroupModal } from "../components/ui/ImportFilterGroupModal";
 import { ExportFilterGroupsModal } from "../components/ui/ExportFilterGroupsModal";
+import AdminFilterDialogStyles from '../components/ui/AdminFilterDialogStyles';
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Built-in filters seeded into every new default group Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 import {ensureDefaultGroup} from '../services/defaultFilterGroup.server.js';
@@ -1999,6 +2000,7 @@ export default function FilterGroups() {
           }}
         >
           <div
+            className="admin-filter-dialog"
             style={{
               background: "#fff",
               borderRadius: "16px",
@@ -2009,6 +2011,7 @@ export default function FilterGroups() {
               overflow: "visible",
             }}
           >
+            <AdminFilterDialogStyles />
             <button
               onClick={() => setShowFilterModal(false)}
               style={{
@@ -2041,6 +2044,7 @@ export default function FilterGroups() {
             </h2>
 
             <div
+              className="admin-filter-match-line"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -2049,6 +2053,7 @@ export default function FilterGroups() {
               }}
             >
               <div
+                className="admin-filter-match-options"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -2102,6 +2107,7 @@ export default function FilterGroups() {
 
               {filterConditions.length > 0 && (
                 <button
+                  className="admin-filter-clear"
                   onClick={() => setFilterConditions([])}
                   style={{
                     background: "#fff",
@@ -2143,6 +2149,7 @@ export default function FilterGroups() {
               {filterConditions.map((cond, index) => (
                 <div
                   key={cond.id}
+                  className="admin-filter-row"
                   style={{ display: "flex", alignItems: "center", gap: "12px" }}
                 >
                   {/* Field Dropdown */}
@@ -2386,11 +2393,13 @@ export default function FilterGroups() {
               ))}
 
               <div
+                className="admin-filter-add-row"
                 style={{
                   marginTop: filterConditions.length > 0 ? "12px" : "0",
                 }}
               >
                 <button
+                  className="admin-filter-add"
                   onClick={() =>
                     setFilterConditions([
                       ...filterConditions,
@@ -2445,6 +2454,7 @@ export default function FilterGroups() {
               }}
             >
               <button
+                className="admin-filter-cancel"
                 onClick={() => setShowFilterModal(false)}
                 style={{
                   background: "#fff",
@@ -2468,9 +2478,10 @@ export default function FilterGroups() {
                   e.currentTarget.style.borderColor = "rgba(30, 27, 75, 0.12)";
                 }}
               >
-                CANCEL
+                Cancel
               </button>
               <button
+                className="admin-filter-apply"
                 onClick={() => setShowFilterModal(false)}
                 style={{
                   background: "#5B21B6",
