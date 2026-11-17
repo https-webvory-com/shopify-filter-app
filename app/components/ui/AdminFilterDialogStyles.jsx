@@ -22,6 +22,13 @@ export default function AdminFilterDialogStyles() {
     .admin-filter-dialog select:focus, .admin-filter-dialog input[type="text"]:focus {
       border-color: #5B21B6 !important; box-shadow: 0 0 0 2px rgba(91,33,182,.1) !important;
     }
+    .admin-filter-dialog select {
+      appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%231E1B4B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+      background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 12px 12px !important;
+      padding-right: 32px !important;
+    }
+    .admin-filter-dialog select + svg { display: none !important; }
     .admin-filter-dialog .admin-filter-match-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .admin-filter-dialog .admin-filter-match-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px !important; color: #202223 !important; font-weight: 400 !important; }
     .admin-filter-dialog .admin-filter-row {
@@ -30,6 +37,7 @@ export default function AdminFilterDialogStyles() {
     }
     .admin-filter-dialog .admin-filter-row > * { min-width: 0 !important; width: auto !important; }
     .admin-filter-dialog .admin-filter-row select, .admin-filter-dialog .admin-filter-row input[type="text"] { width: 100% !important; padding: 7px 12px !important; }
+    .admin-filter-dialog .admin-filter-row select { padding-right: 32px !important; }
     .admin-filter-dialog .admin-filter-row > button { box-sizing: border-box !important; width: 32px !important; height: 32px; padding: 8px !important; flex-shrink: 0; }
     .admin-filter-dialog .admin-filter-add, .admin-filter-dialog .filter-builder-add-btn,
     .admin-filter-dialog .admin-filter-apply, .admin-filter-dialog .btn-reorder-save {
