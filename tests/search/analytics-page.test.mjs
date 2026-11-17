@@ -37,7 +37,7 @@ test('analytics renders six reports with real table data, date controls and char
   });
   const html = renderToStaticMarkup(React.createElement(route.default));
   for (const label of ['Search volume', 'Search queries', 'Top used filters', 'Top clicked products',
-    'Top locations', 'Top 0 result', 'Rows per page:', 'Download CSV', 'Download SVG', 'Download PNG',
+    'Top locations', 'Searches with no results', 'Rows per page:', 'Download CSV', 'Download SVG', 'Download PNG',
     'Black dress', 'From', 'To', 'Group by']) assert.ok(html.includes(label), label);
   assert.match(html, /fixture\.myshopify\.com\/products\/black-dress/);
   assert.match(html, /aria-label="products chart"/);

@@ -11,7 +11,7 @@ const tabs = [
   ['filters', 'Top used filters', 'Top used filters', 'Filter - Label'],
   ['products', 'Top clicked products', 'Top clicked products', 'Product'],
   ['locations', 'Top locations', 'Top locations', 'Country'],
-  ['zero', 'Top 0 result', 'Top 0 results', 'Term'],
+  ['zero', 'Searches with no results', 'Searches with no results', 'Term'],
 ];
 const groups = [['hour', 'Hour'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'],
   ['hour_of_day', 'Hour of day'], ['day_of_week', 'Day of week']];
