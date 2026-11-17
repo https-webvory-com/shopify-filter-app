@@ -1,3 +1,4 @@
+import AdminNoSearchResults from './ui/AdminNoSearchResults';
 import { useState, useRef, useEffect } from 'react';
 import {usePickerRequest} from '../hooks/usePickerRequest';
 import CompactSearchSortable from './CompactSearchSortable';
@@ -84,7 +85,7 @@ export default function CompactSearchSettings({ value = [], onChange, disabled, 
       <div className="cs-picker-results" aria-busy={loadingCollections}>
         {error?<div role="alert">{error}<button type="button" onClick={()=>{setError('');setLoadingCollections(true);collectionFetcher.load('/app/search/settings?collectionPicker=1&q='+encodeURIComponent(query.trim())+'&after='+encodeURIComponent(cursor));}}>Retry</button></div>:null}
         {rows.map(item=>{const checked=selected.some(s=>s.id===item.id);return <label className="cs-picker-row" key={item.id}><input type="checkbox" checked={checked} disabled={!checked&&selected.length>=(picker?.limit||0)} onChange={()=>setSelected(items=>checked?items.filter(s=>s.id!==item.id):[...items,item])}/>{item.image?<img src={item.image} alt=""/>:<span className="cs-thumb"/>}<span><strong>{item.title}</strong><small>{item.handle}{typeof item.productCount==='number'?' · '+item.productCount+' products':''}</small></span></label>;})}
-        {!rows.length&&!error&&!loadingCollections?<div className="cs-empty">{query?'No saved collections match this search. Try another name.':'No collections are saved for this store yet.'}</div>:null}
+        {!rows.length&&!error&&!loadingCollections?<div className="cs-empty"><AdminNoSearchResults query={query}>No collections are saved for this store yet.</AdminNoSearchResults></div>:null}
         {loadingCollections?<div className="cs-empty">Loading saved collections…</div>:null}
         {pagination.hasMore&&<button type="button" className="cs-picker-more" disabled={loadingCollections} onClick={()=>{setLoadingCollections(true);setCursor(pagination.nextCursor);}}>Load more collections</button>}
       </div>

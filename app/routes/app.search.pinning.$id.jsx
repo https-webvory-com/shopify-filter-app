@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { invalidateShop } from "../services/shopCache.server";
 import { useNavigate } from "react-router";
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -843,7 +844,7 @@ export default function PinningEditor() {
             >
               {searchResults.length === 0 ? (
                 <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
-                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : fetcher.data?.error || "No matching products found."}
+                  {isFetchingMore || fetcher.state === "submitting" ? "Searching..." : fetcher.data?.error || <AdminNoSearchResults query={searchQuery}>No products available.</AdminNoSearchResults>}
                 </div>
               ) : (
                 <>

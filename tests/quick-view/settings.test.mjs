@@ -6,7 +6,7 @@ import { transform } from 'esbuild';
 import * as filterWidths from '../../app/utils/filterWidths.js';
 
 async function moduleWithMocks(file, imports) {
-  imports = { '@shopify/app-bridge-react': {}, '../utils/filterWidths.js': filterWidths,
+  imports = { '@shopify/app-bridge-react': {}, '../hooks/useCompletedSubmission': {useCompletedSubmission:()=>{}}, '../utils/filterWidths.js': filterWidths,
     '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
   const { code } = await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' });
   const context = { module: { exports: {} }, exports: {}, Response, URL, console,

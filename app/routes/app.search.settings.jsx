@@ -109,7 +109,7 @@ export default function SearchSettings() {
         fetcher.submit({ intent: 'save', compactCollectionsChanged:String(JSON.stringify(values.compactCollections)!==JSON.stringify(savedCompactCollections)),compactCollectionsBase:JSON.stringify(savedCompactCollections),settings: JSON.stringify({ ...values, manualSuggestions: manual.split(/\r?\n/).map(s => s.trim()).filter(Boolean) }) }, { method: 'post' });
       }} style={{ display: 'grid', gap: 20 }}>
         {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
-        {fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
+        {fetcher.state === 'idle' && fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
         {indexStatus&&['queued','building','failed'].includes(indexStatus.phase)&&<p role="status" style={{padding:12,background:indexStatus.phase==='failed'?'#fff4e5':'#eef6ff'}}>{indexStatus.phase==='failed'?indexStatus.error:`Preparing search index: ${indexStatus.processed} of ${indexStatus.total??'…'} products. The previous complete search remains available until preparation finishes.`}</p>}
         {tab==='index'&&<SearchIndexSettings value={values} onChange={setValues} disabled={busy} indexStatus={indexStatus}/>}
         {tab==='instant'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="instant-search-heading">

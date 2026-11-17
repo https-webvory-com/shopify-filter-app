@@ -33,6 +33,8 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/filterWidths.js')return filterWidths;
     if(name==='../utils/collectionSearchText.js')return collectionSearchText;
     if(name==='../hooks/usePickerRequest')return {usePickerRequest:()=>({})};
+    if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};
+    if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};
     if(name==='../utils/skuSearch.js')return skuSearch;
     if(name==='../utils/instantSearchCard.js')return instantSearchCard;
     if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;

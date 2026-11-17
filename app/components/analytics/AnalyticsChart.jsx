@@ -59,7 +59,7 @@ export default function AnalyticsChart({ chart, keys, rows, group, tab }) {
         <text x={left - 8} y={top + step * plotHeight / 4 + 4} textAnchor="end" fontSize="11" fill="#68778d">{format(maximum - stepSize * step)}</text>
       </g>)}
       {visible.map((point, index) => index % Math.max(1, Math.ceil(visible.length / 8)) === 0 || index === visible.length - 1
-        ? <text key={point.bucket} x={x(index)} y={height - 15} textAnchor="middle" fontSize="11" fill="#68778d">
+        ? <text key={point.bucket} x={x(index)} y={height - 15} textAnchor={visible.length < 2 ? 'middle' : index === 0 ? 'start' : index === visible.length - 1 ? 'end' : 'middle'} fontSize="11" fill="#68778d">
           {group === 'day_of_week' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][Number(point.bucket)] : point.bucket}
         </text> : null)}
       {keys.map((key, series) => hidden.includes(key) ? null : <g key={key}>

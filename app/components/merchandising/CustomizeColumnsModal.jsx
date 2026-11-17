@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../ui/AdminNoSearchResults';
 import { useState, useEffect } from "react";
 
 export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns, onApply }) {
@@ -150,6 +151,7 @@ export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns,
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "8px", maxHeight: "300px", overflowY: "auto" }}>
+              {filteredColumns.length === 0 && <AdminNoSearchResults query={searchQuery} style={{padding:"12px 0",color:"#64748b"}}>No columns available.</AdminNoSearchResults>}
               {filteredColumns.map(c => (
                 <label key={c.id} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", color: c.visible ? "#5B21B6" : "#4b5563", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }}>
                   <div style={{ position: "relative", width: "18px", height: "18px" }}>

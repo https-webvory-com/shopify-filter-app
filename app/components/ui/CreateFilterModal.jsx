@@ -1,3 +1,4 @@
+import AdminNoSearchResults from './AdminNoSearchResults';
 import React, { useState,useEffect } from "react";
 import { Button } from "./Button";
 import { Checkbox } from "./Checkbox";
@@ -85,6 +86,7 @@ const OptionTypeDropdown = ({ value, onChange, storeData }) => {
             </div>
           </div>
           <div style={{ overflowY: "auto", flex: 1, paddingTop: "8px" }}>
+            {filteredOptions.length === 0 && <AdminNoSearchResults query={search} style={{padding:"10px 24px",color:"#6d7175"}}>No options available.</AdminNoSearchResults>}
             {filteredOptions.map(opt => (
               <div 
                 key={opt.value}
@@ -163,7 +165,7 @@ const MultiSelectDropdown = ({ value, onChange, options, placeholder = "Select v
             </div>
           </div>
           <div style={{ overflowY: "auto", flex: 1, paddingTop: "8px" }}>
-            {filteredOptions.length === 0 ? <div style={{ padding: "10px 24px", color: "#6d7175", fontSize: "13px" }}>No options found.</div> : null}
+            {filteredOptions.length === 0 ? <div style={{ padding: "10px 24px", color: "#6d7175", fontSize: "13px" }}><AdminNoSearchResults query={search}>No options available.</AdminNoSearchResults></div> : null}
             {filteredOptions.map(opt => (
               <div 
                 key={opt}
@@ -227,7 +229,7 @@ const SingleSelectDropdown = ({ value, onChange, options, placeholder = "Select 
             </div>
           </div>
           <div style={{ overflowY: "auto", flex: 1, paddingTop: "8px" }}>
-            {filteredOptions.length === 0 ? <div style={{ padding: "10px 24px", color: "#6d7175", fontSize: "13px" }}>No options found.</div> : null}
+            {filteredOptions.length === 0 ? <div style={{ padding: "10px 24px", color: "#6d7175", fontSize: "13px" }}><AdminNoSearchResults query={search}>No options available.</AdminNoSearchResults></div> : null}
             {filteredOptions.map(opt => (
               <div 
                 key={opt}

@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { merchandisingRuleIds } from "../utils/merchandisingSelection.js";
 import { importMerchandisingRules } from '../services/merchandisingImport.server.js';
 import { useNavigate } from "react-router";
@@ -518,7 +520,7 @@ export default function MerchandisingIndex() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
+  useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
       if (fetcher.data.intent === "create")
         shopify.toast.show("Rule created successfully");
@@ -540,7 +542,7 @@ export default function MerchandisingIndex() {
     if (fetcher.state === "idle" && fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
-  }, [fetcher.state, fetcher.data]);
+  });
 
   return (
     <s-page heading="Merchandising">
@@ -1055,9 +1057,8 @@ export default function MerchandisingIndex() {
         <div
           style={{ maxWidth: "1200px", margin: "0 auto", textAlign: "left" }}
         >
-          {filteredRules.length > 0 ||
-            (merchandisingRules.length > 0 &&
-              (searchQuery || ruleFilters.length > 0)) ? (
+          {filteredRules.length > 0 || searchQuery.trim() ||
+            (merchandisingRules.length > 0 && ruleFilters.length > 0) ? (
             <div
               style={{
                 background: "#fff",
@@ -1097,7 +1098,7 @@ export default function MerchandisingIndex() {
                                 gap: "10px",
                               }}
                             >
-                              <input
+                              {filteredRules.length > 0 && (<input
                                 type="checkbox"
                                 checked={filteredRules.length > 0 && filteredRules.every(rule => selectedRules.some(selected => selected.id === rule.id))}
                                 onChange={(e) => {
@@ -1112,7 +1113,7 @@ export default function MerchandisingIndex() {
                                   width: "15px",
                                   height: "15px",
                                 }}
-                              />{" "}
+                              />)}{" "}
                               {c.label}
                             </div>
                           ) : (
@@ -1444,7 +1445,7 @@ export default function MerchandisingIndex() {
                           color: "#64748b",
                         }}
                       >
-                        No rules matched your search or filters.
+                        <AdminNoSearchResults query={searchQuery}>No rules match the selected filters.</AdminNoSearchResults>
                       </td>
                     </tr>
                   )}

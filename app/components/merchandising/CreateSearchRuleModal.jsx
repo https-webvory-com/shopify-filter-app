@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../ui/AdminNoSearchResults';
 import { collectionTitleMatchesSearch } from "../../utils/collectionSearchText.js";
 import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
@@ -36,6 +37,11 @@ export default function CreateSearchRuleModal({
   const [openActionDropdownIndex, setOpenActionDropdownIndex] = useState(null);
   const [openFieldDropdownIndex, setOpenFieldDropdownIndex] = useState(null);
   const [fieldSearch, setFieldSearch] = useState("");
+  const filteredFields = [
+                            "Date", "Price", "Discount", "Percent sales", "Vendor", "Collections",
+                            "Color (product option)", "Size (product option)", "slot (product option)",
+                            "Available", "Product type", "Tags", "Product", "SKU", "Barcode", "Locations", "Rating"
+                            ].filter(f => f.toLowerCase().includes(fieldSearch.toLowerCase()));
 
   const [openOperatorDropdownIndex, setOpenOperatorDropdownIndex] = useState(null);
   const [openRuleDatePickerIndex, setOpenRuleDatePickerIndex] = useState(null);
@@ -593,11 +599,8 @@ export default function CreateSearchRuleModal({
                             </div>
                           </div>
                           <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
-                            {[
-                            "Date", "Price", "Discount", "Percent sales", "Vendor", "Collections",
-                            "Color (product option)", "Size (product option)", "slot (product option)",
-                            "Available", "Product type", "Tags", "Product", "SKU", "Barcode", "Locations", "Rating"
-                            ].filter(f => f.toLowerCase().includes(fieldSearch.toLowerCase())).map(field => (
+                            {filteredFields.length === 0 && <AdminNoSearchResults query={fieldSearch} style={{padding:"12px 16px"}}>No fields available.</AdminNoSearchResults>}
+                            {filteredFields.map(field => (
                               <div 
                                 key={field}
                                 onClick={() => {
@@ -764,7 +767,7 @@ export default function CreateSearchRuleModal({
                                                   {r.field === 'Product' && searchQueries.length && productFetcher.state !== 'idle'
                                                     ? 'Loading matching products...'
                                                     : r.field === 'Product' && productFetcher.data?.queryKey === queryKey && productFetcher.data?.error
-                                                      ? productFetcher.data.error : 'No options found.'}
+                                                      ? productFetcher.data.error : <AdminNoSearchResults query={dropdownSearch}>No options available.</AdminNoSearchResults>}
                                                 </div>
                                               )}
                                               {r.field==='Product'&&searchQueries.length>0&&productFetcher.data?.hasMore&&<div style={{padding:'12px',fontSize:12,color:'#64748b'}}>Showing the first 50 matches. Search by product name to narrow the list.</div>}

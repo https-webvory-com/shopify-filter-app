@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useNavigate } from "react-router";
 import { collectionTitleMatchesSearch } from "../utils/collectionSearchText.js";
 import { useState, useEffect } from "react";
@@ -366,7 +368,7 @@ export default function FilterGroups() {
   const shopify = useAppBridge();
   const isLoading = navigation.state !== "idle";
 
-  useEffect(() => {
+  useCompletedSubmission(actionData, navigation.state, () => {
     if (actionData?.success) {
       if (actionData.intent === "create")
         shopify.toast.show("Filter group created");
@@ -381,7 +383,7 @@ export default function FilterGroups() {
         isError: true,
       });
     }
-  }, [actionData, shopify]);
+  });
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -414,6 +416,7 @@ export default function FilterGroups() {
   const [showColumnsModal, setShowColumnsModal] = useState(false);
   const [tempColumns, setTempColumns] = useState([]);
   const [colSearch, setColSearch] = useState("");
+  const filteredColumnChoices = tempColumns.filter(c => c.label.toLowerCase().includes(colSearch.toLowerCase()));
   const [draggedColId, setDraggedColId] = useState(null);
 
   // Filter modal state
@@ -1374,7 +1377,7 @@ export default function FilterGroups() {
             <thead>
               <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
                 <th style={{ padding: "16px 20px", width: "40px" }}>
-                  <input
+                  {filteredGroups.length > 0 && (<input
                     type="checkbox"
                     checked={selectedGroups.length > 0 && selectedGroups.length === filteredGroups.length}
                     onChange={(e) => {
@@ -1385,7 +1388,7 @@ export default function FilterGroups() {
                       }
                     }}
                     style={{ cursor: "pointer", width: "16px", height: "16px" }}
-                  />
+                  />)}
                 </th>
                 {columns
                   .filter((c) => c.isVisible)
@@ -1419,7 +1422,7 @@ export default function FilterGroups() {
                       fontSize: "14px",
                     }}
                   >
-                    No filter groups found.
+                    <AdminNoSearchResults query={searchQuery}>No filter groups found.</AdminNoSearchResults>
                   </td>
                 </tr>
               ) : (
@@ -1898,9 +1901,7 @@ export default function FilterGroups() {
                               fontSize: "13px",
                             }}
                           >
-                            {collections.length === 0
-                              ? "No collections synced. Sync products first."
-                              : "No collections found."}
+                            <AdminNoSearchResults query={searchColl}>No collections available.</AdminNoSearchResults>
                           </div>
                         ) : (
                           filteredCollections.map((coll) => (
@@ -2625,7 +2626,7 @@ export default function FilterGroups() {
                       }}
                     />
                   </div>
-                  <button
+                  {filteredColumnChoices.length > 0 && (<button
                     onClick={selectAllCols}
                     style={{
                       color: "#0066cc",
@@ -2637,7 +2638,7 @@ export default function FilterGroups() {
                     }}
                   >
                     select all
-                  </button>
+                  </button>)}
                 </div>
                 <div
                   style={{
@@ -2647,11 +2648,8 @@ export default function FilterGroups() {
                     overflowY: "auto",
                   }}
                 >
-                  {tempColumns
-                    .filter((c) =>
-                      c.label.toLowerCase().includes(colSearch.toLowerCase()),
-                    )
-                    .map((c) => (
+                  {filteredColumnChoices.length === 0 && <AdminNoSearchResults query={colSearch}>No columns available.</AdminNoSearchResults>}
+                  {filteredColumnChoices.map((c) => (
                       <label
                         key={c.id}
                         style={{

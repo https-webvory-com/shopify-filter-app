@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useFetcher, useLoaderData, useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
 import { boundary } from '@shopify/shopify-app-react-router/server';
@@ -132,7 +133,7 @@ export default function SearchRedirects() {
           <div className="rd-summary" aria-label="Redirect summary"><div className="rd-stat"><strong>{redirects.length}</strong>Total redirects</div><div className="rd-stat"><strong>{enabledCount}</strong>Enabled</div></div>
         </div>
         {fetcher.data?.error && <div role="alert" className="rd-feedback rd-error">{fetcher.data.error}</div>}
-        {fetcher.data?.success && <div role="status" className="rd-feedback rd-success">Redirect changes saved.</div>}
+        {fetcher.state === 'idle' && fetcher.data?.success && <div role="status" className="rd-feedback rd-success">Redirect changes saved.</div>}
         <div className="rd-layout">
         <div>
         <section className="rd-card" aria-labelledby="redirect-editor-title">
@@ -156,7 +157,7 @@ export default function SearchRedirects() {
           <div className="rd-card-heading"><h3 id="redirect-list-title">Your redirects</h3><p>Manage the shortcuts available to your customers.</p></div>
           {redirects.length > 0 && <div className="rd-toolbar"><div className="rd-filters" aria-label="Filter redirects by status">{['all', 'enabled', 'disabled'].map(value => <button key={value} type="button" className="rd-filter" aria-pressed={status === value} onClick={() => setStatus(value)}>{value === 'all' ? 'All redirects' : value === 'enabled' ? 'Enabled' : 'Disabled'}</button>)}</div><label><input className="rd-input rd-page-search" type="search" placeholder="Search queries or URLs" aria-label="Search redirects" value={search} onChange={e => setSearch(e.target.value)} /></label></div>}
           {!redirects.length && <div className="rd-empty"><div className="rd-empty-icon"><RedirectIcon size={25} /></div><h4>Your first shortcut starts here</h4><p>Create a redirect to help customers find the right page with a simple search.</p></div>}
-          {redirects.length > 0 && !visibleRedirects.length && <div className="rd-empty" role="status"><h4>No matching redirects</h4><p>Try another search or show all redirects.</p><button className="rd-button" style={{ marginTop: 16 }} onClick={() => { setSearch(''); setStatus('all'); }}>Clear filters</button></div>}
+          {redirects.length > 0 && !visibleRedirects.length && <div className="rd-empty" role="status"><h4><AdminNoSearchResults query={search}>No matching redirects.</AdminNoSearchResults></h4><p>Try another search or show all redirects.</p><button className="rd-button" style={{ marginTop: 16 }} onClick={() => { setSearch(''); setStatus('all'); }}>Clear filters</button></div>}
           {visibleRedirects.map(rule => (
             <article key={rule.id} className={`rd-rule${editing === rule.id ? ' rd-rule-editing' : ''}`}>
               <div className="rd-rule-top"><div className="rd-queries">{rule.queries.map(q => <span key={q.id || q.query} className="rd-query">{q.query}</span>)}</div><span className={`rd-badge${rule.isActive ? '' : ' rd-badge-disabled'}`}>{rule.isActive ? 'Enabled' : 'Disabled'}</span></div>

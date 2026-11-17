@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useNavigate } from "react-router";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -479,7 +481,7 @@ const AutocompleteInput = ({
       )}
 
       {isOpen &&
-        (filteredSuggestions.length > 0 || suggestions.length === 0) && (
+        (
           <div
             className="reorder-scroll-container"
             style={{
@@ -559,7 +561,7 @@ const AutocompleteInput = ({
                   color: "#8c9196",
                 }}
               >
-                No items found
+                <AdminNoSearchResults query={inputValue}>No items available.</AdminNoSearchResults>
               </div>
             )}
           </div>
@@ -600,7 +602,7 @@ export default function MergedValues() {
     return () => clearTimeout(handler);
   }, [searchValue, navigate, pagination?.search]);
 
-  useEffect(() => {
+  useCompletedSubmission(actionData, navigation.state, () => {
     if (actionData?.success && navigation.state === "idle") {
       if (actionData.intent === "add_bulk" || actionData.intent === "add") {
         shopify.toast.show("Merged values created successfully");
@@ -614,7 +616,7 @@ export default function MergedValues() {
         shopify.toast.show("Status updated successfully");
       }
     }
-  }, [actionData, navigation.state, shopify]);
+  });
 
   // Add/Edit modal state
   const [showModal, setShowModal] = useState(false);
@@ -1355,8 +1357,8 @@ export default function MergedValues() {
         {rules.length === 0 ? (
           <div className="empty-state-container">
             {pagination?.search?.trim() && pagination.totalItems === 0 && (
-              <h2 className="empty-state-search-title" role="status">
-                No results found for “{pagination.search}”
+              <h2 className="empty-state-search-title">
+                <AdminNoSearchResults query={pagination.search} />
               </h2>
             )}
             <h1 className="empty-state-title">Merge filter values</h1>

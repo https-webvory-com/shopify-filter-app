@@ -112,7 +112,7 @@ test('available product IDs exclude products with only unavailable matching comb
 });
 
 async function route(file,mocks){
- const context={module:{exports:{}},exports:{},Response,URL,console,invalidateCall:mocks.invalidateCall||(()=>{}),require:name=>{if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
+ const context={module:{exports:{}},exports:{},Response,URL,console,invalidateCall:mocks.invalidateCall||(()=>{}),require:name=>{if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
    if(name==='../utils/productTitleFilter.js')return productTitleFilter;
    if(name==='../utils/filterPresentation.js')return filterPresentation;
    if(name==='../utils/extraProductFilters.js')return extraProductFilters;

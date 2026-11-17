@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { invalidateShop } from "../services/shopCache.server";
 import { sortPinningRules } from "../utils/pinImportOrder.js";
 import { useNavigate } from "react-router";
@@ -101,7 +103,7 @@ export default function PinningIndex() {
   const actionData = useActionData();
   const shopify = useAppBridge();
 
-  useEffect(() => {
+  useCompletedSubmission(actionData, navigation.state, () => {
     if (actionData?.success) {
       if (actionData.action === "deleteRule") {
         shopify.toast.show("Pin deleted successfully");
@@ -113,7 +115,7 @@ export default function PinningIndex() {
         shopify.toast.show(`${actionData.count} pins deleted successfully`);
       }
     }
-  }, [actionData, shopify]);
+  });
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -1056,7 +1058,7 @@ export default function PinningIndex() {
             overflow: "hidden",
           }}
         >
-          {pinningRules.length === 0 ? (
+          {pinningRules.length === 0 && !searchQuery.trim() ? (
             <div style={{ padding: "60px 20px", textAlign: "center" }}>
               <h2
                 style={{
@@ -1133,7 +1135,7 @@ export default function PinningIndex() {
                   marginBottom: "8px",
                 }}
               >
-                No pins found
+                <AdminNoSearchResults query={searchQuery}>No pins found.</AdminNoSearchResults>
               </h2>
               <p
                 style={{

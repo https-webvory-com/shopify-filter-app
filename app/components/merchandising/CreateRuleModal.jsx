@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../ui/AdminNoSearchResults';
 import { validConditions } from "../../utils/merchandisingCondition.js";
 import { collectionTitleMatchesSearch } from "../../utils/collectionSearchText.js";
 import DateRangePicker, { todayDate } from "./DateRangePicker";
@@ -37,6 +38,11 @@ export default function CreateRuleModal({
   const [openActionDropdownIndex, setOpenActionDropdownIndex] = useState(null);
   const [openFieldDropdownIndex, setOpenFieldDropdownIndex] = useState(null);
   const [fieldSearch, setFieldSearch] = useState("");
+  const filteredFields = [
+                            "Date", "Price", "Discount", "Percent sales", "Vendor", "Collections",
+                            "Color (product option)", "Size (product option)", "slot (product option)",
+                            "Available", "Product type", "Tags", "Product", "SKU", "Barcode", "Locations", "Rating"
+                            ].filter(f => f.toLowerCase().includes(fieldSearch.toLowerCase()));
 
   const [openOperatorDropdownIndex, setOpenOperatorDropdownIndex] = useState(null);
   const [openRuleDatePickerIndex, setOpenRuleDatePickerIndex] = useState(null);
@@ -345,7 +351,7 @@ export default function CreateRuleModal({
                     
                     {filteredCollections.length === 0 && (
                       <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
-                        No collections found.
+                        <AdminNoSearchResults query={collectionSearch}>No collections available.</AdminNoSearchResults>
                       </div>
                     )}
                   </div>
@@ -588,11 +594,8 @@ export default function CreateRuleModal({
                             </div>
                           </div>
                           <div style={{ maxHeight: "250px", overflowY: "auto", paddingBottom: "12px" }}>
-                            {[
-                            "Date", "Price", "Discount", "Percent sales", "Vendor", "Collections",
-                            "Color (product option)", "Size (product option)", "slot (product option)",
-                            "Available", "Product type", "Tags", "Product", "SKU", "Barcode", "Locations", "Rating"
-                            ].filter(f => f.toLowerCase().includes(fieldSearch.toLowerCase())).map(field => (
+                            {filteredFields.length === 0 && <AdminNoSearchResults query={fieldSearch} style={{padding:"12px 16px"}}>No fields available.</AdminNoSearchResults>}
+                            {filteredFields.map(field => (
                               <div 
                                 key={field}
                                 onClick={() => {
@@ -792,7 +795,7 @@ export default function CreateRuleModal({
                                             })}
                                             {filteredOptions.length === 0 && (
                                               <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
-                                                No options found.
+                                                <AdminNoSearchResults query={dropdownSearch}>No options available.</AdminNoSearchResults>
                                               </div>
                                             )}
                                           </>

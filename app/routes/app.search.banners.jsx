@@ -1,3 +1,4 @@
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useFetcher, useLoaderData, useNavigate } from 'react-router';
 import { useEffect, useState } from 'react';
 import { boundary } from '@shopify/shopify-app-react-router/server';
@@ -182,7 +183,7 @@ export default function SearchBanners() {
         <style>{bannerStyles}</style>
         <div className="sb-intro"><div><p className="sb-eyebrow">Search merchandising</p><h2>Make every search an opportunity</h2><p>Put relevant promotions in front of customers, right where they search.</p></div><div className="sb-counts" aria-label="Banner summary"><div><strong>{rules.length}</strong>Total banners</div><div><strong>{rules.filter(rule => rule.isActive).length}</strong>Enabled</div></div></div>
         {fetcher.data?.error && <div role="alert" className="sb-feedback sb-feedback-error">{fetcher.data.error}</div>}
-        {fetcher.data?.success && <div role="status" className="sb-feedback sb-feedback-success">Banner changes saved.</div>}
+        {fetcher.state === 'idle' && fetcher.data?.success && <div role="status" className="sb-feedback sb-feedback-success">Banner changes saved.</div>}
         <div className="sb-workspace">
         <section className="sb-card" aria-labelledby="banner-editor-title">
           <div className="sb-card-head"><h3 id="banner-editor-title">{editing ? 'Edit banner' : 'Create banner'}</h3><p>Set your audience, add your creative, and preview your promotion.</p></div>
@@ -230,7 +231,7 @@ export default function SearchBanners() {
           <div className="sb-card-head sb-library-head"><div><h3 id="banner-library-title">Your banners</h3><p>Find and manage your search promotions.</p></div>{rules.length > 0 && <div className="sb-library-tools"><input type="search" className="sb-input" aria-label="Search banners" placeholder="Search queries or headings" value={search} onChange={e => setSearch(e.target.value)} /><select className="sb-input" aria-label="Filter banner status" value={status} onChange={e => setStatus(e.target.value)}><option value="all">All statuses</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></div>}</div>
           <div className="sb-banner-list">
           {!rules.length && <div className="sb-empty"><strong>No banners yet.</strong>Create your first promotion with the editor above.</div>}
-          {rules.length > 0 && !visibleRules.length && <div className="sb-empty" role="status"><strong>No matching banners</strong>Try a different search or status.<div style={{ marginTop:14 }}><button className="sb-button" onClick={() => { setSearch(''); setStatus('all'); }}>Clear filters</button></div></div>}
+          {rules.length > 0 && !visibleRules.length && <div className="sb-empty" role="status"><strong><AdminNoSearchResults query={search}>No matching banners.</AdminNoSearchResults></strong>Try a different search or status.<div style={{ marginTop:14 }}><button className="sb-button" onClick={() => { setSearch(''); setStatus('all'); }}>Clear filters</button></div></div>}
           {visibleRules.map(rule => (
             <article key={rule.id} className={`sb-saved${editing === rule.id ? ' sb-saved-editing' : ''}`}>
               <div className="sb-thumbnail" aria-hidden="true"><BannerPreview values={rule} thumbnail /></div>

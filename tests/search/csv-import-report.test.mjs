@@ -13,7 +13,7 @@ import { postPinImportBatch, unconfirmedPinRows } from '../../app/utils/pinImpor
 const plain = value => JSON.parse(JSON.stringify(value));
 export async function loadImportModule(file, mocks) {
   const code = (await transform((await fs.readFile(file, 'utf8')).replaceAll('await import("../services/shopCache.server")', '({invalidateShop: async()=>{}})'), { loader: file.endsWith('jsx') ? 'jsx' : 'js', format: 'cjs' })).code;
-  const context = { module: { exports: {} }, exports: {}, Response, URL, console: { error() {} }, require(name) {
+  const context = { module: { exports: {} }, exports: {}, Response, URL, console: { error() {} }, require(name) {if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
     if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};
     if (name in mocks) return mocks[name];

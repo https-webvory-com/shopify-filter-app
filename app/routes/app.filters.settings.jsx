@@ -1,3 +1,4 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import { useNavigate } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { authenticate } from "../shopify.server";
@@ -318,10 +319,10 @@ export default function FilterSettings() {
   const submit = useSubmit();
   const nav = useNavigation();
   const actionData = useActionData();
-  useEffect(() => {
+  useCompletedSubmission(actionData, nav.state, () => {
     if (actionData?.success) shopify.toast.show("Filter settings saved");
     else if (actionData?.error) shopify.toast.show(actionData.error, { isError: true });
-  }, [actionData, shopify]);
+  });
 
   const [horizontalFilters, setHorizontalFilters] = useState(settings?.horizontalFilters || false);
   const [desktopLayout, setDesktopLayout] = useState(

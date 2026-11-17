@@ -9,6 +9,7 @@ import { normalizeRedirectQuery } from '../../app/utils/searchRedirect.js';
 export const form = values => { const f = new FormData(); for (const [key, value] of Object.entries(values)) f.set(key, value); return f; };
 export const valid = { intent: 'create', query: '  Summer  DRESS ', placement: 'grid', position: '2', heading: 'Sale', isActive: 'true' };
 export async function load(file, mocks) {
+  mocks = {'../components/ui/AdminNoSearchResults':{default:()=>null},...mocks};
   const code = (await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' })).code;
   const ctx = { module: { exports: {} }, exports: {}, URL, Response, console: { error() {} }, require: name => { if (!(name in mocks)) throw Error('Unexpected import ' + name); return mocks[name]; } };
   vm.runInNewContext(code, ctx); return ctx.module.exports;

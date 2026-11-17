@@ -1,3 +1,4 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import { useNavigate } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -53,11 +54,11 @@ export default function Integrations() {
   const fetcher = useFetcher();
   const navigate = useNavigate();
 
-  useEffect(() => {
+  useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.state === "idle" && fetcher.data?.success) {
       shopify.toast.show("Integration settings updated");
     }
-  }, [fetcher.state, fetcher.data]);
+  });
 
   const [integrations, setIntegrations] = useState([
     {

@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useNavigate } from "react-router";
 import { useLoaderData, useFetcher, useNavigation, useActionData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -108,13 +110,13 @@ export default function SearchSynonyms() {
   const isSubmitting = fetcher.state !== "idle";
   const isGlobalLoading = navigation.state !== "idle";
 
-  useEffect(() => {
+  useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data?.message) {
       shopify.toast.show(fetcher.data.message);
     } else if (fetcher.state === "idle" && fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
-  }, [fetcher.state, fetcher.data]);
+  });
 
   const handleOpenAddModal = () => {
     setEditingId(null);
@@ -539,7 +541,7 @@ export default function SearchSynonyms() {
         {/* Table Area */}
         {filteredSynonyms.length === 0 ? (
           <div style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
-            {synonyms.length === 0 ? (
+            {synonyms.length === 0 && !searchQuery.trim() ? (
               <>
                 <svg style={{ width: "48px", height: "48px", fill: "none", stroke: "#cbd5e1", strokeWidth: "1.5", margin: "0 auto 16px" }} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -547,7 +549,7 @@ export default function SearchSynonyms() {
                 <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: "#475569" }}>No synonyms created yet.</p>
                 <p style={{ margin: "4px 0 0", fontSize: "13.5px" }}>Click "Add New Synonym" to create your first mapping.</p>
               </>
-            ) : "No synonyms match your search."}
+            ) : <AdminNoSearchResults query={searchQuery}>No synonyms match the selected filters.</AdminNoSearchResults>}
           </div>
         ) : (
           <table className="groups-table">

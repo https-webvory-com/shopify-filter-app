@@ -1,3 +1,5 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
+import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { useEffect, useState, useRef } from "react";
 import { collectionTitleMatchesSearch } from "../utils/collectionSearchText.js";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -767,6 +769,7 @@ export default function FilterGroupDetail() {
   );
   const [tempTableColumns, setTempTableColumns] = useState([...tableColumns]);
   const [columnsSearch, setColumnsSearch] = useState("");
+  const filteredColumnChoices = ALL_COLUMNS.filter(c => c.label.toLowerCase().includes(columnsSearch.toLowerCase()));
   const [draggedColumnIdx, setDraggedColumnIdx] = useState(null);
 
   // Close dropdowns when clicking outside
@@ -786,7 +789,7 @@ export default function FilterGroupDetail() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
+  useCompletedSubmission(actionData, navigation.state, () => {
     if (actionData) {
       if (actionData.success) {
         if (actionData.intent === "toggleFilter") {
@@ -812,7 +815,7 @@ export default function FilterGroupDetail() {
         shopify.toast.show(actionData.error, { isError: true });
       }
     }
-  }, [actionData, shopify]);
+  });
 
   const openConfigModal = (filter) => {
     filter = normalizeProductTitleFilter(filter);
@@ -943,8 +946,6 @@ export default function FilterGroupDetail() {
       },
       { method: "POST" },
     );
-    shopify.toast.show("Group updated");
-    shopify.toast.show("Group updated");
   };
 
   const filteredFiltersList = group.filters
@@ -1748,6 +1749,7 @@ export default function FilterGroupDetail() {
                               }}
                             />
                           </div>
+                          {filteredCollections.length === 0 && <AdminNoSearchResults query={searchColl} style={{padding:"12px"}}>No collections available.</AdminNoSearchResults>}
                           {filteredCollections.map((c) => {
                             const isSelected = selectedColls.some(
                               (sc) => sc.id === c.id,
@@ -2203,14 +2205,14 @@ export default function FilterGroupDetail() {
                   <th style={{ width: "32px", padding: "12px 16px" }}></th>
                   <th style={{ color: "#fff" }}>
                     <div className="filters-table-title">
-                    <Checkbox
+                    {filteredFiltersList.length > 0 && (<Checkbox
                       checked={filteredFiltersList.length > 0 && filteredFiltersList.every(filter => selectedFilters.includes(filter.id))}
                       aria-label="Select all visible filters"
                       onChange={(checked) => {
                         if (checked) setSelectedFilters(filteredFiltersList.map((f) => f.id));
                         else setSelectedFilters([]);
                       }}
-                    />
+                    />)}
                     Filter title
                     </div>
                   </th>
@@ -2412,8 +2414,8 @@ export default function FilterGroupDetail() {
             </div>
             {filteredFiltersList.length === 0 && (
               <div className="filters-table-empty">
-                <p role="status" style={{ margin: 0, color: "#6d7175", overflowWrap: "anywhere" }}>
-                  {filterSearch.trim() ? <>No results found for “{filterSearch}”</> : "No filters match the selected conditions."}
+                <p style={{ margin: 0, color: "#6d7175", overflowWrap: "anywhere" }}>
+                  <AdminNoSearchResults query={filterSearch}>No filters match the selected conditions.</AdminNoSearchResults>
                 </p>
               </div>
             )}
@@ -2768,19 +2770,18 @@ export default function FilterGroupDetail() {
                 onChange={(e) => setColumnsSearch(e.target.value)}
                 style={{ width: "200px" }}
               />
-              <button
+              {filteredColumnChoices.length > 0 && (<button
                 onClick={() =>
                   setTempTableColumns(ALL_COLUMNS.map((c) => c.id))
                 }
                 className="customize-col-btn-link"
               >
                 select all
-              </button>
+              </button>)}
             </div>
             <div className="customize-col-list">
-              {ALL_COLUMNS.filter((c) =>
-                c.label.toLowerCase().includes(columnsSearch.toLowerCase()),
-              ).map((c) => (
+              {filteredColumnChoices.length === 0 && <AdminNoSearchResults query={columnsSearch}>No columns available.</AdminNoSearchResults>}
+              {filteredColumnChoices.map((c) => (
                 <label
                   key={c.id}
                   className="customize-col-label"

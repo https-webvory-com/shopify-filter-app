@@ -49,4 +49,10 @@ test('analytics renders six reports with real table data, date controls and char
   const markerX = [...singleDay.matchAll(/<circle[^>]*cx="([^"]+)"/g)].map(match => match[1]);
   assert.equal(markerX.length, 2);
   assert.notEqual(markerX[0], markerX[1]);
+  const range = renderToStaticMarkup(React.createElement(chart.default, {tab:'volume',group:'day',
+    chart:['2026-11-04','2026-11-05','2026-11-17'].map(bucket=>({bucket,values:{total:5}})),
+    keys:['total'],rows:[{key:'total',label:'Searches'}]}));
+  assert.match(range, /text-anchor="start"[^>]*>2026-11-04/);
+  assert.match(range, /text-anchor="middle"[^>]*>2026-11-05/);
+  assert.match(range, /text-anchor="end"[^>]*>2026-11-17/);
 });

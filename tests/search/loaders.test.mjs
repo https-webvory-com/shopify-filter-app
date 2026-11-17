@@ -21,7 +21,7 @@ async function loadRoute(file, { authenticate, prisma }) {
   const context = {
     module: { exports: {} }, exports: {}, Response,
     console: { error() {} },
-    require(name) {
+    require(name) {if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};
       if(name==='../utils/collectionSearchText.js')return collectionSearchText;
       if(name==='../utils/emptySearchPins.js')return emptySearchPins;
       if(name==='../services/emptySearchPins.server.js')return {legacyEmptySearchProducts:async()=>[]};

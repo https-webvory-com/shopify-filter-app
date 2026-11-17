@@ -1,3 +1,4 @@
+import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -111,11 +112,11 @@ export default function Settings() {
     fetcher.submit({ [key]: key === 'quickViewStyle' || key === 'quickViewInstantSearchStyle' ? currentValue : String(!currentValue) }, { method:'POST' });
   };
 
-  useEffect(() => {
+  useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.data?.success) {
       shopify.toast.show("Display settings updated");
     }
-  }, [fetcher.data]);
+  });
 
   const renderQuickViewOptions = (instantSearch) => {
     const id = instantSearch ? "instant-quick-view" : "collection-quick-view";
