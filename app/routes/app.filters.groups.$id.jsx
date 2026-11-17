@@ -1143,10 +1143,19 @@ export default function FilterGroupDetail() {
           padding: 20px 24px !important;
           display: flex !important;
           align-items: center !important;
-          flex-wrap: wrap;
-          gap: 12px;
+          flex-wrap: nowrap;
+          gap: 8px;
           border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
           background: linear-gradient(90deg, #f8faff 0%, #f4f3ff 100%) !important;
+        }
+        .filters-toolbar-heading { flex-shrink: 0; }
+        .filters-toolbar-primary, .filters-toolbar-tools { display: flex; flex-wrap: nowrap; align-items: center; flex-shrink: 0; }
+        .filters-toolbar-primary { gap: 8px; }
+        .filters-toolbar-tools { gap: 10px; }
+        .filters-toolbar .btn-view-filters { white-space: nowrap; }
+        @media (max-width: 900px) {
+          .filters-toolbar, .filters-toolbar-primary, .filters-toolbar-tools { flex-wrap: wrap; }
+          .filters-toolbar-primary, .filters-toolbar-tools { max-width: 100%; flex-shrink: 1; }
         }
 
         /* Filter View Button */
@@ -1211,7 +1220,8 @@ export default function FilterGroupDetail() {
           border-radius: 10px !important;
           font-size: 13.5px !important;
           color: #1E1B4B !important;
-          width: 220px !important;
+          width: 150px !important;
+          box-sizing: border-box;
           outline: none !important;
           transition: all 0.2s ease !important;
           box-shadow: 0 2px 4px rgba(30, 27, 75, 0.02) !important;
@@ -1824,7 +1834,7 @@ export default function FilterGroupDetail() {
         <div className="filters-list-card">
           <div className="filters-toolbar">
             {/* Left side: Filters heading */}
-            <div style={{ width: "120px" }}>
+            <div className="filters-toolbar-heading">
               <span
                 style={{
                   fontSize: "18px",
@@ -1837,7 +1847,7 @@ export default function FilterGroupDetail() {
             </div>
 
             {/* Middle: Filter views & Add Filter */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center", minWidth: 0 }}>
+            <div className="filters-toolbar-primary">
               {/* All Filters Dropdown */}
               <div style={{ position: "relative" }} ref={dropdownRef}>
                 <button
@@ -2069,7 +2079,7 @@ export default function FilterGroupDetail() {
             <div style={{ flex: 1, minWidth: 0 }}></div>
 
             {/* Right side: Search and Icons */}
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px", maxWidth: "100%" }}>
+            <div className="filters-toolbar-tools">
               {/* Search Bar */}
               <div style={{ position: "relative" }}>
                 <svg
