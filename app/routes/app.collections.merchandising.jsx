@@ -1183,6 +1183,7 @@ export default function MerchandisingIndex() {
                                     }}
                                   />
                                   <span
+                                    title={rule.name}
                                     onClick={() => {
                                       setRuleToEdit(rule);
                                       setIsCreateRuleModalOpen(true);
@@ -1191,6 +1192,11 @@ export default function MerchandisingIndex() {
                                       color: "#5B21B6",
                                       fontWeight: "500",
                                       cursor: "pointer",
+                                      minWidth: 0,
+                                      maxWidth: "320px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
                                     {rule.name}
@@ -1204,7 +1210,15 @@ export default function MerchandisingIndex() {
                                   {rule.collections &&
                                   rule.collections.length > 0 ? (
                                     <span
+                                      title={rule.collections.join(", ")}
                                       style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        maxWidth: "240px",
+                                        boxSizing: "border-box",
+                                        verticalAlign: "middle",
+                                        whiteSpace: "nowrap",
                                         background: "rgba(91, 33, 182, 0.08)",
                                         color: "#5B21B6",
                                         padding: "4px 12px",
@@ -1213,9 +1227,12 @@ export default function MerchandisingIndex() {
                                         fontWeight: "500",
                                       }}
                                     >
-                                      {rule.collections[0]}{" "}
-                                      {rule.collections.length > 1 &&
-                                        `+${rule.collections.length - 1}`}
+                                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                        {rule.collections[0]}
+                                      </span>
+                                      {rule.collections.length > 1 && (
+                                        <span style={{ flexShrink: 0 }}>+{rule.collections.length - 1}</span>
+                                      )}
                                     </span>
                                   ) : (
                                     <span style={{ color: "#94a3b8" }}>
