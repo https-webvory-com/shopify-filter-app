@@ -36,10 +36,9 @@ export async function queueSynonymActivation(shop) {
 }
 
 export async function getSynonymActivationStatus(shop, rows) {
-  const observedAt = Date.now();
   const current = await snapshot(shop, rows);
   const [applied, jobId] = await Promise.all([redis.get(key(shop, 'applied')), redis.get(key(shop, 'job'))]);
-  const base = {revision: current.revision, jobId, observedAt};
+  const base = {revision: current.revision, jobId};
   if (applied === current.revision) return {...base, phase: 'active'};
   if (!jobId) return {...base, phase: 'idle'}; // Existing rules have no recorded background job.
   const job = await synonymQueue.getJob(jobId);

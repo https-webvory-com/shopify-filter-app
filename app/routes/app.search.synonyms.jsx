@@ -19,7 +19,7 @@ export const loader = async ({ request }) => {
 
   let activation;
   try { activation = await getSynonymActivationStatus(shop, synonyms); }
-  catch { activation = {phase: 'unavailable', observedAt: Date.now()}; }
+  catch { activation = {phase: 'unavailable'}; }
   return { synonyms, activation };
 };
 
@@ -103,8 +103,9 @@ export default function SearchSynonyms() {
   const { synonyms, activation = {phase: 'idle'} } = useLoaderData();
   const fetcher = useFetcher();
   const statusFetcher = useFetcher();
+  const pollKey = useMemo(() => Math.random().toString(36).slice(2), [activation]);
   const polled = statusFetcher.data;
-  const activationStatus = polled && (polled.observedAt ?? 0) >= (activation.observedAt ?? 0) && (activation.phase === 'unavailable' || (polled.revision === activation.revision && polled.jobId === activation.jobId))
+  const activationStatus = polled?.requestKey === pollKey && (activation.phase === 'unavailable' || (polled.revision === activation.revision && polled.jobId === activation.jobId))
     ? polled : activation;
   const navigate = useNavigate();
   const navigation = useNavigation(); // for global page loading state
@@ -126,9 +127,9 @@ export default function SearchSynonyms() {
 
   useEffect(() => {
     if (!['applying', 'unavailable'].includes(activationStatus.phase) || statusFetcher.state !== 'idle' || isSubmitting) return;
-    const timer = setTimeout(() => statusFetcher.load('/app/synonym-status'), 2000);
+    const timer = setTimeout(() => statusFetcher.load(`/app/synonym-status?check=${pollKey}`), 2000);
     return () => clearTimeout(timer);
-  }, [activationStatus, statusFetcher.state, isSubmitting]);
+  }, [activationStatus, statusFetcher.state, isSubmitting, pollKey]);
 
   useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data?.message) {

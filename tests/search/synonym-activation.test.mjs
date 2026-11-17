@@ -7,7 +7,7 @@ import {transform} from 'esbuild';
 import * as crypto from 'node:crypto';
 
 async function load(file, mocks) {
-  const context = {module: {exports: {}}, exports: {}, console: {error() {}}, Response,
+  const context = {module: {exports: {}}, exports: {}, console: {error() {}}, Response, URL,
     require: name => {if (!(name in mocks)) throw Error(`Unexpected import: ${name}`); return mocks[name];}};
   vm.runInNewContext((await transform(await fs.readFile(file, 'utf8'), {format: 'cjs'})).code, context);
   return context.module.exports;
@@ -170,7 +170,8 @@ test('status polling is scoped to the authenticated store and cannot trigger eng
     '../shopify.server': {authenticate: {admin: async () => ({session: {shop}})}},
     '../services/synonymActivation.server.js': {getSynonymActivationStatus: async value => {tenant = value; return {phase: 'active'};}},
   });
-  const response = await route.loader({request: new Request('http://fixture/app/synonym-status?shop=other.myshopify.com')});
-  assert.equal(tenant, shop); assert.equal((await response.json()).phase, 'active');
+  const response = await route.loader({request: new Request('http://fixture/app/synonym-status?shop=other.myshopify.com&check=current-page')});
+  assert.equal(tenant, shop); const data = await response.json(); assert.equal(data.phase, 'active');
+  assert.equal(data.requestKey, 'current-page');
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
 });
