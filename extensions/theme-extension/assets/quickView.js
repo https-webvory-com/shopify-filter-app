@@ -21,6 +21,13 @@ if (typeof window.CfpQuickView === 'undefined') {
           (this.nativeAdapter || this.overlay.classList.contains('cfp-active'))) this.closeModal();
       this.configurationVersion = (this.configurationVersion || 0) + 1;
       window.cfpGlobalSettings = { ...window.cfpGlobalSettings, ...settings };
+      for (const context of ['Collection', 'InstantSearch']) {
+        const key = `showQuickView${context}Mobile`;
+        const enabled = (settings.integrations?.[key] ?? settings[key] ?? settings[`showQuickView${context}`]) !== false;
+        window.cfpGlobalSettings[key] = enabled;
+        document.documentElement.setAttribute(`data-cfp-quick-view-${context === 'Collection' ? 'collection' : 'instant'}-mobile`, String(enabled));
+        document.documentElement.setAttribute(`data-cfp-quick-view-${context === 'Collection' ? 'collection' : 'instant'}-desktop`, String(settings[`showQuickView${context}`] !== false));
+      }
       if (settings.quickViewStyle === 'app' && settings.showQuickViewCollection !== false) window.CfpQuickViewAdapters?.closeOpenNative();
       window.CfpQuickViewAdapters?.configure(window.cfpGlobalSettings);
     }
@@ -183,7 +190,11 @@ if (typeof window.CfpQuickView === 'undefined') {
       }, true);
       // Use event delegation for dynamically loaded product cards
       document.addEventListener('click', (e) => {
-        const native = window.cfpGlobalSettings?.showQuickViewCollection !== false && window.cfpGlobalSettings
+        const global = window.cfpGlobalSettings;
+        const collectionEnabled = window.matchMedia('(max-width: 768px)').matches
+          ? (global?.integrations?.showQuickViewCollectionMobile ?? global?.showQuickViewCollectionMobile ?? global?.showQuickViewCollection) !== false
+          : global?.showQuickViewCollection !== false;
+        const native = global && collectionEnabled
           ? window.CfpQuickViewAdapters?.getNativeTrigger(e.target) : null;
         const btn = e.target.closest('.cfp-quick-view-btn, [data-cfp-theme-replacement]') || native?.button;
         if (btn) {
@@ -224,6 +235,13 @@ if (typeof window.CfpQuickView === 'undefined') {
     }
 
     async openModal(handle, trigger = document.activeElement) {
+      const instant = trigger?.getAttribute('data-cfp-quick-view-context') === 'instant-search';
+      const settings = window.cfpGlobalSettings;
+      const key = instant ? 'showQuickViewInstantSearch' : 'showQuickViewCollection';
+      const enabled = window.matchMedia('(max-width: 768px)').matches
+        ? (settings?.integrations?.[`${key}Mobile`] ?? settings?.[`${key}Mobile`] ?? settings?.[key]) !== false
+        : settings?.[key] !== false;
+      if (!enabled) return;
       const requestedVariantId = window.CfpQuickViewAdapters?.getVariantId(trigger);
       if (this.overlay.classList.contains('cfp-active')) this.closeModal();
       this.nativeController?.abort();

@@ -1852,7 +1852,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ${wishlistHtml}
               </div>
             </a>
-            ${(data.globalSettings && data.globalSettings.showQuickViewInstantSearch !== false) ? `<button type="button" class="cfp-quick-view-btn" data-cfp-quick-view-context="instant-search" data-product-handle="${instantEscapeHtml(p.handle)}">Quick View</button>` : ''}
+            ${(data.globalSettings && (data.globalSettings.showQuickViewInstantSearch !== false || data.globalSettings.integrations?.showQuickViewInstantSearchMobile === true)) ? `<button type="button" class="cfp-quick-view-btn" data-cfp-quick-view-context="instant-search" data-product-handle="${instantEscapeHtml(p.handle)}">Quick View</button>` : ''}
           </div>
           <a href="${instantEscapeHtml(productUrl)}" class="cfp-search-product-card" style="display:block; width:100%; text-decoration:none; color:inherit;">
             <div class="cfp-search-product-title" style="margin-top: 12px; font-size: 14px; font-weight: 500; text-align: center;">${window.cfpSearchSettings?.instantLayout === 'compact' && query ? highlightSearchText(p.title, query) : instantEscapeHtml(p.title)}</div>

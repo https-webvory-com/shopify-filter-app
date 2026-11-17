@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
+import * as filterWidths from '../../app/utils/filterWidths.js';
 
 async function moduleWithMocks(file, imports) {
+  imports = { '@shopify/app-bridge-react': {}, '../utils/filterWidths.js': filterWidths,
+    '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
   const { code } = await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' });
   const context = { module: { exports: {} }, exports: {}, Response, URL, console,
     require: name => { if (!(name in imports)) throw new Error(`Unexpected import ${name}`); return imports[name]; } };
@@ -77,7 +80,9 @@ test('public Quick View configuration exposes only flags and never creates shops
   assert.equal(flags.quickViewInstantSearchStyle, 'theme');
   assert.equal(flags.showQuickViewInstantSearchSizeChart, true);
   assert.equal(flags.showQuickViewCollection, false);
-  assert.deepEqual(Object.keys(flags).sort(), ['isWholesale', 'quickViewStyle', 'quickViewInstantSearchStyle', 'showQuickViewInstantSearchSizeChart', 'showQuickViewCollection', 'showQuickViewInstantSearch', 'showQuickViewSizeChart'].sort());
+  assert.equal(flags.showQuickViewCollectionMobile, false);
+  assert.equal(flags.showQuickViewInstantSearchMobile, true);
+  assert.deepEqual(Object.keys(flags).sort(), ['isWholesale', 'quickViewStyle', 'quickViewInstantSearchStyle', 'showQuickViewInstantSearchSizeChart', 'showQuickViewCollection', 'showQuickViewInstantSearch', 'showQuickViewSizeChart', 'showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile'].sort());
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), '*');
   allowed = false;
   assert.equal((await load('fixture.myshopify.com')).status, 429);
@@ -93,7 +98,7 @@ test('each General toggle updates only its own field and rejects malformed submi
   '../services/filterSettings.server':{updateFilterGlobalSettings:async(_shop,data)=>{saved=data;calls++;}},
  });
  const post=body=>route.action({request:new Request('https://fixture.test/settings',{method:'POST',body:new URLSearchParams(body)})});
- for(const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']){
+ for(const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewCollectionMobile','showQuickViewInstantSearchMobile','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']){
   for(const value of ['true','false']){assert.equal((await post({[key]:value})).status,200);assert.deepEqual(Object.keys(saved),[key]);assert.equal(saved[key],value==='true');}
  }
  const before=calls;
@@ -150,4 +155,21 @@ test('saving another filter preference retains the saved desktop layout in the r
  });
  const result=await service.updateFilterGlobalSettings('fixture.myshopify.com',{showProductCount:false});
  assert.equal(result.desktopFilterLayout,'vertical');assert.equal(result.showProductCount,false);
+});
+
+test('small-screen Quick View preferences preserve other integration settings and each other', async()=>{
+ let integrations={wishlist:true,desktopFilterLayout:'vertical'};
+ const service=await moduleWithMocks('app/services/filterSettings.server.js',{
+  '../db.server':{__esModule:true,default:{filterGlobalSetting:{
+   findUnique:async()=>({integrations}),
+   upsert:async args=>{assert.equal(Object.hasOwn(args.update,'showQuickViewCollectionMobile'),false);assert.equal(Object.hasOwn(args.update,'showQuickViewInstantSearchMobile'),false);integrations=args.update.integrations;return args.update;},
+  }}},
+  './shopCache.server':{invalidateShop:async()=>{}},
+ });
+ await service.updateFilterGlobalSettings('fixture.myshopify.com',{showQuickViewCollectionMobile:false});
+ await service.updateFilterGlobalSettings('fixture.myshopify.com',{showQuickViewInstantSearchMobile:false});
+ assert.equal(integrations.wishlist,true);assert.equal(integrations.desktopFilterLayout,'vertical');
+ assert.equal(integrations.showQuickViewCollectionMobile,false);assert.equal(integrations.showQuickViewInstantSearchMobile,false);
+ await service.updateFilterGlobalSettings('fixture.myshopify.com',{showQuickViewCollectionMobile:true});
+ assert.equal(integrations.showQuickViewInstantSearchMobile,false);assert.equal(integrations.showQuickViewCollectionMobile,true);
 });

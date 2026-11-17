@@ -42,7 +42,7 @@ export async function updateFilterGlobalSettings(shop, data) {
     updateData[key] = Number(data[key]);
   }
 
-  const presentationKeys = ['filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', ...FILTER_WIDTH_KEYS];
+  const presentationKeys = ['showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile', 'filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', ...FILTER_WIDTH_KEYS];
   if (typeof data.desktopFilterLayout === 'string' || presentationKeys.some(key => data[key] !== undefined) || typeof data.horizontalFilters === 'boolean') {
     const current = await prisma.filterGlobalSetting.findUnique({
       where: { shop },

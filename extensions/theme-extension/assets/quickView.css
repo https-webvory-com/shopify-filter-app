@@ -1,4 +1,20 @@
 /* Quick View Modal Styles */
+@media (min-width: 769px) {
+  html[data-cfp-quick-view-collection-desktop="false"] .cfp-quick-view-btn:not([data-cfp-quick-view-context="instant-search"]),
+  html[data-cfp-quick-view-collection-desktop="false"] [data-cfp-theme-replacement],
+  html[data-cfp-quick-view-collection-desktop="false"] [data-cfp-collection-quick-view],
+  html[data-cfp-quick-view-instant-desktop="false"] .cfp-quick-view-btn[data-cfp-quick-view-context="instant-search"] {
+    display: none !important;
+  }
+}
+@media (max-width: 768px) {
+  html[data-cfp-quick-view-collection-mobile="false"] .cfp-quick-view-btn:not([data-cfp-quick-view-context="instant-search"]),
+  html[data-cfp-quick-view-collection-mobile="false"] [data-cfp-theme-replacement],
+  html[data-cfp-quick-view-collection-mobile="false"] [data-cfp-collection-quick-view],
+  html[data-cfp-quick-view-instant-mobile="false"] .cfp-quick-view-btn[data-cfp-quick-view-context="instant-search"] {
+    display: none !important;
+  }
+}
 .cfp-native-quick-view { z-index: 2147483647 !important; }
 /* Prestige moves nested charts to body when opened; reserve a layer above Quick Buy. */
 quick-buy-modal.cfp-native-quick-view { z-index: 2147483646 !important; }

@@ -85,7 +85,12 @@ if (!window.CfpQuickViewAdapters) {
   };
   const reconcile = () => {
     scheduled = false;
-    const appMode = configuration?.quickViewStyle !== 'theme' && configuration?.showQuickViewCollection !== false;
+    if (configuration) document.querySelectorAll(`${nativeSelector}, button[aria-controls]`).forEach(button => {
+      const quickView = handleFrom(button) && !variantFrom(button) &&
+        (nativeModal(button)?.matches('quick-add-modal') || prestigeModal(button));
+      button.toggleAttribute('data-cfp-collection-quick-view', Boolean(quickView));
+    });
+    const appMode = configuration?.quickViewStyle !== 'theme' && (configuration?.showQuickViewCollection !== false || configuration?.showQuickViewCollectionMobile === true);
     replacements.forEach((saved, button) => {
       if (!appMode || !button.isConnected || !handleFrom(button) || button.matches(nativeSelector) && variantFrom(button)) restore(button, saved);
       else {

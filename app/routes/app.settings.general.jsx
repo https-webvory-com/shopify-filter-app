@@ -35,7 +35,7 @@ export const action = async ({ request }) => {
   }
 
   const payload = {};
-  for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
+  for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewCollectionMobile','showQuickViewInstantSearchMobile','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
     if (!formData.has(key)) continue;
     const value = formData.get(key);
     if (value !== 'true' && value !== 'false') return Response.json({ success:false, error:'Invalid display setting.' },{status:400});
@@ -121,8 +121,33 @@ export default function Settings() {
     const id = instantSearch ? "instant-quick-view" : "collection-quick-view";
     const style = instantSearch ? quickViewInstantSearchStyle : quickViewStyle;
     const sizeChart = instantSearch ? showQuickViewInstantSearchSizeChart : showQuickViewSizeChart;
+    const desktopKey = instantSearch ? 'showQuickViewInstantSearch' : 'showQuickViewCollection';
+    const showOnDesktop = instantSearch ? showQuickViewInstantSearch : showQuickViewCollection;
+    const mobileKey = instantSearch ? 'showQuickViewInstantSearchMobile' : 'showQuickViewCollectionMobile';
+    const showOnMobile = fetcher.formData?.has(mobileKey)
+      ? fetcher.formData.get(mobileKey) === 'true'
+      : (settings?.integrations?.[mobileKey] ?? settings?.[desktopKey]) !== false;
     return (
       <div className="quick-view-options">
+        <div className="quick-view-field">
+          <label className="quick-view-checkbox" htmlFor={`${id}-desktop`}>
+            <input id={`${id}-desktop`} type="checkbox" checked={showOnDesktop}
+              disabled={fetcher.state !== "idle"}
+              onChange={() => {
+                if (fetcher.state === 'idle') fetcher.submit({[desktopKey]: String(!showOnDesktop), [mobileKey]: String(showOnMobile)}, {method:'POST'});
+              }} />
+            Show on desktop
+          </label>
+        </div>
+        <div className="quick-view-field">
+          <label className="quick-view-checkbox" htmlFor={`${id}-mobile`}>
+            <input id={`${id}-mobile`} type="checkbox" checked={showOnMobile}
+              disabled={fetcher.state !== "idle"} aria-describedby={`${id}-mobile-help`}
+              onChange={() => toggleSetting(mobileKey, showOnMobile)} />
+            Show on small screens
+          </label>
+          <p className="int-desc" id={`${id}-mobile-help`}>Show Quick View on screens 768 px wide or smaller, independently of desktop.</p>
+        </div>
         <div className="quick-view-field">
           <label className="quick-view-label" htmlFor={`${id}-style`}>Quick View style</label>
           <div className="quick-view-select-wrap">
@@ -485,21 +510,6 @@ export default function Settings() {
                 >
                   FEATURES
                 </span>
-                <label className="int-toggle" aria-label="Toggle setting">
-                  <input
-                    type="checkbox"
-                    aria-label="Quick View in instant search"
-                    disabled={fetcher.state !== "idle"}
-                    checked={showQuickViewInstantSearch}
-                    onChange={() =>
-                      toggleSetting(
-                        "showQuickViewInstantSearch",
-                        showQuickViewInstantSearch,
-                      )
-                    }
-                  />
-                  <span className="int-slider"></span>
-                </label>
               </div>
               <div>
                 <h3 className="int-title">Quick View (Instant Search)</h3>
@@ -520,21 +530,6 @@ export default function Settings() {
                 >
                   FEATURES
                 </span>
-                <label className="int-toggle" aria-label="Toggle setting">
-                  <input
-                    type="checkbox"
-                    aria-label="Quick View in collections"
-                    disabled={fetcher.state !== "idle"}
-                    checked={showQuickViewCollection}
-                    onChange={() =>
-                      toggleSetting(
-                        "showQuickViewCollection",
-                        showQuickViewCollection,
-                      )
-                    }
-                  />
-                  <span className="int-slider"></span>
-                </label>
               </div>
               <div>
                 <h3 className="int-title">Quick View (Collection/Search)</h3>
@@ -543,7 +538,7 @@ export default function Settings() {
                   collection pages.
                 </p>
               </div>
-              {showQuickViewCollection && renderQuickViewOptions(false)}
+              {renderQuickViewOptions(false)}
             </div>
             {/* Card 5: Country availability */}
             <div className="int-card">

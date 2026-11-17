@@ -19,6 +19,8 @@ export const loader = async ({ request }) => {
     showQuickViewInstantSearchSizeChart: (settings?.showQuickViewInstantSearchSizeChart ?? settings?.showQuickViewSizeChart) === true,
     showQuickViewCollection: settings?.showQuickViewCollection !== false,
     showQuickViewInstantSearch: settings?.showQuickViewInstantSearch !== false,
+    showQuickViewCollectionMobile: (settings?.integrations?.showQuickViewCollectionMobile ?? settings?.showQuickViewCollection) !== false,
+    showQuickViewInstantSearchMobile: (settings?.integrations?.showQuickViewInstantSearchMobile ?? settings?.showQuickViewInstantSearch) !== false,
     isWholesale: settings?.isWholesale === true,
   }, { headers });
 };
