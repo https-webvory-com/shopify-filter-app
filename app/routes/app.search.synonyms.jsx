@@ -6,7 +6,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { syncSynonymsToMeilisearch } from "../services/synonyms.server";
+import { queueSynonymActivation, getSynonymActivationStatus } from "../services/synonymActivation.server.js";
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -17,7 +17,10 @@ export const loader = async ({ request }) => {
     orderBy: { createdAt: "desc" },
   });
 
-  return { synonyms };
+  let activation;
+  try { activation = await getSynonymActivationStatus(shop, synonyms); }
+  catch { activation = {phase: 'unavailable', observedAt: Date.now()}; }
+  return { synonyms, activation };
 };
 
 export const action = async ({ request }) => {
@@ -29,6 +32,11 @@ export const action = async ({ request }) => {
   try {
     let message = "Action completed successfully";
     
+    if (intent === 'retryActivation') {
+      try { await queueSynonymActivation(shop); }
+      catch { return {saved: true, error: 'Synonyms are saved, but search activation could not be queued. Retry activation.', status: 503}; }
+      return {success: true, message: 'Applying saved synonyms to search…'};
+    }
     if (intent === "add" || intent === "update") {
       const word = formData.get("word")?.toString().trim().toLowerCase();
       const synonymsInput = formData.get("synonyms")?.toString();
@@ -75,14 +83,16 @@ export const action = async ({ request }) => {
         where: { id, shop },
         data: { isActive }
       });
-      message = isActive ? "Synonym activated" : "Synonym deactivated";
+      message = isActive ? "Synonym enabled" : "Synonym disabled";
+    } else {
+      return {error: 'Unknown synonym action', status: 400};
     }
-
-    if (!await syncSynonymsToMeilisearch(shop)) {
-      return { error: 'Synonyms were saved but could not be applied to search. Please retry.', status: 500 };
+    try { await queueSynonymActivation(shop); }
+    catch (error) {
+      console.error('CFP Synonym enqueue failed:', error.name);
+      return {saved: true, error: 'Synonyms saved, but search activation could not be queued. Retry activation.', status: 503};
     }
-
-    return { success: true, message };
+    return { success: true, message: `${message}. Applying to search…` };
   } catch (error) {
     console.error("Synonym action error:", error);
     return { error: error.message, status: 500 };
@@ -90,8 +100,12 @@ export const action = async ({ request }) => {
 };
 
 export default function SearchSynonyms() {
-  const { synonyms } = useLoaderData();
+  const { synonyms, activation = {phase: 'idle'} } = useLoaderData();
   const fetcher = useFetcher();
+  const statusFetcher = useFetcher();
+  const polled = statusFetcher.data;
+  const activationStatus = polled && (polled.observedAt ?? 0) >= (activation.observedAt ?? 0) && (activation.phase === 'unavailable' || (polled.revision === activation.revision && polled.jobId === activation.jobId))
+    ? polled : activation;
   const navigate = useNavigate();
   const navigation = useNavigation(); // for global page loading state
 
@@ -109,6 +123,12 @@ export default function SearchSynonyms() {
 
   const isSubmitting = fetcher.state !== "idle";
   const isGlobalLoading = navigation.state !== "idle";
+
+  useEffect(() => {
+    if (!['applying', 'unavailable'].includes(activationStatus.phase) || statusFetcher.state !== 'idle' || isSubmitting) return;
+    const timer = setTimeout(() => statusFetcher.load('/app/synonym-status'), 2000);
+    return () => clearTimeout(timer);
+  }, [activationStatus, statusFetcher.state, isSubmitting]);
 
   useCompletedSubmission(fetcher.data, fetcher.state, () => {
     if (fetcher.state === "idle" && fetcher.data?.success && fetcher.data?.message) {
@@ -511,6 +531,14 @@ export default function SearchSynonyms() {
         </a>
       </div>
 
+      {(activationStatus.phase !== 'idle' || fetcher.data?.saved) && <div role="status" aria-live="polite" style={{marginBottom: 16, padding: '12px 16px', borderRadius: 8, background: '#f5f3ff', color: '#5B21B6'}}>
+        {fetcher.data?.saved || activationStatus.phase === 'failed'
+          ? 'Synonyms are saved, but search activation failed.'
+          : activationStatus.phase === 'active' ? 'Synonyms are active in search.'
+          : activationStatus.phase === 'unavailable' ? 'Search activation status is temporarily unavailable.'
+          : 'Synonyms saved. Applying to search…'}
+        {(fetcher.data?.saved || activationStatus.phase === 'failed') && <button type="button" disabled={isSubmitting} onClick={() => fetcher.submit({intent: 'retryActivation'}, {method: 'POST'})} style={{marginLeft: 12}}>Retry activation</button>}
+      </div>}
       <div className="filter-groups-container">
         {/* Toolbar */}
         <div className="table-toolbar">

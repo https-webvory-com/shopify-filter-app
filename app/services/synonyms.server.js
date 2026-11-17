@@ -2,6 +2,18 @@ import prisma from "../db.server";
 import { DEFAULT_SEARCH_SETTINGS } from "../utils/searchSettings.js";
 import { scheduleSearchIndex, syncConfiguredSearchSynonyms } from "./searchIndex.server.js";
 
+export function buildSynonymDictionary(activeSynonyms) {
+  const dictionary = Object.create(null);
+  for (const entry of activeSynonyms) {
+    const word = entry.word.trim().toLowerCase();
+    const terms = entry.synonyms.split(',').map(value => value.trim().toLowerCase()).filter(Boolean);
+    dictionary[word] = [...(dictionary[word] || []), ...terms];
+    for (const term of terms) dictionary[term] = [...(dictionary[term] || []), word];
+  }
+  for (const word of Object.keys(dictionary)) dictionary[word] = [...new Set(dictionary[word])];
+  return dictionary;
+}
+
 /**
  * Fetch all synonyms for a shop and sync them to Meilisearch.
  */

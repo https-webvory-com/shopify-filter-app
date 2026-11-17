@@ -323,6 +323,14 @@ export function initWebhookWorker() {
     global.__collectionRankingWorker.on('error', error => console.error('CFP Ranking Worker:', error.message));
     global.__collectionRankingWorker.on('failed', (job, error) => console.error('CFP Ranking Worker failed:', job?.id, error.message));
   }
+  if (!global.__synonymWorker) {
+    global.__synonymWorker = new Worker('synonymActivationQueueV1', async job => {
+      if (job.name !== 'APPLY_SYNONYMS') throw Error('Unknown synonym job');
+      return (await import('../services/synonymActivation.server.js')).processSynonymActivation(job.data);
+    }, {connection: {...redisOptions, maxRetriesPerRequest: null}, concurrency: 1, lockDuration: 300000});
+    global.__synonymWorker.on('error', error => console.error('CFP Synonym Worker:', error.message));
+    global.__synonymWorker.on('failed', (job, error) => console.error('CFP Synonym activation failed:', job?.id, error.message));
+  }
   if (!global.__searchIndexWorker) {
     global.__searchIndexWorker = new Worker('searchIndexQueueV1', async job => {
       if (!['SEARCH_INDEX_BUILD','SEARCH_INDEX_PRODUCTS','SEARCH_INDEX_RETIRE'].includes(job.name))

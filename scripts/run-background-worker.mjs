@@ -10,10 +10,10 @@ try {
   await import("../build/server/index.js");
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__searchIndexWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker &&
+    if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__searchIndexWorker && global.__synonymWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker &&
         typeof global.__scheduleCatalogDriftAudits==='function' && typeof global.__refreshConnectedMarketPriceCoverage==='function' &&
         typeof global.__reconcileLegacySynonymIndexes==='function') {
-      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__searchIndexWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker, global.__marketAvailabilityWorker];
+      workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__searchIndexWorker, global.__synonymWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker, global.__marketAvailabilityWorker];
       break;
     }
     await delay(1000);

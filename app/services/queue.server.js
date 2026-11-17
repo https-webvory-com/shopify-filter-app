@@ -49,6 +49,11 @@ if (!global.__searchIndexQueue) {
 }
 export const searchIndexQueue = global.__searchIndexQueue;
 
+export const synonymQueue = global.__synonymQueue ||= new Queue('synonymActivationQueueV1', {
+  connection: redisOptions,
+});
+synonymQueue.on('error', error => console.error('CFP Synonym Queue:', error.message));
+
 // Shopify order snapshots unblock storefront pages. Never put them behind
 // catalog webhooks or full ranking scans, and keep retries durable.
 if (!global.__collectionOrderQueue) {
