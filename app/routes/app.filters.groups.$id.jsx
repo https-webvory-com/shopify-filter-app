@@ -1143,6 +1143,8 @@ export default function FilterGroupDetail() {
           padding: 20px 24px !important;
           display: flex !important;
           align-items: center !important;
+          flex-wrap: wrap;
+          gap: 12px;
           border-bottom: 1px solid rgba(30, 27, 75, 0.08) !important;
           background: linear-gradient(90deg, #f8faff 0%, #f4f3ff 100%) !important;
         }
@@ -1240,8 +1242,11 @@ export default function FilterGroupDetail() {
         }
 
         /* Table design */
+        .filters-table-scroll { overflow-x: auto; }
         .filters-table {
           width: 100% !important;
+          min-width: 880px;
+          table-layout: fixed;
           border-collapse: collapse !important;
           text-align: left !important;
         }
@@ -1266,6 +1271,10 @@ export default function FilterGroupDetail() {
           padding: 18px 24px !important;
           font-size: 14px !important;
         }
+        .filters-table th:first-child, .filters-table td:first-child { padding: 12px !important; }
+        .filters-table-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .filters-table-title > label { flex-shrink: 0; }
+        .filters-table-title > button { min-width: 0; overflow-wrap: anywhere; }
 
         /* Toggle switch */
         .toggle-switch-slider {
@@ -1828,7 +1837,7 @@ export default function FilterGroupDetail() {
             </div>
 
             {/* Middle: Filter views & Add Filter */}
-            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center", minWidth: 0 }}>
               {/* All Filters Dropdown */}
               <div style={{ position: "relative" }} ref={dropdownRef}>
                 <button
@@ -1840,7 +1849,7 @@ export default function FilterGroupDetail() {
                     : filterStatusView === "inactive"
                       ? "Inactive filters"
                       : "All filters"}{" "}
-                  ({group.filters.length})
+                  ({filteredFiltersList.length})
                   <svg
                     viewBox="0 0 20 20"
                     style={{
@@ -2057,10 +2066,10 @@ export default function FilterGroupDetail() {
               )}
             </div>
 
-            <div style={{ flex: 1 }}></div>
+            <div style={{ flex: 1, minWidth: 0 }}></div>
 
             {/* Right side: Search and Icons */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "16px", maxWidth: "100%" }}>
               {/* Search Bar */}
               <div style={{ position: "relative" }}>
                 <svg
@@ -2170,19 +2179,28 @@ export default function FilterGroupDetail() {
               </s-button>
             </div>
           ) : (
+            <div className="filters-table-scroll">
             <table className="filters-table">
+              <colgroup>
+                <col style={{ width: "56px" }} /><col />
+                <col style={{ width: "170px" }} /><col style={{ width: "160px" }} />
+                <col style={{ width: "112px" }} /><col style={{ width: "188px" }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th style={{ width: "32px", padding: "12px 16px" }}></th>
-                  <th style={{ display: "flex", alignItems: "center", gap: "12px", color: "#fff" }}>
+                  <th style={{ color: "#fff" }}>
+                    <div className="filters-table-title">
                     <Checkbox
-                      checked={selectedFilters.length > 0 && selectedFilters.length === filteredFiltersList.length}
+                      checked={filteredFiltersList.length > 0 && filteredFiltersList.every(filter => selectedFilters.includes(filter.id))}
+                      aria-label="Select all visible filters"
                       onChange={(checked) => {
                         if (checked) setSelectedFilters(filteredFiltersList.map((f) => f.id));
                         else setSelectedFilters([]);
                       }}
                     />
                     Filter title
+                    </div>
                   </th>
                   <th>Display mode</th>
                   <th>Filter values</th>
@@ -2205,9 +2223,11 @@ export default function FilterGroupDetail() {
                           <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-6 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
                         </svg>
                       </td>
-                      <td style={{ display: "flex", alignItems: "center", gap: "12px", verticalAlign: "middle" }}>
+                      <td style={{ verticalAlign: "middle" }}>
+                        <div className="filters-table-title">
                         <Checkbox
                           checked={selectedFilters.includes(filter.id)}
+                          aria-label={`Select ${filter.label}`}
                           onChange={(checked) => {
                             if (checked) setSelectedFilters([...selectedFilters, filter.id]);
                             else setSelectedFilters(selectedFilters.filter(id => id !== filter.id));
@@ -2233,6 +2253,7 @@ export default function FilterGroupDetail() {
                             </span>
                           )}
                         </button>
+                        </div>
                       </td>
                       <td>
                         <DisplayModeBadge mode={filter.displayMode} />
@@ -2376,6 +2397,7 @@ export default function FilterGroupDetail() {
                   ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </s-stack>
