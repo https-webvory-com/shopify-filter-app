@@ -14,6 +14,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { invalidateShop } from "../services/shopCache.server";
+import {createMergedValueSearchIndex} from '../utils/mergedValueSearch.js';
 
 // â”€â”€ Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const loader = async ({ request }) => {
@@ -22,7 +23,6 @@ export const loader = async ({ request }) => {
   const sort = url.searchParams.get("sort") || "newest";
   const search = url.searchParams.get("q") || "";
   const limit = 20;
-  const skip = (page - 1) * limit;
 
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
@@ -32,23 +32,13 @@ export const loader = async ({ request }) => {
     orderBy = [{ createdAt: "asc" }];
   }
 
-  const whereClause = { shop };
-  if (search) {
-    whereClause.OR = [
-      { targetValue: { contains: search } },
-      { filterKey: { contains: search } },
-      { filterType: { contains: search } }
-    ];
-  }
-
-  const [rules, totalRules, products] = await Promise.all([
+  // Merge rules are small configuration records, not catalog products. Load
+  // this shop's complete list so typing and pagination need no route requests.
+  const [rules, products] = await Promise.all([
     prisma.mergedValue.findMany({
-      where: whereClause,
+      where: {shop},
       orderBy,
-      skip,
-      take: limit,
     }),
-    prisma.mergedValue.count({ where: whereClause }),
     prisma.product.findMany({
       where: { shop },
       select: { options: true },
@@ -135,8 +125,8 @@ export const loader = async ({ request }) => {
 
   const pagination = {
     currentPage: page,
-    totalPages: Math.ceil(totalRules / limit),
-    totalItems: totalRules,
+    totalPages: Math.ceil(rules.length / limit),
+    totalItems: rules.length,
     sort,
     search,
   };
@@ -574,7 +564,7 @@ const AutocompleteInput = ({
 
 // â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function MergedValues() {
-  const { rules, optionNames, storeData, pagination } = useLoaderData();
+  const { rules: savedRules, optionNames, storeData, pagination: initialPagination } = useLoaderData();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -582,27 +572,11 @@ export default function MergedValues() {
   const isLoading = navigation.state !== "idle";
   const actionData = useActionData();
 
-  const [searchValue, setSearchValue] = useState(pagination?.search || "");
-
-  useEffect(() => {
-    setSearchValue(pagination?.search || "");
-  }, [pagination?.search]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchValue !== (pagination?.search || "")) {
-        const url = new URL(window.location.href);
-        if (searchValue) {
-          url.searchParams.set("q", searchValue);
-        } else {
-          url.searchParams.delete("q");
-        }
-        url.searchParams.set("page", "1");
-        navigate(url.pathname + url.search);
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchValue, navigate, pagination?.search]);
+  const [searchValue, setSearchValue] = useState(initialPagination?.search || "");
+  const [page, setPage] = useState(initialPagination?.currentPage || 1);
+  const [sort, setSort] = useState(initialPagination?.sort || 'newest');
+  const searchRules = useMemo(() => createMergedValueSearchIndex(savedRules), [savedRules]);
+  const {rules, pagination} = useMemo(() => searchRules({query: searchValue, sort, page}), [searchRules, searchValue, sort, page]);
 
   useCompletedSubmission(actionData, navigation.state, () => {
     if (actionData?.success && navigation.state === "idle") {
@@ -1271,7 +1245,8 @@ export default function MergedValues() {
               >
                 <div
                   onClick={() => {
-                    navigate(`?page=1&sort=newest`);
+                    setSort('newest');
+                    setPage(1);
                     setIsSortOpen(false);
                   }}
                   style={{
@@ -1296,7 +1271,8 @@ export default function MergedValues() {
                 </div>
                 <div
                   onClick={() => {
-                    navigate(`?page=1&sort=oldest`);
+                    setSort('oldest');
+                    setPage(1);
                     setIsSortOpen(false);
                   }}
                   style={{
@@ -1341,7 +1317,7 @@ export default function MergedValues() {
               type="text"
               placeholder="Search"
               value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
+              onChange={(e) => {setSearchValue(e.target.value); setPage(1);}}
               className="search-input-box"
             />
           </div>
@@ -1511,9 +1487,7 @@ export default function MergedValues() {
           <button
             disabled={pagination.currentPage <= 1 || isLoading}
             onClick={() => {
-              const u = new URL(window.location.href);
-              u.searchParams.set("page", pagination.currentPage - 1);
-              navigate(u.pathname + u.search);
+              setPage(pagination.currentPage - 1);
             }}
             className="pagination-btn"
           >
@@ -1525,9 +1499,7 @@ export default function MergedValues() {
           <button
             disabled={pagination.currentPage >= pagination.totalPages || isLoading}
             onClick={() => {
-              const u = new URL(window.location.href);
-              u.searchParams.set("page", pagination.currentPage + 1);
-              navigate(u.pathname + u.search);
+              setPage(pagination.currentPage + 1);
             }}
             className="pagination-btn"
           >

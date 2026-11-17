@@ -16,15 +16,16 @@ async function action(file, dependencies, exportName='action') {
 }
 const request=values=>new Request('http://fixture/admin',{method:'POST',body:new URLSearchParams(values)});
 
-test('merged filter search includes the saved title for both rows and count within the current shop',async()=>{
+test('merged filters load the entire tenant configuration once for instant local searching across pages',async()=>{
  const queries=[];
  const loader=await action('app/routes/app.filters.merged-value.jsx',{
-  prisma:{mergedValue:{findMany:async value=>{queries.push(value.where);return [];},count:async value=>{queries.push(value.where);return 0;}},
+  prisma:{mergedValue:{findMany:async value=>{queries.push(value);return [];},count:async()=>assert.fail('a separate search count is unnecessary')},
    product:{findMany:async()=>[],groupBy:async()=>[]},$queryRaw:async()=>[]},
  },'loader');
  await loader({request:new Request('http://fixture/app/filters/merged-value?q=Burgundy+colours')});
- assert.equal(queries.length,2);
- for(const where of queries){assert.equal(where.shop,'fixture.myshopify.com');assert.ok(where.OR.some(item=>item.filterKey?.contains==='Burgundy colours'));}
+ assert.equal(queries.length,1);
+ assert.deepEqual(JSON.parse(JSON.stringify(queries[0].where)),{shop:'fixture.myshopify.com'});
+ assert.equal(queries[0].take,undefined); assert.equal(queries[0].skip,undefined);
 });
 
 test('renaming a merged filter persists its title, preserves mapping and scope, then invalidates storefront state',async()=>{
