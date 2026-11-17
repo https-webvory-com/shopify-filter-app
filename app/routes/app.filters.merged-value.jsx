@@ -885,6 +885,14 @@ export default function MergedValues() {
           margin-bottom: 16px !important;
           letter-spacing: -0.5px !important;
         }
+        .empty-state-search-title {
+          max-width: 100%;
+          margin: 0 0 24px;
+          font-size: 24px;
+          font-weight: 600;
+          color: #1E1B4B;
+          overflow-wrap: anywhere;
+        }
         .empty-state-subtitle {
           font-size: 16px !important;
           color: #6d7175 !important;
@@ -1346,6 +1354,11 @@ export default function MergedValues() {
         {/* Empty State */}
         {rules.length === 0 ? (
           <div className="empty-state-container">
+            {pagination?.search?.trim() && pagination.totalItems === 0 && (
+              <h2 className="empty-state-search-title" role="status">
+                No results found for “{pagination.search}”
+              </h2>
+            )}
             <h1 className="empty-state-title">Merge filter values</h1>
             <p className="empty-state-subtitle">
               Stack similar values under the same value category
