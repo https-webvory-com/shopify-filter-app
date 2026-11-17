@@ -1282,7 +1282,7 @@ export default function FilterGroupDetail() {
           font-size: 14px !important;
         }
         .filters-table th:first-child, .filters-table td:first-child { padding: 12px !important; }
-        .filters-table td.filters-table-empty { padding: 40px 24px !important; text-align: center; }
+        .filters-table-empty { padding: 40px 24px; text-align: center; }
         .filters-table-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
         .filters-table-title > label { flex-shrink: 0; }
         .filters-table-title > button { min-width: 0; overflow-wrap: anywhere; }
@@ -2190,6 +2190,7 @@ export default function FilterGroupDetail() {
               </s-button>
             </div>
           ) : (
+            <>
             <div className="filters-table-scroll">
             <table className="filters-table">
               <colgroup>
@@ -2220,15 +2221,6 @@ export default function FilterGroupDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filteredFiltersList.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="filters-table-empty">
-                      <p role="status" style={{ margin: 0, color: "#6d7175", overflowWrap: "anywhere" }}>
-                        {filterSearch.trim() ? <>No results found for “{filterSearch}”</> : "No filters match the selected conditions."}
-                      </p>
-                    </td>
-                  </tr>
-                )}
                 {filteredFiltersList.map((filter) => (
                     <tr key={filter.id}>
                       <td style={{ cursor: "grab", textAlign: "center", verticalAlign: "middle" }}>
@@ -2418,6 +2410,14 @@ export default function FilterGroupDetail() {
               </tbody>
             </table>
             </div>
+            {filteredFiltersList.length === 0 && (
+              <div className="filters-table-empty">
+                <p role="status" style={{ margin: 0, color: "#6d7175", overflowWrap: "anywhere" }}>
+                  {filterSearch.trim() ? <>No results found for “{filterSearch}”</> : "No filters match the selected conditions."}
+                </p>
+              </div>
+            )}
+            </>
           )}
         </div>
       </s-stack>
