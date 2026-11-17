@@ -48,9 +48,17 @@ export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns,
   return (
     <div onClick={onClose} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
       <style>{`
-        .columns-modal-card input:focus {
+        .columns-modal-search:focus-within {
           border-color: #5B21B6 !important;
           box-shadow: 0 0 0 2px rgba(62, 58, 177, 0.1) !important;
+        }
+        .columns-modal-search input,
+        .columns-modal-search input:focus {
+          border: 0 !important;
+          outline: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          min-width: 0;
         }
         .columns-modal-card::-webkit-scrollbar {
           width: 6px !important;
@@ -112,7 +120,7 @@ export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns,
           {/* Left Side: Select Columns */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", background: "#ffffff", padding: "8px 16px", borderRadius: "10px", width: "100%", border: "1px solid rgba(30, 27, 75, 0.12)", transition: "all 0.2s" }}>
+              <div className="columns-modal-search" style={{ display: "flex", alignItems: "center", background: "#ffffff", padding: "8px 16px", borderRadius: "10px", flex: 1, minWidth: 0, border: "1px solid rgba(30, 27, 75, 0.12)", transition: "all 0.2s" }}>
                 <svg style={{ width: "16px", height: "16px", color: "#64748b", marginRight: "8px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 <input 
                   type="text" 
@@ -122,7 +130,7 @@ export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns,
                   style={{ border: "none", background: "transparent", outline: "none", fontSize: "14px", color: "#333", width: "100%" }} 
                 />
               </div>
-              <button 
+              {filteredColumns.length > 0 && <button
                 onClick={toggleAll} 
                 style={{ 
                   background: "none", 
@@ -138,7 +146,7 @@ export default function CustomizeColumnsModal({ isOpen, onClose, currentColumns,
                 onMouseLeave={e => e.currentTarget.style.color = "#5B21B6"}
               >
                 {allVisible ? "deselect all" : "select all"}
-              </button>
+              </button>}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "8px", maxHeight: "300px", overflowY: "auto" }}>
