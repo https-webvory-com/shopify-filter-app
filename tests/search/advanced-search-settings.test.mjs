@@ -142,6 +142,8 @@ test('synonym query branches are bounded by words and isolated to the owner',asy
  const f=await fixture(settings({}),[product(1)],true);
  const own=await f.service.prepareConfiguredSearchQueries([{q:'gown',filter:[`shop = "${shop}"`]}]);
  assert.deepEqual(plain(own[0]._cfpSynonymQueries),['dress']);
+ assert.equal(own[0].indexUid,'products');
+ assert.equal(f.jobs.length,0,'tenant synonym expansion does not require a catalog build');
  const unrelated=await f.service.prepareConfiguredSearchQueries([{q:'gown',filter:[`shop = "${other}"`]}]);
  assert.equal(unrelated[0]._cfpSynonymQueries,undefined);
  const partial=await f.service.prepareConfiguredSearchQueries([{q:'gownish',filter:[`shop = "${shop}"`]}]);

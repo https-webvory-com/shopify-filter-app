@@ -16,7 +16,7 @@ const shop = 'fixture.myshopify.com';
 const plain = value => JSON.parse(JSON.stringify(value));
 async function fixture() {
   const cache = new Map(), jobs = new Map(), writes = [], engine = [];
-  let rules = [{word: 'gown', synonyms: 'dress, formal', isActive: true}], active = 'private-index', failQueue = false, failEngine = false, hold;
+  let rules = [{word: 'gown', synonyms: 'dress, formal', isActive: true}], active = 'private-index', hasSettings = true, failQueue = false, failEngine = false, hold;
   const dictionaryModule = await load('app/services/synonyms.server.js', {
     '../db.server': {}, '../utils/searchSettings.js': {}, './searchIndex.server.js': {},
   });
@@ -30,16 +30,17 @@ async function fixture() {
     }, getJob: async id => jobs.get(id),
   };
   const prisma = {synonym: {findMany: async ({where}) => {assert.equal(where.shop, shop); return plain(rules);}},
-    searchSetting: {findUnique: async ({where}) => {assert.equal(where.shop, shop); return {config: {_index: {active: active ? {uid: active} : null}}};}}};
+    searchSetting: {findUnique: async ({where}) => {assert.equal(where.shop, shop); return hasSettings ? {config: {_index: {active: active ? {uid: active} : null}}} : null;},
+      upsert: async value => {assert.equal(value.where.shop, shop); assert.deepEqual(plain(value.update), {}); hasSettings = true; writes.push(['setting', shop]);}}};
   const service = await load('app/services/synonymActivation.server.js', {
     'node:crypto': crypto, '../db.server.js': {__esModule: true, default: prisma},
     './redis.server.js': {__esModule: true, default: redis}, './queue.server.js': {synonymQueue: queue},
-    './synonyms.server.js': dictionaryModule,
-    './searchIndex.server.js': {syncConfiguredSearchSynonyms: async (tenant, dictionary) => {
+    './synonyms.server.js': dictionaryModule, '../utils/searchSettings.js': {DEFAULT_SEARCH_SETTINGS: {}},
+    './searchIndex.server.js': {resetSearchIndexContext: async tenant => writes.push(['invalidate', tenant]), syncConfiguredSearchSynonyms: async (tenant, dictionary) => {
       engine.push([tenant, plain(dictionary)]); if (hold) await hold; if (failEngine) throw Error('Engine unavailable');
     }},
   });
-  return {service, jobs, cache, writes, engine, setRules: value => rules = value, setActive: value => active = value,
+  return {service, jobs, cache, writes, engine, setRules: value => rules = value, setActive: value => active = value, setSettings: value => hasSettings = value,
     failQueue: () => failQueue = true, failEngine: value => failEngine = value,
     holdEngine: value => hold = value};
 }
@@ -105,9 +106,11 @@ test('disabling or deleting the last rule clears engine synonyms; revisions incl
   assert.equal(f.engine.length, 3);
 });
 
-test('missing search setup fails honestly without starting a catalog build, and invalid tenants are rejected', async () => {
-  const f = await fixture(); f.setActive(null);
-  await assert.rejects(f.service.processSynonymActivation({shop}), /not ready/);
+test('a first synonym without a private index activates tenant query expansion without a catalog build', async () => {
+  const f = await fixture(); f.setActive(null); f.setSettings(false);
+  await f.service.queueSynonymActivation(shop); await f.service.processSynonymActivation({shop});
+  assert.equal((await f.service.getSynonymActivationStatus(shop)).phase, 'active');
+  assert.deepEqual(f.writes.slice(1), [['setting', shop], ['invalidate', shop]]);
   assert.equal(f.engine.length, 0);
   await assert.rejects(f.service.queueSynonymActivation('not-a-shop'), /Invalid shop/);
   await assert.rejects(f.service.getSynonymActivationStatus('not-a-shop'), /Invalid shop/);

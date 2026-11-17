@@ -3,7 +3,8 @@ import prisma from '../db.server.js';
 import redis from './redis.server.js';
 import {synonymQueue} from './queue.server.js';
 import {buildSynonymDictionary} from './synonyms.server.js';
-import {syncConfiguredSearchSynonyms} from './searchIndex.server.js';
+import {syncConfiguredSearchSynonyms, resetSearchIndexContext} from './searchIndex.server.js';
+import {DEFAULT_SEARCH_SETTINGS} from '../utils/searchSettings.js';
 
 const key = (shop, kind) => `synonymActivation:${shop}:${kind}`;
 const validShop = shop => /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop || '');
@@ -17,7 +18,7 @@ async function snapshot(shop, rows) {
   const state = setting?.config?._index || {};
   const indexes = [...new Set([state.active?.uid, state.build?.initialized && state.build.uid].filter(Boolean))].sort();
   const canonical = Object.keys(dictionary).sort().map(word => [word, [...dictionary[word]].sort()]);
-  return {dictionary, active: state.active?.uid, indexes,
+  return {dictionary, hasSettings: !!setting, indexes,
     revision: createHash('sha256').update(JSON.stringify([canonical, indexes])).digest('hex')};
 }
 
@@ -50,15 +51,20 @@ export async function getSynonymActivationStatus(shop, rows) {
 export async function processSynonymActivation({shop}) {
   const current = await snapshot(shop);
   if (await redis.get(key(shop, 'applied')) === current.revision) return {unchanged: true};
-  if (Object.keys(current.dictionary).length && !current.active) {
-    throw Error('The store search index is not ready for synonym activation');
-  }
   // Update settings on existing merchant indexes only. Never schedule a
   // product sync, catalog rebuild or a shared-index synonym update here.
   // A previous version must not appear active while an intervening update is
   // in flight (including an edit that reverts back to that previous version).
   await redis.del(key(shop, 'applied'));
   if (current.indexes.length) await syncConfiguredSearchSynonyms(shop, current.dictionary);
+  else {
+    // Shared-index searches already expand only this shop's saved rules into
+    // tenant-filtered query branches. Enable that existing path for a first
+    // synonym without changing shared settings or building a private catalog.
+    if (!current.hasSettings) await prisma.searchSetting.upsert({where: {shop},
+      create: {shop, config: DEFAULT_SEARCH_SETTINGS}, update: {}});
+    await resetSearchIndexContext(shop);
+  }
   if ((await snapshot(shop)).revision !== current.revision) throw Error('Synonyms changed during activation; retrying the latest saved version');
   await redis.set(key(shop, 'applied'), current.revision);
   return {applied: true};
