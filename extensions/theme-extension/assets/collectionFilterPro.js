@@ -1077,9 +1077,12 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       // Start the canonical filter read before building the product grid. Its
       // network work can overlap card rendering instead of waiting behind it.
       const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
+      const keepPriceFiltersUsable=queryParams.get('priceSortVersion')==='2'&&data.cfpCards?.directSort?.version===1&&filtersReady&&cfpLastSettings.length>0&&
+        Number.isFinite(data.totalCount)&&Array.isArray(data.products)&&data.products.length===Math.min(PAGE_SIZE,data.totalCount);
+      if(keepPriceFiltersUsable)data.cfpCards.preview=false;
       let facetsPromise;
       if(!(isLoadMore&&data.cfpCards?.append===true)&&((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2)){
-        sidebar.classList.add('cfp-loading');
+        if(!keepPriceFiltersUsable)sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
           ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)
           :completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
@@ -1100,8 +1103,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       renderBreadcrumbs();
       updateActiveCountBadge();
       window._cfpInitialized = true;
-      if(facetsPromise)await facetsPromise;
-      else if (!isLoadMore) saveBrowserResult(queryParams, data);
+      if(facetsPromise&&!keepPriceFiltersUsable)await facetsPromise;
+      else if (!facetsPromise&&!isLoadMore) saveBrowserResult(queryParams, data);
 
     } catch (e) {
       if (fetchSignal.aborted) return;

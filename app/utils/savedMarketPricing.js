@@ -28,8 +28,12 @@ export function priceSortVariant(product,context){
  return result;
 }
 
-export function savedMarketProduct(product,country){
+export function savedMarketProduct(product,country,{basePrice=false}={}){
  const variants=product.variants||[];
+ if(basePrice&&country==='US'&&variants.length&&variants.every(variant=>variant.price!=null&&variant.price!==''&&Number.isFinite(Number(variant.price))&&Number(variant.price)>=0)){
+  const clean=variants.map(({marketPrices,...variant})=>variant),amounts=clean.map(variant=>Number(variant.price));
+  return {...product,variants:clean,priceMin:Math.min(...amounts),priceMax:Math.max(...amounts),pricingContext:{country:'US',currency:'USD',source:'saved'}};
+ }
  const prices=variants.map(variant=>variant.marketPrices?.[country]);
  const valid=countryPattern.test(country||'')&&variants.length>0&&prices.every(price=>price&&price.price!=null&&price.price!==''&&Number.isFinite(Number(price.price))&&Number(price.price)>=0&&currencyPattern.test(price.currency||'')&&price.currency===prices[0].currency);
  const clean=variants.map(({marketPrices,...variant},index)=>{

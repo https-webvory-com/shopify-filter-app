@@ -1712,7 +1712,7 @@ export const loader = async ({ request, context }) => {
         }
       });
 
-      return savedMarketProduct(productObj,country);
+      return savedMarketProduct(productObj,country,{basePrice:variantPriceContext?.basePrice===true});
     });
 
     // Sort products by match score so the most relevant colors appear first on the page

@@ -2,11 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
-import {priceSortVariant} from '../../app/utils/savedMarketPricing.js';
+import {priceSortVariant,savedMarketProduct} from '../../app/utils/savedMarketPricing.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
 
 const context={version:2,country:'US',currency:'USD',basePrice:true,stockOnly:true,direction:'desc',options:{},mergedValues:[],ranges:[]};
 const product={id:'1',options:[{name:'Color'},{name:'Size'}],variantPrices:[{id:'11',price:3190,available:true,option1:'Blue',option2:'S'},{id:'12',price:3410,available:true,option1:'Blue',option2:'L'},{id:'13',price:9000,available:false,option1:'Red',option2:'L'}]};
+
+test('verified US base prices render as saved USD without another price request',()=>{
+ const p={variants:[{id:'1',price:3190},{id:'2',price:3410}]};
+ const result=savedMarketProduct(p,'US',{basePrice:true});
+ assert.deepEqual(result.pricingContext,{country:'US',currency:'USD',source:'saved'});assert.equal(result.variants[1].price,3410);
+ assert.equal(savedMarketProduct(p,'IN',{basePrice:true}).pricingContext,undefined);
+ assert.equal(savedMarketProduct({variants:[{price:null}]},'US',{basePrice:true}).pricingContext,undefined);
+});
 
 test('same variable-price product uses lowest eligible price ascending and highest descending',()=>{
  assert.equal(priceSortVariant(product,{...context,direction:'asc'}).price,3190);
