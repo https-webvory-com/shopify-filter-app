@@ -6,7 +6,7 @@ import { catalogImageUrls } from '../../app/utils/pinProductImages.js';
 async function fixture(initial = { id: 'existing', shop: 'fixture.myshopify.com', ruleType: 'search', searchQueries: ['blue'], status: false }) {
   const writes = [];
   let saved = { ...initial, products: [{ id: 'p1', position: 1 }, { id: 'p2', position: 2 }], applyToSearchType: 'both', applyToAll: false };
-  const prisma = { pinnedProductRule: {
+  const prisma = { filterGlobalSetting:{findUnique:async()=>({showOnlyInStock:true})}, pinnedProductRule: {
     create: async ({ data }) => { writes.push({ type: 'create', data }); saved = { id: 'created', status: true, ...data }; return saved; },
     update: async ({ where, data }) => { assert.deepEqual(JSON.parse(JSON.stringify(where)), { id: 'existing', shop: 'fixture.myshopify.com', ruleType: 'search' }); writes.push({ type: 'update', where, data }); saved = { ...saved, ...data }; return saved; },
     findFirst: async ({ where }) => saved.shop === where.shop && saved.ruleType === where.ruleType ? saved : null,

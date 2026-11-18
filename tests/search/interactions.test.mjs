@@ -98,6 +98,7 @@ for (const section of ["collections", "search"]) {
     const shop = "fixture.myshopify.com";
     const calls = [];
     const prisma = {
+      filterGlobalSetting:{findUnique:async()=>({showOnlyInStock:true})},
       $queryRaw: async (sql, queryShop, text) => {
         assert.equal(queryShop, shop);
         assert.equal(text, "SUMMER");

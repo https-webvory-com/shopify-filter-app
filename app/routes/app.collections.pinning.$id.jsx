@@ -38,7 +38,9 @@ export const action = async ({ request, params }) => {
     const collections = collectionsStr ? JSON.parse(collectionsStr) : [];
     const applyToAll = formData.get("applyToAll") === "true";
 
-    const whereClause = { shop, status: "active", variants: { some: { available: true } } };
+    const setting=await prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}});
+    const stockOnly=setting?.showOnlyInStock===true;
+    const whereClause = { shop, status: "active", ...(stockOnly?{variants: { some: { available: true } }}:{}) };
 
     Object.assign(whereClause, await pinProductSearchFilter(
       prisma, shop, query, formData.get("searchField"),
@@ -183,7 +185,8 @@ export const loader = async ({ request, params }) => {
 
   let pinImageFallbacks = {};
   if (rule) {
-    const products = await availablePins(prisma, shop, rule.products);
+    const setting=await prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}});
+    const products = await availablePins(prisma, shop, rule.products,{stockOnly:setting?.showOnlyInStock===true});
     pinImageFallbacks = await pinProductImageFallbacks(prisma, shop, products);
     rule = { ...rule, products };
   }

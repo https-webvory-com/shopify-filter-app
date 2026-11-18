@@ -7,9 +7,10 @@ import {catalogImageUrls} from '../utils/pinProductImages.js';
 
 // Admin pickers share storefront paging. Never expand the matching catalog
 // into a SQL IN list just to display a handful of cards.
-export async function searchPickerPage(shop,targetQuery,{query='',searchField='title',skip=0,limit=9,excludedIds=[],stockOnly=true}={}){
+export async function searchPickerPage(shop,targetQuery,{query='',searchField='title',skip=0,limit=9,excludedIds=[],stockOnly}={}){
   query=String(query).trim();targetQuery=String(targetQuery||'').trim();
   if(query.length>200||targetQuery.length>300||!Number.isSafeInteger(skip)||skip<0||skip>100000||!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('Invalid product picker request');
+  if(stockOnly===undefined){const setting=await prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}});stockOnly=setting?.showOnlyInStock===true;}
   const parsedQuery=targetQuery?await parseQuery(targetQuery,shop):null;
   const filter=[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'"];
   if(stockOnly)filter.push('available = true');

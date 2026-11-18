@@ -4,10 +4,10 @@ import {loadModule} from './helpers/search-ranking.mjs';
 import {pinProductSearchFilter} from '../../app/utils/pinProductSearch.server.js';
 import {catalogImageUrls} from '../../app/utils/pinProductImages.js';
 const shop='picker.myshopify.com',gid=id=>'gid://shopify/Product/'+id;
-async function fixture({fallback=false}={}){
+async function fixture({fallback=false,stockOnly=true}={}){
  const calls=[],native=[],engine=[];
  const service=await loadModule('app/services/searchPicker.server.js',{
-  '../db.server':{default:{product:{findMany:async args=>{calls.push(args);if(!args.where.id)return Array.from({length:49958},(_,i)=>({id:gid(i+1)}));assert.ok(args.where.id.in.length<=9,'database hydration is limited to one visible page');return args.where.id.in.map(id=>({id,title:'Dress '+id,images:['https://cdn.shopify.com/dress.jpg']}));}}}},
+  '../db.server':{default:{filterGlobalSetting:{findUnique:async({where})=>{assert.equal(where.shop,shop);return {showOnlyInStock:stockOnly};}},product:{findMany:async args=>{calls.push(args);if(!args.where.id)return Array.from({length:49958},(_,i)=>({id:gid(i+1)}));assert.ok(args.where.id.in.length<=9,'database hydration is limited to one visible page');return args.where.id.in.map(id=>({id,title:'Dress '+id,images:['https://cdn.shopify.com/dress.jpg']}));}}}},
   './queryParser.server.js':{parseQuery:async()=>({colorFilter:'option_Color = "Red"'})},
   './nativeSearchPage.server.js':{rankNativeSearchPage:async args=>{native.push(args);return fallback?null:{products:Array.from({length:9},(_,i)=>({id:String((args.page-1)*9+i+1)})),total:49958};}},
   './semanticSearch.server':{semanticSearch:async(query,options)=>{engine.push({query,options});return {hits:Array.from({length:9},(_,i)=>({id:String(i+1)})),totalHits:49958};}},
@@ -31,6 +31,15 @@ test('stores without native projections still request a single bounded search pa
 });
 test('bad pagination is rejected before database or engine work',async()=>{
  const f=await fixture();await assert.rejects(f.service.searchPickerPage(shop,'dress',{skip:-1}),/Invalid/);assert.equal(f.calls.length,0);assert.equal(f.native.length,0);
+});
+
+test('search pinning follows the tenant stock setting in both retrieval and database hydration',async()=>{
+ for(const stockOnly of [true,false]){
+  const f=await fixture({stockOnly});await f.service.searchPickerPage(shop,'promD');
+  assert.equal(f.native[0].options.filter.includes('available = true'),stockOnly);
+  assert.equal(f.native[0].globalSettings.showOnlyInStock,stockOnly);
+  assert.equal(!!f.calls[0].where.variants,stockOnly);
+ }
 });
 test('picker resource failures return a recoverable response and never accept save intents',async()=>{
  let searches=0;

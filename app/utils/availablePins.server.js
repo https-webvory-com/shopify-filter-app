@@ -1,5 +1,5 @@
 // Pin eligibility uses purchase availability, including continue-selling variants.
-export async function availablePins(prisma, shop, products) {
+export async function availablePins(prisma, shop, products, {stockOnly=true} = {}) {
   let pins = products;
   if (typeof pins === "string") {
     try { pins = JSON.parse(pins); } catch { return []; }
@@ -8,7 +8,7 @@ export async function availablePins(prisma, shop, products) {
   const eligible = await prisma.product.findMany({
     where: { shop, id: { in: pins.map(pin => pin.id) },
       status: { equals: "active", mode: "insensitive" },
-      variants: { some: { available: true } },
+      ...(stockOnly ? {variants: { some: { available: true } }} : {}),
     },
     select: { id: true },
   });

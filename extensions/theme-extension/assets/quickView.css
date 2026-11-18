@@ -169,6 +169,18 @@ x-modal.cfp-native-size-chart { z-index: 2147483647 !important; }
   overflow-y: auto;
 }
 
+.cfp-quick-view-modal,
+.cfp-quick-view-details {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.cfp-quick-view-modal::-webkit-scrollbar,
+.cfp-quick-view-details::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .cfp-quick-view-title {
   overflow-wrap: anywhere;
   font-family: "Playfair Display", "Times New Roman", serif;

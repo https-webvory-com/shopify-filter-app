@@ -10,3 +10,9 @@ test("pin editors omit sold-out and missing products while retaining available p
   assert.deepEqual(await availablePins(prisma,shop,JSON.stringify(pins)),[pins[1],pins[2]]);
   assert.deepEqual(await availablePins(prisma,shop,"invalid JSON"),[]);
 });
+
+test('saved pins retain out-of-stock products when the store allows them, while missing products stay excluded',async()=>{
+ const pins=[{id:gid(1),image:'saved.jpg'},{id:gid(2)},{id:gid(3)}];
+ const prisma={product:{findMany:async({where})=>{assert.equal(where.shop,shop);assert.equal(where.variants,undefined);assert.deepEqual(where.status,{equals:'active',mode:'insensitive'});return [{id:gid(1)},{id:gid(2)}];}}};
+ assert.deepEqual(await availablePins(prisma,shop,pins,{stockOnly:false}),pins.slice(0,2));
+});

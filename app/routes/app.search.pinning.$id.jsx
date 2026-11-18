@@ -163,7 +163,9 @@ export const loader = async ({ request, params }) => {
     stockOnly=state.stockOnly;
   }
   if (rule&&!emptyTarget) {
-    const products = await availablePins(prisma, shop, rule.products);
+    const setting=await prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}});
+    stockOnly=setting?.showOnlyInStock===true;
+    const products = await availablePins(prisma, shop, rule.products,{stockOnly});
     pinImageFallbacks = await pinProductImageFallbacks(prisma, shop, products);
     rule = { ...rule, products };
   }

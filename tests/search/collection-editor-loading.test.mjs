@@ -39,7 +39,7 @@ for (const all of [false, true]) test(`collection picker overlaps count/cards an
   let release;
   const gate = new Promise(resolve => release = resolve);
   const calls = [];
-  const prisma = {product: {
+  const prisma = {filterGlobalSetting:{findUnique:async()=>({showOnlyInStock:true})},product: {
     count: async args => {calls.push({kind:'count', ...args}); await gate; return 19;},
     findMany: async args => {calls.push({kind:'cards', ...args}); await gate; return [
       {id:'one', title:'Dress', handle:'dress', images:'["red.jpg"]'},
