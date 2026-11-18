@@ -592,6 +592,8 @@ export const loader = async ({ request, context }) => {
     if(variantPriceV2&&(!Number.isFinite(priceSortRate)||priceSortRate<=0||priceSortRate>1e9))return data({error:'Invalid price currency rate'},{status:400});
     const nativeRanges=variantPriceV2?(selectedPriceRanges.length?selectedPriceRanges:(minPrice>0||maxPrice<9999999)?[{min:minPrice,max:maxPrice}]:[]).map(range=>({min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:null})):[];
     const variantPriceContext=variantPriceV2?{version:2,country:sortCountry,currency:savedUsBasePrice?'USD':null,basePrice:savedUsBasePrice,stockOnly:globalSettings?.showOnlyInStock===true||availability.includes('in_stock')&&!availability.includes('out_of_stock'),direction:descendingPrice?'desc':'asc',ranges:nativeRanges,options:optionsFilters,mergedValues}:null;
+    const variantEligibilityPriceContext=variantPriceContext?{...variantPriceContext}:null;
+    if(variantEligibilityPriceContext)delete variantEligibilityPriceContext.direction;
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&(variantPriceV2||!savedUsBasePrice)&&/^[A-Z]{2}$/.test(sortCountry)
       ? await marketPriceIntentReady(shop,sortCountry,{stockOnly:variantPriceContext?.stockOnly??globalSettings?.showOnlyInStock===true,...(variantPriceV2?{maximum:descendingPrice,basePrice:savedUsBasePrice}:{})}):false;
     const priceSortField=variantPriceV2?(savedUsBasePrice?`${variantPriceContext.stockOnly?'availablePrice':'price'}${descendingPrice?'Max':'Min'}`:`market${variantPriceContext.stockOnly?'Available':''}Price${descendingPrice?'Max':'Min'}_${sortCountry}`):priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
@@ -728,12 +730,12 @@ export const loader = async ({ request, context }) => {
         categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_available_variant_price__"';
       }else categoryFilters.priceMin='('+selectedPriceRanges.map(range=>`(priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''})`).join(' OR ')+')';
     }
-    if(variantPriceV2&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length))){
+    if(variantPriceV2&&!fastCards&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length))){
       const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
       for(const range of ranges){
         const normalized=range?{min:range.min,max:range.max??Infinity}:null;
-        const eligible=await getCached('availableVariants:'+shop+':sort-v2:'+JSON.stringify([scope,variantPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantPriceContext}),30);
+        const eligible=await getCached('availableVariants:'+shop+':sort-v2:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantPriceContext}),30);
         for(const id of eligible)ids.add(id);
       }
       categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
@@ -1025,7 +1027,7 @@ export const loader = async ({ request, context }) => {
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
     const priceEligibleIds=hideUnavailable||variantPriceV2?await Promise.all(priceCountRanges.map(range=>{
       const eligibleRange=variantPriceV2?{min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:Infinity}:range;
-      return getCached('availableVariantPrices:'+shop+':'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantPriceContext]),
+      return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext]),
         ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,eligibleRange,{database:prisma,...(variantPriceContext?{priceContext:variantPriceContext}:{})}),30,{maxBytes:1048576});
     })):[];
     for(const [index,range] of priceCountRanges.entries()){
