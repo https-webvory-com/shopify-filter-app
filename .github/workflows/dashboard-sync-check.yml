@@ -43,7 +43,7 @@ jobs:
               for(const job of jobs)if(job.data.shop===shop&&(job.data.incremental||job.data.retireUid))console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),retireUid:job.data.retireUid,incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
               const prefix=state.active?.uid?.slice(0,28);
               const all=await client.getIndexes({limit:1000});
-              for(const item of all.results.filter(item=>prefix&&item.uid.startsWith(prefix))){const stats=await client.index(item.uid).getStats();console.log('SEARCH_INDEX_STORAGE',JSON.stringify({uid:item.uid,createdAt:item.createdAt,documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,active:item.uid===state.active?.uid,build:item.uid===state.build?.uid}));}
+              for(const item of all.results.filter(item=>prefix&&item.uid.startsWith(prefix))){const index=client.index(item.uid),stats=await index.getStats(),info=await index.getRawInfo();console.log('SEARCH_INDEX_STORAGE',JSON.stringify({uid:item.uid,createdAt:info.createdAt,documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,active:item.uid===state.active?.uid,build:item.uid===state.build?.uid}));}
               const global=await client.getStats();console.log('SEARCH_STORAGE_TOTAL',JSON.stringify({databaseSize:global.databaseSize,usedDatabaseSize:global.usedDatabaseSize}));
               const target=process.env.RETIRE_ABANDONED_INDEX;
               if(target){
@@ -51,8 +51,9 @@ jobs:
                 if(!jobs.some(job=>job.data.shop===shop&&job.data.retireUid===target))throw Error('Index is not already queued for retirement');
                 const owners=await db.searchSetting.findMany({select:{config:true}});
                 if(owners.some(owner=>[owner.config?._index?.active?.uid,owner.config?._index?.build?.uid].includes(target)))throw Error('Index is referenced by saved settings');
-                const info=await client.getIndex(target),stats=await client.index(target).getStats(),serving=await client.index(state.active.uid).getStats();
-                if(new Date(info.createdAt)<new Date('2026-11-18T00:00:00Z')||stats.numberOfDocuments>=serving.numberOfDocuments)throw Error('Only this session\'s incomplete temporary build can be retired');
+                const info=await client.index(target).getRawInfo(),stats=await client.index(target).getStats(),serving=await client.index(state.active.uid).getStats();
+                const createdAt=new Date(info.createdAt).getTime();
+                if(!Number.isFinite(createdAt)||createdAt<new Date('2026-11-18T00:00:00Z').getTime()||stats.numberOfDocuments>=serving.numberOfDocuments)throw Error('Only this session\'s incomplete temporary build can be retired');
                 const task=await client.deleteIndex(target),done=await client.tasks.waitForTask(task.taskUid,{timeout:120000});
                 if(done.status!=='succeeded')throw Error('Temporary index retirement failed: '+done.error?.code);
                 console.log('ABANDONED_BUILD_RETIRED',JSON.stringify({uid:target,documents:stats.numberOfDocuments,activePreserved:state.active.uid}));
