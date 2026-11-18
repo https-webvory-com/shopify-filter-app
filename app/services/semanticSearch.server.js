@@ -20,6 +20,8 @@ async function countSynonymUnion(indexUid, texts, scope) {
   const capacity=await getCached('synonymCountCapacity:'+indexUid,async()=>
     (await meiliClient.index(indexUid).getSettings()).pagination?.maxTotalHits??1000,30);
   if(totals.some(n=>n>=capacity))return null;
+  const populated=texts.filter((_text,i)=>totals[i]>0);
+  if(populated.length===1)return {total:Math.max(...totals),metadata:counted.results[totals.indexOf(Math.max(...totals))],singleQuery:populated[0]};
   const largest=totals.indexOf(Math.max(...totals));
   if(totals.reduce((sum,n,i)=>sum+(i===largest?0:n),0)>1000)return null;
   const smaller=texts.map((text,i)=>({text,total:totals[i],i})).filter(branch=>branch.i!==largest&&branch.total>0);
@@ -55,7 +57,12 @@ async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
     if(!scope.hybrid&&Array.isArray(scope.attributesToRetrieve)&&scope.attributesToRetrieve.length===0){
       const counted=await countSynonymUnion(indexUid,[...new Set([q,..._cfpSynonymQueries])],scope);
       if(counted){
-        const metadata=scope.facets?.length?await runQuery({indexUid,q,_cfpSynonymQueries,...scope,offset:0,limit:1}):counted.metadata;
+        // A fresh alias often has no matches of its own. Native facets for
+        // the sole matching branch are the exact union, without federation's
+        // repeated prefix ranking and facet merging across the whole catalog.
+        const metadata=scope.facets?.length?(counted.singleQuery
+          ? await meiliClient.index(indexUid).search(counted.singleQuery,{...scope,page:1,hitsPerPage:1})
+          : await runQuery({indexUid,q,_cfpSynonymQueries,...scope,offset:0,limit:1})):counted.metadata;
         const {estimatedTotalHits,offset,limit,...result}=metadata;
         return {...result,query:q,hits:Array.from({length:Math.min(hitsPerPage,Math.max(0,counted.total-start))},()=>({})),
           totalHits:counted.total,totalPages:hitsPerPage?Math.ceil(counted.total/hitsPerPage):0,page,hitsPerPage};
@@ -73,6 +80,16 @@ async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
     return {...result,hits:selected,totalHits:total,totalPages:hitsPerPage?Math.ceil(total/hitsPerPage):0,page,hitsPerPage};
   }
   const {offset=0,limit=20,facets,...params}=options;
+  if (!params.hybrid && _cfpSynonymQueries.length === 1) {
+    // Alias-only matches need one native page, not a federated prefix scan.
+    // A zero total is exact even when the engine caps nonzero hit counts.
+    const branchCounts=await meiliClient.multiSearch({queries:[q,..._cfpSynonymQueries].map(text=>({indexUid,q:text,...params,facets:[],attributesToHighlight:[],attributesToRetrieve:[],page:1,hitsPerPage:1,matchingStrategy:'all'}))});
+    const totals=branchCounts.results?.map(branch=>branch.totalHits);
+    if(totals?.length===2&&totals.every(total=>Number.isSafeInteger(total)&&total>=0)&&totals.filter(total=>total>0).length===1){
+      const text=totals[0]>0?q:_cfpSynonymQueries[0];
+      return {...await meiliClient.index(indexUid).search(text,{...params,matchingStrategy:'all',offset,limit,...(facets?{facets}:{})}),query:q};
+    }
+  }
   const federation={offset,limit,...(facets?.length?{facetsByIndex:{[indexUid]:facets},mergeFacets:{maxValuesPerFacet:100000}}:{})};
   const result=await meiliClient.multiSearch({queries:[...new Set([q,..._cfpSynonymQueries])].map(text=>({indexUid,q:text,...params,matchingStrategy:'all'})),federation});
   return {...result,query:q,hits:result.hits.map(({_federation,...hit})=>hit)};

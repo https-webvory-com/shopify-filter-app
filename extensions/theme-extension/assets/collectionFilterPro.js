@@ -510,8 +510,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         result.cfpCards?.preview || result.cfpCards?.prefix) return;
     try {
       const entry = JSON.stringify({at:Date.now(),rankingToken:result.rankingToken,products:result.products,totalCount:result.totalCount,
+        settings:result.settings,facets:result.facets,
         mergedValues:result.mergedValues,globalSettings:result.globalSettings,contextualPricingApplied:result.contextualPricingApplied});
-      if (entry.length > 750000) return;
+      if (entry.length > 2000000) return;
       sessionStorage.setItem(key, entry);
       const entries = [];
       for (let i = 0; i < sessionStorage.length; i++) {
@@ -931,6 +932,21 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             try {
               collectionRankingTokens.set(rankingKey, cachedBrowserResult.rankingToken);
               globalSettings = cachedBrowserResult.globalSettings || {};
+              window.cfpGlobalSettings = globalSettings;
+              window.cfpQuickViewInstance?.configure(globalSettings);
+              applyGlobalSettings(globalSettings);
+              // Restore the complete previous view while its scoped request
+              // revalidates. Cards alone leave the filter and sort UI hidden
+              // on refresh, particularly when active filters bypass bootstrap.
+              if (Array.isArray(cachedBrowserResult.settings) && cachedBrowserResult.facets) {
+                cfpLastSettings = cachedBrowserResult.settings;
+                cfpLastFacets = cachedBrowserResult.facets;
+                cfpLastTotalCount = cachedBrowserResult.totalCount;
+                renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+                sidebar.classList.remove('cfp-loading');
+                syncSortControls();
+                updateActiveCountBadge();
+              }
               await renderProducts(cachedBrowserResult.products, cachedBrowserResult.totalCount, false,
                 cachedBrowserResult.mergedValues, cachedBrowserResult.contextualPricingApplied);
               renderBreadcrumbs();
@@ -1408,6 +1424,18 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
 
   const wishlistProducts=new Map();
+  let wishlistPollTimer = null;
+  function waitForWishlistProvider() {
+    if (wishlistPollTimer || globalSettings?.integrations?.wishlist !== true) return;
+    let attempts = 0;
+    const check = () => {
+      wishlistPollTimer = null;
+      if (globalSettings?.integrations?.wishlist !== true) return;
+      if (window.pageDataMap && typeof window.pageDataMap === 'object') { syncWishlistProducts(); return; }
+      if (++attempts < 120) wishlistPollTimer = setTimeout(check, 250);
+    };
+    wishlistPollTimer = setTimeout(check, 250);
+  }
   function wishlistMarkup(product){
       let wishlistHtml = '';
       // console.log("CFP DEBUG: globalSettings.integrations =>", globalSettings?.integrations);
@@ -1459,7 +1487,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
 
 
-    if(typeof window.pageDataMap==='undefined')return;
+    if(typeof window.pageDataMap==='undefined'){waitForWishlistProvider();return;}
     const grid=document.getElementById('cfp-products-container');
     grid?.querySelectorAll('.cfp-product-card').forEach(card=>{
       if(card.querySelector('.wishlist-btn-container'))return;
@@ -1472,14 +1500,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   }
   document.addEventListener('DOMContentLoaded',()=>setTimeout(syncWishlistProducts,0),{once:true});
   window.addEventListener('load',syncWishlistProducts,{once:true});
+  document.addEventListener('load',event=>{if(event.target?.tagName==='SCRIPT')syncWishlistProducts();},true);
 
   let marketRenderVersion = 0;
   function priceSortedVariant(variants) {
     const direction = ['price-ascending','price-asc'].includes(activeFilters.sortBy) ? 1 :
       ['price-descending','price-desc'].includes(activeFilters.sortBy) ? -1 : 0;
     if (!direction) return null;
-    return (variants || []).filter(v => v.available === true && Number.isFinite(Number(v.price)))
-      .reduce((best, variant) => !best || direction * (Number(variant.price) - Number(best.price)) < 0 ? variant : best, null);
+    // Both directions order products by their minimum price. Choosing the
+    // most expensive variant for descending order changes the displayed key.
+    return (variants || []).filter(v => (!globalSettings?.showOnlyInStock || v.available === true) && v.price != null && Number.isFinite(Number(v.price)))
+      .reduce((best, variant) => !best || Number(variant.price) < Number(best.price) ? variant : best, null);
   }
   function updateMarketCardPrice(card, product) {
     if (!card || !product || product._marketPricingUnavailable) return;
