@@ -6,6 +6,10 @@ on:
         description: Read search-rule update state and errors only
         type: boolean
         default: false
+      retire_abandoned_index:
+        description: Optional already-queued unused temporary build to retire before retrying incremental rules
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -16,14 +20,15 @@ jobs:
       - uses: appleboy/ssh-action@v1.0.3
         env:
           CHECK_SEARCH_RULES: ${{ inputs.search_rules }}
+          RETIRE_ABANDONED_INDEX: ${{ inputs.retire_abandoned_index }}
         with:
-          envs: CHECK_SEARCH_RULES
+          envs: CHECK_SEARCH_RULES,RETIRE_ABANDONED_INDEX
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             if [ "$CHECK_SEARCH_RULES" = true ]; then
-              docker exec -i shopify-filter-app node --input-type=module <<'SEARCH_NODE'
+              docker exec -i -e RETIRE_ABANDONED_INDEX shopify-filter-app node --input-type=module <<'SEARCH_NODE'
             import {PrismaClient} from '@prisma/client';
             import {Queue} from 'bullmq';
             import {redisConnectionOptions} from './app/services/redisConnection.server.js';
@@ -35,7 +40,26 @@ jobs:
               const row=await db.searchSetting.findUnique({where:{shop}}),state=row?.config?._index||{};
               console.log('SEARCH_RULE_STATE',JSON.stringify({phase:state.phase,processed:state.processed,total:state.total,error:state.error,active:state.active?.uid,build:state.build?.uid,incremental:!!state.update,updated:state.update?.updated,lastUpdate:state.lastUpdate}));
               const jobs=await queue.getJobs(['active','failed','delayed','prioritized'],0,60);
-              for(const job of jobs)if(job.data.shop===shop)console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
+              for(const job of jobs)if(job.data.shop===shop&&(job.data.incremental||job.data.retireUid))console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),retireUid:job.data.retireUid,incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
+              const prefix=state.active?.uid?.slice(0,28);
+              const all=await client.getIndexes({limit:1000});
+              for(const item of all.results.filter(item=>prefix&&item.uid.startsWith(prefix))){const stats=await client.index(item.uid).getStats();console.log('SEARCH_INDEX_STORAGE',JSON.stringify({uid:item.uid,createdAt:item.createdAt,documents:stats.numberOfDocuments,isIndexing:stats.isIndexing,active:item.uid===state.active?.uid,build:item.uid===state.build?.uid}));}
+              const global=await client.getStats();console.log('SEARCH_STORAGE_TOTAL',JSON.stringify({databaseSize:global.databaseSize,usedDatabaseSize:global.usedDatabaseSize}));
+              const target=process.env.RETIRE_ABANDONED_INDEX;
+              if(target){
+                if(!prefix||!target.startsWith(prefix)||target===state.active?.uid||target===state.build?.uid)throw Error('Refusing to retire a serving or building index');
+                if(!jobs.some(job=>job.data.shop===shop&&job.data.retireUid===target))throw Error('Index is not already queued for retirement');
+                const owners=await db.searchSetting.findMany({select:{config:true}});
+                if(owners.some(owner=>[owner.config?._index?.active?.uid,owner.config?._index?.build?.uid].includes(target)))throw Error('Index is referenced by saved settings');
+                const info=await client.getIndex(target),stats=await client.index(target).getStats(),serving=await client.index(state.active.uid).getStats();
+                if(new Date(info.createdAt)<new Date('2026-11-18T00:00:00Z')||stats.numberOfDocuments>=serving.numberOfDocuments)throw Error('Only this session\'s incomplete temporary build can be retired');
+                const task=await client.deleteIndex(target),done=await client.tasks.waitForTask(task.taskUid,{timeout:120000});
+                if(done.status!=='succeeded')throw Error('Temporary index retirement failed: '+done.error?.code);
+                console.log('ABANDONED_BUILD_RETIRED',JSON.stringify({uid:target,documents:stats.numberOfDocuments,activePreserved:state.active.uid}));
+                const {scheduleSearchIndex}=await import('./app/services/searchIndex.server.js');await scheduleSearchIndex(shop,{allowInitialBuild:false});
+                console.log('INCREMENTAL_RULE_RETRY_QUEUED');
+                setTimeout(()=>process.exit(0),2000).unref();
+              }
               if(state.active?.uid){const tasks=await client.tasks.getTasks({indexUids:[state.active.uid],limit:8});for(const task of tasks.results)console.log('SEARCH_RULE_ENGINE_TASK',JSON.stringify({uid:task.uid,type:task.type,status:task.status,errorCode:task.error?.code,error:clean(task.error?.message)}));}
             }finally{await queue.close();await db.$disconnect();}
             SEARCH_NODE
