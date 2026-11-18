@@ -60,7 +60,18 @@ export async function scheduleSearchIndex(shop,{allowInitialBuild=true}={}){
   const from=validateSearchSettings(previous.update?.from||previous.active.config);
   const interrupted=previous.update?.config&&validateSearchSettings(previous.update.config);
   const forceFields=[...new Set([...(previous.update?.forceFields||[]),...(interrupted?interrupted.fields.filter(field=>changesField(field,from.fields.find(old=>old.key===field.key),from,interrupted)).map(field=>field.key):[])])];
-  const update=previous.update?.hash===requested?previous.update:{hash:requested,config,from,forceFields,forceScan:!!previous.update,offset:0,cursor:null,processed:0,updated:0};
+  const forceScan=!!previous.update&&(previous.update.forceScan||interrupted&&projectionSignature(from)!==projectionSignature(interrupted));
+  const update=previous.update?.hash===requested?previous.update:{hash:requested,config,from,forceFields,forceScan:!!forceScan,offset:0,cursor:null,processed:0,updated:0};
+  if(!update.forceScan&&!update.forceFields?.length&&queryPolicySignature(from)===queryPolicySignature(config)){
+   const existing=await client.index(previous.active.uid).getSettings(),attributes=existing.searchableAttributes||[];
+   const required=[...enabledSearchFields(config),...enabledSearchFields(config,'suggest')].map(field=>searchFieldName(field.index));
+   if(config.smartSkuSearch)required.push('cfpSkuNormalized');
+   if(attributes.includes('*')||required.every(attribute=>attributes.includes(attribute))){
+    await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'ready',requested,build:null,update:null,error:null,processed:0,total:0,updatedAt:Date.now(),active:{...state.active,hash:requested,config,queryRanking:true,semanticFields:state.active.semanticFields||semanticFields(from)},lastUpdate:{processed:0,updated:0}});
+    if(previous.build?.uid)await retireSearchIndexes(shop,[previous.build.uid]);
+    return;
+   }
+  }
   await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'queued',requested,build:null,update,error:null,processed:update.processed,total:null});
   await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested,incremental:true},'search-patch-'+hash([shop,requested,update.offset,update.cursor]));
   if(previous.build?.uid)await retireSearchIndexes(shop,[previous.build.uid]);
@@ -125,7 +136,7 @@ export async function getSearchIndexContext(shop){
   const desired=validateSearchSettings(row.config),active=stateOf(row).active;
   const synonymRules=await prisma.synonym.findMany({where:{shop,isActive:true},select:{word:true,synonyms:true}});
   // A partial build never replaces a complete serving index.
-  if(active?.uid&&active.config){const prepared=validateSearchSettings(stateOf(row).update?.applied?desired:active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},layout:desired.instantLayout,custom:true,revision,synonymRules};}
+  if(active?.uid&&active.config){const update=stateOf(row).update,prepared=validateSearchSettings(update?.applied?desired:active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},queryRanking:update?.applied?update.queryRanking:active.queryRanking,semanticDisabled:JSON.stringify(active.semanticFields||semanticFields(active.config))!==JSON.stringify(semanticFields(prepared)),layout:desired.instantLayout,custom:true,revision,synonymRules};}
   return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,layout:desired.instantLayout,custom:false,revision,synonymRules};
  },15);
 }
@@ -143,7 +154,8 @@ export async function prepareConfiguredSearchQueries(queries){
   const shop=searchQueryShop(query),context=shop&&(query.q?.trim()||query._cfpSearchSurface)?await contexts.get(shop):null;
   let next=context?.custom?configuredSearchOptions(query,context.settings):{...query,...(context?.settings?{matchingStrategy:context.settings.broadMatch?'last':'all'}:{})};
   if(context?.custom&&context.settings.smartSkuSearch&&isProductCodeQuery(query.q)&&enabledSearchFields(context.settings).some(f=>f.key==='sku'))next={...next,q:String(query.q).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,''),attributesToSearchOn:['cfpSkuNormalized'],_cfpSmartSku:true};
-  if(context?.settings?.broadMatch===false||context?.custom&&!enabledSearchFields(context.settings).length)next={...next,_cfpSemanticDisabled:true};
+  if(context?.queryRanking&&!next._cfpSmartSku&&query.q?.trim())next={...next,_cfpFieldWeights:enabledSearchFields(context.settings).map(field=>({attribute:searchFieldName(field.index),weight:field.weight}))};
+  if(context?.semanticDisabled||context?.settings?.broadMatch===false||context?.custom&&!enabledSearchFields(context.settings).length)next={...next,_cfpSemanticDisabled:true};
   const alternatives=new Set();
   if(!next._cfpSmartSku&&query.q?.trim())for(const rule of context?.synonymRules||[]){
    const terms=[rule.word,...rule.synonyms.split(',')].map(t=>t.trim().toLowerCase()).filter(Boolean);
@@ -200,10 +212,14 @@ export function searchRuleCandidates(before,after){
  const separators=[...new Set([a.delimiter,b.delimiter,...(a.delimiters||[]),...(b.delimiters||[])].filter(Boolean))];
  return separators.length?{OR:separators.map(contains=>({title:{contains}}))}:null;
 }
-const projectionSignature=config=>JSON.stringify({fields:config.fields.map(f=>({...f,weight:f.weight>0?1:0})),tentativeDelimiters:config.tentativeDelimiters,hideUnavailableVariants:config.hideUnavailableVariants,productDateType:config.productDateType});
+const projectionSignature=config=>JSON.stringify({fields:config.fields.map(({weight,search,suggest,...field})=>field),tentativeDelimiters:config.tentativeDelimiters,hideUnavailableVariants:config.hideUnavailableVariants,productDateType:config.productDateType});
+const queryPolicySignature=config=>JSON.stringify({...searchIndexConfiguration(config),fields:config.fields.map(({weight,search,suggest,...field})=>field)});
+const fieldPolicy=config=>JSON.stringify(config.fields.map(({key,weight,search,suggest})=>({key,weight,search,suggest})));
+const semanticFields=config=>config.fields.filter(field=>field.search&&field.weight>0).map(field=>field.key).sort();
+const semanticText=(document,config,scope)=>config.fields.flatMap((field,index)=>scope.includes(field.key)?[field.label+': '+(document[searchFieldName(index)]||[]).join(', ')]:[]).join('. ').slice(0,12000);
 const fieldInputs=field=>JSON.stringify([field.key,field.numeric,field.delimiter,field.delimiters||[],field.transforms,field.indexTransforms]);
 const changesField=(field,old,before,config)=>!old||fieldInputs(field)!==fieldInputs(old)||JSON.stringify(before.tentativeDelimiters)!==JSON.stringify(config.tentativeDelimiters)||before.hideUnavailableVariants!==config.hideUnavailableVariants&&/^(sku|barcode|option:|variantMetafield:)/.test(field.key);
-export function searchRulePatch(source,current,config,before,forceFields=[]){
+export function searchRulePatch(source,current,config,before,forceFields=[],embeddingFields=semanticFields(config)){
  const projected=projectConfiguredSearchDocument(source,config),patch={id:source.id};
  if(before){
   for(const [index,field] of config.fields.entries()){
@@ -211,7 +227,7 @@ export function searchRulePatch(source,current,config,before,forceFields=[]){
    if(!forceFields.includes(field.key)&&!changesField(field,old,before,config)&&Object.hasOwn(current,searchFieldName(oldIndex)))projected[searchFieldName(index)]=current[searchFieldName(oldIndex)];
   }
   for(const key of Object.keys(projected))if(key.startsWith('cfp_field_')&&!config.fields.some((_field,index)=>key===searchFieldName(index)))delete projected[key];
-  projected.cfpSemanticText=config.fields.flatMap((field,index)=>field.search&&field.weight>0?[field.label+': '+(projected[searchFieldName(index)]||[]).join(', ')]:[]).join('. ').slice(0,12000);
+  projected.cfpSemanticText=semanticText(projected,config,embeddingFields);
   if(config.productDateType===before.productDateType)projected.createdAt=current.createdAt;
   if(config.hideUnavailableVariants===before.hideUnavailableVariants&&Object.hasOwn(current,'cfpSkuNormalized'))projected.cfpSkuNormalized=current.cfpSkuNormalized;
  }
@@ -228,10 +244,14 @@ async function processSearchRuleUpdate(shop,requested,row){
    // Settings changes reuse the existing documents. Collection requests continue
    // using the shared index; this changes only this shop's private search index.
    const desired=await indexSettings(config),existing=await index.getSettings();
+   // Query restrictions and weighted federation use already searchable values.
+   // Removing/reordering fields must not rewrite the physical index on a save.
+   // Newly enabled fields still require indexing if they were never searchable.
+   if(Array.isArray(existing.searchableAttributes))desired.searchableAttributes=existing.searchableAttributes.includes('*')?existing.searchableAttributes:[...existing.searchableAttributes,...desired.searchableAttributes.filter(field=>!existing.searchableAttributes.includes(field))];
    const ruleSettings=new Set(['searchableAttributes','stopWords','separatorTokens','nonSeparatorTokens','typoTolerance']);
    const changes=Object.fromEntries(Object.entries(desired).filter(([key,value])=>ruleSettings.has(key)&&JSON.stringify(value)!==JSON.stringify(existing[key])));
    if(Object.keys(changes).length)await wait(await index.updateSettings(changes));
-   const applied=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,update:{...current.update,applied:true},phase:'building'});
+   const applied=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,update:{...current.update,applied:true,queryRanking:!!current.active.queryRanking||fieldPolicy(before)!==fieldPolicy(config)},phase:'building'});
    if(!applied)return {superseded:true};
   }
   const needsDocuments=update.forceScan||projectionSignature(before)!==projectionSignature(config);
@@ -281,7 +301,7 @@ async function processSearchRuleUpdate(shop,requested,row){
      if(field.key.startsWith('variantMetafield:')&&!before.fields.some(f=>f.key===field.key))throw Error('Variant metafield is not available in saved search data');
      if(field.key.startsWith('productMetafield:')&&field.key!=='productMetafield:*'&&!Object.hasOwn(source,'metafield_'+field.key.slice(17)))throw Error('Metafield is not available in saved search data');
     }
-    return searchRulePatch(source,saved,config,before,update.forceFields);
+    return searchRulePatch(source,saved,config,before,update.forceFields,state.active.semanticFields||semanticFields(before));
    }).filter(Boolean);
    if(patches.length){
     // A newer save can supersede this batch while reads are in flight.
@@ -291,7 +311,7 @@ async function processSearchRuleUpdate(shop,requested,row){
    }
   }
   if((await redis.get(sourceRevisionKey(shop))||'0')!==sourceRevision){complete=false;offset=0;cursor=null;}
-  const next=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,phase:complete?'ready':'building',processed:offset,total,error:null,updatedAt:Date.now(),update:complete?null:{...current.update,sourceRevision,offset,cursor,processed:offset,updated:(current.update.updated||0)+changed},...(complete?{active:{uid,hash:requested,config},lastUpdate:{processed:offset,updated:(current.update.updated||0)+changed}}:{})});
+  const next=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,phase:complete?'ready':'building',processed:offset,total,error:null,updatedAt:Date.now(),update:complete?null:{...current.update,sourceRevision,offset,cursor,processed:offset,updated:(current.update.updated||0)+changed},...(complete?{active:{...current.active,uid,hash:requested,config,queryRanking:current.update.queryRanking,semanticFields:current.active.semanticFields||semanticFields(before)},lastUpdate:{processed:offset,updated:(current.update.updated||0)+changed}}:{})});
   if(!next)return {superseded:true};
   if(!complete)await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested,incremental:true},'search-patch-'+hash([shop,requested,offset,cursor,randomUUID()]));
   return {complete,processed:offset,updated:changed,total,incremental:true};
@@ -363,7 +383,7 @@ async function updateSearchIndexProducts(shop,ids,row){
  const docs=base.results.filter(p=>p.shop===shop&&p.status==='ACTIVE'),found=new Set(docs.map(p=>String(p.id)));
  for(const target of targets){
   const index=client.index(target.uid),config=validateSearchSettings(target.config),enriched=await enrich(shop,docs,config);
-  if(enriched.length)await wait(await index.addDocuments(await withHeldEmbeddingsForIndex(index,enriched.map(p=>projectConfiguredSearchDocument(p,config)))));
+  if(enriched.length)await wait(await index.addDocuments(await withHeldEmbeddingsForIndex(index,enriched.map(p=>{const projected=projectConfiguredSearchDocument(p,config);if(target.semanticFields)projected.cfpSemanticText=semanticText(projected,config,target.semanticFields);return projected;}))));
   const removed=ids.filter(id=>!found.has(id));if(removed.length)await wait(await index.deleteDocuments(removed));
  }
  await redis.incr(revisionKey(shop));return {updated:docs.length};

@@ -86,10 +86,10 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,upsert:async({where,create})=>{if(!rows.has(where.shop))rows.set(where.shop,{...create,updatedAt:++clock});return rows.get(where.shop);},updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async({distinct}={})=>distinct?activeSynonym?[{shop}]:[]:activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
  prisma.product={findMany:async({where,take})=>catalog.filter(p=>p.shop===where.shop&&(!where.id||p.id>where.id.gt)&&where.OR.some(clause=>p.title.includes(clause.title.contains))).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,take).map(p=>({id:p.id})),count:async({where})=>catalog.filter(p=>p.shop===where.shop&&where.OR.some(clause=>p.title.includes(clause.title.contains))).length};
- let sharedSynonyms={gown:['dress']},sharedFields=['shop','status','id'];
+ let sharedSynonyms={gown:['dress']},sharedFields=['shop','status','id'];const savedSettings=new Map();
  const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{cause:{code:'index_not_found'}});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{getTask:async()=>({status:'succeeded'}),waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
-  getSettings:async()=>({filterableAttributes:uid==='products'?sharedFields:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
-  updateSettings:async value=>{assert.deepEqual(Object.keys(value.typoTolerance).filter(key=>!['enabled','minWordSizeForTypos','disableOnWords','disableOnAttributes'].includes(key)),[]);calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
+  getSettings:async()=>({filterableAttributes:uid==='products'?sharedFields:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness'],...savedSettings.get(uid)}),
+  updateSettings:async value=>{assert.deepEqual(Object.keys(value.typoTolerance||{}).filter(key=>!['enabled','minWordSizeForTypos','disableOnWords','disableOnAttributes'].includes(key)),[]);calls.push(['settings',uid,value]);savedSettings.set(uid,{...savedSettings.get(uid),...plain(value)});return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
   deleteAllDocuments:async()=>{indexes.get(uid).clear();calls.push(['clear',uid]);return queued();},
   addDocuments:async docs=>{for(const p of docs)indexes.get(uid).set(String(p.id),plain(p));return queued();},
   updateDocuments:async docs=>{calls.push(['patch',uid,plain(docs)]);for(const p of docs)indexes.get(uid).set(String(p.id),{...indexes.get(uid).get(String(p.id)),...plain(p)});return queued();},
@@ -258,6 +258,50 @@ test('removing separators restores old search values and retries do not start a 
  assert.deepEqual(f.indexes.get(active).get('1').cfp_field_000,['Blue, Evening']);
  const writes=f.calls.filter(c=>c[0]==='patch').length;
  await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();assert.equal(f.calls.filter(c=>c[0]==='patch').length,writes);
+});
+
+test('zero title weight and reversed priorities activate even when engine writes cannot complete',async()=>{
+ const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();
+ const uid=f.rows.get(shop).config._index.active.uid;
+ for(const weights of [{title:0,handle:1},{title:.2,handle:1},{title:1,handle:.1}]){
+  const checkpoint=f.calls.length;
+  f.rows.get(shop).config.fields=fields(Object.fromEntries(Object.entries(weights).map(([key,weight])=>[key,{weight}])));
+  await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});f.fail();await f.drain();
+  const state=f.rows.get(shop).config._index;assert.equal(state.phase,'ready');assert.equal(state.active.uid,uid);
+  assert.deepEqual(plain(state.lastUpdate),{processed:0,updated:0});
+  assert.equal(f.calls.slice(checkpoint).some(c=>['settings','patch','clear','read-fields','wait'].includes(c[0])),false);
+  const [query]=await f.service.prepareConfiguredSearchQueries([{q:'godet',filter:[`shop = "${shop}"`]}]);
+  assert.equal(query.attributesToSearchOn.includes('cfp_field_000'),weights.title>0);
+  assert.equal(query._cfpFieldWeights.find(field=>field.attribute==='cfp_field_001').weight,weights.handle);
+  assert.equal(!!query._cfpSemanticDisabled,weights.title===0,'disabled fields cannot leak through stale semantic text');
+ }
+ const collection=await f.service.prepareConfiguredSearchQueries([{q:'',filter:[`shop = "${shop}"`]}]);
+ assert.equal(collection[0].indexUid,'products');assert.equal(collection[0]._cfpFieldWeights,undefined);
+});
+
+test('superseding a failed weight save does not schedule a catalog comparison',async()=>{
+ const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();
+ const before=plain(f.rows.get(shop).config);f.rows.get(shop).config.fields=fields({title:{weight:0},handle:{weight:1}});
+ f.rows.get(shop).config._index.update={hash:'failed-weight-save',from:before,config:plain(f.rows.get(shop).config),forceFields:[],forceScan:false,offset:0,cursor:null};
+ const stale={data:{shop,hash:'failed-weight-save',incremental:true}};
+ f.rows.get(shop).config.fields=fields({title:{weight:.2},handle:{weight:1}});
+ const checkpoint=f.calls.length;await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ assert.equal(f.rows.get(shop).config._index.update,null);assert.equal(f.rows.get(shop).config._index.phase,'ready');
+ assert.equal((await f.service.processSearchIndexJob(stale.data)).superseded,true);await f.drain();
+ assert.equal(f.calls.slice(checkpoint).some(c=>['read-fields','patch','settings'].includes(c[0])),false);
+});
+
+test('product deltas retain the saved semantic scope across disabling and restoring title search',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Original title'}],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const uid=f.rows.get(shop).config._index.active.uid;
+ f.rows.get(shop).config.fields=fields({title:{weight:0}});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ f.catalog[0].title='Changed title';await f.service.scheduleSearchIndexProducts(shop,['1'],7);await f.drain();
+ assert.ok(f.indexes.get(uid).get('1').cfpSemanticText.includes('Changed title'));
+ const scope={q:'changed',filter:[`shop = "${shop}"`]};
+ assert.equal((await f.service.prepareConfiguredSearchQueries([scope]))[0]._cfpSemanticDisabled,true);
+ f.rows.get(shop).config.fields=fields({});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ assert.equal((await f.service.prepareConfiguredSearchQueries([scope]))[0]._cfpSemanticDisabled,undefined);
+ assert.equal(f.rows.get(shop).config._index.phase,'ready');
 });
 
 test('rule saves never bootstrap an absent private index with a full rebuild',async()=>{

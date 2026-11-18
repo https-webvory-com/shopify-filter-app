@@ -45,7 +45,31 @@ async function countSynonymUnion(indexUid, texts, scope) {
 
 // Engine multiword synonyms require a phrase match. Explicit query branches
 // also find terms in separate attributes (e.g. White color + Dress title).
-async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
+async function runQuery({indexUid='products',q,_cfpSynonymQueries,_cfpFieldWeights,...options}) {
+  if(_cfpFieldWeights?.length&&!options.sort?.length){
+    const base={indexUid,q,_cfpSynonymQueries,...options};
+    // Counts and facets come from the complete query, not the sum of overlapping
+    // field branches. Count-only tier queries never execute weighted searches.
+    if(Array.isArray(options.attributesToRetrieve)&&!options.attributesToRetrieve.length)return runQuery(base);
+    const {page,hitsPerPage,offset=0,limit=20,facets,hybrid,vector,...params}=options;
+    const start=page!=null||hitsPerPage!=null?Math.max(0,(page??1)-1)*(hitsPerPage??20):offset;
+    const take=page!=null||hitsPerPage!=null?(hitsPerPage??20):limit;
+    const groups=new Map();
+    for(const {attribute,weight} of _cfpFieldWeights){if(!groups.has(weight))groups.set(weight,[]);groups.get(weight).push(attribute);}
+    const floor=Math.min(...groups.keys())/2;
+    const branches=[{...params,...(hybrid?{hybrid}:{}),...(vector?{vector}:{}),federationOptions:{weight:floor}},
+      ...[...groups].map(([weight,attributesToSearchOn])=>({...params,attributesToSearchOn,federationOptions:{weight}}))];
+    const texts=[...new Set([q,...(_cfpSynonymQueries||[])])];
+    const [count,ranked]=await Promise.all([
+      runQuery({...base,page:1,hitsPerPage:1,attributesToRetrieve:[],attributesToHighlight:[]}),
+      meiliClient.multiSearch({queries:branches.flatMap(branch=>texts.map(text=>({indexUid,q:text,...branch}))),federation:{offset:start,limit:take}}),
+    ]);
+    const {page:_page,hitsPerPage:_size,totalPages:_pages,totalHits,estimatedTotalHits,...metadata}=count;
+    const total=totalHits??estimatedTotalHits;
+    return {...metadata,...ranked,query:q,...(page!=null||hitsPerPage!=null?{page:page??1,hitsPerPage:take,totalHits:total,totalPages:take?Math.ceil(total/take):0}:{offset:start,limit:take,estimatedTotalHits:total}),
+      ...(count.facetDistribution?{facetDistribution:count.facetDistribution}:{}),...(count.facetStats?{facetStats:count.facetStats}:{}),
+      hits:ranked.hits.map(({_federation,...hit})=>hit)};
+  }
   if(!_cfpSynonymQueries?.length)return meiliClient.index(indexUid).search(q,options);
   // Older engines lack federated page/count parameters. Count the deduplicated
   // union through offset pages instead of passing unsupported parameters.
@@ -78,7 +102,7 @@ async function runQuery({indexUid='products',q,_cfpSynonymQueries,...options}) {
   return {...result,query:q,hits:result.hits.map(({_federation,...hit})=>hit)};
 }
 async function runBatch(queries){
-  if(!queries.some(q=>q._cfpSynonymQueries?.length))return meiliClient.multiSearch({queries});
+  if(!queries.some(q=>q._cfpSynonymQueries?.length||q._cfpFieldWeights))return meiliClient.multiSearch({queries});
   return {results:await Promise.all(queries.map(runQuery))};
 }
 

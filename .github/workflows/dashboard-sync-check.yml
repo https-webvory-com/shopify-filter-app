@@ -38,7 +38,7 @@ jobs:
             const clean=value=>String(value||'').replace(/https?:\/\/\S+/g,'[url]').slice(0,1800);
             try {
               const row=await db.searchSetting.findUnique({where:{shop}}),state=row?.config?._index||{};
-              console.log('SEARCH_RULE_STATE',JSON.stringify({phase:state.phase,processed:state.processed,total:state.total,error:state.error,active:state.active?.uid,build:state.build?.uid,incremental:!!state.update,updated:state.update?.updated,lastUpdate:state.lastUpdate}));
+              console.log('SEARCH_RULE_STATE',JSON.stringify({phase:state.phase,processed:state.processed,total:state.total,error:state.error,active:state.active?.uid,build:state.build?.uid,incremental:!!state.update,updated:state.update?.updated,lastUpdate:state.lastUpdate,queryRanking:state.active?.queryRanking,activeWeights:state.active?.config?.fields?.filter(field=>['title','handle'].includes(field.key)).map(({key,weight})=>({key,weight}))}));
               const jobs=await queue.getJobs(['active','failed','delayed','prioritized'],0,60);
               for(const job of jobs)if(job.data.shop===shop&&(job.data.incremental||job.data.retireUid))console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),retireUid:job.data.retireUid,incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
               const prefix=state.active?.uid?.slice(0,28);
