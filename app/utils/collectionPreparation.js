@@ -15,7 +15,7 @@ export const publicPreparationLimit = 40;
 export const publicRetentionLimit = 2048;
 export const publicRetentionBytes = 64 * 1024 * 1024;
 export const warmupRegistryLifetime = 7 * 86400;
-const warmupParameters = new Set(['shop','locale','language','country','collectionHandle','collectionId','sortBy','page','limit','responseProfile']);
+const warmupParameters = new Set(['shop','locale','language','country','collectionHandle','collectionId','sortBy','page','limit','responseProfile','priceSortVersion','priceSortRate']);
 export function normalizeCollectionWarmup(shop, requestUrl, collectionId) {
   let url;try {url=new URL(requestUrl);} catch {return null;}
   const keys=[...url.searchParams.keys()];

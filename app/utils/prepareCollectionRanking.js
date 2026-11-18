@@ -1,20 +1,39 @@
 import { buildCollectionSequence, collectionRankingFields, hydrateCollectionPrices, hydrateCollectionInventory, hydrateCollectionSkus } from './rankedCollectionPage.js';
 import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFacts.js';
+import {priceSortVariant} from './savedMarketPricing.js';
+import {savedVariantPriceSelections} from './availableVariants.js';
 
 export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
   const sortSettings=spec.globalSettings;
   const missingMarketPriceIds = new Set();
+  const selections=new Map(),ineligible=new Set();
+  let savedSelections=null;
+  if(spec.variantPriceSort&&typeof prisma?.$queryRaw==='function'){
+    const {indexUid,q,...options}=spec.query;
+    const candidates=await index.search(q||'',{...options,offset:0,limit:100000,attributesToRetrieve:['id']});
+    const ids=(candidates.hits||[]).map(product=>String(product.id).split('/').pop());
+    if(ids.length!==(candidates.totalHits??candidates.estimatedTotalHits??ids.length)||new Set(ids).size!==ids.length)throw Error('Incomplete saved-price ranking candidates');
+    savedSelections=await savedVariantPriceSelections(prisma,{shop:spec.shop,ids:[...new Set([...ids,...(spec.pinnedIds||[]).map(id=>String(id).split('/').pop())])],context:spec.variantPriceSort});
+  }
   const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;
   let sourceOutsideIds=native?[]:null;
   const resolveFact=factProfile?collectionFactResolver(spec.rule,factProfile,spec.mergedValues):null;
   if(factProfile&&!resolveFact)throw Error('Collection rule facts do not cover this rule');
-  const projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD,
+  let projectedFields=factProfile?[...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)).filter(field=>!['variantPrices','options','images'].includes(field)),COLLECTION_SOURCE_FIELD,
     'cfpCollectionFactProfile','cfpCollectionFactSource','cfpCollectionFactMatches','cfpCollectionFactImages',
     ...(spec.priceSortField?[spec.priceSortField]:[])])]:spec.priceSortField
       ? [...new Set([...collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds)),spec.priceSortField])]
       : undefined;
+  if(spec.variantPriceSort&&!savedSelections)projectedFields=[...new Set([...(projectedFields||collectionRankingFields(spec.rule?.conditions||[],spec.sortBy,Array.isArray(spec.orderedIds))),'variantPrices','options'])];
   const withSortPrice=product=>{
+    if(spec.variantPriceSort){
+      if(!savedSelections&&!Array.isArray(product.variantPrices)&&!Array.isArray(product.variants))return product;
+      const key=String(product.id).split('/').pop(),selected=savedSelections?savedSelections.get(key):priceSortVariant(product,spec.variantPriceSort);
+      if(selected){selections.set(key,selected);missingMarketPriceIds.delete(key);ineligible.delete(key);return {...product,priceMin:selected.price};}
+      if(savedSelections||product.variantPrices?.length)ineligible.add(key);else missingMarketPriceIds.add(key);
+      return product;
+    }
     const price=Number(product[spec.priceSortField]);
     if(product[spec.priceSortField]==null||product[spec.priceSortField]===''||!Number.isFinite(price)||price<0){
       if(!spec.allowIncompleteMarketPrice)throw Error('Incomplete market price sort index');
@@ -78,9 +97,13 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     arrange: products => {
       const ranked = arrange(products, spec.rule, spec.sortBy, spec.pinningRule, spec.mergedValues,
         { ...sortSettings, preserveCollectionBestSellingOrder: spec.needsShopifyOrder });
-      for (const p of ranked) if (p.merchandisingScore || p.merchandisingImage) metadata[p.id.split('/').pop()] = {
-        merchandisingScore: p.merchandisingScore, merchandisingImage: p.merchandisingImage,
-      };
+      for (const p of ranked){
+        const key=p.id.split('/').pop(),selection=selections.get(key);
+        if(p.merchandisingScore||p.merchandisingImage||selection)metadata[key]={
+          merchandisingScore:p.merchandisingScore,merchandisingImage:p.merchandisingImage,
+          ...(selection?{priceSortSelection:selection}:{}),
+        };
+      }
       return ranked;
     },
   });
@@ -89,5 +112,5 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
   const orderedIds=spec.allowIncompleteMarketPrice
     ? [...ids.filter(id=>!missingMarketPriceIds.has(id)),...ids.filter(id=>missingMarketPriceIds.has(id))]
     : ids;
-  return { ids:orderedIds, metadata, ...(captureReuse?{sourceOutsideIds}:{}) };
+  return { ids:orderedIds.filter(id=>!ineligible.has(id)), metadata, ...(captureReuse?{sourceOutsideIds}:{}) };
 }

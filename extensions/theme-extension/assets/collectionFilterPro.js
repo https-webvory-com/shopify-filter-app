@@ -838,6 +838,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       const country=window.Shopify?.country||window.cfpCollectionContext?.country;
       if(country)queryParams.append('country',country);
+      if(templateName!=='search'&&['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)&&window.cfpPriceSortVersion!==1){
+        queryParams.set('priceSortVersion','2');
+        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
+      }
 
       if (window.cfpCustomerTags) {
         queryParams.append('customer_tags', window.cfpCustomerTags);
@@ -1467,7 +1471,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   window.addEventListener('load',syncWishlistProducts,{once:true});
 
   let marketRenderVersion = 0;
-  function priceSortedVariant(variants) {
+  function priceSortedVariant(variants,selection) {
+    if(selection?.version===2&&selection.country===window.Shopify?.country){
+      return (variants||[]).find(v=>String(v.id).split('/').pop()===String(selection.variantId))||null;
+    }
     const direction = ['price-ascending','price-asc'].includes(activeFilters.sortBy) ? 1 :
       ['price-descending','price-desc'].includes(activeFilters.sortBy) ? -1 : 0;
     if (!direction) return null;
@@ -1506,8 +1513,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       }
     }
     if (!card.dataset.cfpUserSelectedVariant &&
-        Object.values(activeFilters.options || {}).every(values => !values?.length)) {
-      const sorted = priceSortedVariant(product.variants);
+        (product.priceSortSelection?.version===2||Object.values(activeFilters.options || {}).every(values => !values?.length))) {
+      const sorted = priceSortedVariant(product.variants,product.priceSortSelection);
       const sortedId = sorted && String(sorted.id).split('/').pop();
       if (sortedId && sortedId !== selected) {
         selected = sortedId;
@@ -1760,6 +1767,10 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
           }
         }
 
+        if(product.priceSortSelection?.version===2){
+            const selected=priceSortedVariant(product.variants,product.priceSortSelection);
+            if(selected){matchedVariant=selected;matchedVariantId=String(selected.id).split('/').pop();variantImg=selected.imageUrl||null;}
+        }
         if ((!matchedVariant || product.searchColor) && product.selectedVariantId && product.variants) {
             const selectedId = String(product.selectedVariantId).split('/').pop();
             matchedVariant = product.variants.find(v => String(v.id).split('/').pop() === selectedId) || null;
@@ -1770,7 +1781,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         }
 
         if (Object.values(activeFilters.options || {}).every(values => !values?.length)) {
-            const sorted = priceSortedVariant(product.variants);
+            const sorted = priceSortedVariant(product.variants,product.priceSortSelection);
             if (sorted) {
                 matchedVariant = sorted;
                 matchedVariantId = String(sorted.id).split('/').pop();
@@ -1781,7 +1792,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         // Explicit price sort selects the available variant that determines the
         // card's position. Otherwise retain the first available default.
         if (!matchedVariantId && product.variants && product.variants.length > 0) {
-            const firstAvailable = priceSortedVariant(product.variants) || product.variants.find(v => v.available === true);
+            const firstAvailable = priceSortedVariant(product.variants,product.priceSortSelection) || product.variants.find(v => v.available === true);
             if (firstAvailable) {
                 matchedVariant = firstAvailable;
                 matchedVariantId = firstAvailable.id ? firstAvailable.id.toString().replace(/gid:\/\/shopify\/ProductVariant\//g, '') : null;

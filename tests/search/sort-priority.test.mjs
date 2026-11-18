@@ -41,7 +41,7 @@ async function loadModule(file, mocks) {
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
-    if (name === '../services/marketPriceCoverage.server.js') return {marketPriceIntentReady:async()=>false};
+    if (name === '../services/marketPriceCoverage.server.js') return mocks[name]||{marketPriceIntentReady:async()=>false};
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};
     if (name in mocks) return mocks[name];
@@ -72,6 +72,11 @@ async function collectionRoute(settings) {
     images: ["black.jpg"], options: [{ name: "Color", values: ["Black"] }], available:true, priceMin: i + 1, priceMax: i + 1,
     variantPrices: [{ id: String(i + 1) + "01", option1: "Black", available: true, price: i + 1, imageUrl: "black.jpg" }],
   }));
+  if(settings.nativeMarketPrices)for(const doc of docs){
+    const price=settings.nativeMarketPrices[doc.id]??Number(doc.id);
+    doc.marketPriceMin_IN=price;doc.marketAvailablePriceMin_IN=price;
+    doc.variantPrices[0].marketPrices={IN:{price,currency:'INR'}};
+  }
   const byId = new Map(docs.map(p => [p.id, p]));
   const matching = filter => {
     const text = JSON.stringify(filter);
@@ -82,7 +87,8 @@ async function collectionRoute(settings) {
   const select = options => {
     const products = matching(options.filter).map(p => ({ ...p }));
     const sort = options.sort?.[0];
-    products.sort((a,b) => sort === "priceMin:asc" ? a.priceMin-b.priceMin :
+    const marketSort=sort?.match(/^(market(?:Available)?PriceMin_IN):(asc|desc)$/);
+    products.sort((a,b) => marketSort ? (a[marketSort[1]]-b[marketSort[1]])*(marketSort[2]==='asc'?1:-1) : sort === "priceMin:asc" ? a.priceMin-b.priceMin :
       sort === "title:asc" ? a.title.localeCompare(b.title) :
       sort === "title:desc" ? b.title.localeCompare(a.title) :
       sort === "createdAt:asc" ? a.createdAt-b.createdAt : b.bestSellingScore-a.bestSellingScore);
@@ -93,7 +99,7 @@ async function collectionRoute(settings) {
   const meili = { index: () => index, multiSearch: async ({ queries }) => { settings.captureQueries?.push(...queries); return { results: queries.map(select) }; } };
   const service = await loadModule("app/services/merchandising.server.js", {});
   const pins = { products: (settings.pinIds||["1", "175"]).map(id => ({ id: "gid://shopify/Product/" + id })) };
-  const rule = settings.rule || { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
+  const rule = settings.noRule?null:settings.rule || { conditions: [{ action: "Boost", field: "Tags", value: "TopFormal", operator: "contains" }] };
   const cache = new Map();
   const route = await loadModule("app/routes/api.filter.jsx", {
     testParsedQuery: settings.testParsedQuery,
@@ -103,6 +109,7 @@ async function collectionRoute(settings) {
     "../services/filterSettings.server": {},
     "../services/meiliClient.server": { __esModule: true, default: meili },
     "../services/semanticSearch.server": { semanticMultiSearch: queries => meili.multiSearch({ queries }) },
+    ...(settings.nativeMarketPrices?{'../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>true}}:{}),
     ...(settings.pendingPreparation?{"../services/collectionPreparation.server.js":{
       getCollectionPreparationRevision:async()=> '1',registerCollectionWarmup:async()=>{},getPreparedCollectionRanking:async()=>({status:'pending'}),
       getCollectionHeadVersion:async()=> 'a'.repeat(64),rememberCollectionHead:async()=>true,
@@ -188,6 +195,27 @@ test('title sort pages directly when both priorities override ordering-only rule
   assert.equal(new Set(names).size,50);
   assert.deepEqual(names,[...names].sort((a,b)=>a.localeCompare(b)));
   assert.ok(captureQueries.some(query=>query.sort?.[0]==='title:asc'&&query.limit===25));
+});
+
+test('sorting priority preserves native country order when no merchandising rule applies',async()=>{
+  const load=await collectionRoute({prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,noRule:true,
+    nativeMarketPrices:{'1':341000,'2':320200}});
+  for(const profile of ['collection-v1','fast-cards-v1']){
+    const result=await load('page=1&sortBy=price-descending&country=IN&responseProfile='+profile);
+    assert.deepEqual(Array.from(result.products.slice(0,2),p=>p.id),['gid://shopify/Product/1','gid://shopify/Product/2']);
+    assert.equal(result.products[0].variants[0].price,341000);
+    assert.equal(result.products[1].variants[0].price,320200);
+  }
+});
+
+test('legacy US price requests never construct a null sort field when country fields are available',async()=>{
+ const captureQueries=[];
+ const load=await collectionRoute({shop:'thedressoutlet.myshopify.com',prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,nativeMarketPrices:{},captureQueries});
+ for(const sortBy of ['price-ascending','price-descending']){
+  const result=await load('page=1&country=US&sortBy='+sortBy);
+  assert.equal(result.products.length,25);assert.equal(result.priceSortSource,'saved-usd-base');
+ }
+ assert.ok(captureQueries.length>0);assert.ok(captureQueries.every(query=>(query.sort||[]).every(sort=>!sort.startsWith('null:'))));
 });
 
 test('exact stock and ID exclusions retain pin protection in direct title sort',async()=>{

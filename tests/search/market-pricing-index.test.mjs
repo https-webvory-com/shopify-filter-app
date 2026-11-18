@@ -48,6 +48,8 @@ test('market price sorting uses the cheapest available variant while retaining t
   assert.equal(projected.marketPriceMin_IN,2000);
   assert.equal(projected.marketAvailablePriceMin_IN,2400);
   assert.equal(projected.availablePriceMin,24);
+  assert.equal(projected.availablePriceMax,26);
+  assert.equal(projected.marketAvailablePriceMax_IN,2600);
 });
 
 test('base collection sort price ignores sold-out variants when a purchasable variant exists',()=>{

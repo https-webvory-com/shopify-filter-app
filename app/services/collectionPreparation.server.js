@@ -121,7 +121,7 @@ const preparation = createCollectionPreparation({ redis, queue: collectionRankin
   revalidateSaved:true,readPinReorderSource,verifyNewPins,
   observe:event=>{console.info('CFP: collection preparation',JSON.stringify({...event,at:Date.now()}));recordPreparationEvent(event).catch(()=>{});},
 });
-const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile']);
+const publicParameters = new Set(['shop', 'locale', 'language', 'country', 'collectionHandle', 'collectionId', 'sortBy', 'page', 'limit', 'responseProfile', 'priceSortVersion', 'priceSortRate']);
 
 export const getCollectionPreparationRevision = preparation.revision;
 export const getPreparedCollectionRanking = preparation.get;

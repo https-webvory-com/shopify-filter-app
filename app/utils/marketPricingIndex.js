@@ -79,8 +79,10 @@ export function productMarketPriceIndexFields(variants = []) {
   for (const country of countries) {
     if (!ranges[country]) continue;
     const available = variants.filter(variant => variant.available === true).map(variant => Number(variant.marketPrices?.[country]?.price));
-    if (available.length && available.every(price => Number.isFinite(price) && price >= 0))
+    if (available.length && available.every(price => Number.isFinite(price) && price >= 0)) {
       fields[`marketAvailablePriceMin_${country}`] = Math.min(...available);
+      fields[`marketAvailablePriceMax_${country}`] = Math.max(...available);
+    }
   }
   return fields;
 }

@@ -3,7 +3,7 @@ import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,sale
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import { spellingCorrection } from "../utils/spellingCorrection.js";
-import { availableProductIds, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
+import { availableProductIds, savedVariantPricePage, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -42,8 +42,8 @@ import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailabil
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
-import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
-import {savedMarketProduct} from '../utils/savedMarketPricing.js';
+import {marketPriceIntentReady,collectionPriceBoundReady} from '../services/marketPriceCoverage.server.js';
+import {savedMarketProduct,priceSortVariant} from '../utils/savedMarketPricing.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
@@ -541,13 +541,13 @@ export const loader = async ({ request, context }) => {
     const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&
       (userHasFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy))&&
       page===1&&limit<=40&&!context?.rankingWarmup;
-    const facetsOnly=url.searchParams.get('responseProfile')==='collection-facets-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
+    let facetsOnly=url.searchParams.get('responseProfile')==='collection-facets-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const variantEligibilityScope = resolvedCollectionId ? {collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}} : {};
     // Start the exact same-available-variant lookup while rule and market reads
     // proceed. A failure is carried to the original eligibility gate below.
-    const earlyVariantEligibility=hideUnavailable&&(fastCards||fastSearchCards)
+    const earlyVariantEligibility=hideUnavailable&&!(marketPriceSortRequested&&url.searchParams.get('priceSortVersion')==='2')&&(fastCards||fastSearchCards)
       ? getCached('availableVariants:' + shop + ':' + JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues]),
           () => availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...variantEligibilityScope},optionsFilters,mergedValues,null,{database:prisma}),30)
           .then(value=>({value}),error=>({error})) : null;
@@ -580,14 +580,20 @@ export const loader = async ({ request, context }) => {
 
     // ── 6. Build Meilisearch sort ──────────────────────────────────────
     const priceSortSelected=['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy);
+    const variantPriceV2=priceSortSelected&&!isSearch&&!searchQuery&&url.searchParams.get('priceSortVersion')==='2';
     // The previous version cached price sequences with a forced priority
     // override. A new identity prevents those 24-hour records from surviving
     // after the saved settings become authoritative.
     const exactPriceSortVersion=priceSortSelected&&shop==='thedressoutlet.myshopify.com'?3:null;
     const sortCountry=String(country||'').toUpperCase();
-    const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
-      ? await marketPriceIntentReady(shop,sortCountry,{stockOnly:globalSettings?.showOnlyInStock===true}):false;
-    const priceSortField=priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
+    const descendingPrice=['price-descending','price-desc'].includes(sortBy);
+    const priceSortRate=Number(url.searchParams.get('priceSortRate')||1);
+    if(variantPriceV2&&(!Number.isFinite(priceSortRate)||priceSortRate<=0||priceSortRate>1e9))return data({error:'Invalid price currency rate'},{status:400});
+    const nativeRanges=variantPriceV2?(selectedPriceRanges.length?selectedPriceRanges:(minPrice>0||maxPrice<9999999)?[{min:minPrice,max:maxPrice}]:[]).map(range=>({min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:null})):[];
+    const variantPriceContext=variantPriceV2?{version:2,country:sortCountry,currency:savedUsBasePrice?'USD':null,basePrice:savedUsBasePrice,stockOnly:globalSettings?.showOnlyInStock===true||availability.includes('in_stock')&&!availability.includes('out_of_stock'),direction:descendingPrice?'desc':'asc',ranges:nativeRanges,options:optionsFilters,mergedValues}:null;
+    const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&(variantPriceV2||!savedUsBasePrice)&&/^[A-Z]{2}$/.test(sortCountry)
+      ? await marketPriceIntentReady(shop,sortCountry,{stockOnly:variantPriceContext?.stockOnly??globalSettings?.showOnlyInStock===true,...(variantPriceV2?{maximum:descendingPrice,basePrice:savedUsBasePrice}:{})}):false;
+    const priceSortField=variantPriceV2?(savedUsBasePrice?`${variantPriceContext.stockOnly?'availablePrice':'price'}${descendingPrice?'Max':'Min'}`:`market${variantPriceContext.stockOnly?'Available':''}Price${descendingPrice?'Max':'Min'}_${sortCountry}`):priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? `market${globalSettings?.showOnlyInStock?'Available':''}PriceMin_${sortCountry}`:null;
     const partialMarketPriceSort=!!priceSortField&&!marketSortReady;
     let meiliSort = null;
@@ -610,11 +616,11 @@ export const loader = async ({ request, context }) => {
         break;
       case "price-ascending":
       case "price-asc":
-        meiliSort = [`${marketSortReady?priceSortField:'priceMin'}:asc`];
+        meiliSort = [`${marketSortReady&&priceSortField?priceSortField:'priceMin'}:asc`];
         break;
       case "price-descending":
       case "price-desc":
-        meiliSort = [`${marketSortReady?priceSortField:'priceMin'}:desc`];
+        meiliSort = [`${marketSortReady&&priceSortField?priceSortField:'priceMin'}:desc`];
         break;
       case "created-descending":
       case "created-desc":
@@ -678,7 +684,7 @@ export const loader = async ({ request, context }) => {
     const selectedPriceRange = minPrice > 0 || maxPrice < 9999999
       ? { min: Math.max(0, minPrice - 0.5), max: maxPrice + 0.5 } : null;
     const eligibilityStarted=Date.now();
-    if (hideUnavailable) {
+    if (hideUnavailable&&!variantPriceV2) {
       await getCached('variantEligibilityFilter:' + shop, async () => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
         return true;
@@ -701,7 +707,7 @@ export const loader = async ({ request, context }) => {
     const categoryFilters = {};
     for(const [type,values] of Object.entries(selectedExtra)) if(type!=='stock_status'&&values.length)categoryFilters['extra_'+type]=extraIdsFilter(extraRows,type,values);
     if (selectedSaleRanges.length) categoryFilters.percentSale = saleIdsFilter(saleRows,selectedSaleRanges);
-    if (minPrice > 0 || maxPrice < 9999999) {
+    if (!variantPriceV2&&(minPrice > 0 || maxPrice < 9999999)) {
       const bufferedMin = Math.max(0, minPrice - 0.5);
       const bufferedMax = maxPrice + 0.5;
       if (hideUnavailable) {
@@ -714,12 +720,22 @@ export const loader = async ({ request, context }) => {
         categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
       }
     }
-    if(selectedPriceRanges.length){
+    if(!variantPriceV2&&selectedPriceRanges.length){
       if(hideUnavailable){
         const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
         const ids=new Set();for(const range of selectedPriceRanges)for(const id of await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma}))ids.add(id);
         categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_available_variant_price__"';
       }else categoryFilters.priceMin='('+selectedPriceRanges.map(range=>`(priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''})`).join(' OR ')+')';
+    }
+    if(variantPriceV2&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length))){
+      const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+      const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
+      for(const range of ranges){
+        const normalized=range?{min:range.min,max:range.max??Infinity}:null;
+        const eligible=await getCached('availableVariants:'+shop+':sort-v2:'+JSON.stringify([scope,variantPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantPriceContext}),30);
+        for(const id of eligible)ids.add(id);
+      }
+      categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
     }
     variantEligibilityMs=Date.now()-eligibilityStarted;
     if (availability.length > 0 && needsExtraFacts) categoryFilters.available=extraIdsFilter(extraRows,'stock_status',availability);
@@ -780,13 +796,15 @@ export const loader = async ({ request, context }) => {
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
-    const directPrice=priceSortSelected&&(savedUsBasePrice||marketSortReady&&!!priceSortField);
+    const nativePriceBoundReady=variantPriceV2&&marketSortReady&&(!savedUsBasePrice||variantPriceContext.stockOnly)&&nativeRanges.length===0&&!Object.values(optionsFilters).some(values=>values.length)&&typeof collectionPriceBoundReady==='function'
+      ?await collectionPriceBoundReady(shop,priceSortField,baseFilters):false;
+    const directPrice=priceSortSelected&&(variantPriceV2?true:(savedUsBasePrice||marketSortReady&&!!priceSortField));
     const directOrder=directPrice||['title-ascending','title-asc','title-descending','title-desc',
       'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy);
     const directExclusions=directOrder&&sortOverPinning&&sortOverMerchandising
       ?directSortExclusions(activeRule,pinnedIds):null;
     let availableProof=true;
-    if(directExclusions?.some(filter=>filter.includes('available = false')))try{
+    if(!variantPriceV2&&directExclusions?.some(filter=>filter.includes('available = false')))try{
       availableProof=await getCached(`directSortAvailableProof:${shop}`,async()=>{
         const result=await meiliClient.index('products').search('',{
           filter:[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'",'(available NOT EXISTS OR available IS NULL)'],
@@ -796,7 +814,7 @@ export const loader = async ({ request, context }) => {
       },60);
     }catch{availableProof=false;}
     let basePriceProof=true;
-    if(directExclusions!==null&&directPrice&&savedUsBasePrice)try{
+    if(!variantPriceV2&&directExclusions!==null&&directPrice&&savedUsBasePrice)try{
       basePriceProof=await getCached(`directSortBasePriceProof:${shop}`,async()=>{
         const result=await meiliClient.index('products').search('',{
           filter:[`shop = ${JSON.stringify(shop)}`,"status = 'ACTIVE'",'(priceMin NOT EXISTS OR priceMin IS NULL)'],
@@ -810,8 +828,10 @@ export const loader = async ({ request, context }) => {
     const directSort = directExclusions!==null && availableProof && basePriceProof &&
       (activeRule?.conditions || []).every(condition =>
         ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
+    const databasePriceSort=variantPriceV2&&directSort&&!nativePriceBoundReady;
     if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual" && !directSort;
+    facetsOnly=facetsOnly&&useRankedCollectionPagination;
     const cardsOnly=useRankedCollectionPagination&&isPublicCollectionCards(request);
     let activePinnedList = (!sortOverPinning && !userHasFilters && pinnedIds.length > 0) ? [...new Set(pinnedIds)] : [];
     if(parsedQuery?.skuProductIds?.length){const eligible=new Set(parsedQuery.skuProductIds);activePinnedList=activePinnedList.filter(id=>eligible.has(String(id).split('/').pop()));}
@@ -1001,12 +1021,14 @@ export const loader = async ({ request, context }) => {
     let configuredPrices=[];if(String(priceSettings?.displayMode||'List').toLowerCase()==='list')try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
     const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
-    const priceEligibleIds=hideUnavailable?await Promise.all(priceCountRanges.map(range=>
-      getCached('availableVariantPrices:'+shop+':'+JSON.stringify([priceScope,optionsFilters,mergedValues,range]),
-        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,range,{database:prisma}),30,{maxBytes:1048576}))):[];
+    const priceEligibleIds=hideUnavailable||variantPriceV2?await Promise.all(priceCountRanges.map(range=>{
+      const eligibleRange=variantPriceV2?{min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:Infinity}:range;
+      return getCached('availableVariantPrices:'+shop+':'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantPriceContext]),
+        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,eligibleRange,{database:prisma,...(variantPriceContext?{priceContext:variantPriceContext}:{})}),30,{maxBytes:1048576});
+    })):[];
     for(const [index,range] of priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
-      if(hideUnavailable){
+      if(hideUnavailable||variantPriceV2){
         const ids=priceEligibleIds[index];priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
       }
       queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
@@ -1040,7 +1062,7 @@ export const loader = async ({ request, context }) => {
     let collectionRankingApplied = false;
     let searchRankingApplied = false;
     let searchRankingMode = null;
-    const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion);
+    const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion)+(variantPriceV2?':eligible-variant-price-v2':'');
     const rankingFingerprint = `${priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}:${partialMarketPriceSort?'partial':'complete'}` : baseRankingFingerprint}${exactPriceSortVersion?`:price-order-v${exactPriceSortVersion}`:''}`;
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
@@ -1107,8 +1129,9 @@ export const loader = async ({ request, context }) => {
         ...(userHasFilters&&marketIds?{marketFilterIndex}:{}),
         shop, collectionId: resolvedCollectionId, revision: preparationRevision, sortBy, needsShopifyOrder,
         ...(priceSortField?{priceSortField}:{}),
+        ...(variantPriceContext?{variantPriceSort:variantPriceContext}:{}),
         ...(exactPriceSortVersion?{priceSortVersion:exactPriceSortVersion}:{}),
-        ...(partialMarketPriceSort?{allowIncompleteMarketPrice:true}:{}),
+        ...(partialMarketPriceSort&&!variantPriceV2?{allowIncompleteMarketPrice:true}:{}),
         retainForIdle: !userHasFilters && !customerTagsStr && !searchQuery,
         directFiltered: userHasFilters && !customerTagsStr && !searchQuery,
         query: { ...mainQuery, filter: allFiltersList, q: searchQuery },
@@ -1187,18 +1210,32 @@ export const loader = async ({ request, context }) => {
       // The immutable sequence already owns product order and exact totals.
       // Skip ordinary product searches whose hits would be discarded, and do
       // not force exhaustive hit-count ranking merely to obtain facets.
-      const queryIndexes=fastCards&&directSort?[0]:queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
-      const searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
+      let queryIndexes=fastCards&&directSort?[0]:queries.map((_,i)=>i).filter(i=>!useRankedCollectionPagination || (i!==0&&i!==tier2QueryIndex));
+      if(databasePriceSort)queryIndexes=queryIndexes.filter(i=>i!==0);
+      let searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
+      const savedPriceRead=databasePriceSort?getCached('availableVariants:'+shop+':sorted-price-v2:'+rankingFingerprint+':'+page+':'+limit,async()=>{
+        const candidates=await meiliClient.index('products').search(mainQuery.q||'',{filter:mainQuery.filter,limit:100000,offset:0,attributesToRetrieve:['id']});
+        const ids=(candidates.hits||[]).map(product=>String(product.id).split('/').pop());
+        const expected=candidates.totalHits??candidates.estimatedTotalHits??ids.length;
+        if(ids.length!==expected||new Set(ids).size!==ids.length)throw Error('Incomplete saved-price candidate IDs');
+        return savedVariantPricePage(prisma,{shop,ids,context:variantPriceContext,page,limit});
+      },30,{maxBytes:4194304}):null;
       const sharedSearchKey=isSearch&&searchCacheHeaders(request)['Cache-Control'].startsWith('public')
         ? 'searchPageBatch:'+shop+':'+JSON.stringify([country,url.searchParams.get('locale'),searchQueries]) : null;
-      const searchRead=()=>semanticMultiSearch(searchQueries,{preferKeyword:!!searchQuery});
-      const [multiSearchRes,rankedPage] = await Promise.all([
+      const searchRead=()=>searchQueries.length?semanticMultiSearch(searchQueries,{preferKeyword:!!searchQuery}):Promise.resolve({results:[]});
+      const [multiSearchRes,rankedPage,savedPricePage] = await Promise.all([
         sharedSearchKey&&sharedSearchKey.length<=32768
           ? getCached(sharedSearchKey,searchRead,60,{maxBytes:524288}) : searchRead(),
         facetsOnly?{hits:[],total:rankingSession.ids.length}:useRankedCollectionPagination?readRankedCollectionPage(meiliClient.index('products'),{
           ids:rankingSession.ids,page,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
         }):null,
+        savedPriceRead,
       ]);
+      if(databasePriceSort){
+        const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
+        queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
+        multiSearchRes.results[0]={hits:[],totalHits:savedPricePage.total,estimatedTotalHits:savedPricePage.total};
+      }
       if(useRankedCollectionPagination){
         const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
         queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
@@ -1255,7 +1292,12 @@ export const loader = async ({ request, context }) => {
           if (collectionResponse) responsePageFingerprint = getResponsePageFingerprint(result.hits);
           collectionRankingApplied = true;
         } else if (directSort) {
-          result = { hits: tier1Res.hits || [], total: facetRes?.totalHits ?? tier1Res.totalHits ?? tier1Res.estimatedTotalHits ?? 0 };
+          if(databasePriceSort){
+            const saved=savedPricePage;
+            const selected=await readRankedCollectionPage(meiliClient.index('products'),{ids:saved.rows.map(row=>row.id),page:1,limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve.filter(field=>field!=='variantPrices')});
+            const byId=new Map(saved.rows.map(row=>[row.id,row]));
+            result={hits:selected.hits.map(product=>({...product,variantPrices:byId.get(String(product.id)).variants,priceSortSelection:byId.get(String(product.id)).selection})),total:saved.total};
+          }else result = { hits: tier1Res.hits || [], total: facetRes?.totalHits ?? tier1Res.totalHits ?? tier1Res.estimatedTotalHits ?? 0 };
         } else {
           result = await fetchCollectionPage(meiliClient.index("products"), {
             page, limit, pinnedIds: activePinnedList, tiers, attributes: mainQuery.attributesToRetrieve, orderedIds: collectionBestSellingIds,
@@ -1282,6 +1324,7 @@ export const loader = async ({ request, context }) => {
         }
       }
     } catch (e) {
+      if(databasePriceSort)throw e;
       if (saleCountRanges.length || selectedSaleRanges.length || priceCountRanges.length || extraChoices.length || needsExtraFacts) throw e;
       meiliError = e.message || String(e);
       console.error("CFP: Meilisearch MultiSearch failed:", e);
@@ -1365,7 +1408,7 @@ export const loader = async ({ request, context }) => {
     }
 
     // ── 11. Apply merchandising rules + sort ───────────────────────────
-    const merchandisedProducts = collectionRankingApplied || searchRankingApplied ? allMatchedProducts : applyMerchandisingRules(
+    const merchandisedProducts = directSort || collectionRankingApplied || searchRankingApplied ? allMatchedProducts : applyMerchandisingRules(
       allMatchedProducts,
       activeRule,
       sortBy,
@@ -1469,7 +1512,11 @@ export const loader = async ({ request, context }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, selectedPriceRange) : [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantPriceV2?null:selectedPriceRange,variantPriceContext||{}) : [...(p.variantPrices || [])];
+      if(variantPriceV2&&!variantPriceContext.basePrice)localVariantPrices=localVariantPrices.filter(variant=>{
+        const saved=variant.marketPrices?.[sortCountry];
+        return saved&&saved.price!=null&&saved.price!==''&&Number.isFinite(Number(saved.price))&&Number(saved.price)>=0&&/^[A-Z]{3}$/.test(saved.currency||'');
+      });
       let productImages = [...(p.images || [])];
       let localOptions = p.options ? JSON.parse(JSON.stringify(p.options)) : [];
       if (hideUnavailable) {
@@ -1485,11 +1532,12 @@ export const loader = async ({ request, context }) => {
       const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
       const firstProductImage=productImages[0];
       const pinnedProductImage=pinnedDefault?(typeof firstProductImage==='string'?firstProductImage:firstProductImage?.url||firstProductImage?.src||firstProductImage?.image?.url||null):null;
+      const sortSelection=variantPriceContext?(p.priceSortSelection||priceSortVariant({...p,options:localOptions,variants:localVariantPrices},variantPriceContext)):null;
       const sortedPriceVariants=priceSortField?localVariantPrices
         .filter(variant=>!globalSettings?.showOnlyInStock||variant.available===true)
         .filter(variant=>Number.isFinite(Number(variant.marketPrices?.[sortCountry]?.price)))
         .sort((left,right)=>Number(left.marketPrices[sortCountry].price)-Number(right.marketPrices[sortCountry].price)):[];
-      let activeVariant = sortedPriceVariants.length?sortedPriceVariants[0]:pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
+      let activeVariant = sortSelection?localVariantPrices.find(v=>String(v.id).split('/').pop()===sortSelection.variantId):sortedPriceVariants.length?sortedPriceVariants[0]:pinnedDefault?localVariantPrices[0]||null:parsedQuery?.colorIntent?.requested.length
         ? selectSearchColorVariant({ ...p, variants: undefined, variantPrices: localVariantPrices.filter(v =>
             Object.entries(optionsFilters).every(([name, values]) => {
               const index = localOptions.findIndex(option => option.name.toLowerCase() === name.toLowerCase());
@@ -1619,6 +1667,7 @@ export const loader = async ({ request, context }) => {
         productImages = activeVariant.imageUrl ? [activeVariant.imageUrl] : [];
       }
       const productObj = {
+        ...(sortSelection?{priceSortSelection:sortSelection}:{}),
         id: p.id,
         title: p.title,
         handle: p.handle,
@@ -1663,7 +1712,7 @@ export const loader = async ({ request, context }) => {
     });
 
     // Sort products by match score so the most relevant colors appear first on the page
-    if (!collectionRankingApplied && !searchRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
+    if (!directSort && !collectionRankingApplied && !searchRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
       products.sort((a, b) => b._matchScore - a._matchScore);
     }
 

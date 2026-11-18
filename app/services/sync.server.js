@@ -144,7 +144,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
 
     const marketCountries = await allMarketPriceCountries();
     const marketFilterFields = marketCountries.flatMap(country =>
-      [`marketPriceMin_${country}`, `marketPriceMax_${country}`, `marketPriceCurrency_${country}`, `marketAvailablePriceMin_${country}`]);
+      [`marketPriceMin_${country}`, `marketPriceMax_${country}`, `marketPriceCurrency_${country}`, `marketAvailablePriceMin_${country}`, `marketAvailablePriceMax_${country}`]);
 
     const filterableAttributes = [
       "id",
@@ -159,6 +159,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       "status",
       "priceMin",
       "availablePriceMin",
+      "availablePriceMax",
       ...marketFilterFields,
       "createdAt",
       ...SEARCH_FILTER_FIELDS,
@@ -176,7 +177,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       ...Array.from(dynamicKeys),
     ];
 
-    const sortableAttributes = ["priceMin", "availablePriceMin", ...marketCountries.flatMap(country => [`marketPriceMin_${country}`,`marketAvailablePriceMin_${country}`]),
+    const sortableAttributes = ["priceMin", "priceMax", "availablePriceMin", "availablePriceMax", ...marketCountries.flatMap(country => [`marketPriceMin_${country}`,`marketPriceMax_${country}`,`marketAvailablePriceMin_${country}`,`marketAvailablePriceMax_${country}`]),
       "createdAt", "title", "bestSellingScore", "trendingScore"];
 
     await index.updateFilterableAttributes(filterableAttributes);

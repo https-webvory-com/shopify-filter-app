@@ -1,6 +1,32 @@
+import {canonicalSize,isSizeFacet} from './facetNormalization.js';
 const countryPattern=/^[A-Z]{2}$/;
 const currencyPattern=/^[A-Z]{3}$/;
 const id=value=>String(value).split('/').pop();
+
+export function priceSortVariant(product,context){
+ if(!context||!['asc','desc'].includes(context.direction))return null;
+ const normalize=value=>String(value??'').trim().toLowerCase();
+ const options=product.options||[],selected=context.options||{},merged=context.mergedValues||[];
+ let result=null;
+ for(const variant of product.variants||product.variantPrices||[]){
+  if(context.stockOnly&&variant.available!==true)continue;
+  const raw=context.basePrice?variant.price:variant.marketPrices?.[context.country]?.price;
+  const currency=context.basePrice?context.currency:variant.marketPrices?.[context.country]?.currency;
+  if(raw==null||raw===''||!Number.isFinite(Number(raw))||Number(raw)<0||!/^[A-Z]{3}$/.test(currency||''))continue;
+  const price=Number(raw);
+  if(context.ranges?.length&&!context.ranges.some(range=>price>=range.min&&(range.max==null||price<=range.max)))continue;
+  if(!Object.entries(selected).every(([name,values])=>{
+   if(!values?.length)return true;
+   const position=options.findIndex(option=>normalize(option.name)===normalize(name));
+   if(position<0)return false;
+   const actual=normalize(variant['option'+(position+1)]);
+   return values.some(value=>actual===normalize(value)||isSizeFacet(name)&&canonicalSize(actual)&&canonicalSize(actual)===canonicalSize(value)||merged.some(rule=>(!rule.optionName||normalize(rule.optionName)===normalize(name))&&normalize(rule.targetValue)===normalize(value)&&(rule.sourceValues||[]).some(source=>normalize(source)===actual)));
+  }))continue;
+  if(!result||(context.direction==='desc'?price>result.price:price<result.price)||price===result.price&&id(variant.id)<result.variantId)
+   result={version:2,country:context.country,currency,variantId:id(variant.id),price};
+ }
+ return result;
+}
 
 export function savedMarketProduct(product,country){
  const variants=product.variants||[];

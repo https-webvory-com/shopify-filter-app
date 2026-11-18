@@ -26,11 +26,12 @@ export async function allMarketPriceCountries(){
  return [...new Set([...configurations.flatMap(row=>row.countries),...observed,...connections.flatMap(row=>row.countries)])].filter(validCountry).sort();
 }
 
-async function supportsPriceField(country,{stockOnly=true,indexUid='products'}={}){
+async function supportsPriceField(country,{stockOnly=true,indexUid='products',maximum=false,basePrice=false}={}){
  if(!validCountry(country))return false;
  try{
   const settings=await getCached(`marketPriceCapabilities:${indexUid}`,()=>meiliClient.index(indexUid).getSettings(),30);
-  const field=`market${stockOnly?'Available':''}PriceMin_${country}`;
+  const bound=maximum?'Max':'Min';
+  const field=basePrice?`${stockOnly?'availablePrice':'price'}${bound}`:`market${stockOnly?'Available':''}Price${bound}_${country}`;
   return settings.filterableAttributes?.includes(field)===true&&settings.sortableAttributes?.includes(field)===true;
  }catch{return false;}
 }
@@ -44,4 +45,16 @@ export async function marketPriceIntentReady(shop,country,options={}){
 export async function marketPriceScopeReady(country,{filter,stockOnly=false,indexUid='products'}={}){
  if(!Array.isArray(filter)||!filter.some(clause=>/^shop\s*=/.test(clause)))return false;
  return supportsPriceField(country,{stockOnly,indexUid});
+}
+
+// Check only this collection's requested scalar key. No store revision proof
+// or database coverage scan; old documents use their saved variant data.
+export async function collectionPriceBoundReady(shop,field,filter){
+ if(!validShop(shop)||!/^(?:(?:availablePrice|price)(?:Min|Max)|market(?:Available)?Price(?:Min|Max)_[A-Z]{2})$/.test(field||'')||!Array.isArray(filter)||!filter.some(clause=>/collections\s*=/.test(clause)))return false;
+ try{
+  return await getCached('availableVariants:'+shop+':sort-bound:'+field+':'+JSON.stringify(filter),async()=>{
+   const result=await meiliClient.index('products').search('',{filter:[...filter,`(${field} NOT EXISTS OR ${field} IS NULL)`],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+   return result.totalHits===0;
+  },30);
+ }catch{return false;}
 }

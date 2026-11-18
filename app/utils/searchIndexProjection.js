@@ -53,6 +53,9 @@ export function searchIndexProjection(product) {
     availablePriceMin: variants.some(variant => variant.available === true)
       ? Math.min(...variants.filter(variant => variant.available === true).map(variant => Number(variant.price)))
       : null,
+    availablePriceMax: variants.some(variant => variant.available === true)
+      ? Math.max(...variants.filter(variant => variant.available === true).map(variant => Number(variant.price)))
+      : null,
     cfpSearchVersion: complete ? SEARCH_PROJECTION_VERSION : 0,
     cfpSearchOptionPhrases: complete ? [...phrases].map(searchExactToken) : [],
     cfpSearchColors: colorPosition < 0 ? [] : [...new Set(variants.map(color).filter(Boolean))].map(searchExactToken),

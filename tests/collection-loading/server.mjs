@@ -40,8 +40,9 @@ import {createCollectionHeadProofs} from '../../app/utils/collectionHeadProofs.j
 import {createHash} from 'node:crypto';
 
 const shop='headless-fixture.myshopify.com';
-export async function createLoadingServer({redisLayer}={}) {
+export async function createLoadingServer({redisLayer,savedPricePage,database}={}) {
   const values=new Map(),sessions=new Map(),jobs=new Map(),requests=[],configurationRequests=[],requestStarts=[],facetRequests=[];
+  const savedPriceReads=new Map();
   const state={delay:5500,priceDelay:2500,imageDelay:3000,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,colorRule:false,early:false,assetDelay:0,apiDelay:0,clockOffset:0};
   let lastSpec;
   const headEvents=[];
@@ -59,7 +60,7 @@ export async function createLoadingServer({redisLayer}={}) {
     if(state.noMatchQuery && options.q===state.noMatchQuery)products=[];
     for(const filter of [options.filter || []].flat(Infinity)){
       if(typeof filter==='string'&&filter.startsWith('id IN ')) { const ids=JSON.parse(filter.slice(6));products=products.filter(p=>ids.includes(p.id)); }
-      if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"')products=[];
+      if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"'||filter==='id = "__no_eligible_price_variant__"')products=[];
       if(typeof filter==='string'){
         const fieldMatch=filter.match(/^(vendor|productType|collection_titles|tags|option_[^ ]+|metafield_[^ ]+) IN (\[.*\])$/);
         if(fieldMatch){const [,field,raw]=fieldMatch;let values;try{values=JSON.parse(raw);}catch{values=[...raw.matchAll(/'((?:\\.|[^'])*)'/g)].map(m=>m[1].replace(/\\'/g,"'").replace(/\\\\/g,'\\'));}
@@ -75,8 +76,10 @@ export async function createLoadingServer({redisLayer}={}) {
       }
     }
     const sort=options.sort?.[0];
-    const priceSort=sort?.match(/^(priceMin|market(?:Available)?PriceMin_[A-Z]{2}):(asc|desc)$/);
+    const priceSort=sort?.match(/^((?:availablePrice|price)(?:Min|Max)|market(?:Available)?Price(?:Min|Max)_[A-Z]{2}):(asc|desc)$/);
     if(priceSort){const [,field,direction]=priceSort;products.sort((a,b)=>(Number(a[field])-Number(b[field]))*(direction==='asc'?1:-1));}
+    else if(sort==='title:asc'||sort==='title:desc')products.sort((a,b)=>a.title.localeCompare(b.title)*(sort.endsWith(':asc')?1:-1));
+    else if(sort==='createdAt:asc'||sort==='createdAt:desc')products.sort((a,b)=>(a.createdAt-b.createdAt)*(sort.endsWith(':asc')?1:-1));
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
     const facetDistribution=options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{};
     for(const field of options.facets||[]){
@@ -113,10 +116,12 @@ export async function createLoadingServer({redisLayer}={}) {
       const ids=JSON.parse(options.filter.slice(6));const results=ids.map(id=>byId.get(String(id))).filter(doc=>doc&&doc.status!=='DELETED').map(doc=>({...doc})).reverse();trace.hydrations+=results.length;return {results,offset:0,limit:options.limit,total:results.length};},
     getDocument:async id=>{trace.documentCalls++;trace.hydrations++;const doc=byId.get(String(id));if(doc.status==='DELETED')throw Object.assign(Error('Missing'),{code:'document_not_found'});return {...doc};}};
   const prisma={$queryRaw:async(strings,...values)=>{
+    if(database)return database.$queryRaw(strings,...values);
     if(strings.join('?').includes('AS preorder'))return docs.filter(p=>p.status==='ACTIVE').map(p=>({id:p.id,available:true,onhand:true,preorder:false,rating:null,facts:null,...(state.extraFacts?.[p.id]||{})}));
     if (!strings.join('?').includes('AS percent') || values[0] !== shop) throw Error('Unexpected fixture SQL');
     return docs.filter(p=>p.status==='ACTIVE').map(p=>({id:p.id,percent:(state.salePercentages || {})[p.id] ?? 0}));
   },product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]},collection:{findMany:async({where})=>(state.collectionLinks||[{shop,title:'Fixture collection',handle:'fixture'}]).filter(row=>row.shop===where.shop&&where.title.in.includes(row.title))}};
+  if(database)prisma.$transaction=database.$transaction.bind(database);
   const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
   const merch=serviceCtx.module.exports;
@@ -187,6 +192,7 @@ export async function createLoadingServer({redisLayer}={}) {
       '../services/collectionCards.server.js':{getPreparedCollectionCards:(request,options)=>state.cardSnapshots?cardStore.get(request,options):null,beginPreparedCollectionCards:options=>state.cardSnapshots?cardStore.begin({...options,preparedKey:options.preparedKey||(options.spec?preparationKey(options.spec):undefined)}):null},
     '../services/semanticSearch.server':{semanticMultiSearch:async queries=>{if(state.facetDelay||state.searchFacetDelay&&queries.some(query=>query.facets?.length))await new Promise(r=>setTimeout(r,state.facetDelay||state.searchFacetDelay));if(state.facetFailure)throw Error('Facet unavailable');facetRequests.push(...queries);trace.facetQueries+=queries.length;return {results:queries.map(select)};},searchPageBatch:async queries=>({results:queries.map(select)})},
     '../utils/searchColor.js':searchColor,'../utils/availableVariants.js':{...availableVariants,
+      ...(savedPricePage?{savedVariantPricePage:(_database,args)=>savedPricePage(args,docs)}:{}),
       availableOptionFacetCounts:async(_database,{productIds,optionValues,mergedValues})=>{
       const selected=new Set(productIds.map(id=>String(id).split('/').pop())),counts={};
       for(const [name,rawValues]of Object.entries(optionValues)){
@@ -213,10 +219,16 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
-    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true,marketPriceScopeReady:async()=>state.marketPriceScopeReady??state.marketPriceReady===true},
+    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true,marketPriceScopeReady:async()=>state.marketPriceScopeReady??state.marketPriceReady===true,collectionPriceBoundReady:async()=>state.nativePriceBoundReady===true},
     '../utils/searchPinnedIntent.js':{pinnedProductMatchesAppliedIntent:()=>true},
   };
   mocks['../utils/filterPresentation.js']=filterPresentation;
+  const readCached=mocks['../services/shopCache.server'].getCached;
+  mocks['../services/shopCache.server'].getCached=(key,fetchValue,...args)=>{
+    if(!key.includes(':sorted-price-v2:'))return readCached(key,fetchValue,...args);
+    if(!savedPriceReads.has(key))savedPriceReads.set(key,Promise.resolve().then(fetchValue).catch(error=>{savedPriceReads.delete(key);throw error;}));
+    return savedPriceReads.get(key);
+  };
   const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
   vm.runInNewContext((await transform(source,{loader:'jsx',format:'cjs'})).code,routeCtx);
@@ -277,6 +289,7 @@ export async function createLoadingServer({redisLayer}={}) {
       }
       if(url.pathname==='/__control'){
         const chunks=[];for await(const chunk of req)chunks.push(chunk);const updates=JSON.parse(Buffer.concat(chunks).toString()||'{}');
+        if(updates.reset||updates.invalidate)savedPriceReads.clear();
         if(updates.reset){state.country=null;state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;state.savedFilterFailures=0;state.savedFilterAttempts=0;state.themeIntro=false;state.noMatchQuery=null;}
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
@@ -367,6 +380,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(state.independentFilters)body=body.replace('</head>','<script src="/assets/collectionFilters.js"></script></head>');
         if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
         if(url.pathname==='/search')body=body.replace('data-search-terms="purple prom dress"','data-search-terms="'+String(url.searchParams.get('q')||'')+'"');
+        body=body.replace('<script>window.Shopify=',`<script>window.cfpPriceSortVersion=${state.variantPriceSort?2:1};window.Shopify=`);
         if(state.countryStock||state.country)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||state.country||'US'));
         if(state.country==='IN')body=body.replace("active:'USD',rate:1","active:'INR',rate:1");
         body=body.replace(/<div class="cfp-sidebar__footer">[\s\S]*?<\/div>/,footerHtml);
