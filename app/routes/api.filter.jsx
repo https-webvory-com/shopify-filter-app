@@ -42,7 +42,7 @@ import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailabil
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
-import {marketPriceIntentReady,collectionPriceBoundReady} from '../services/marketPriceCoverage.server.js';
+import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
 import {savedMarketProduct,priceSortVariant} from '../utils/savedMarketPricing.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
@@ -797,8 +797,6 @@ export const loader = async ({ request, context }) => {
     const hasCustomSort = Boolean(sortBy) && !["best-selling", "bestselling", "manual", "relevance", "r"].includes(sortBy);
     const sortOverPinning = hasCustomSort && globalSettings?.prioritizeSortOverPinning === true;
     const sortOverMerchandising = hasCustomSort && globalSettings?.prioritizeSortOverMerchandising === true;
-    const nativePriceBoundReady=variantPriceV2&&marketSortReady&&(!savedUsBasePrice||variantPriceContext.stockOnly)&&nativeRanges.length===0&&!Object.values(optionsFilters).some(values=>values.length)&&typeof collectionPriceBoundReady==='function'
-      ?await collectionPriceBoundReady(shop,priceSortField,baseFilters):false;
     const directPrice=priceSortSelected&&(variantPriceV2?true:(savedUsBasePrice||marketSortReady&&!!priceSortField));
     const directOrder=directPrice||['title-ascending','title-asc','title-descending','title-desc',
       'created-ascending','created-asc','created-descending','created-desc','trending'].includes(sortBy);
@@ -829,8 +827,8 @@ export const loader = async ({ request, context }) => {
     const directSort = directExclusions!==null && availableProof && basePriceProof &&
       (activeRule?.conditions || []).every(condition =>
         ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
-    const databasePriceSort=variantPriceV2&&directSort&&!nativePriceBoundReady;
-    const savedCollectionScope=databasePriceSort&&!userHasFilters&&!marketVersion
+    const databasePriceSort=variantPriceV2&&directSort;
+    const savedCollectionScope=databasePriceSort&&!marketVersion&&Object.keys(categoryFilters).every(key=>key==='priceMin'||key.startsWith('option_'))
       ?savedPriceCollectionScope(resolvedCollectionId||(url.searchParams.get('collectionHandle')==='all'?'all':null),directExclusions,pinnedIds,variantPriceContext.stockOnly):null;
     const savedPriceTiming={candidateMs:0,sqlMs:0};
     if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
