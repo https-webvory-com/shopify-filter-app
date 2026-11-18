@@ -114,7 +114,10 @@ export function validateSearchSettings(input) {
     if(key==='variantMetafield:*')throw Error('Choose a variant metafield using namespace.key.');
     if(typeof field.weight!=='number'||!Number.isFinite(field.weight)||field.weight<0||field.weight>1)throw Error('Field weights must be between 0 and 1.');
     for(const property of ['search','suggest','numeric'])if(typeof field[property]!=='boolean')throw Error('Invalid search-field option.');
+    if(field.delimiters!==undefined&&(!Array.isArray(field.delimiters)||field.delimiters.length>5))throw Error('Use up to five additional separators.');
+    const delimiters=[...new Set((field.delimiters||[]).map(value=>literalText(value,'Field separator',10)).filter(Boolean))];
     return {key,label:text(field.label??key,'Field label',100),weight:field.weight,search:field.search,suggest:field.suggest,numeric:field.numeric,
+      ...(delimiters.length?{delimiters}:{}),
       delimiter:literalText(field.delimiter??'','Field delimiter',10),transforms:transforms(field.transforms??[]),indexTransforms:transforms(field.indexTransforms??[])};
   });
   return result;

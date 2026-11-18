@@ -3,7 +3,7 @@ import {DEFAULT_SEARCH_SETTINGS} from './searchSettings.js';
 export const searchFieldName=index=>'cfp_field_'+String(index).padStart(3,'0');
 export function searchIndexConfiguration(settings){
  const s=settings||DEFAULT_SEARCH_SETTINGS;
- return Object.fromEntries(['fields','stopwords','tokenDelimiters','tentativeDelimiters','hideUnavailableVariants','omitProductMetafields','omitProductMetaobjects','omitVariantMetafields','omitVariantMetaobjects','productDateType','smartSkuSearch'].map(key=>[key,key==='fields'?s.fields.map(f=>[f.key,f.weight,f.search,f.suggest,f.numeric,f.delimiter,f.transforms,f.indexTransforms]):s[key]]));
+ return Object.fromEntries(['fields','stopwords','tokenDelimiters','tentativeDelimiters','hideUnavailableVariants','omitProductMetafields','omitProductMetaobjects','omitVariantMetafields','omitVariantMetaobjects','productDateType','smartSkuSearch'].map(key=>[key,key==='fields'?s.fields.map(f=>[f.key,f.weight,f.search,f.suggest,f.numeric,f.delimiter,f.transforms,f.indexTransforms,...(f.delimiters?.length?[f.delimiters]:[])]):s[key]]));
 }
 export const requiresCustomSearchIndex=settings=>JSON.stringify(searchIndexConfiguration(settings))!==JSON.stringify(searchIndexConfiguration(DEFAULT_SEARCH_SETTINGS));
 export function transformSearchValue(value,rules=[]){
@@ -44,7 +44,8 @@ export function projectConfiguredSearchDocument(document,settings){
  for(const [index,field]of s.fields.entries()){
   let values=sourceValues(doc,field.key,s).filter(v=>v!=null).flatMap(value=>{
    const displayed=transformSearchValue(typeof value==='object'?JSON.stringify(value):value,field.transforms);
-   return field.delimiter?displayed.split(field.delimiter):[displayed];
+   const separators=[...new Set([field.delimiter,...(field.delimiters||[])].filter(Boolean))].sort((a,b)=>b.length-a.length);
+   return separators.length?displayed.split(new RegExp(separators.map(value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'u')):[displayed];
   }).map(value=>normalizeSearchTokens(transformSearchValue(value,field.indexTransforms),s)).filter(v=>v!=='');
   if(field.numeric)values=values.map(Number).filter(Number.isFinite);
   doc[searchFieldName(index)]=[...new Set(values)];

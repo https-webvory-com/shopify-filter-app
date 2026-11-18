@@ -47,10 +47,29 @@ export async function syncConfiguredSearchSynonyms(shop,dictionary){
  for(const uid of [...new Set([state.active?.uid,state.build?.initialized&&state.build.uid].filter(Boolean))])await wait(await client.index(uid).updateSynonyms(dictionary));
  await resetSearchIndexContext(shop);
 }
-export async function scheduleSearchIndex(shop){
+export async function scheduleSearchIndex(shop,{allowInitialBuild=true}={}){
  if(!validShop(shop))throw Error('Invalid shop');
  const row=await prisma.searchSetting.findUnique({where:{shop}});if(!row)return;
  const config=validateSearchSettings(row.config),requested=identity(shop,config),previous=stateOf(row);
+ if(previous.active?.uid){
+  if(previous.active.hash===requested&&!previous.update){
+   await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'ready',requested,build:null,error:null});
+   if(previous.build?.uid)await retireSearchIndexes(shop,[previous.build.uid]);
+   return;
+  }
+  const from=validateSearchSettings(previous.update?.from||previous.active.config);
+  const interrupted=previous.update?.config&&validateSearchSettings(previous.update.config);
+  const forceFields=[...new Set([...(previous.update?.forceFields||[]),...(interrupted?interrupted.fields.filter(field=>changesField(field,from.fields.find(old=>old.key===field.key),from,interrupted)).map(field=>field.key):[])])];
+  const update=previous.update?.hash===requested?previous.update:{hash:requested,config,from,forceFields,forceScan:!!previous.update,offset:0,cursor:null,processed:0,updated:0};
+  await changeState(shop,(state,current)=>identity(shop,current)!==requested?null:{...state,phase:'queued',requested,build:null,update,error:null,processed:update.processed,total:null});
+  await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested,incremental:true},'search-patch-'+hash([shop,requested,update.offset,update.cursor]));
+  if(previous.build?.uid)await retireSearchIndexes(shop,[previous.build.uid]);
+  return;
+ }
+ if(!allowInitialBuild){
+  if(requiresCustomSearchIndex(config))throw Object.assign(Error('Search setup is required before adding this rule. No full rebuild was started.'),{code:'SEARCH_INDEX_SETUP_REQUIRED'});
+  return;
+ }
  if(!requiresCustomSearchIndex(config)&&!await hasActiveSynonyms(shop)){
   await changeState(shop,(_state,current)=>identity(shop,current)!==requested?null:{phase:'ready',requested,active:null,processed:0,total:0});
   await retireSearchIndexes(shop,[previous.active?.uid,previous.build?.uid]);return;
@@ -96,7 +115,7 @@ export async function reconcileLegacySynonymIndexes(){
 }
 export async function getSearchIndexStatus(shop){
  const state=stateOf(await prisma.searchSetting.findUnique({where:{shop}}));
- return {phase:state.phase||'default',processed:state.processed||0,total:state.total??null,error:state.error?'Search index preparation failed. Save again to retry.':null,active:!!state.active,updatedAt:state.updatedAt||null};
+ return {phase:state.phase||'default',mode:state.update?'incremental':'initial',updated:state.update?.updated||0,processed:state.processed||0,total:state.total??null,error:state.error?(state.update?'Search rule update failed. Existing search remains available. Save again to retry.':'Search index preparation failed. Save again to retry.'):null,active:!!state.active,updatedAt:state.updatedAt||null};
 }
 export async function getSearchIndexContext(shop){
  if(!validShop(shop))return {uid:'products',settings:null,custom:false};
@@ -106,7 +125,7 @@ export async function getSearchIndexContext(shop){
   const desired=validateSearchSettings(row.config),active=stateOf(row).active;
   const synonymRules=await prisma.synonym.findMany({where:{shop,isActive:true},select:{word:true,synonyms:true}});
   // A partial build never replaces a complete serving index.
-  if(active?.uid&&active.config){const prepared=validateSearchSettings(active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},layout:desired.instantLayout,custom:true,revision,synonymRules};}
+  if(active?.uid&&active.config){const prepared=validateSearchSettings(stateOf(row).update?.applied?desired:active.config);return {uid:active.uid,settings:{...desired,...Object.fromEntries(Object.keys(searchIndexConfiguration(prepared)).map(key=>[key,prepared[key]]))},layout:desired.instantLayout,custom:true,revision,synonymRules};}
   return {uid:'products',settings:requiresCustomSearchIndex(desired)?null:desired,layout:desired.instantLayout,custom:false,revision,synonymRules};
  },15);
 }
@@ -170,6 +189,113 @@ async function enrich(shop,docs,config){
  const {unauthenticated}=await import('../shopify.server.js');const {admin}=await unauthenticated.admin(shop);
  return readSearchIndexExtras(admin,docs,config);
 }
+// Separator-only title changes have an exact saved-DB candidate set. Other
+// transformations compare saved documents, but never rebuild or replace them.
+export function searchRuleCandidates(before,after){
+ const old=validateSearchSettings(before),next=validateSearchSettings(after);
+ const strip=s=>({...searchIndexConfiguration(s),fields:s.fields.map(f=>f.key==='title'?{...f,delimiter:'',delimiters:[]}:f)});
+ if(JSON.stringify(strip(old))!==JSON.stringify(strip(next)))return null;
+ const a=old.fields.find(f=>f.key==='title'),b=next.fields.find(f=>f.key==='title');
+ if(!a||!b||a.transforms.length||a.indexTransforms.length||a.numeric)return null;
+ const separators=[...new Set([a.delimiter,b.delimiter,...(a.delimiters||[]),...(b.delimiters||[])].filter(Boolean))];
+ return separators.length?{OR:separators.map(contains=>({title:{contains}}))}:null;
+}
+const projectionSignature=config=>JSON.stringify({fields:config.fields.map(f=>({...f,weight:f.weight>0?1:0})),tentativeDelimiters:config.tentativeDelimiters,hideUnavailableVariants:config.hideUnavailableVariants,productDateType:config.productDateType});
+const fieldInputs=field=>JSON.stringify([field.key,field.numeric,field.delimiter,field.delimiters||[],field.transforms,field.indexTransforms]);
+const changesField=(field,old,before,config)=>!old||fieldInputs(field)!==fieldInputs(old)||JSON.stringify(before.tentativeDelimiters)!==JSON.stringify(config.tentativeDelimiters)||before.hideUnavailableVariants!==config.hideUnavailableVariants&&/^(sku|barcode|option:|variantMetafield:)/.test(field.key);
+export function searchRulePatch(source,current,config,before,forceFields=[]){
+ const projected=projectConfiguredSearchDocument(source,config),patch={id:source.id};
+ if(before){
+  for(const [index,field] of config.fields.entries()){
+   const oldIndex=before.fields.findIndex(previous=>previous.key===field.key),old=before.fields[oldIndex];
+   if(!forceFields.includes(field.key)&&!changesField(field,old,before,config)&&Object.hasOwn(current,searchFieldName(oldIndex)))projected[searchFieldName(index)]=current[searchFieldName(oldIndex)];
+  }
+  for(const key of Object.keys(projected))if(key.startsWith('cfp_field_')&&!config.fields.some((_field,index)=>key===searchFieldName(index)))delete projected[key];
+  projected.cfpSemanticText=config.fields.flatMap((field,index)=>field.search&&field.weight>0?[field.label+': '+(projected[searchFieldName(index)]||[]).join(', ')]:[]).join('. ').slice(0,12000);
+  if(config.productDateType===before.productDateType)projected.createdAt=current.createdAt;
+  if(config.hideUnavailableVariants===before.hideUnavailableVariants&&Object.hasOwn(current,'cfpSkuNormalized'))projected.cfpSkuNormalized=current.cfpSkuNormalized;
+ }
+ const keys=new Set([...Object.keys(projected),...Object.keys(current)].filter(key=>key.startsWith('cfp_field_')||['cfpSemanticText','cfpSkuNormalized','createdAt'].includes(key)));
+ for(const key of keys){const value=projected[key]??null;if(JSON.stringify(value)!==JSON.stringify(current[key]??null))patch[key]=value;}
+ return Object.keys(patch).length>1?patch:null;
+}
+async function processSearchRuleUpdate(shop,requested,row){
+ const config=validateSearchSettings(row.config),state=stateOf(row),update=state.update;
+ if(!update||update.hash!==requested||state.requested!==requested||identity(shop,config)!==requested||!state.active?.uid)return {superseded:true};
+ const uid=state.active.uid,index=client.index(uid),before=validateSearchSettings(update.from);
+ try{
+  if(!update.applied){
+   // Settings changes reuse the existing documents. Collection requests continue
+   // using the shared index; this changes only this shop's private search index.
+   const desired=await indexSettings(config),existing=await index.getSettings();
+   const changes=Object.fromEntries(Object.entries(desired).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(existing[key])));
+   if(Object.keys(changes).length)await wait(await index.updateSettings(changes));
+   const applied=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,update:{...current.update,applied:true},phase:'building'});
+   if(!applied)return {superseded:true};
+  }
+  const needsDocuments=update.forceScan||projectionSignature(before)!==projectionSignature(config);
+  let docs=[],complete=true,total=0,cursor=update.cursor,offset=update.offset;
+  const sourceRevision=await redis.get(sourceRevisionKey(shop))||'0';
+  if(update.sourceRevision!==undefined&&update.sourceRevision!==sourceRevision){offset=0;cursor=null;}
+  const sourceTask=await redis.get(sourceTaskKey(shop));if(sourceTask!=null)await wait({taskUid:Number(sourceTask)});
+  const candidates=needsDocuments&&!update.forceScan?searchRuleCandidates(before,config):null;
+  const changedFields=config.fields.filter(field=>(update.forceFields||[]).includes(field.key)||changesField(field,before.fields.find(old=>old.key===field.key),before,config));
+  const sourceFields=new Set(['id','shop','status']);
+  for(const field of changedFields){
+   if(field.key.startsWith('productMetafield:'))sourceFields.add('*');
+   else if(field.key.startsWith('option:')){sourceFields.add('options');if(config.hideUnavailableVariants)sourceFields.add('variantPrices');}
+   else if(/^(sku|barcode|variantMetafield:)/.test(field.key))sourceFields.add('variantPrices');
+   else sourceFields.add(field.key==='collections'?'collection_titles':field.key);
+  }
+  if(before.hideUnavailableVariants!==config.hideUnavailableVariants)sourceFields.add('variantPrices');
+  const sourceProjection=sourceFields.has('*')?{}:{fields:[...sourceFields]};
+  if(needsDocuments){
+   if(candidates){
+    const where={shop,status:{in:['ACTIVE','active']},...candidates};
+    const [ids,count]=await Promise.all([prisma.product.findMany({where:{...where,...(cursor?{id:{gt:cursor}}:{})},orderBy:{id:'asc'},take:100,select:{id:true}}),prisma.product.count({where})]);
+    total=count;complete=ids.length<100;cursor=ids.at(-1)?.id||cursor;
+    if(ids.length){const result=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)} AND id IN ${JSON.stringify(ids.map(p=>p.id.split('/').pop()))}`,limit:ids.length,...sourceProjection});docs=result.results;if(!Array.isArray(docs)||docs.length!==ids.length)throw Error('Saved product search data is incomplete');}
+    offset+=ids.length;
+   }else{
+    const result=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)}`,offset,limit:100,...sourceProjection});
+    if(!Array.isArray(result.results)||!Number.isSafeInteger(result.total))throw Error('Incomplete saved search data');
+    docs=result.results;total=result.total;offset+=docs.length;complete=offset>=total;
+    if(!complete&&!docs.length)throw Error('Saved search comparison did not advance');
+   }
+  }
+  if(docs.some(doc=>doc.shop!==shop))throw Error('Saved search tenant mismatch');
+  let changed=0;
+  if(docs.length){
+   const current=await index.getDocuments({filter:`shop = ${JSON.stringify(shop)} AND id IN ${JSON.stringify(docs.map(doc=>String(doc.id)))}`,limit:docs.length,fields:['id','shop','createdAt','cfpSemanticText','cfpSkuNormalized',...before.fields.map((_field,index)=>searchFieldName(index))]});
+   if(!Array.isArray(current.results))throw Error('Incomplete existing search data');
+   const byId=new Map(current.results.map(doc=>[String(doc.id),doc]));
+   const patches=docs.filter(doc=>doc.status==='ACTIVE').map(doc=>{
+    const saved=byId.get(String(doc.id));if(!saved||saved.shop!==shop)throw Error('Existing search product is missing');
+    // Extras already held in the serving document are reusable; never fetch
+    // the entire Shopify catalog to apply a text transformation.
+    const source={...saved,...doc};
+    if(config.productDateType!==before.productDateType)throw Error('Changing product date requires saved source dates');
+    for(const field of config.fields.filter(f=>(f.search||f.suggest)&&f.weight>0&&changesField(f,before.fields.find(old=>old.key===f.key),before,config))){
+     if(field.key==='description'&&!Object.hasOwn(source,'description'))throw Error('Description is not available in saved search data');
+     if(field.key.startsWith('variantMetafield:')&&!before.fields.some(f=>f.key===field.key))throw Error('Variant metafield is not available in saved search data');
+     if(field.key.startsWith('productMetafield:')&&field.key!=='productMetafield:*'&&!Object.hasOwn(source,'metafield_'+field.key.slice(17)))throw Error('Metafield is not available in saved search data');
+    }
+    return searchRulePatch(source,saved,config,before,update.forceFields);
+   }).filter(Boolean);
+   if(patches.length){
+    // A newer save can supersede this batch while reads are in flight.
+    const latest=await prisma.searchSetting.findUnique({where:{shop}});
+    if(stateOf(latest).update?.hash!==requested)return {superseded:true};
+    await wait(await index.updateDocuments(await withHeldEmbeddingsForIndex(index,patches)));changed=patches.length;
+   }
+  }
+  if((await redis.get(sourceRevisionKey(shop))||'0')!==sourceRevision){complete=false;offset=0;cursor=null;}
+  const next=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,phase:complete?'ready':'building',processed:offset,total,error:null,updatedAt:Date.now(),update:complete?null:{...current.update,sourceRevision,offset,cursor,processed:offset,updated:(current.update.updated||0)+changed},...(complete?{active:{uid,hash:requested,config},lastUpdate:{processed:offset,updated:(current.update.updated||0)+changed}}:{})});
+  if(!next)return {superseded:true};
+  if(!complete)await enqueue('SEARCH_INDEX_BUILD',{shop,hash:requested,incremental:true},'search-patch-'+hash([shop,requested,offset,cursor,randomUUID()]));
+  return {complete,processed:offset,updated:changed,total,incremental:true};
+ }catch(error){await changeState(shop,current=>current.update?.hash!==requested?null:{...current,phase:'failed',error:error.name,updatedAt:Date.now()});throw error;}
+}
 export async function processSearchIndexJob(data){
  const {shop}=data;if(!validShop(shop))throw Error('Invalid shop');
  const row=await prisma.searchSetting.findUnique({where:{shop}});
@@ -182,6 +308,11 @@ export async function processSearchIndexJob(data){
  if(!row)return {skipped:true};
  const config=validateSearchSettings(row.config),state=stateOf(row);
  if(data.ids){if(data.sourceTaskUid!=null)await wait({taskUid:data.sourceTaskUid});return updateSearchIndexProducts(shop,data.ids,row);}
+ if(data.incremental)return processSearchRuleUpdate(shop,data.hash,row);
+ if(state.active?.uid&&state.build&&state.requested===data.hash){
+  // Adopt jobs queued by the previous release without copying the catalog again.
+  await scheduleSearchIndex(shop,{allowInitialBuild:false});return {convertedToIncremental:true};
+ }
  if(!state.build||state.requested!==data.hash||identity(shop,config)!==data.hash)return {superseded:true};
  const build=state.build,index=client.index(build.uid);
  try{
@@ -224,7 +355,7 @@ export async function scheduleSearchIndexProducts(shop,ids,sourceTaskUid){
  for(let i=0;i<unique.length;i+=20){const batch=unique.slice(i,i+20);await enqueue('SEARCH_INDEX_PRODUCTS',{shop,ids:batch,sourceTaskUid},'search-products-'+hash([shop,batch,sourceTaskUid??Date.now()]),7);}
 }
 async function updateSearchIndexProducts(shop,ids,row){
- const state=stateOf(row),targets=[state.active,state.build&&{uid:state.build.uid,config:validateSearchSettings(row.config)}].filter(t=>t?.uid&&t.config);
+ const state=stateOf(row),targets=[state.active&&{...state.active,config:state.update?.applied?validateSearchSettings(row.config):state.active.config},state.build&&{uid:state.build.uid,config:validateSearchSettings(row.config)}].filter(t=>t?.uid&&t.config);
  if(!targets.length)return {skipped:true};
  const base=await client.index('products').getDocuments({filter:`shop = ${JSON.stringify(shop)} AND id IN ${JSON.stringify(ids)}`,limit:ids.length});
  if(!Array.isArray(base.results))throw Error('Incomplete source catalog delta');

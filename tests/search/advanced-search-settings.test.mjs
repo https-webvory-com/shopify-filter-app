@@ -85,17 +85,21 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const redis={get:async key=>cache.get(key)??null,set:async(key,value)=>cache.set(key,value),del:async key=>cache.delete(key),incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));}};
  const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,upsert:async({where,create})=>{if(!rows.has(where.shop))rows.set(where.shop,{...create,updatedAt:++clock});return rows.get(where.shop);},updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async({distinct}={})=>distinct?activeSynonym?[{shop}]:[]:activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
+ prisma.product={findMany:async({where,take})=>catalog.filter(p=>p.shop===where.shop&&(!where.id||p.id>where.id.gt)&&where.OR.some(clause=>p.title.includes(clause.title.contains))).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,take).map(p=>({id:p.id})),count:async({where})=>catalog.filter(p=>p.shop===where.shop&&where.OR.some(clause=>p.title.includes(clause.title.contains))).length};
  let sharedSynonyms={gown:['dress']};
  const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{cause:{code:'index_not_found'}});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{getTask:async()=>({status:'succeeded'}),waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
   getSettings:async()=>({filterableAttributes:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
   updateSettings:async value=>{assert.deepEqual(Object.keys(value.typoTolerance).filter(key=>!['enabled','minWordSizeForTypos','disableOnWords','disableOnAttributes'].includes(key)),[]);calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
   deleteAllDocuments:async()=>{indexes.get(uid).clear();calls.push(['clear',uid]);return queued();},
   addDocuments:async docs=>{for(const p of docs)indexes.get(uid).set(String(p.id),plain(p));return queued();},
+  updateDocuments:async docs=>{calls.push(['patch',uid,plain(docs)]);for(const p of docs)indexes.get(uid).set(String(p.id),{...indexes.get(uid).get(String(p.id)),...plain(p)});return queued();},
   deleteDocuments:async ids=>{for(const id of ids)indexes.get(uid).delete(String(id));return queued();},
   getDocuments:async options=>{
-   assert.equal(uid,'products');const tenant=JSON.parse(options.filter.match(/shop = ("[^"]+")/)[1]);
-   let docs=catalog.filter(p=>p.shop===tenant);const ids=options.filter.match(/id IN (\[.*\])/);if(ids){const wanted=JSON.parse(ids[1]);docs=docs.filter(p=>wanted.includes(String(p.id)));}
-   return {results:plain(docs.slice(options.offset||0,(options.offset||0)+options.limit)),total:docs.length};
+   const tenant=JSON.parse(options.filter.match(/shop = ("[^"]+")/)[1]);
+   let docs=(uid==='products'?catalog:[...indexes.get(uid).values()]).filter(p=>p.shop===tenant);const ids=options.filter.match(/id IN (\[.*\])/);if(ids){const wanted=JSON.parse(ids[1]);docs=docs.filter(p=>wanted.includes(String(p.id)));}
+   const page=docs.slice(options.offset||0,(options.offset||0)+options.limit);
+   if(options.fields)calls.push(['read-fields',uid,plain(options.fields)]);
+   return {results:plain(options.fields?page.map(doc=>Object.fromEntries(Object.entries(doc).filter(([key])=>options.fields.includes(key)))):page),total:docs.length};
   },search:async(q,options)=>{calls.push(['query',uid,q,plain(options)]);return {hits:[...indexes.get(uid).values()]};},
  })};
  const queue={getJob:async()=>null,add:async(name,data,options)=>jobs.push({name,data:plain(data),options:plain(options)})};
@@ -207,6 +211,128 @@ test('retirement refuses another tenant and retains active indexes',async()=>{
  await assert.rejects(f.service.processSearchIndexJob({shop:other,retireUid:uid}),/tenant mismatch/);
  assert.equal((await f.service.processSearchIndexJob({shop,retireUid:uid})).retained,true);
  f.rows.delete(shop);assert.equal((await f.service.processSearchIndexJob({shop,retireUid:uid})).retired,true);assert.equal(f.indexes.has(uid),false);
+});
+
+test('separator saves reuse the serving index and patch only matching saved titles',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Blue Dress | Prom, Evening'},product(2),{...product(3,other),title:'Foreign | Dress'}],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const active=(await f.service.getSearchIndexContext(shop)).uid;
+ const clears=f.calls.filter(c=>c[0]==='clear').length;
+ f.rows.get(shop).config.fields=fields({title:{delimiter:'|',delimiters:[','],indexTransforms:[{type:'trim'}]}});
+ await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();
+ assert.equal((await f.service.getSearchIndexContext(shop)).uid,active);
+ assert.equal(f.indexes.size,1);assert.equal(f.calls.filter(c=>c[0]==='clear').length,clears);
+ const patches=f.calls.filter(c=>c[0]==='patch').flatMap(c=>c[2]);assert.deepEqual(patches.map(p=>p.id),['1']);
+ assert.deepEqual(patches[0].cfp_field_000,['Blue Dress','Prom','Evening']);
+ assert.equal(patches[0].title,undefined);assert.equal(patches[0].variantPrices,undefined);
+ assert.equal(f.indexes.get(active).get('1').title,'Blue Dress | Prom, Evening');
+ assert.equal(f.rows.get(shop).config._index.lastUpdate.updated,1);
+ assert.deepEqual(f.calls.filter(c=>c[0]==='read-fields'&&c[1]==='products').at(-1)[2],['id','shop','status','title']);
+});
+
+test('a delimiter-only edit selects candidates from saved DB rather than visiting the whole catalog',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Blue, Evening'},product(2)],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();
+ const original=configuration.projectConfiguredSearchDocument(product(2),settings({}));
+ f.rows.get(shop).config.fields=fields({title:{delimiter:','}});
+ assert.deepEqual(plain(f.service.searchRuleCandidates(settings({}),settings({fields:fields({title:{delimiter:','}})}))),{OR:[{title:{contains:','}}]});
+ await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();
+ const state=f.rows.get(shop).config._index;assert.equal(state.lastUpdate.processed,1);assert.equal(state.lastUpdate.updated,1);
+ assert.deepEqual(f.indexes.get(state.active.uid).get('2'),original);
+});
+
+test('changing priorities and stopwords updates configuration without reading or writing documents',async()=>{
+ const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();const count=f.calls.length;
+ f.rows.get(shop).config.stopwords=['a'];f.rows.get(shop).config.fields=fields({title:{weight:.8}});
+ await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();
+ assert.equal(f.calls.slice(count).some(c=>c[0]==='patch'||c[0]==='clear'),false);
+ assert.equal(f.rows.get(shop).config._index.lastUpdate.processed,0);
+});
+
+test('removing separators restores old search values and retries do not start a full build',async()=>{
+ const f=await fixture(settings({fields:fields({title:{delimiter:','}})}),[{...product(1),title:'Blue, Evening'}]);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const active=(await f.service.getSearchIndexContext(shop)).uid;
+ f.rows.get(shop).config.fields=fields({});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();
+ assert.equal((await f.service.getSearchIndexContext(shop)).uid,active);
+ assert.deepEqual(f.indexes.get(active).get('1').cfp_field_000,['Blue, Evening']);
+ const writes=f.calls.filter(c=>c[0]==='patch').length;
+ await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();assert.equal(f.calls.filter(c=>c[0]==='patch').length,writes);
+});
+
+test('rule saves never bootstrap an absent private index with a full rebuild',async()=>{
+ const f=await fixture();await assert.rejects(f.service.scheduleSearchIndex(shop,{allowInitialBuild:false}),/No full rebuild was started/);
+ assert.equal(f.jobs.length,0);assert.equal(f.indexes.size,0);
+ const synonyms=await fixture(settings({}),[product(1)],true);
+ await synonyms.service.scheduleSearchIndex(shop,{allowInitialBuild:false});assert.equal(synonyms.jobs.length,0,'a normal save must not bootstrap a synonym index either');
+});
+
+test('multiple separators are literal, longest-first and compatible with existing single separators',()=>{
+ const cfg=settings({fields:fields({title:{delimiter:'|',delimiters:[',','||'],indexTransforms:[{type:'trim'}]}})});
+ const doc=configuration.projectConfiguredSearchDocument({...product(1),title:'Blue||Evening, Prom|Formal'},cfg);
+ assert.deepEqual(doc.cfp_field_000,['Blue','Evening','Prom','Formal']);
+ assert.deepEqual(configuration.projectConfiguredSearchDocument({...product(1),title:'Blue - Evening'},settings({fields:fields({title:{delimiter:' - '}})})).cfp_field_000,['Blue','Evening']);
+ const numbers=settings({fields:fields({title:{delimiter:'|',delimiters:[','],numeric:true}})});
+ assert.deepEqual(configuration.projectConfiguredSearchDocument({...product(1),title:'10|20,XL,30.5'},numbers).cfp_field_000,[10,20,30.5]);
+});
+
+test('text patches preserve cached extra fields, dates, and unrelated product data',async()=>{
+ const f=await fixture(),before=settings({fields:fields({description:{search:true}}),productDateType:'created'});
+ const current=configuration.projectConfiguredSearchDocument({...product(1),title:'Blue, Evening',description:'Saved detailed description'},before);
+ current.createdAt=123456;
+ const config=settings({...before,fields:before.fields.map(field=>field.key==='title'?{...field,delimiter:','}:field)});
+ const patch=f.service.searchRulePatch({...product(1),title:'Blue, Evening',createdAt:999999},current,config,before);
+ assert.deepEqual(plain(patch.cfp_field_000),['Blue',' Evening']);
+ assert.equal(patch.createdAt,undefined);assert.equal(patch.cfp_field_008,undefined);
+ assert.ok(patch.cfpSemanticText.includes('Saved detailed description'));
+ assert.equal(patch.variantPrices,undefined);assert.equal(patch.priceMin,undefined);
+});
+
+test('rapidly replacing a partially applied rule also repairs values changed by the superseded rule',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Blue, Evening'}],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const active=f.rows.get(shop).config._index.active;
+ f.rows.get(shop).config.fields=fields({title:{delimiter:','}});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ const stale=f.jobs.shift();
+ // Model a completed engine write whose checkpoint has not yet committed.
+ f.indexes.get(active.uid).get('1').cfp_field_000=['Blue',' Evening'];
+ f.rows.get(shop).config.fields=fields({});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ assert.equal((await f.service.processSearchIndexJob(stale.data)).superseded,true);
+ await f.drain();assert.deepEqual(f.indexes.get(active.uid).get('1').cfp_field_000,['Blue, Evening']);
+});
+
+test('failed incremental tasks retry against the same index and supersede a pending full build',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Blue, Evening'}],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const uid=f.rows.get(shop).config._index.active.uid;
+ const oldData={shop,hash:'old-full-build'};f.rows.get(shop).config._index.build={uid:'unused',hash:'old-full-build'};
+ f.rows.get(shop).config.fields=fields({title:{delimiter:','}});await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});
+ assert.equal(f.rows.get(shop).config._index.build,null);
+ assert.equal((await f.service.processSearchIndexJob(oldData)).superseded,true);
+ assert.equal((await f.service.getSearchIndexStatus(shop)).mode,'incremental');
+ await f.drain();assert.equal(f.rows.get(shop).config._index.active.uid,uid);
+ assert.equal(f.calls.filter(c=>c[0]==='patch').length,1);
+});
+
+test('a full build queued by the old release is converted to a saved-value update',async()=>{
+ const f=await fixture(settings({}),[{...product(1),title:'Blue, Evening'}],true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const uid=f.rows.get(shop).config._index.active.uid;
+ const row=f.rows.get(shop);row.config.fields=fields({title:{delimiter:','}});
+ const requested=createHash('sha256').update(JSON.stringify([shop,configuration.searchIndexConfiguration(row.config)])).digest('hex');
+ row.config._index={...row.config._index,requested,build:{uid:'old-partial-build',hash:requested},phase:'building'};
+ assert.equal((await f.service.processSearchIndexJob({shop,hash:requested})).convertedToIncremental,true);
+ assert.equal(row.config._index.build?.uid,'old-partial-build','fixture mutation uses versioned replacement');
+ assert.equal(f.rows.get(shop).config._index.build,null);
+ await f.drain();assert.equal(f.rows.get(shop).config._index.active.uid,uid);
+ assert.deepEqual(f.indexes.get(uid).get('1').cfp_field_000,['Blue',' Evening']);
+});
+
+test('catalog deletions during a multi-batch rule update never clear the serving index or skip shifted rows',async()=>{
+ const f=await fixture(settings({}),Array.from({length:150},(_,i)=>product(i+1)),true);
+ await f.service.scheduleSearchIndex(shop);await f.drain();const uid=f.rows.get(shop).config._index.active.uid;
+ const clears=f.calls.filter(c=>c[0]==='clear').length;
+ f.rows.get(shop).config.fields=fields({title:{indexTransforms:[{type:'lowercase'}]}});
+ await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.service.processSearchIndexJob(f.jobs.shift().data);
+ f.catalog.shift();await f.service.scheduleSearchIndexProducts(shop,['1'],7);await f.drain();
+ assert.equal(f.indexes.get(uid).size,149);
+ assert.ok([...f.indexes.get(uid).values()].every(doc=>doc.cfp_field_000[0]===doc.title.toLowerCase()));
+ assert.equal(f.calls.filter(c=>c[0]==='clear').length,clears);
 });
 
 test('Shopify metadata uses variables, validates identity and rejects incomplete variant data',async()=>{

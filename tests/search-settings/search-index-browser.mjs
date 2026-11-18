@@ -12,14 +12,15 @@ try{
   await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Product title settings',exact:true});await dialog.waitFor();
   await dialog.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');
+  await dialog.getByRole('textbox',{name:'Additional field separators',exact:true}).fill(',');
   await dialog.getByRole('button',{name:'Add display transformations rule'}).click();
   await dialog.getByRole('button',{name:'Add display transformations rule'}).click();
   await dialog.getByRole('combobox',{name:'Display transformations rule 2',exact:true}).selectOption('remove-prefix');
   await dialog.getByRole('textbox',{name:'Text to remove',exact:true}).fill('SALE - ');
   await dialog.getByRole('button',{name:'Add search-only transformations rule'}).click();
   await dialog.getByRole('combobox',{name:'Search-only transformations rule 1',exact:true}).selectOption('uppercase');
-  await dialog.getByRole('textbox',{name:'Try a sample value',exact:true}).fill('  SALE - Satin Dress|Evening  ');
-  assert.deepEqual(await dialog.locator('.six-preview-list li').allTextContents(),['SATIN DRESS','EVENING']);
+  await dialog.getByRole('textbox',{name:'Try a sample value',exact:true}).fill('  SALE - Satin Dress|Evening,Formal  ');
+  assert.deepEqual(await dialog.locator('.six-preview-list li').allTextContents(),['SATIN DRESS','EVENING','FORMAL']);
   await dialog.screenshot({path:'scratch/search-index-advanced-desktop.png'});
   await dialog.getByRole('button',{name:'Apply field settings',exact:true}).click();
   await panel.getByRole('button',{name:'Configure Product title',exact:true}).click();await dialog.getByRole('textbox',{name:'Split values by',exact:true}).fill(',');await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
@@ -28,6 +29,7 @@ try{
   await panel.getByRole('button',{name:'Configure Occasion',exact:true}).click();const custom=page.getByRole('dialog',{name:'Occasion settings',exact:true});await custom.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');assert.deepEqual(await custom.locator('.six-preview-list li').allTextContents(),['Prom','Wedding','Evening']);await custom.getByRole('button',{name:'Apply field settings',exact:true}).click();
   await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.getByText('Search settings saved.',{exact:true}).waitFor();
   assert.equal(fixture.state.settings.fields[0].weight,.8);assert.equal(fixture.state.settings.fields[0].suggest,false);assert.equal(fixture.state.settings.fields[0].delimiter,'|');assert.equal(fixture.state.settings.fields.at(-1).key,'productMetafield:custom.occasion');
+  assert.deepEqual(fixture.state.settings.fields[0].delimiters,[',']);
   await page.reload();await page.getByRole('tab',{name:'Search index',exact:true}).click();assert.equal(await panel.getByRole('spinbutton',{name:'Product title priority',exact:true}).inputValue(),'0.8');
   await panel.getByRole('textbox',{name:'Find search fields',exact:true}).fill('SKU');assert.equal(await panel.locator('.six-field-name').count(),1);await panel.getByRole('button',{name:/Configure Variants/}).click();const sku=page.getByRole('dialog');await sku.getByRole('textbox',{name:'Split values by',exact:true}).fill('|');await sku.getByRole('checkbox',{name:'Treat values as numbers',exact:true}).check();await sku.getByRole('textbox',{name:'Try a sample value',exact:true}).fill('0012|not-a-number|13');assert.deepEqual(await sku.locator('.six-preview-list li').allTextContents(),['12','13']);await sku.getByRole('button',{name:'Cancel',exact:true}).click();
   await panel.getByRole('textbox',{name:'Find search fields',exact:true}).fill('');await panel.screenshot({path:'scratch/search-index-page-desktop.png'});

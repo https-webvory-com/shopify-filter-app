@@ -46,7 +46,7 @@ export const action = async ({ request }) => {
     catch{return {error:'Reload search settings before editing your Compact collections.'};}
   }
   try { const saved=await saveSearchSettings(session.shop, settings,{preserveEmptyPins:true,preserveCompactCollections,compactCollectionsBase}); return { success: true, settings:saved,indexStatus:await getSearchIndexStatus(session.shop) }; }
-  catch(error) { return { error: error.message==='Compact collections changed in another tab. Reload settings before saving your menu.'?error.message:'Could not save search settings. Please retry.' }; }
+  catch(error) { return { error: ['SEARCH_INDEX_SETUP_REQUIRED','SEARCH_INDEX_SOURCE_REQUIRED'].includes(error.code)||error.message==='Compact collections changed in another tab. Reload settings before saving your menu.'?error.message:'Could not save search settings. Please retry.' }; }
 };
 
 const fieldStyle = { width: '100%', boxSizing: 'border-box', padding: 10, border: '1px solid #c9cccf', borderRadius: 6, font: 'inherit' };
@@ -111,7 +111,7 @@ export default function SearchSettings() {
       }} style={{ display: 'grid', gap: 20 }}>
         {fetcher.data?.error && <p role="alert" style={{ color: '#b42318' }}>{fetcher.data.error}</p>}
         {fetcher.state === 'idle' && fetcher.data?.success && <p role="status">Search settings {fetcher.data.settings ? 'saved' : 'restored to defaults'}.</p>}
-        {indexStatus&&['queued','building','failed'].includes(indexStatus.phase)&&<p role="status" style={{padding:12,background:indexStatus.phase==='failed'?'#fff4e5':'#eef6ff'}}>{indexStatus.phase==='failed'?indexStatus.error:`Preparing search index: ${indexStatus.processed} of ${indexStatus.total??'…'} products. The previous complete search remains available until preparation finishes.`}</p>}
+        {indexStatus&&['queued','building','failed'].includes(indexStatus.phase)&&<p role="status" style={{padding:12,background:indexStatus.phase==='failed'?'#fff4e5':'#eef6ff'}}>{indexStatus.phase==='failed'?indexStatus.error:indexStatus.mode==='incremental'?`Updating saved search values: ${indexStatus.processed} products checked; ${indexStatus.updated||0} updated. Search stays available while changes apply.`:`Preparing search index: ${indexStatus.processed} of ${indexStatus.total??'…'} products. The previous complete search remains available until preparation finishes.`}</p>}
         {tab==='index'&&<SearchIndexSettings value={values} onChange={setValues} disabled={busy} indexStatus={indexStatus}/>}
         {tab==='instant'&&<fieldset disabled={busy} className="search-config-card" style={{ margin: 0, display: 'grid', gap: 16 }} aria-labelledby="instant-search-heading">
           <div className="settings-section-title"><h2 id="instant-search-heading">Instant search experience</h2>{field('instantSearchEnabled')}</div>
