@@ -189,7 +189,7 @@ test('manual pin export and batch import preserve order and images; legacy image
  const products=JSON.parse(exported[0].Products);
  assert.deepEqual(products.map(p=>p.ImageUrl),['one.jpg','two.jpg']);
  const calls=[];
- const db={product:{findMany:async()=>[1,2,3].map(id=>({id:'gid://shopify/Product/'+id,title:String(id),images:['fallback.jpg']}))},collection:{findMany:async()=>[{id:'gid://shopify/Collection/1',title:'Smart Watch'}]},pinnedProductRule:{upsert:async arg=>calls.push(arg)}};
+ const db={product:{findMany:async()=>[1,2,3].map(id=>({id:'gid://shopify/Product/'+id,title:String(id),images:['fallback.jpg']}))},collection:{findMany:async()=>[{id:'gid://shopify/Collection/1',title:'Smart Watch'}]},pinnedProductRule:{findFirst:async()=>null,upsert:async arg=>calls.push(arg)}};
  const {action}=await route('app/routes/api.import-pins-batch.jsx',{'../shopify.server':{authenticate:{admin:async()=>({session:{shop:'fixture'}})}},'../db.server':{__esModule:true,default:db}});
  const response=await action({request:new Request('https://fixture/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:[{externalId:'pins',collectionTitles:['Smart Watch'],products:[...products,{Id:'3'}]}]})})});
  assert.equal((await response.json()).imported,1);

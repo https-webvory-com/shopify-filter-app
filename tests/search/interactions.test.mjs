@@ -413,7 +413,7 @@ test('collection pin import uses IDs for renamed collections and never broadens 
         assert.ok(where.OR[1].id.in.includes('gid://shopify/Collection/10'));
         return [{ id: 'gid://shopify/Collection/10', title: 'Champagne Bridesmaids Dresses' }];
       } },
-      pinnedProductRule: { upsert: async args => writes.push(args) },
+      pinnedProductRule: { findFirst: async () => null, upsert: async args => writes.push(args) },
     } },
   });
   const products = [{ Id: 1 }];

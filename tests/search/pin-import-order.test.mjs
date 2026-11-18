@@ -13,7 +13,7 @@ for(const scope of ['collection','search'])test(`${scope}: 151 imported rules re
   const prisma={
     product:{findMany:async()=>[{id:'gid://shopify/Product/1',title:'One',images:[]},{id:'gid://shopify/Product/2',title:'Two',images:[]}]},
     collection:{findMany:async({where})=>where.OR[0].title.in.map(title=>({id:title,title}))},
-    pinnedProductRule:{upsert:async({where,create,update})=>{
+    pinnedProductRule:{findFirst:async()=>null,upsert:async({where,create,update})=>{
       assert.equal(where.shop_name_ruleType.shop,'fixture.myshopify.com');
       assert.equal(where.shop_name_ruleType.ruleType,scope);
       if(Number(create.importOrder.slice(-10))<52)await new Promise(resolve=>setTimeout(resolve,1));

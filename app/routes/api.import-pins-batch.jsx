@@ -176,9 +176,32 @@ export const action = async ({ request }) => {
           ruleName = `Imported ${ruleType === "collection" ? "Collection" : "Search"} Pin`;
         }
 
-        // UPSERT — key for resume: (shop, name, ruleType)
-        // Deduplicates across stores by collection name or search query!
-        await prisma.pinnedProductRule.upsert({
+        // Our collection exports carry the rule ID, while the collection title
+        // can differ from its custom rule name. Prefer that identity for a
+        // same-store reimport; foreign/legacy IDs retain name-based importing.
+        const existingRule = ruleType === "collection" && typeof row.externalId === "string" && row.externalId.trim()
+          ? await prisma.pinnedProductRule.findFirst({
+              where: { id: row.externalId.trim(), shop, ruleType },
+              select: { id: true },
+            })
+          : null;
+        const updateData = {
+          ...orderData,
+          status: row.active !== false,
+          collections: validCollections,
+          products: validProducts,
+          searchQueries,
+          applyToSearchType,
+          applyToAll,
+        };
+        if (existingRule) {
+          // Keep the original name, creation date and any metadata absent from
+          // the CSV. Repeat the tenant/type guard on the write as well.
+          await prisma.pinnedProductRule.update({
+            where: { id: existingRule.id, shop, ruleType },
+            data: updateData,
+          });
+        } else await prisma.pinnedProductRule.upsert({
           where: {
             shop_name_ruleType: {
               shop,
@@ -186,15 +209,7 @@ export const action = async ({ request }) => {
               ruleType,
             },
           },
-          update: {
-            ...orderData,
-            status: row.active !== false,
-            collections: validCollections,
-            products: validProducts,
-            searchQueries,
-            applyToSearchType,
-            applyToAll,
-          },
+          update: updateData,
           create: {
             ...orderData,
             shop,

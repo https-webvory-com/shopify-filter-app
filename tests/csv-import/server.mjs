@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 import { loadModule } from '../search/helpers/search-ranking.mjs';
 import * as helpers from '../../app/utils/csvImportReport.js';
 import * as conditionHelpers from '../../app/utils/merchandisingCondition.js';
+import * as marketRuleCountries from '../../app/utils/marketRuleCountries.js';
 let rows = [];
 const state = { pinFailure: false, merchFailure: false }, writes = [];
 const model = {
@@ -12,13 +13,14 @@ const model = {
   create: async ({ data }) => { const value = { id: String(rows.length + 1), ...data }; rows.push(value); return value; },
   update: async ({ where, data }) => Object.assign(rows.find(r => r.id === where.id), data),
 };
-const prisma = { merchandisingRule: model, $transaction: async fn => { const previous = structuredClone(rows); try { return await fn({ merchandisingRule: model }); } catch (e) { rows = previous; throw e; } } };
-const merch = await loadModule('app/services/merchandisingImport.server.js', { '../db.server': { default: prisma }, '../utils/merchandisingCondition.js': conditionHelpers, '../utils/csvImportReport.js': helpers });
+const collection = { findMany: async () => [{ id: 'gid://shopify/Collection/1', title: 'Summer' }] };
+const prisma = { merchandisingRule: model, collection, $transaction: async fn => { const previous = structuredClone(rows); try { return await fn({ merchandisingRule: model, collection }); } catch (e) { rows = previous; throw e; } } };
+const merch = await loadModule('app/services/merchandisingImport.server.js', { '../db.server': { default: prisma }, '../utils/merchandisingCondition.js': conditionHelpers, '../utils/csvImportReport.js': helpers, '../utils/marketRuleCountries.js': marketRuleCountries });
 const pin = await loadModule('app/routes/api.import-pins-batch.jsx', {
   '../utils/pinImportOrder.js': pinImportOrder,
   '../shopify.server': { authenticate: { admin: async () => ({ session: { shop: 'fixture.myshopify.com' } }) } },
   '../utils/csvImportReport.js': helpers, '../services/shopCache.server.js': { invalidateShop: async () => {} },
-  '../db.server': { default: { product: { findMany: async () => [{ id: 'gid://shopify/Product/1', title: 'Dress', images: [] }] }, collection: { findMany: async ({where}) => where.OR[0].title.in.filter(title=>title==='Summer'||/^OrderCollection \d+$/.test(title)).map(title=>({id:'gid://shopify/Collection/1',title})) }, pinnedProductRule: { upsert: async data => writes.push(data) } } },
+  '../db.server': { default: { product: { findMany: async () => [{ id: 'gid://shopify/Product/1', title: 'Dress', images: [] }] }, collection: { findMany: async ({where}) => where.OR[0].title.in.filter(title=>title==='Summer'||/^OrderCollection \d+$/.test(title)).map(title=>({id:'gid://shopify/Collection/1',title})) }, pinnedProductRule: { findFirst: async () => null, upsert: async data => writes.push(data) } } },
 });
 await fs.writeFile('scratch/csv-import-entry.jsx', `import React,{useState}from'react';import{createRoot}from'react-dom/client';import Merch from '../app/components/merchandising/ImportMerchandisingRulesModal.jsx';import Collection from '../app/components/merchandising/ImportCollectionPinsModal.jsx';import Search from '../app/components/merchandising/ImportSearchPinsModal.jsx';window.toasts=[];window.shopify={toast:{show:message=>window.toasts.push(message)}};function Harness(){const[open,setOpen]=useState(true),[busy,setBusy]=useState(false),[result,setResult]=useState(null);const p=new URLSearchParams(location.search),kind=p.get('kind')||'merch',scope=p.get('scope')||'collection';return <><button onClick={()=>setOpen(true)}>Open importer</button>{kind==='merch'?<Merch isOpen={open} ruleType={scope} onClose={()=>setOpen(false)} isSubmitting={busy} importResult={result} onSubmit={async rules=>{setBusy(true);try{const r=await fetch('/api/import-merch',{method:'POST',body:JSON.stringify({rules,scope})});setResult(await r.json())}catch{setResult({error:'The import could not be confirmed. Check existing rules before retrying.'})}finally{setBusy(false)}}}/>:scope==='search'?<Search isOpen={open} onClose={()=>setOpen(false)}/>:<Collection isOpen={open} onClose={()=>setOpen(false)}/>}</>};createRoot(document.getElementById('root')).render(<Harness/>);`);
 await build({ entryPoints: ['scratch/csv-import-entry.jsx'], outfile: 'scratch/csv-import-browser.js', bundle: true, jsx: 'automatic', format: 'iife', define: { 'process.env.NODE_ENV': '"development"' } });

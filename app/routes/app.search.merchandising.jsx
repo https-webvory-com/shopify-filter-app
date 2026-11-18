@@ -1193,6 +1193,7 @@ export default function MerchandisingIndex() {
                                       }}
                                     />
                                     <span
+                                      title={rule.name}
                                       onClick={() => {
                                         setRuleToEdit(rule);
                                         setIsCreateSearchRuleModalOpen(true);
@@ -1202,6 +1203,11 @@ export default function MerchandisingIndex() {
                                         fontWeight: "600",
                                         cursor: "pointer",
                                         transition: "color 0.2s ease",
+                                        minWidth: 0,
+                                        maxWidth: "320px",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
                                       }}
                                       onMouseEnter={(e) =>
                                         (e.currentTarget.style.color =
@@ -1224,7 +1230,15 @@ export default function MerchandisingIndex() {
                                   {rule.searchQueries &&
                                   rule.searchQueries.length > 0 ? (
                                     <span
+                                      title={rule.searchQueries.join(", ")}
                                       style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        maxWidth: "240px",
+                                        boxSizing: "border-box",
+                                        verticalAlign: "middle",
+                                        whiteSpace: "nowrap",
                                         background: "rgba(91, 33, 182, 0.08)",
                                         color: "#5B21B6",
                                         padding: "6px 14px",
@@ -1235,9 +1249,12 @@ export default function MerchandisingIndex() {
                                           "1px solid rgba(91, 33, 182, 0.1)",
                                       }}
                                     >
-                                      {rule.searchQueries[0]}{" "}
-                                      {rule.searchQueries.length > 1 &&
-                                        `+${rule.searchQueries.length - 1}`}
+                                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                        {rule.searchQueries[0]}
+                                      </span>
+                                      {rule.searchQueries.length > 1 && (
+                                        <span style={{ flexShrink: 0 }}>+{rule.searchQueries.length - 1}</span>
+                                      )}
                                     </span>
                                   ) : (
                                     <span
