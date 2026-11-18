@@ -3,7 +3,7 @@ import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,sale
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import { spellingCorrection } from "../utils/spellingCorrection.js";
-import { availableProductIds, savedVariantPricePage, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
+import { availableProductIds, savedVariantPricePage, collectionPriceCandidateIds, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -829,6 +829,7 @@ export const loader = async ({ request, context }) => {
       (activeRule?.conditions || []).every(condition =>
         ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
     const databasePriceSort=variantPriceV2&&directSort&&!nativePriceBoundReady;
+    const savedPriceTiming={candidateMs:0,sqlMs:0};
     if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual" && !directSort;
     facetsOnly=facetsOnly&&useRankedCollectionPagination;
@@ -1214,11 +1215,11 @@ export const loader = async ({ request, context }) => {
       if(databasePriceSort)queryIndexes=queryIndexes.filter(i=>i!==0);
       let searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
       const savedPriceRead=databasePriceSort?getCached('availableVariants:'+shop+':sorted-price-v2:'+rankingFingerprint+':'+page+':'+limit,async()=>{
-        const candidates=await meiliClient.index('products').search(mainQuery.q||'',{filter:mainQuery.filter,limit:100000,offset:0,attributesToRetrieve:['id']});
-        const ids=(candidates.hits||[]).map(product=>String(product.id).split('/').pop());
-        const expected=candidates.totalHits??candidates.estimatedTotalHits??ids.length;
-        if(ids.length!==expected||new Set(ids).size!==ids.length)throw Error('Incomplete saved-price candidate IDs');
-        return savedVariantPricePage(prisma,{shop,ids,context:variantPriceContext,page,limit});
+        let started=Date.now();
+        const ids=await collectionPriceCandidateIds(meiliClient.index('products'),{q:mainQuery.q||'',filter:mainQuery.filter});
+        savedPriceTiming.candidateMs=Date.now()-started;started=Date.now();
+        const result=await savedVariantPricePage(prisma,{shop,ids,context:variantPriceContext,page,limit});
+        savedPriceTiming.sqlMs=Date.now()-started;return result;
       },30,{maxBytes:4194304}):null;
       const sharedSearchKey=isSearch&&searchCacheHeaders(request)['Cache-Control'].startsWith('public')
         ? 'searchPageBatch:'+shop+':'+JSON.stringify([country,url.searchParams.get('locale'),searchQueries]) : null;
@@ -1735,7 +1736,7 @@ export const loader = async ({ request, context }) => {
         ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
-      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,totalMs:Date.now()-startTime}},
+      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     }
 
@@ -2050,6 +2051,7 @@ export const loader = async ({ request, context }) => {
         timing: {
           configurationReadyMs,
           queryReadyMs,
+          ...(databasePriceSort?{savedPriceTiming}:{}),
           meiliMs: meiliTime,
           normalizedCountMs,
           normalizedCountQueries:duplicateGroups.length,

@@ -74,7 +74,7 @@ export async function prepareCollectionFromFacts(spec,{populate=false}={}){
   // Filtered visitor requests can fetch bounded candidate pages in parallel;
   // the candidate index still validates every page before freezing the order.
   const candidates=createCollectionCandidateIndex(index,spec,{signal,browseConcurrency:populate||spec.directFiltered?4:1});
-  const boundedIndex={search:(q,options,extra={})=>candidates.search(q,options,{...extra,...(signal?{signal:extra.signal?AbortSignal.any([signal,extra.signal]):signal}:{})})};
+  const boundedIndex={getDocuments:options=>index.getDocuments(options,{...(signal?{signal}:{})}),search:(q,options,extra={})=>candidates.search(q,options,{...extra,...(signal?{signal:extra.signal?AbortSignal.any([signal,extra.signal]):signal}:{})})};
   return prepareCollectionRanking(spec,{index:boundedIndex,prisma,arrange:applyMerchandisingRules,comparator:createMerchandisingComparator,captureReuse:true,
    ...(profile?{factProfile:profile,loadFacts:products=>populate?
     maintainCollectionFacts({store,index,prisma,shop:spec.shop,profile,products,check:checkRuleMatch}):

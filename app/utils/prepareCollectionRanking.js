@@ -2,6 +2,7 @@ import { buildCollectionSequence, collectionRankingFields, hydrateCollectionPric
 import {COLLECTION_SOURCE_FIELD,collectionFactResolver} from './collectionRuleFacts.js';
 import {priceSortVariant} from './savedMarketPricing.js';
 import {savedVariantPriceSelections} from './availableVariants.js';
+import {collectionPriceCandidateIds} from './collectionPriceCandidates.js';
 
 export async function prepareCollectionRanking(spec, { index, prisma, arrange, comparator, factProfile, loadFacts, captureReuse=false }) {
   const metadata = {};
@@ -10,10 +11,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
   const selections=new Map(),ineligible=new Set();
   let savedSelections=null;
   if(spec.variantPriceSort&&typeof prisma?.$queryRaw==='function'){
-    const {indexUid,q,...options}=spec.query;
-    const candidates=await index.search(q||'',{...options,offset:0,limit:100000,attributesToRetrieve:['id']});
-    const ids=(candidates.hits||[]).map(product=>String(product.id).split('/').pop());
-    if(ids.length!==(candidates.totalHits??candidates.estimatedTotalHits??ids.length)||new Set(ids).size!==ids.length)throw Error('Incomplete saved-price ranking candidates');
+    const ids=await collectionPriceCandidateIds(index,spec.query);
     savedSelections=await savedVariantPriceSelections(prisma,{shop:spec.shop,ids:[...new Set([...ids,...(spec.pinnedIds||[]).map(id=>String(id).split('/').pop())])],context:spec.variantPriceSort});
   }
   const native=captureReuse&&Array.isArray(spec.orderedIds)?new Set(spec.orderedIds.map(id=>String(id).split('/').pop())):null;

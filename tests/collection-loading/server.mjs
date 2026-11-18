@@ -1,5 +1,6 @@
 import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
 import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
+import * as collectionPriceCandidates from '../../app/utils/collectionPriceCandidates.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import http from 'node:http';
 import {gunzipSync} from 'node:zlib';
@@ -172,6 +173,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
   ]});
   const mocks={
     '../utils/savedMarketPricing.js':savedMarketPricing,
+    '../utils/collectionPriceCandidates.js':collectionPriceCandidates,
     'node:crypto':{createHash},
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
