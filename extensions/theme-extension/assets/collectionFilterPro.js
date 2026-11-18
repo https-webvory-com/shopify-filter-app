@@ -903,6 +903,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       if(templateName!=='search'&&!collectionQuery&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
           (hasSelectedFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)))
         queryParams.set('responseProfile','fast-cards-v1');
+      if(isLoadMore&&templateName!=='search'&&!collectionQuery&&queryParams.get('priceSortVersion')==='2')
+        queryParams.set('responseProfile','price-sort-page-v1');
       if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
       if (templateName!=='search'&&!collectionQuery&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
@@ -1076,7 +1078,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       // network work can overlap card rendering instead of waiting behind it.
       const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
       let facetsPromise;
-      if((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2){
+      if(!(isLoadMore&&data.cfpCards?.append===true)&&((data.cfpCards?.version===1&&!data.cfpCards.published&&!savedFiltersReady)||data.cfpCards?.version===2)){
         sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
           ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)

@@ -1,4 +1,15 @@
 const clean=id=>String(id).split('/').pop();
+export function savedPriceCollectionScope(collectionId,exclusions,pinnedIds,stockOnly){
+ if(!collectionId||!Array.isArray(exclusions))return null;
+ const keep=new Set((pinnedIds||[]).map(clean)),excluded=new Set();
+ for(const clause of exclusions){
+  if(clause.startsWith('(NOT (available = false)')){if(!stockOnly)return null;continue;}
+  const match=clause.match(/^\(NOT \(id IN (\[[^\]]*\])\)/);
+  if(!match)return null;
+  for(const id of JSON.parse(match[1]))if(!keep.has(clean(id)))excluded.add(clean(id));
+ }
+ return {collectionId:collectionId==='all'?'all':'gid://shopify/Collection/'+clean(collectionId),excludeIds:[...excluded]};
+}
 // Membership is already indexed. Reading IDs must not ask the search engine
 // to rank every matching product before SQL selects the requested price page.
 export async function collectionPriceCandidateIds(index,{q='',filter}){

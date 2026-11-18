@@ -3,7 +3,7 @@ import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,sale
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import { spellingCorrection } from "../utils/spellingCorrection.js";
-import { availableProductIds, savedVariantPricePage, collectionPriceCandidateIds, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
+import { availableProductIds, savedVariantPricePage, collectionPriceCandidateIds, savedPriceCollectionScope, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -538,9 +538,10 @@ export const loader = async ({ request, context }) => {
       Object.values(metafieldsFilters).some((v) => v.length > 0) ||
       minPrice > 0 ||
       maxPrice < 9999999;
-    const fastCards=url.searchParams.get('responseProfile')==='fast-cards-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&
+    const priceSortAppend=url.searchParams.get('responseProfile')==='price-sort-page-v1'&&url.searchParams.get('priceSortVersion')==='2'&&marketPriceSortRequested&&page>1;
+    const fastCards=(url.searchParams.get('responseProfile')==='fast-cards-v1'||priceSortAppend)&&!isSearch&&!searchQuery&&sortBy!=='manual'&&
       (userHasFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(sortBy))&&
-      page===1&&limit<=40&&!context?.rankingWarmup;
+      (page===1||priceSortAppend)&&limit<=40&&!context?.rankingWarmup;
     let facetsOnly=url.searchParams.get('responseProfile')==='collection-facets-v1'&&!isSearch&&!searchQuery&&sortBy!=='manual'&&userHasFilters&&page===1&&limit<=40&&!context?.rankingWarmup;
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
@@ -829,6 +830,8 @@ export const loader = async ({ request, context }) => {
       (activeRule?.conditions || []).every(condition =>
         ['Include','Boost','Pin','Dynamic','Bury','Exclude'].includes(condition.action));
     const databasePriceSort=variantPriceV2&&directSort&&!nativePriceBoundReady;
+    const savedCollectionScope=databasePriceSort&&!userHasFilters&&!marketVersion
+      ?savedPriceCollectionScope(resolvedCollectionId||(url.searchParams.get('collectionHandle')==='all'?'all':null),directExclusions,pinnedIds,variantPriceContext.stockOnly):null;
     const savedPriceTiming={candidateMs:0,sqlMs:0};
     if(directSort){baseFilters.push(...directExclusions);allFiltersList.push(...directExclusions);}
     const useRankedCollectionPagination = useCollectionPagination && sortBy !== "manual" && !directSort;
@@ -1216,9 +1219,9 @@ export const loader = async ({ request, context }) => {
       let searchQueries=fastSearchCards?[mainQuery]:queryIndexes.map(i=>queries[i]);
       const savedPriceRead=databasePriceSort?getCached('availableVariants:'+shop+':sorted-price-v2:'+rankingFingerprint+':'+page+':'+limit,async()=>{
         let started=Date.now();
-        const ids=await collectionPriceCandidateIds(meiliClient.index('products'),{q:mainQuery.q||'',filter:mainQuery.filter});
+        const ids=savedCollectionScope?null:await collectionPriceCandidateIds(meiliClient.index('products'),{q:mainQuery.q||'',filter:mainQuery.filter});
         savedPriceTiming.candidateMs=Date.now()-started;started=Date.now();
-        const result=await savedVariantPricePage(prisma,{shop,ids,context:variantPriceContext,page,limit});
+        const result=await savedVariantPricePage(prisma,{shop,ids,...savedCollectionScope,context:variantPriceContext,page,limit});
         savedPriceTiming.sqlMs=Date.now()-started;return result;
       },30,{maxBytes:4194304}):null;
       const sharedSearchKey=isSearch&&searchCacheHeaders(request)['Cache-Control'].startsWith('public')
@@ -1732,7 +1735,7 @@ export const loader = async ({ request, context }) => {
         reportCollectionHead(preparedSpec,'proven','price-sort-explicit-pins');
       }
       return data({products,totalCount:pinnedPrefix?null:collectionPageTotal??null,rankingToken:rankingSession?.token??null,
-      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:true,filtered:userHasFilters,
+      mergedValues,globalSettings,didYouMean,cfpCards:{version:2,preview:!priceSortAppend,...(priceSortAppend?{append:true}:{}),filtered:userHasFilters,
         ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),

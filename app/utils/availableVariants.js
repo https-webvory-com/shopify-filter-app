@@ -1,7 +1,7 @@
 import {Prisma} from '@prisma/client';
 import {canonicalSize,isSizeFacet,expandMappedFacetValues} from './facetNormalization.js';
 export {availableOptionFacetCounts,availableOptionFacetSignature} from './availableOptionFacetCounts.js';
-export {collectionPriceCandidateIds} from './collectionPriceCandidates.js';
+export {collectionPriceCandidateIds,savedPriceCollectionScope} from './collectionPriceCandidates.js';
 
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const trimCharacters='\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
@@ -20,8 +20,11 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
  if(!database?.$queryRaw||typeof where.shop!=='string'||Object.keys(where).some(key=>!['shop','status','collections','id'].includes(key)))return null;
  const clauses=[Prisma.sql`p."shop" = ${where.shop}`];
  if(where.id){
-  if(!Array.isArray(where.id.in)||where.id.in.some(id=>typeof id!=='string'))return null;
-  clauses.push(Prisma.sql`p."id" = ANY(${where.id.in}::text[])`);
+  if(Object.keys(where.id).some(key=>!['in','notIn'].includes(key)))return null;
+  for(const key of ['in','notIn'])if(where.id[key]){
+   if(!Array.isArray(where.id[key])||where.id[key].some(id=>typeof id!=='string'))return null;
+   clauses.push(key==='in'?Prisma.sql`p."id" = ANY(${where.id[key]}::text[])`:Prisma.sql`NOT (p."id" = ANY(${where.id[key]}::text[]))`);
+  }
  }
  if(where.status!==undefined){
   if(typeof where.status==='string')clauses.push(Prisma.sql`p."status" = ${where.status}`);
@@ -117,9 +120,11 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
  return rows.map(row=>row.id.split('/').pop());
 }
 
-export async function savedVariantPricePage(database,{shop,ids,context,page=1,limit=25}){
- if(typeof shop!=='string'||!Array.isArray(ids)||ids.length>100000||!context||!['asc','desc'].includes(context.direction)||!Number.isSafeInteger(page)||page<1||!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('Invalid saved variant sort page');
- const rows=await availableProductIdsInDatabase(database,{shop,status:{equals:'active',mode:'insensitive'},id:{in:ids.map(id=>'gid://shopify/Product/'+String(id).split('/').pop())}},context.options||{},context.mergedValues||[],context.ranges?.length?context.ranges:null,context,{limit,offset:(page-1)*limit});
+export async function savedVariantPricePage(database,{shop,ids,collectionId,excludeIds=[],context,page=1,limit=25}){
+ if(typeof shop!=='string'||(ids!=null?(!Array.isArray(ids)||ids.length>100000):!(collectionId==='all'||/^gid:\/\/shopify\/Collection\/\d+$/.test(collectionId||'')))||!Array.isArray(excludeIds)||excludeIds.some(id=>!/^\d+$/.test(String(id)))||!context||!['asc','desc'].includes(context.direction)||!Number.isSafeInteger(page)||page<1||!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('Invalid saved variant sort page');
+ const where={shop,status:{equals:'active',mode:'insensitive'},...(collectionId&&collectionId!=='all'?{collections:{some:{collectionId}}}:{})};
+ if(ids!=null||excludeIds.length)where.id={...(ids!=null?{in:ids.map(id=>'gid://shopify/Product/'+String(id).split('/').pop())}:{}),...(excludeIds.length?{notIn:excludeIds.map(id=>'gid://shopify/Product/'+id)}:{})};
+ const rows=await availableProductIdsInDatabase(database,where,context.options||{},context.mergedValues||[],context.ranges?.length?context.ranges:null,context,{limit,offset:(page-1)*limit});
  if(!Array.isArray(rows))throw Error('Saved price query unavailable');
  const total=Number(rows[0]?.total||0);
  if(!Number.isSafeInteger(total)||total<0)throw Error('Invalid saved price total');

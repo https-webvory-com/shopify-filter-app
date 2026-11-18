@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {collectionPriceCandidateIds} from '../../app/utils/collectionPriceCandidates.js';
+import {collectionPriceCandidateIds,savedPriceCollectionScope} from '../../app/utils/collectionPriceCandidates.js';
+
+test('saved collection membership keeps exact exclusions and protected pins',()=>{
+ const exclusions=['(NOT (available = false) OR id IN ["1"])','(NOT (id IN ["1","2"]) OR id IN ["1"])'];
+ assert.deepEqual(savedPriceCollectionScope('10',exclusions,['gid://shopify/Product/1'],true),{collectionId:'gid://shopify/Collection/10',excludeIds:['2']});
+ assert.equal(savedPriceCollectionScope('10',exclusions,[],false),null);
+ assert.equal(savedPriceCollectionScope('10',['tags IN ["Excluded"]'],[],true),null);
+});
 
 test('saved price membership reads only indexed IDs without ranking the collection',async()=>{
  const filter=['shop = "fixture.myshopify.com"','collections = "1"'],reads=[];

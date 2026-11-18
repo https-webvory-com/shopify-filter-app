@@ -48,6 +48,8 @@ try{
  const reports=[];
  const read=async(extra={},page=1)=>{const t=performance.now();const value=await savedVariantPricePage(database,{shop:'headless-fixture.myshopify.com',ids,context:{...context,...extra},page,limit:25});reports.push({country:extra.country||'US',direction:extra.direction||'desc',ranges:extra.ranges||[],options:extra.options||{},page,ms:Math.round(performance.now()-t),total:value.total});return value;};
  const high=await read();assert.equal(high.total,15000);assert.equal(high.rows[0].id,'1');assert.equal(high.rows[0].selection.price,3410);assert.equal(high.rows[0].variants.length,10);
+ const scoped=await savedVariantPricePage(database,{shop:'headless-fixture.myshopify.com',collectionId:'gid://shopify/Collection/1',context,page:1,limit:25});assert.equal(scoped.total,high.total);assert.deepEqual(scoped.rows.map(row=>row.id),high.rows.map(row=>row.id));
+ const excluded=await savedVariantPricePage(database,{shop:'headless-fixture.myshopify.com',collectionId:'gid://shopify/Collection/1',excludeIds:['1'],context,page:1,limit:25});assert.equal(excluded.total,14999);assert.equal(excluded.rows[0].id,'2');
  const low=await read({direction:'asc'});assert.equal(low.rows[0].selection.price,11);
  const band=await read({ranges:[{min:3000,max:3300}]});assert.deepEqual(band.rows.map(r=>r.id),['2','1']);assert.equal(band.rows[1].selection.price,3190);
  const options=await read({ranges:[{min:3000,max:3300}],options:{Color:['Navy'],Size:['L']},mergedValues:[{optionName:'Color',targetValue:'Navy',sourceValues:['Blue']}]});assert.deepEqual(options.rows.map(r=>r.id),['2']);
