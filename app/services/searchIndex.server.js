@@ -62,7 +62,10 @@ export async function scheduleSearchIndex(shop,{allowInitialBuild=true}={}){
   const forceFields=[...new Set([...(previous.update?.forceFields||[]),...(interrupted?interrupted.fields.filter(field=>changesField(field,from.fields.find(old=>old.key===field.key),from,interrupted)).map(field=>field.key):[])])];
   const forceScan=!!previous.update&&(previous.update.forceScan||interrupted&&projectionSignature(from)!==projectionSignature(interrupted));
   const update=previous.update?.hash===requested?previous.update:{hash:requested,config,from,forceFields,forceScan:!!forceScan,offset:0,cursor:null,processed:0,updated:0};
-  if(!update.forceScan&&!update.forceFields?.length&&queryPolicySignature(from)===queryPolicySignature(config)){
+  // Older releases marked every superseded save for a full comparison, even
+  // when both requests only changed weights. Ignore that stale checkpoint
+  // only after proving no interrupted document transformation needs repair.
+  if(!forceFields.length&&queryPolicySignature(from)===queryPolicySignature(config)&&(!interrupted||queryPolicySignature(from)===queryPolicySignature(interrupted))){
    const existing=await client.index(previous.active.uid).getSettings(),attributes=existing.searchableAttributes||[];
    const required=[...enabledSearchFields(config),...enabledSearchFields(config,'suggest')].map(field=>searchFieldName(field.index));
    if(config.smartSkuSearch)required.push('cfpSkuNormalized');

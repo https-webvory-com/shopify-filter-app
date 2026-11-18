@@ -282,7 +282,7 @@ test('zero title weight and reversed priorities activate even when engine writes
 test('superseding a failed weight save does not schedule a catalog comparison',async()=>{
  const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();
  const before=plain(f.rows.get(shop).config);f.rows.get(shop).config.fields=fields({title:{weight:0},handle:{weight:1}});
- f.rows.get(shop).config._index.update={hash:'failed-weight-save',from:before,config:plain(f.rows.get(shop).config),forceFields:[],forceScan:false,offset:0,cursor:null};
+ f.rows.get(shop).config._index.update={hash:'failed-weight-save',from:before,config:plain(f.rows.get(shop).config),forceFields:[],forceScan:true,offset:100,cursor:null,applied:true,processed:100,updated:68};
  const stale={data:{shop,hash:'failed-weight-save',incremental:true}};
  f.rows.get(shop).config.fields=fields({title:{weight:.2},handle:{weight:1}});
  const checkpoint=f.calls.length;await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});

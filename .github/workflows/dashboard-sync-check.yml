@@ -10,6 +10,10 @@ on:
         description: Optional already-queued unused temporary build to retire before retrying incremental rules
         type: string
         default: ''
+      repair_policy_checkpoint:
+        description: Clear a legacy comparison checkpoint only for a verified field-weight-only saved rule
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -21,14 +25,15 @@ jobs:
         env:
           CHECK_SEARCH_RULES: ${{ inputs.search_rules }}
           RETIRE_ABANDONED_INDEX: ${{ inputs.retire_abandoned_index }}
+          REPAIR_POLICY_CHECKPOINT: ${{ inputs.repair_policy_checkpoint }}
         with:
-          envs: CHECK_SEARCH_RULES,RETIRE_ABANDONED_INDEX
+          envs: CHECK_SEARCH_RULES,RETIRE_ABANDONED_INDEX,REPAIR_POLICY_CHECKPOINT
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             if [ "$CHECK_SEARCH_RULES" = true ]; then
-              docker exec -i -e RETIRE_ABANDONED_INDEX shopify-filter-app node --input-type=module <<'SEARCH_NODE'
+              docker exec -i -e RETIRE_ABANDONED_INDEX -e REPAIR_POLICY_CHECKPOINT shopify-filter-app node --input-type=module <<'SEARCH_NODE'
             import {PrismaClient} from '@prisma/client';
             import {Queue} from 'bullmq';
             import {redisConnectionOptions} from './app/services/redisConnection.server.js';
@@ -39,6 +44,19 @@ jobs:
             try {
               const row=await db.searchSetting.findUnique({where:{shop}}),state=row?.config?._index||{};
               console.log('SEARCH_RULE_STATE',JSON.stringify({phase:state.phase,processed:state.processed,total:state.total,error:state.error,active:state.active?.uid,build:state.build?.uid,incremental:!!state.update,updated:state.update?.updated,lastUpdate:state.lastUpdate,queryRanking:state.active?.queryRanking,activeWeights:state.active?.config?.fields?.filter(field=>['title','handle'].includes(field.key)).map(({key,weight})=>({key,weight}))}));
+              console.log('SEARCH_RULE_CHECKPOINT',JSON.stringify({forceScan:state.update?.forceScan,forceFields:state.update?.forceFields,applied:state.update?.applied}));
+              if(process.env.REPAIR_POLICY_CHECKPOINT==='true'){
+                const {validateSearchSettings}=await import('./app/utils/searchSettings.js');
+                const {searchIndexConfiguration}=await import('./app/utils/searchConfiguration.js');
+                const signature=value=>{const config=validateSearchSettings(value);return JSON.stringify({...searchIndexConfiguration(config),fields:config.fields.map(({weight,search,suggest,...field})=>field)});};
+                if(!state.active?.uid||state.build||!state.update?.forceScan||state.update.forceFields?.length)throw Error('Not a repairable legacy policy checkpoint');
+                if(signature(state.update.from)!==signature(row.config)||signature(state.update.from)!==signature(state.update.config))throw Error('Document transformations are pending; refusing policy checkpoint repair');
+                const repaired=await db.searchSetting.updateMany({where:{shop,updatedAt:row.updatedAt},data:{config:{...row.config,_index:{...state,update:{...state.update,forceScan:false}}}}});
+                if(repaired.count!==1)throw Error('Saved rule changed during checkpoint repair');
+                const {scheduleSearchIndex}=await import('./app/services/searchIndex.server.js');await scheduleSearchIndex(shop,{allowInitialBuild:false});
+                const ready=(await db.searchSetting.findUnique({where:{shop}})).config._index;
+                console.log('POLICY_CHECKPOINT_REPAIRED',JSON.stringify({phase:ready.phase,active:ready.active?.uid,build:ready.build?.uid,update:!!ready.update,queryRanking:ready.active?.queryRanking,lastUpdate:ready.lastUpdate}));
+              }
               const jobs=await queue.getJobs(['active','failed','delayed','prioritized'],0,60);
               for(const job of jobs)if(job.data.shop===shop&&(job.data.incremental||job.data.retireUid))console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),retireUid:job.data.retireUid,incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
               const prefix=state.active?.uid?.slice(0,28);
