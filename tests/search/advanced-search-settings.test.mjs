@@ -86,9 +86,9 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,upsert:async({where,create})=>{if(!rows.has(where.shop))rows.set(where.shop,{...create,updatedAt:++clock});return rows.get(where.shop);},updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async({distinct}={})=>distinct?activeSynonym?[{shop}]:[]:activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
  prisma.product={findMany:async({where,take})=>catalog.filter(p=>p.shop===where.shop&&(!where.id||p.id>where.id.gt)&&where.OR.some(clause=>p.title.includes(clause.title.contains))).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,take).map(p=>({id:p.id})),count:async({where})=>catalog.filter(p=>p.shop===where.shop&&where.OR.some(clause=>p.title.includes(clause.title.contains))).length};
- let sharedSynonyms={gown:['dress']};
+ let sharedSynonyms={gown:['dress']},sharedFields=['shop','status','id'];
  const client={getIndex:async uid=>{if(!indexes.has(uid))throw Object.assign(Error('Missing'),{cause:{code:'index_not_found'}});return {};},createIndex:async uid=>{indexes.set(uid,new Map());return queued();},deleteIndex:async uid=>{calls.push(['retire',uid]);indexes.delete(uid);return queued();},tasks:{getTask:async()=>({status:'succeeded'}),waitForTask:async uid=>{calls.push(['wait',uid]);if(fail)throw Error('engine unavailable');return {status:'succeeded'};}},index:uid=>({
-  getSettings:async()=>({filterableAttributes:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
+  getSettings:async()=>({filterableAttributes:uid==='products'?sharedFields:['shop','status','id'],sortableAttributes:['priceMin'],rankingRules:['words','typo','proximity','attribute','sort','exactness']}),
   updateSettings:async value=>{assert.deepEqual(Object.keys(value.typoTolerance).filter(key=>!['enabled','minWordSizeForTypos','disableOnWords','disableOnAttributes'].includes(key)),[]);calls.push(['settings',uid,value]);return queued();},getSynonyms:async()=>sharedSynonyms,updateSynonyms:async value=>{calls.push(['synonyms',uid,plain(value)]);if(uid==='products')sharedSynonyms=plain(value);return queued();},
   deleteAllDocuments:async()=>{indexes.get(uid).clear();calls.push(['clear',uid]);return queued();},
   addDocuments:async docs=>{for(const p of docs)indexes.get(uid).set(String(p.id),plain(p));return queued();},
@@ -107,7 +107,7 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
  const source=(await fs.readFile('app/services/searchIndex.server.js','utf8')).replace("await import('./queue.server.js')",'injectedQueue');
  const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{searchIndexQueue:queue},require:name=>{if(name==='../utils/searchSuggestions.js')return suggestionText;if(!(name in mocks))throw Error(name);return mocks[name];}};
  vm.runInNewContext((await transform(source,{format:'cjs'})).code,context);
- return {service:context.module.exports,rows,cache,indexes,jobs,calls,catalog,fail:()=>{fail=true;},async drain(){let count=0;while(jobs.length){const job=jobs.shift();if(job.name==='SEARCH_INDEX_RETIRE')continue;await context.module.exports.processSearchIndexJob(job.data);if(++count>20)throw Error('Unbounded worker');}}};
+ return {service:context.module.exports,rows,cache,indexes,jobs,calls,catalog,extendSharedFilters:()=>sharedFields.push('newCountryField'),fail:()=>{fail=true;},async drain(){let count=0;while(jobs.length){const job=jobs.shift();if(job.name==='SEARCH_INDEX_RETIRE')continue;await context.module.exports.processSearchIndexJob(job.data);if(++count>20)throw Error('Unbounded worker');}}};
 }
 
 test('background preparation serves the previous index until every bounded batch is complete',async()=>{
@@ -242,10 +242,12 @@ test('a delimiter-only edit selects candidates from saved DB rather than visitin
 
 test('changing priorities and stopwords updates configuration without reading or writing documents',async()=>{
  const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();const count=f.calls.length;
+ f.extendSharedFilters();
  f.rows.get(shop).config.stopwords=['a'];f.rows.get(shop).config.fields=fields({title:{weight:.8}});
  await f.service.scheduleSearchIndex(shop,{allowInitialBuild:false});await f.drain();
  assert.equal(f.calls.slice(count).some(c=>c[0]==='patch'||c[0]==='clear'),false);
  assert.equal(f.rows.get(shop).config._index.lastUpdate.processed,0);
+ assert.ok(f.calls.slice(count).filter(c=>c[0]==='settings').every(c=>!('filterableAttributes' in c[2])&&!('sortableAttributes' in c[2])),'a rule edit must not copy unrelated country/collection settings and trigger their engine reindex');
 });
 
 test('removing separators restores old search values and retries do not start a full build',async()=>{

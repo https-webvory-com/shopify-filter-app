@@ -1,6 +1,11 @@
 name: Inspect dashboard sync error
 on:
   workflow_dispatch:
+    inputs:
+      search_rules:
+        description: Read search-rule update state and errors only
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -9,11 +14,33 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: appleboy/ssh-action@v1.0.3
+        env:
+          CHECK_SEARCH_RULES: ${{ inputs.search_rules }}
         with:
+          envs: CHECK_SEARCH_RULES
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            if [ "$CHECK_SEARCH_RULES" = true ]; then
+              docker exec -i shopify-filter-app node --input-type=module <<'SEARCH_NODE'
+            import {PrismaClient} from '@prisma/client';
+            import {Queue} from 'bullmq';
+            import {redisConnectionOptions} from './app/services/redisConnection.server.js';
+            import client from './app/services/meiliClient.server.js';
+            const db=new PrismaClient(),queue=new Queue('searchIndexQueueV1',{connection:redisConnectionOptions});
+            const shop='thedressoutlet.myshopify.com';
+            const clean=value=>String(value||'').replace(/https?:\/\/\S+/g,'[url]').slice(0,1800);
+            try {
+              const row=await db.searchSetting.findUnique({where:{shop}}),state=row?.config?._index||{};
+              console.log('SEARCH_RULE_STATE',JSON.stringify({phase:state.phase,processed:state.processed,total:state.total,error:state.error,active:state.active?.uid,build:state.build?.uid,incremental:!!state.update,updated:state.update?.updated,lastUpdate:state.lastUpdate}));
+              const jobs=await queue.getJobs(['active','failed','delayed','prioritized'],0,60);
+              for(const job of jobs)if(job.data.shop===shop)console.log('SEARCH_RULE_JOB',JSON.stringify({name:job.name,state:await job.getState(),incremental:job.data.incremental,error:clean(job.failedReason),stack:clean(job.stacktrace?.at(-1))}));
+              if(state.active?.uid){const tasks=await client.tasks.getTasks({indexUids:[state.active.uid],limit:8});for(const task of tasks.results)console.log('SEARCH_RULE_ENGINE_TASK',JSON.stringify({uid:task.uid,type:task.type,status:task.status,errorCode:task.error?.code,error:clean(task.error?.message)}));}
+            }finally{await queue.close();await db.$disconnect();}
+            SEARCH_NODE
+              exit $?
+            fi
             docker ps --format '{{.Names}} {{.Status}}'
             docker exec -i shopify-filter-app node --input-type=module <<'NODE'
             import {PrismaClient} from '@prisma/client';

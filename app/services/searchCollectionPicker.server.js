@@ -15,14 +15,15 @@ export async function getEmptySearchProductState(shop,products){
   const byId=new Map(rows.map(row=>[row.id,productCard(row)]));
   return {products:products.map(p=>byId.get(p.id)||{...p,available:false,missing:true}),stockOnly:settings?.showOnlyInStock===true};
 }
-export async function listSearchProducts(shop,{query=''}={}){
+export async function listSearchProducts(shop,{query='',after=''}={}){
   const q=String(query).trim();
-  if(q.length>120||/[\u0000-\u001f\u007f]/u.test(q))throw Error('Invalid product search.');
+  if(q.length>120||typeof after!=='string'||after.length>120||/[\u0000-\u001f\u007f]/u.test(q+after))throw Error('Invalid product search.');
   const [rows,settings]=await Promise.all([
-    prisma.product.findMany({where:{shop,status:{in:['ACTIVE','active']},...(q?{OR:[{title:{contains:q,mode:'insensitive'}},{handle:{contains:q,mode:'insensitive'}}]}:{})},orderBy:[{title:'asc'},{id:'asc'}],take:21,select:productSelect}),
+    prisma.product.findMany({where:{shop,status:{in:['ACTIVE','active']},...(q?{OR:[{title:{contains:q,mode:'insensitive'}},{handle:{contains:q,mode:'insensitive'}}]}:{})},orderBy:[{title:'asc'},{id:'asc'}],take:21,...(after?{cursor:{id:after},skip:1}:{}),select:productSelect}),
     prisma.filterGlobalSetting.findUnique({where:{shop},select:{showOnlyInStock:true}}),
   ]);
-  return {query:q,products:rows.slice(0,20).map(productCard),hasMore:rows.length>20,stockOnly:settings?.showOnlyInStock===true};
+  const products=rows.slice(0,20).map(productCard);
+  return {query:q,after,products,hasMore:rows.length>20,nextCursor:rows.length>20?products.at(-1)?.id||'':'',stockOnly:settings?.showOnlyInStock===true};
 }
 export async function validateSelectedSearchProducts(shop,products){
   if(!products.length)return [];

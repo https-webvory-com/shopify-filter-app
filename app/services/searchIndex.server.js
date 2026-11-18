@@ -228,7 +228,8 @@ async function processSearchRuleUpdate(shop,requested,row){
    // Settings changes reuse the existing documents. Collection requests continue
    // using the shared index; this changes only this shop's private search index.
    const desired=await indexSettings(config),existing=await index.getSettings();
-   const changes=Object.fromEntries(Object.entries(desired).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(existing[key])));
+   const ruleSettings=new Set(['searchableAttributes','stopWords','separatorTokens','nonSeparatorTokens','typoTolerance']);
+   const changes=Object.fromEntries(Object.entries(desired).filter(([key,value])=>ruleSettings.has(key)&&JSON.stringify(value)!==JSON.stringify(existing[key])));
    if(Object.keys(changes).length)await wait(await index.updateSettings(changes));
    const applied=await changeState(shop,(current,latest)=>current.update?.hash!==requested||identity(shop,latest)!==requested?null:{...current,update:{...current.update,applied:true},phase:'building'});
    if(!applied)return {superseded:true};

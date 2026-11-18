@@ -7,7 +7,7 @@ import prisma from '../db.server';
 export async function loader({request}){
  const {session}=await authenticate.admin(request),url=new URL(request.url),query=url.searchParams.get('q')||'',after=url.searchParams.get('after')||'';
  try{
-  return Response.json(url.searchParams.get('scope')==='collections'?await listSearchCollections(session.shop,{query,after}):await listSearchProducts(session.shop,{query}));
+  return Response.json(url.searchParams.get('scope')==='collections'?await listSearchCollections(session.shop,{query,after}):await listSearchProducts(session.shop,{query,after}));
  }catch(error){
   console.error('Catalog picker unavailable:',error.code||error.name);
   return Response.json({query,after,products:[],collections:[],productPickerError:'Could not load products. Please retry.',collectionPickerError:'Could not load collections. Please retry.'});
