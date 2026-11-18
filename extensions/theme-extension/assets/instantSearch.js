@@ -1556,23 +1556,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   let marketRenderVersion = 0;
-  let wishlistPollTimer = null;
-  function waitForInstantWishlist(data, query, isDefault, contextualPricingApplied, version) {
-    if (wishlistPollTimer) clearTimeout(wishlistPollTimer);
-    wishlistPollTimer = null;
-    if (data.globalSettings?.integrations?.wishlist !== true || window.pageDataMap) return;
-    let attempts = 0;
-    const check = () => {
-      wishlistPollTimer = null;
-      if (version !== marketRenderVersion) return;
-      if (window.pageDataMap && typeof window.pageDataMap === 'object') {
-        renderProducts(data, query, isDefault, contextualPricingApplied);
-        return;
-      }
-      if (++attempts < 120) wishlistPollTimer = setTimeout(check, 250);
-    };
-    wishlistPollTimer = setTimeout(check, 250);
-  }
   const instantImagePlaceholder='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="100%" height="100%" fill="#f8fafc"/><text x="50%" y="50%" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="16">Image unavailable</text></svg>');
   const instantEscapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const instantScriptString=value=>instantEscapeHtml(JSON.stringify(String(value??'')));
@@ -1895,7 +1878,6 @@ document.addEventListener("DOMContentLoaded", function () {
       if(version!==marketRenderVersion||mainInput._cfpSearchVersion!==queryVersion||mainInput.value.trim().toLowerCase()!==query.trim().toLowerCase())return;
     }
     grid.innerHTML = html;
-    waitForInstantWishlist(data, query, isDefault, contextualPricingApplied, version);
     grid.querySelectorAll('img.cfp-main-img,img.cfp-secondary-img').forEach(image=>{
       const fallbacks=JSON.parse(image.dataset.cfpImageFallbacks||'[]');
       image.addEventListener('load',()=>image.classList.add('cfp-image-ready'));

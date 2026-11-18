@@ -39,8 +39,8 @@ test('balanced or capacity-limited synonym counts keep the complete union scan',
   '../utils/semanticSearch.js':{withSemanticSearch,semanticFallback,semanticProvider},
  });
  const {results:[result]}=await service.searchPageBatch([{q:'large',page:1,hitsPerPage:1,attributesToRetrieve:[]}],false);
- assert.equal(result.totalHits,1901);
- assert.deepEqual(calls.filter(request=>request.federation).map(request=>request.federation.offset),[0,1000]);
+ assert.equal(result.totalHits,1901);assert.equal(calls.length,3);
+ assert.deepEqual(calls.slice(1).map(request=>request.federation.offset),[0,1000]);
  }
 });
 
@@ -56,16 +56,16 @@ test('edited multiword synonym branches retain filters, facets and pagination wi
  const result=await service.keywordSearch('mani',scope);
  assert.deepEqual(calls[0].queries.map(q=>q.q),['mani','white dress']);
  for(const q of calls[0].queries){assert.deepEqual(q.filter,scope.filter);assert.deepEqual(q.sort,scope.sort);assert.equal(q.matchingStrategy,'all');assert.equal(q.offset,undefined);assert.equal(q._cfpSynonymQueries,undefined);}
- assert.equal(calls[1].federation.offset,10);assert.equal(calls[1].federation.limit,5);
- assert.deepEqual(calls[1].federation.facetsByIndex,{'private-owner':['color']});
+ assert.equal(calls[0].federation.offset,10);assert.equal(calls[0].federation.limit,5);
+ assert.deepEqual(calls[0].federation.facetsByIndex,{'private-owner':['color']});
  assert.equal(result.hits[0]._federation,undefined);assert.equal(result.estimatedTotalHits,22);
  replacement='blue dress';await service.semanticSearch('mani',scope);
- assert.deepEqual(calls[3].queries.map(q=>q.q),['mani','blue dress']);
+ assert.deepEqual(calls[1].queries.map(q=>q.q),['mani','blue dress']);
  const counted=await service.searchPageBatch([{q:'mani',page:1,hitsPerPage:1}],false);
  assert.equal(counted.results[0].totalHits,1);
  assert.equal(counted.results[0].hits.length,1);
- assert.equal(calls[5].federation.page,undefined);
- assert.equal(calls[5].queries[0].page,undefined);
+ assert.equal(calls[2].federation.page,undefined);
+ assert.equal(calls[2].queries[0].page,undefined);
 });
 
 test('synonym page counts scan the complete union and retain fields beyond the first batch',async()=>{
@@ -73,7 +73,6 @@ test('synonym page counts scan the complete union and retain fields beyond the f
  const service=await loadModule('app/services/semanticSearch.server.js',{
   './searchIndex.server.js':{prepareConfiguredSearchQueries:async queries=>queries.map(q=>({...q,indexUid:'private-owner',_cfpSynonymQueries:['white dress']}))},
   './meiliClient.server':{default:{multiSearch:async({queries,federation})=>{
-   if(!federation)return {results:[{totalHits:2003},{totalHits:2003}]};
    calls.push(federation.offset);const idOnly=queries[0].attributesToRetrieve?.join(',')==='id';
    return {hits:catalog.slice(federation.offset,federation.offset+federation.limit).map(p=>idOnly?{id:p.id}:p),estimatedTotalHits:9999,facetDistribution:{color:{White:2003}}};
   }}},

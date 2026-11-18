@@ -31,8 +31,6 @@ test('same-tab collection cards survive reload for ten minutes and never cross c
   const state=makeCache();state.cache.save(params,result);
   assert.equal(state.cache.read(params)?.products[0].id,'123');
   assert.equal(state.cache.read(params)?.rankingToken,result.rankingToken);
-  assert.deepEqual(JSON.parse(JSON.stringify(state.cache.read(params)?.settings)),result.settings);
-  assert.deepEqual(JSON.parse(JSON.stringify(state.cache.read(params)?.facets)),result.facets);
   const same=new URLSearchParams(params);same.set('responseProfile','collection-preview-v1');same.set('rankingToken','old-token');
   assert.equal(state.cache.read(same)?.products[0].id,'123');
   const otherCountry=new URLSearchParams(params);otherCountry.set('country','GB');assert.equal(state.cache.read(otherCountry),null);

@@ -5,7 +5,6 @@ import DateRangePicker, { todayDate } from "./DateRangePicker";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import {usePickerRequest} from '../../hooks/usePickerRequest';
 import Tooltip from "../ui/Tooltip";
 const TooltipIcon = ({ text }) => (
   <Tooltip content={text}>
@@ -18,7 +17,6 @@ export default function CreateRuleModal({
   shopifyLocations = [], shopifyProductTypes = [], shopifyTags = [], shopifyProducts = [], shopifySkus = [], shopifyBarcodes = []
 }) {
   const fetcher = useFetcher();
-  const productPicker = usePickerRequest('products');
   const shopify = useAppBridge();
   const [ruleName, setRuleName] = useState("");
   const [customerTags, setCustomerTags] = useState("");
@@ -51,12 +49,6 @@ export default function CreateRuleModal({
   const [openVendorDropdownIndex, setOpenVendorDropdownIndex] = useState(null);
   const [dropdownSearch, setDropdownSearch] = useState("");
   const [dropdownLimit, setDropdownLimit] = useState(50);
-  const productDropdownOpen = isOpen && openVendorDropdownIndex !== null && ruleRules[openVendorDropdownIndex]?.field === 'Product';
-  useEffect(() => {
-    if (!productDropdownOpen) return;
-    const timer = setTimeout(() => productPicker.load('?q=' + encodeURIComponent(dropdownSearch.trim())), 150);
-    return () => clearTimeout(timer);
-  }, [productDropdownOpen, dropdownSearch, productPicker.load]);
 
   const handleClose = () => {
     setRuleName("");
@@ -734,7 +726,7 @@ export default function CreateRuleModal({
                                         else if (r.field === "Product type") currentOptions = shopifyProductTypes || [];
                                         else if (r.field === "Tags") currentOptions = shopifyTags || [];
                                         else if (r.field === "Locations") currentOptions = shopifyLocations || [];
-                                        else if (r.field === "Product") currentOptions = productPicker.data?.query === dropdownSearch.trim() && productPicker.state === 'idle' ? productPicker.data.products || [] : [];
+                                        else if (r.field === "Product") currentOptions = shopifyProducts || [];
                                         else if (r.field === "SKU") currentOptions = shopifySkus || [];
                                         else if (r.field === "Barcode") currentOptions = shopifyBarcodes || [];
                                         else if (r.field && r.field.endsWith("(product option)")) {
@@ -743,7 +735,7 @@ export default function CreateRuleModal({
                                         }
                                         const filteredOptions = currentOptions.filter(v => {
                                           const text = typeof v === 'string' ? v : v.title;
-                                          return r.field === 'Product' ? true : r.field === 'Collections'
+                                          return r.field === 'Collections'
                                             ? collectionTitleMatchesSearch(text, dropdownSearch)
                                             : text.toLowerCase().includes((dropdownSearch || "").toLowerCase());
                                         }).slice(0, dropdownLimit);
@@ -803,10 +795,9 @@ export default function CreateRuleModal({
                                             })}
                                             {filteredOptions.length === 0 && (
                                               <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: "14px" }}>
-                                                {r.field === 'Product' && (productPicker.state !== 'idle' || productPicker.data?.query !== dropdownSearch.trim()) ? 'Loading products…' : r.field === 'Product' && productPicker.data?.productPickerError ? <span role="alert">{productPicker.data.productPickerError} <button type="button" onClick={() => productPicker.load('?q=' + encodeURIComponent(dropdownSearch.trim()))}>Retry</button></span> : <AdminNoSearchResults query={dropdownSearch}>No options available.</AdminNoSearchResults>}
+                                                <AdminNoSearchResults query={dropdownSearch}>No options available.</AdminNoSearchResults>
                                               </div>
                                             )}
-                                            {r.field === 'Product' && productPicker.data?.hasMore && <div style={{padding:'8px 16px',fontSize:12}}>Search by product name or handle to find more products.</div>}
                                           </>
                                         );
                                       })()}

@@ -65,7 +65,7 @@ export default function Integrations() {
       id: "wishlist",
       name: "Wishlist Growth",
       category: "Wishlist",
-      desc: "Allow customers to save their favorite products directly from the search and filter results. Requires Wishlist Growth to be installed and enabled on the storefront theme.",
+      desc: "Allow customers to save their favorite products directly from the search and filter results.",
       enabled: integrationsSettings.wishlist || false,
       url: "https://apps.shopify.com/wishlist-growth-new"
     }
