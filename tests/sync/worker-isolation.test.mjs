@@ -59,14 +59,14 @@ test("a failed worker startup reports failure and never publishes readiness",asy
     const f=await runner(options);assert.equal(f.files.size,0);assert.ok(f.calls.includes("exit:1"));
   }
 });
-test('market price and catalog checks use bundled worker callbacks on startup and timer',async()=>{
+test('catalog checks continue without a whole-store market price proof timer',async()=>{
  let catalog=0,market=0;
  const f=await runner({catalogAudit:async()=>{catalog++;},marketCheck:async()=>{market++;}});
- assert.equal(catalog,1);assert.equal(market,1);
- assert.equal(f.timers[2].ms,3600000);assert.equal(f.timers[3].ms,120000);
+ assert.equal(catalog,1);assert.equal(market,0);
+ assert.equal(f.timers[2].ms,3600000);assert.ok(!f.timers.some(timer=>timer.ms===120000));
  await new Promise(resolve=>setImmediate(resolve));
- await f.timers[2].callback();await f.timers[3].callback();
- assert.equal(catalog,2);assert.equal(market,2);
+ await f.timers[2].callback();
+ assert.equal(catalog,2);assert.equal(market,0);
 });
 test("worker shutdown closes processors and removes readiness without touching web processes",async()=>{
   const f=await runner();await f.signals.SIGTERM();assert.equal(f.files.size,0);

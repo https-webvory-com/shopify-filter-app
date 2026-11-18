@@ -43,6 +43,7 @@ import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../uti
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
 import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
+import {savedMarketProduct} from '../utils/savedMarketPricing.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
@@ -129,7 +130,7 @@ export const loader = async ({ request, context }) => {
     // This merchant's primary Shopify currency is USD. Its US storefront uses
     // the saved base variant prices; there is no separate US contextual column.
     const savedUsBasePrice=marketPriceSortRequested&&shop==='thedressoutlet.myshopify.com'&&requestedCountry==='US';
-    const verifiedMarketPriceSort=marketPriceSortRequested&&!savedUsBasePrice ? await marketPriceIntentReady(shop,requestedCountry) : null;
+    // Saved country fields are used without a whole-store completeness proof.
     // Incomplete contextual prices use the partial-price ranker below for any
     // shop/country. They must not make the collection and its filters unavailable.
     const marketCountry=url.searchParams.get('country');
@@ -585,7 +586,7 @@ export const loader = async ({ request, context }) => {
     const exactPriceSortVersion=priceSortSelected&&shop==='thedressoutlet.myshopify.com'?3:null;
     const sortCountry=String(country||'').toUpperCase();
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
-      ? (marketPriceSortRequested?verifiedMarketPriceSort:await marketPriceIntentReady(shop,sortCountry)):false;
+      ? await marketPriceIntentReady(shop,sortCountry,{stockOnly:globalSettings?.showOnlyInStock===true}):false;
     const priceSortField=priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
       ? `market${globalSettings?.showOnlyInStock?'Available':''}PriceMin_${sortCountry}`:null;
     const partialMarketPriceSort=!!priceSortField&&!marketSortReady;
@@ -1642,6 +1643,7 @@ export const loader = async ({ request, context }) => {
           sku: v.sku,
           price: v.price,
           compareAtPrice: v.compareAtPrice,
+          marketPrices: v.marketPrices,
           available: v.available,
           option1: v.option1,
           option2: v.option2,
@@ -1657,7 +1659,7 @@ export const loader = async ({ request, context }) => {
         }
       });
 
-      return productObj;
+      return savedMarketProduct(productObj,country);
     });
 
     // Sort products by match score so the most relevant colors appear first on the page

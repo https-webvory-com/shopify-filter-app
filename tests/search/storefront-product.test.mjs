@@ -6,6 +6,7 @@ import vm from "node:vm";
 import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
 import * as marketPricingIndex from "../../app/utils/marketPricingIndex.js";
+import * as productMarketPrices from '../../app/utils/readProductMarketPrices.js';
 
 test("only active products published to the Online Store are eligible", () => {
   assert.equal(isStorefrontProduct({ status: "ACTIVE", publishedAt: "2026-10-01T00:00:00Z" }), true);
@@ -39,6 +40,7 @@ async function loadSync({ product, deleteError } = {}) {
     "./shopCache.server": { invalidateShop: async () => {} },
     "../utils/storefrontProduct.js": { isStorefrontProduct },
     "../utils/marketPricingIndex.js": marketPricingIndex,
+    '../utils/readProductMarketPrices.js':productMarketPrices,
     "./marketPriceCoverage.server.js": { allMarketPriceCountries: async () => [], marketPriceCountriesForShop: async () => [] },
   };
   const context = { module: { exports: {} }, exports: {}, console: { log() {}, warn() {}, error() {} }, setTimeout: callback => callback(), require: name => mocks[name] };

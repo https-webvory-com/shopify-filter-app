@@ -271,10 +271,6 @@ export function initWebhookWorker() {
     const {scheduleCatalogDriftAudits}=await import('../services/catalogDriftAudit.server.js');
     return scheduleCatalogDriftAudits();
   };
-  global.__refreshConnectedMarketPriceCoverage = async () => {
-    const {refreshConnectedMarketPriceCoverage}=await import('../services/marketPriceCoverage.server.js');
-    return refreshConnectedMarketPriceCoverage();
-  };
   if(!global.__marketAvailabilityWorker){
     global.__marketAvailabilityWorker=new Worker('marketAvailabilityQueueV1',async job=>{
       if(job.name==='COUNTRY_DISCOVERY')return (await import('../services/marketAvailability.server.js')).discoverMarketCountries(job.data);

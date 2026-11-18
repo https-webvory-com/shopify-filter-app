@@ -4,6 +4,10 @@ import prisma from "../db.server.js";
 import { syncErrorMessage } from "../utils/syncError.js";
 
 export async function processProductSyncJob(job, token) {
+  if(job.name==='INSTALL_MARKET_PRICES'){
+    const {prepareInstallationPrices}=await import('../services/marketPriceInstallation.server.js');
+    return prepareInstallationPrices(job.data.shop);
+  }
   if (job.name === 'SIZE_MAPPING_REBUILD') {
     const { invalidateSizeMappings } = await import('../services/sync.server.js');
     invalidateSizeMappings(job.data.shop);

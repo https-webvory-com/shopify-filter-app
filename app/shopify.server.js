@@ -15,6 +15,12 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
+  hooks: {
+    afterAuth: async ({session}) => {
+      const {enqueuePriceInstallation}=await import('./services/marketPriceInstallation.server.js');
+      await enqueuePriceInstallation(session.shop);
+    },
+  },
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,

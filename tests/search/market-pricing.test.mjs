@@ -9,6 +9,51 @@ function fixture({fail=false,compare=null}={}){
  vm.runInNewContext(source,context);return {window,calls,apply:window.cfpMarketPricing.apply};
 }
 const products=[{handle:'milk-cooler',priceMin:2500,priceMax:3000,variants:[{id:'gid://shopify/ProductVariant/42',price:2500,compareAtPrice:4000}]}];
+
+test('saved country prices render without per-product Shopify requests and reject another country',async()=>{
+ const f=fixture(),calls=[];
+ const product={...products[0],pricingContext:{country:'IN',currency:'INR',source:'saved'}};
+ const priced=await f.apply([product],p=>calls.push(p.priceMin));assert.equal(f.calls.length,0);assert.equal(priced[0]._marketPricingApplied,true);assert.deepEqual(calls,[2500]);
+ f.window.Shopify.country='US';f.window.Shopify.currency.active='USD';await f.apply([product]);assert.equal(f.calls.length,1);
+});
+
+test('a page reuses saved DB prices in one batch instead of refetching every product from Shopify',async()=>{
+ const calls=[],window={Shopify:{shop:'owner.myshopify.com',country:'IN',currency:{active:'INR'}}};
+ const context={window,URLSearchParams,AbortController,setTimeout,clearTimeout,Date,fetch:async url=>{
+  calls.push(url);assert.match(url,/\/api\/market-prices\?/);return {ok:true,json:async()=>({country:'IN',currency:'INR',products:[{id:'1',priceMin:900,priceMax:900,variants:[{id:'11',price:900,available:true}],pricingContext:{country:'IN',currency:'INR',source:'saved'}}]})};
+ }};
+ vm.runInNewContext(source,context);const result=await window.cfpMarketPricing.apply([{id:'1',handle:'dress',variants:[{id:'11',imageUrl:'kept.jpg'}]}]);
+ assert.equal(calls.length,1);assert.equal(result[0].variants[0].price,900);assert.equal(result[0].variants[0].imageUrl,'kept.jpg');assert.equal(result[0]._marketPricingUnavailable,false);
+});
+
+test('concurrent and repeated sorts share saved price reads; a changed variant refreshes only its product',async()=>{
+ const calls=[],window={Shopify:{shop:'owner.myshopify.com',country:'IN',currency:{active:'INR'}}};
+ let release,variant='11';
+ const held=new Promise(resolve=>release=resolve);
+ const context={window,URLSearchParams,AbortController,setTimeout,clearTimeout,Date,fetch:async url=>{
+  calls.push(url);assert.match(url,/\/api\/market-prices\?/);await held;
+  return {ok:true,json:async()=>({country:'IN',currency:'INR',products:[{id:'1',priceMin:900,priceMax:900,variants:[{id:variant,price:900,available:true}],pricingContext:{country:'IN',currency:'INR',source:'saved'}}]})};
+ }};
+ vm.runInNewContext(source,context);
+ const product={id:'1',handle:'dress',variants:[{id:'11'}]};
+ const first=window.cfpMarketPricing.apply([product]),second=window.cfpMarketPricing.apply([product]);
+ assert.equal(calls.length,1);release();await Promise.all([first,second]);
+ await window.cfpMarketPricing.apply([product]);assert.equal(calls.length,1);
+ variant='12';const changed=await window.cfpMarketPricing.apply([{...product,variants:[{id:'12'}]}]);
+ assert.equal(calls.length,2);assert.equal(changed[0].variants[0].price,900);
+ assert.equal(new URL(calls[1]).searchParams.get('ids'),'1');
+});
+
+test('known saved prices publish before another product finishes a slow background read',async()=>{
+ const published=[],window={Shopify:{shop:'owner.myshopify.com',country:'IN',currency:{active:'INR'}}};
+ let release;const held=new Promise(resolve=>release=resolve);
+ const context={window,URLSearchParams,AbortController,setTimeout,clearTimeout,Date,fetch:async()=>{
+  await held;return {ok:true,json:async()=>({country:'IN',currency:'INR',products:[{id:'2',priceMin:20,priceMax:20,variants:[{id:'22',price:20}],pricingContext:{country:'IN',currency:'INR',source:'saved'}}]})};
+ }};
+ vm.runInNewContext(source,context);
+ const pending=window.cfpMarketPricing.apply([{id:'1',priceMin:10,variants:[{id:'11',price:10}],pricingContext:{country:'IN',currency:'INR',source:'saved'}},{id:'2',variants:[{id:'22'}]}],product=>published.push(product.id));
+ assert.deepEqual(published,['1']);release();await pending;assert.deepEqual(published,['1','2']);
+});
 test('Shopify storefront market prices replace estimates and stale compare-at prices by variant ID',async()=>{
  const f=fixture();const result=await f.apply(products);
  assert.equal(result[0].priceMin,2450);assert.equal(result[0].variants[0].price,2450);

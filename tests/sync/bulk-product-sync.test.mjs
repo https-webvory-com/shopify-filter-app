@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
 import * as marketPricingIndex from '../../app/utils/marketPricingIndex.js';
+import * as productMarketPrices from '../../app/utils/readProductMarketPrices.js';
 
 const shop = 'fixture.myshopify.com';
 const active = { id: 'gid://shopify/Product/1', status: 'ACTIVE', publishedAt: '2026-10-01', collections: { nodes: [] } };
@@ -38,6 +39,7 @@ async function fixture({ indexFails = false, bulkProducts = [active, draft], pay
     .replaceAll('await autoSeedOptionFilters(shop)', 'await pretendSeed(shop)')
     .replaceAll('await updateMeiliSettings(shop, { throwOnError: true })', 'await pretendSettings(shop)');
   const mocks = {
+    '../utils/readProductMarketPrices.js':productMarketPrices,
     '../db.server': { __esModule: true, default: prisma },
     './meiliClient.server': { __esModule: true, default: { index: () => index, tasks: { waitForTask: async () => ({ status: 'succeeded' }) } } },
     './shopCache.server': { invalidateShop: async () => {} },

@@ -11,7 +11,7 @@ try {
   let workers;
   for (let attempt = 0; attempt < 60; attempt++) {
     if (global.__productSyncWorker && global.__webhookWorker && global.__collectionRankingWorker && global.__searchIndexWorker && global.__synonymWorker && global.__collectionOrderWorker && global.__collectionMembershipWorker && global.__marketAvailabilityWorker &&
-        typeof global.__scheduleCatalogDriftAudits==='function' && typeof global.__refreshConnectedMarketPriceCoverage==='function' &&
+        typeof global.__scheduleCatalogDriftAudits==='function' &&
         typeof global.__reconcileLegacySynonymIndexes==='function') {
       workers = [global.__productSyncWorker, global.__webhookWorker, global.__collectionRankingWorker, global.__searchIndexWorker, global.__synonymWorker, global.__collectionOrderWorker, global.__collectionMembershipWorker, global.__marketAvailabilityWorker];
       break;
@@ -44,11 +44,6 @@ try {
     await global.__scheduleCatalogDriftAudits();
   }catch(error){console.error('CFP catalog drift scheduler unavailable:',error.name);}finally{catalogAuditing=false;}};
   const catalogAuditTimer=setInterval(catalogAudit,3600000);catalogAuditTimer.unref();
-  let checkingMarketPrices=false;
-  const checkMarketPrices=async()=>{if(checkingMarketPrices||shuttingDown)return;checkingMarketPrices=true;try{
-    await global.__refreshConnectedMarketPriceCoverage();
-  }catch(error){console.error('CFP market price coverage unavailable:',error.name);}finally{checkingMarketPrices=false;}};
-  const marketPriceTimer=setInterval(checkMarketPrices,120000);marketPriceTimer.unref();
   let reconcilingSynonyms=false;
   const reconcileSynonyms=async()=>{if(reconcilingSynonyms||shuttingDown)return;reconcilingSynonyms=true;try{
     await global.__reconcileLegacySynonymIndexes();
@@ -67,7 +62,6 @@ try {
     clearInterval(membershipTimer);
     clearInterval(catalogAuditTimer);
     clearInterval(analyticsTimer);
-    clearInterval(marketPriceTimer);
     clearInterval(synonymTimer);
     fs.rmSync(readyFile, { force: true });
     await Promise.all(workers.map(worker => worker.close()));
@@ -79,7 +73,6 @@ try {
   void audit();
   void catalogAudit();
   void expireAnalytics();
-  void checkMarketPrices();
   void reconcileSynonyms();
 } catch (error) {
   fs.rmSync(readyFile, { force: true });

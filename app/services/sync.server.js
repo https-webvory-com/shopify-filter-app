@@ -14,6 +14,7 @@ import { contextualPricingFields, marketCountriesInVariants, variantMarketPrices
 import { variantSizeEvidence } from '../utils/variantSize.js';
 import { allMarketPriceCountries, marketPriceCountriesForShop } from './marketPriceCoverage.server.js';
 import { withHeldEmbeddingsForIndex } from '../utils/embeddingHold.js';
+import {readProductMarketPrices} from '../utils/readProductMarketPrices.js';
 
 /**
  * Format products and push to Meilisearch index.
@@ -175,7 +176,7 @@ export async function updateMeiliSettings(shop, { throwOnError = false } = {}) {
       ...Array.from(dynamicKeys),
     ];
 
-    const sortableAttributes = ["priceMin", "availablePriceMin", ...marketCountries.map(country => `marketAvailablePriceMin_${country}`),
+    const sortableAttributes = ["priceMin", "availablePriceMin", ...marketCountries.flatMap(country => [`marketPriceMin_${country}`,`marketAvailablePriceMin_${country}`]),
       "createdAt", "title", "bestSellingScore", "trendingScore"];
 
     await index.updateFilterableAttributes(filterableAttributes);
@@ -543,7 +544,8 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
     publishedCollectionIds = null;
   }
 
-  const marketPricingFields = contextualPricingFields(await marketPriceCountriesForShop(shop));
+  const supportedPriceCountries=await marketPriceCountriesForShop(shop);
+  const marketPricingFields = '';
   const query = `#graphql
     query getProducts($cursor: String) {
       products(first: 10, after: $cursor) {
@@ -688,7 +690,7 @@ async function processSyncChunk(jobId, shop, admin, maxBatches = Infinity) {
       const products = productsData.nodes.filter(isStorefrontProduct);
 
       // Complete membership reads before any DB/index writes for this batch.
-      for (const product of products) { await completeProductCollections(admin, product); await hydrateProductFilterFacts(product,admin,prisma,shop); }
+      for (const product of products) { await completeProductCollections(admin, product); await hydrateProductFilterFacts(product,admin,prisma,shop); await readProductMarketPrices(product,admin,supportedPriceCountries); }
 
       // Remove stale drafts, archived products, and products unpublished from the Online Store.
       const unpublishedProducts = productsData.nodes.filter((p) => !isStorefrontProduct(p));
@@ -1097,7 +1099,8 @@ export async function smartUpsertProduct(shop, product, prismaClient, {collectio
 export async function syncSingleProduct(shop, admin, productId, { retrySearchErrors = false } = {}) {
   console.log(`CFP: Syncing single product ${productId} for ${shop}...`);
 
-  const marketPricingFields = contextualPricingFields(await marketPriceCountriesForShop(shop));
+  // Country pricing is read in bounded batches after the product is fetched.
+  const marketPricingFields = '';
 
   const query = `#graphql
     query getProduct($id: ID!) {
@@ -1255,6 +1258,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   // No need to re-read from Postgres — we have all the data from the API response
   await completeProductCollections(admin, product);
   await hydrateProductFilterFacts(product,admin,prisma,shop,{wantsLocations});
+  await readProductMarketPrices(product,admin,await marketPriceCountriesForShop(shop));
 
   const available = product.variants.nodes.some((v) => v.availableForSale);
   const { min: priceMin, max: priceMax } = variantPriceRange(product.variants.nodes);

@@ -7,6 +7,7 @@ import * as filterPresentation from '../../app/utils/filterPresentation.js';
 import * as filterWidths from '../../app/utils/filterWidths.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
+import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as searchColor from "../../app/utils/searchColor.js";
 import * as facetNormalization from '../../app/utils/facetNormalization.js';
 import * as searchCachePolicy from '../../app/utils/searchCachePolicy.js';
@@ -25,6 +26,7 @@ async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => testParsedQuery })');
   const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+    if(name==='../utils/savedMarketPricing.js')return savedMarketPricing;
     if(name==='../utils/filterPresentation.js')return filterPresentation;
     if(name==='../utils/filterWidths.js')return filterWidths;
     if(name==='../utils/facetNormalization.js')return facetNormalization;

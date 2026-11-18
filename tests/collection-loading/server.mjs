@@ -1,4 +1,5 @@
 import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
+import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import http from 'node:http';
 import {gunzipSync} from 'node:zlib';
@@ -74,8 +75,8 @@ export async function createLoadingServer({redisLayer}={}) {
       }
     }
     const sort=options.sort?.[0];
-    if(sort==='priceMin:asc')products.sort((a,b)=>a.priceMin-b.priceMin);
-    else if(sort==='priceMin:desc')products.sort((a,b)=>b.priceMin-a.priceMin);
+    const priceSort=sort?.match(/^(priceMin|market(?:Available)?PriceMin_[A-Z]{2}):(asc|desc)$/);
+    if(priceSort){const [,field,direction]=priceSort;products.sort((a,b)=>(Number(a[field])-Number(b[field]))*(direction==='asc'?1:-1));}
     else products.sort((a,b)=>b.bestSellingScore-a.bestSellingScore);
     const facetDistribution=options.facets?.includes('vendor')?{vendor:{Fixture:products.length}}:{};
     for(const field of options.facets||[]){
@@ -165,6 +166,7 @@ export async function createLoadingServer({redisLayer}={}) {
     String(await redis.get(preparationRevisionKey(shop))??'0'),String(await redis.get(productRevisionKey(shop,'all'))??'0'),
   ]});
   const mocks={
+    '../utils/savedMarketPricing.js':savedMarketPricing,
     'node:crypto':{createHash},
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
@@ -211,7 +213,7 @@ export async function createLoadingServer({redisLayer}={}) {
     '../services/searchIndex.server.js':{getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})},
     '../utils/searchConfiguration.js':{publicSearchProduct:product=>product},
     '../services/marketAvailability.server.js':{getMarketAvailabilityState:async(_shop,country)=>state.countryStock?{status:'ready',version:country+':'+state.countryStock.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>state.countryStock.ids[country]},
-    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true},
+    '../services/marketPriceCoverage.server.js':{marketPriceIntentReady:async()=>state.marketPriceReady===true,marketPriceScopeReady:async()=>state.marketPriceScopeReady??state.marketPriceReady===true},
     '../utils/searchPinnedIntent.js':{pinnedProductMatchesAppliedIntent:()=>true},
   };
   mocks['../utils/filterPresentation.js']=filterPresentation;
@@ -366,6 +368,7 @@ export async function createLoadingServer({redisLayer}={}) {
         if(url.pathname==='/search')body=body.replace('data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"','data-collection-id="" data-collection-handle="" data-template-name="search" data-search-terms="purple prom dress"');
         if(url.pathname==='/search')body=body.replace('data-search-terms="purple prom dress"','data-search-terms="'+String(url.searchParams.get('q')||'')+'"');
         if(state.countryStock||state.country)body=body.replace("country:'US'",'country:'+JSON.stringify(url.searchParams.get('country')||state.country||'US'));
+        if(state.country==='IN')body=body.replace("active:'USD',rate:1","active:'INR',rate:1");
         body=body.replace(/<div class="cfp-sidebar__footer">[\s\S]*?<\/div>/,footerHtml);
         if(state.realToolbar)body=body.replace(/<div id="cfp-top-bar" class="cfp-top-bar">[\s\S]*?(?=<aside id="cfp-sidebar")/,toolbarHtml).replace('</body>',toolbarScript+'</body>');
         if(state.headRenderer){

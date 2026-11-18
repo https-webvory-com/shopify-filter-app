@@ -88,7 +88,7 @@ export const loader = async ({ request }) => {
         meiliClient.index(searchContext.uid).getFilterableAttributes(), 60).catch(() => []);
       const priceField = /^[A-Z]{2}$/.test(country) ? `marketAvailablePriceMin_${country}` : null;
       if (searchContext.uid === 'products' && priceField && fields.includes(priceField) &&
-          await marketPriceIntentReady(shop, country))
+          await marketPriceIntentReady(shop, country,{stockOnly:true,indexUid:searchContext.uid}))
         marketPriceField = priceField;
       if (intent?.price && marketPriceField) {
         if (intent.price.min != null) meiliFilters.push(`${marketPriceField} >= ${intent.price.min}`);

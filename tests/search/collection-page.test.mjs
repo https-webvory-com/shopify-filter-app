@@ -1,4 +1,5 @@
 import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
+import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
@@ -236,6 +237,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};
     if (name === "../utils/facetNormalization.js") return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
+    if (name === '../utils/savedMarketPricing.js') return savedMarketPricing;
     if (name === "../services/searchRanking.server.js" || name === "../services/searchPicker.server.js") return {};
     if (name === "../utils/availableVariants.js") return availableVariants;
     if (name === "../utils/spellingCorrection.js") return {spellingCorrection};

@@ -28,6 +28,14 @@ model CollectionLoadingSnapshot {
 }
 
 // Kept separate from public/global settings: tokens never enter storefront JSON.
+// Country-price preparation is independent of the optional stock connection.
+model MarketPriceConfiguration {
+  shop       String   @id
+  countries  String[]
+  currencies Json
+  updatedAt  DateTime @updatedAt
+}
+
 model MarketStorefrontConnection {
   shop        String   @id
   accessToken String

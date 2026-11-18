@@ -1,4 +1,5 @@
 import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
+import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
@@ -132,6 +133,7 @@ async function route(file,mocks){
     if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};
     if (name === '../utils/facetNormalization.js') return facetNormalization;
     if (name === '../utils/searchCachePolicy.js') return searchCachePolicy;
+    if (name === '../utils/savedMarketPricing.js') return savedMarketPricing;
     if (name === '../services/marketPriceCoverage.server.js') return {marketPriceIntentReady:async()=>false};
     if (name === '../services/searchIndex.server.js') return {getSearchIndexContext:async()=>({uid:'products',settings:null,custom:false})};
     if (name === '../utils/searchConfiguration.js') return {publicSearchProduct:product=>product};

@@ -1130,15 +1130,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     }
   }
 
-  function updatePriceSortNotice(data) {
+  function updatePriceSortNotice() {
     document.querySelectorAll('.cfp-price-sort-notice').forEach(notice => notice.remove());
-    if (data.priceSortSource !== 'partial-market') return;
-    const container = getProductContainer();
-    const notice = document.createElement('div');
-    notice.className = 'cfp-price-sort-notice';
-    notice.setAttribute('role', 'status');
-    notice.textContent = 'Price sorting is still preparing for this country. Products are available, but their order may change.';
-    container.parentElement?.insertBefore(notice, container);
   }
 
   async function completeSearchFacets(cards,requestUrl,signal,pendingRead){
@@ -1624,7 +1617,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const pricingProducts = products;
     // Render cards immediately, without displaying unverified market prices.
     // Each price arrives independently; a slow product cannot hold the grid.
-    products = products.map(p => ({...p, _marketPricingUnavailable:true}));
+    products = products.map(p => ({...p, _marketPricingUnavailable:!window.cfpMarketPricing?.saved?.(p)}));
     contextualPricingApplied = true;
     console.log('[CFP] Rendering products. Count:', products.length, 'Total:', totalCount);
     const grid = getProductContainer();

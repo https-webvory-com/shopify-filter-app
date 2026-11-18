@@ -8,6 +8,7 @@ import { transform } from "esbuild";
 import { isStorefrontProduct } from "../../app/utils/storefrontProduct.js";
 import * as searchProjection from '../../app/utils/searchIndexProjection.js';
 import * as marketPricingIndex from '../../app/utils/marketPricingIndex.js';
+import * as productMarketPrices from '../../app/utils/readProductMarketPrices.js';
 import * as memberships from '../../app/services/productCollections.server.js';
 
 async function fixture({ failSetup = false, failIndex = false, failMembership = false, finalizationGate, processed = 6900, total = 6900, morePages = false } = {}) {
@@ -44,6 +45,7 @@ async function fixture({ failSetup = false, failIndex = false, failMembership = 
     "./shopCache.server": {invalidateShop: async () => {}},
     "../utils/storefrontProduct.js": {isStorefrontProduct},
     "../utils/marketPricingIndex.js": marketPricingIndex,
+    '../utils/readProductMarketPrices.js':productMarketPrices,
     "./marketPriceCoverage.server.js": { allMarketPriceCountries: async () => [], marketPriceCountriesForShop: async () => [] },
     "../utils/semanticSearch.js": {},
   };
