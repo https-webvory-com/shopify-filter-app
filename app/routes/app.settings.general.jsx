@@ -2,6 +2,8 @@ import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import PageWidthSettings from '../components/PageWidthSettings';
+import {COLLECTION_SPACING_LIMITS,collectionLayoutSettings,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
 import prisma from "../db.server.js";
 import { connectMarketAvailability } from "../services/marketAvailability.server.js";
 import { authenticate } from "../shopify.server";
@@ -36,6 +38,16 @@ export const action = async ({ request }) => {
   }
 
   const payload = {};
+  if(formData.has('collectionPageWidth')){
+    const value=formData.get('collectionPageWidth');
+    if(!isValidCollectionPageWidth(value))return Response.json({success:false,error:'Choose theme width or custom side spacing.'},{status:400});
+    payload.collectionPageWidth=value;
+  }
+  for(const [key,limits] of Object.entries(COLLECTION_SPACING_LIMITS))if(formData.has(key)){
+    const value=formData.get(key);
+    if(!isValidCollectionSpacing(key,value))return Response.json({success:false,error:`Enter whole-number spacing from ${limits.min} to ${limits.max} px.`},{status:400});
+    payload[key]=Number(value);
+  }
   for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewCollectionMobile','showQuickViewInstantSearchMobile','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
     if (!formData.has(key)) continue;
     const value = formData.get(key);
@@ -438,6 +450,12 @@ export default function Settings() {
       </div>
 
       <s-stack direction="block" gap="base">
+        <s-section heading="Page layout">
+          <PageWidthSettings value={collectionLayoutSettings(settings)} disabled={fetcher.state!=='idle'} onApply={values=>{
+            if(fetcher.state!=='idle')return;
+            fetcher.submit(Object.fromEntries(Object.entries(values).map(([key,value])=>[key,String(value)])),{method:'POST'});
+          }}/>
+        </s-section>
         <s-section heading="Product Display Settings">
           <s-paragraph>
             Manage exactly which products are visible to your customers across

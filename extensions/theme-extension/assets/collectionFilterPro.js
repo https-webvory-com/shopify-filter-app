@@ -1237,9 +1237,9 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   function applyGlobalSettings(settings) {
     syncThemeBackgroundColor(settings);
     window.cfpApplyCollectionPageWidth?.(document.querySelector('.cfp-layout-wrapper'),settings);
-    for (const [key,variable] of [['drawerWidth','--cfp-drawer-width'],['verticalFilterWidth','--cfp-vertical-width'],['mobileDrawerWidth','--cfp-mobile-drawer-width'],['mobileVerticalFilterWidth','--cfp-mobile-vertical-width']]) {
-      const width=Number(settings?.[key] ?? settings?.integrations?.[key]);
-      const cssWidth = `${Number.isInteger(width)&&width>=240&&width<=600?width:420}px`;
+    for (const [key,variable] of [['drawerWidth','--cfp-drawer-width'],['verticalFilterWidth','--cfp-vertical-width'],['mobileDrawerWidth','--cfp-mobile-drawer-width'],['mobileHorizontalFilterWidth','--cfp-mobile-horizontal-filter-width']]) {
+      const width=Number(settings?.[key] ?? settings?.integrations?.[key] ?? (key==='mobileDrawerWidth'?settings?.mobileVerticalFilterWidth??settings?.integrations?.mobileVerticalFilterWidth:undefined));
+      const cssWidth = `${Number.isInteger(width)&&width>=240&&width<=600?width:key==='mobileHorizontalFilterWidth'?300:420}px`;
       sidebar?.style.setProperty(variable,cssWidth);
       if (key === 'verticalFilterWidth') document.querySelector('.cfp-layout-wrapper')?.style.setProperty(variable,cssWidth);
     }
@@ -4281,7 +4281,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     const rect=toggle.getBoundingClientRect();
     const width=document.documentElement.clientWidth;
     const height=window.visualViewport?.height || window.innerHeight;
-    const panelWidth=Math.min(300,width-32);
+    content.style.maxWidth=`${Math.max(0,width-32)}px`;
+    const panelWidth=Math.min(content.getBoundingClientRect().width||300,width-32);
     const desired=Math.min(420,content.scrollHeight);
     const below=Math.max(0,height-rect.bottom-16),above=Math.max(0,rect.top-16);
     const openAbove=below<Math.min(desired,180)&&above>below;
@@ -4476,19 +4477,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
-        if (window.cfpFullWidth&&!location.pathname.startsWith('/collections/')) {
-          wrapper.classList.add('cfp-full-width-mode');
-        }
         container.appendChild(wrapper);
-
-        // Expand the theme's native container if Full Width is enabled
-        if (window.cfpFullWidth&&!location.pathname.startsWith('/collections/')) {
-           const themeContainer = wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');
-           if (themeContainer) {
-              themeContainer.style.maxWidth = '100%';
-              themeContainer.style.padding = '0 15px';
-           }
-        }
       }
 
       window.cfpApplyCollectionPageWidth?.(wrapper,globalSettings||{});

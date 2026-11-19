@@ -8,7 +8,7 @@ import * as collectionLayoutSettings from '../../app/utils/collectionLayoutSetti
 
 async function moduleWithMocks(file, imports) {
   imports = { '@shopify/app-bridge-react': {}, '../hooks/useCompletedSubmission': {useCompletedSubmission:()=>{}}, '../utils/filterWidths.js': filterWidths, '../utils/collectionLayoutSettings.js':collectionLayoutSettings,
-    '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
+    '../components/PageWidthSettings':{default:()=>null}, '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
   const { code } = await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' });
   const context = { module: { exports: {} }, exports: {}, Response, URL, console,
     require: name => { if (!(name in imports)) throw new Error(`Unexpected import ${name}`); return imports[name]; } };

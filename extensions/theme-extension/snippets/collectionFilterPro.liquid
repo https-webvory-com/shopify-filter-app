@@ -235,7 +235,6 @@
 {%- endstyle -%}
 
 <script>
-  window.cfpFullWidth = {{ full_width | default: true, allow_false: true | json }};
   window.cfpCurrency = {
     isoCode: {{ cart.currency.iso_code | json }},
     symbol: {{ cart.currency.symbol | json }}

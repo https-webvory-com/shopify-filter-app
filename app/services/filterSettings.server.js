@@ -24,7 +24,7 @@ export async function getFilterGlobalSettings(shop) {
   return {
     ...settings,
     desktopFilterLayout,
-    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(integrations[key])])),
+    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(integrations[key]??(key==='mobileDrawerWidth'?integrations.mobileVerticalFilterWidth:undefined),key)])),
     ...collectionLayoutSettings(integrations),
     filterBarBackgroundColor: integrations.filterBarBackgroundColor,
     priceFilterDisplayMode: integrations.priceFilterDisplayMode === 'Range' ? 'Range' : 'List',
@@ -82,7 +82,7 @@ export async function updateFilterGlobalSettings(shop, data) {
   return {
     ...settings,
     filterBarBackgroundColor: settings.integrations?.filterBarBackgroundColor,
-    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(settings.integrations?.[key])])),
+    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(settings.integrations?.[key]??(key==='mobileDrawerWidth'?settings.integrations?.mobileVerticalFilterWidth:undefined),key)])),
     ...collectionLayoutSettings(settings.integrations),
     desktopFilterLayout: settings.integrations?.desktopFilterLayout || updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
   };

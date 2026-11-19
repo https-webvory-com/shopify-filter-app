@@ -23,7 +23,13 @@ async function fixture(){
     '../shopify.server':{authenticate:{admin:async()=>({session:{shop:row.shop}})}},
     '../services/filterSettings.server':service,
   });
-  return {service,route,writes,invalidations,row:()=>row};
+  const general=await loadModule('app/routes/app.settings.general.jsx',{
+    'react-router':{},react:{},'@shopify/shopify-app-react-router/server':{},'@shopify/app-bridge-react':{},
+    '../db.server.js':{default:{}},'../services/marketAvailability.server.js':{},
+    '../shopify.server':{authenticate:{admin:async()=>({session:{shop:row.shop}})}},
+    '../services/filterSettings.server':service,
+  });
+  return {service,route,general,writes,invalidations,row:()=>row};
 }
 
 test('per-style widths save independently, stay in shop integrations and preserve horizontal layout',async()=>{
@@ -74,18 +80,34 @@ test('small-screen widths and collection spacing save independently without rebu
   const f=await fixture(),shop=f.row().shop;
   const before=await f.service.getFilterGlobalSettings(shop);
   assert.equal(before.collectionPageWidth,'theme');assert.equal(before.mobileDrawerWidth,420);
-  for(const payload of [{mobileDrawerWidth:'300'},{mobileVerticalFilterWidth:'350'},
+  assert.equal(before.mobileHorizontalFilterWidth,300);
+  for(const payload of [{mobileDrawerWidth:'300'},{mobileHorizontalFilterWidth:'350'},
     {collectionPageWidth:'custom',collectionSideSpacing:'48',mobileCollectionSideSpacing:'12'},
     {collectionPageWidth:'theme'}]){
     const response=await f.route.action({request:new Request('https://fixture/app',{method:'POST',body:new URLSearchParams(payload)})});
     assert.equal(response.success,true);assert.equal(f.invalidations.at(-1).options.kind,'presentation');
   }
   const saved=await f.service.getFilterGlobalSettings(shop);
-  assert.equal(saved.mobileDrawerWidth,300);assert.equal(saved.mobileVerticalFilterWidth,350);
+  assert.equal(saved.mobileDrawerWidth,300);assert.equal(saved.mobileHorizontalFilterWidth,350);
   assert.equal(saved.drawerWidth,420);assert.equal(saved.verticalFilterWidth,420);
   assert.equal(saved.collectionPageWidth,'theme');assert.equal(saved.collectionSideSpacing,48);assert.equal(saved.mobileCollectionSideSpacing,12);
   assert.equal(f.row().integrations.wishlist,true);assert.equal(f.row().integrations.desktopFilterLayout,'horizontal');
   assert.ok(f.writes.every(write=>!('collectionPageWidth' in write.update)&&!('mobileDrawerWidth' in write.update)));
+});
+
+test('General Settings saves shared page width atomically as presentation only and rejects malformed spacing',async()=>{
+  const f=await fixture();
+  const response=await f.general.action({request:new Request('https://fixture/app/settings/general',{method:'POST',body:new URLSearchParams({collectionPageWidth:'custom',collectionSideSpacing:'44',mobileCollectionSideSpacing:'14'})})});
+  assert.equal(response.status,200);assert.equal((await response.json()).success,true);
+  const saved=await f.service.getFilterGlobalSettings(f.row().shop);
+  assert.equal(saved.collectionPageWidth,'custom');assert.equal(saved.collectionSideSpacing,44);assert.equal(saved.mobileCollectionSideSpacing,14);
+  assert.equal(f.invalidations.at(-1).options.kind,'presentation');assert.equal(f.row().integrations.wishlist,true);
+  const writes=f.writes.length;
+  for(const payload of [{collectionSideSpacing:'-1'},{mobileCollectionSideSpacing:'81'},{collectionPageWidth:'bad'}]){
+    const invalid=await f.general.action({request:new Request('https://fixture/app/settings/general',{method:'POST',body:new URLSearchParams(payload)})});
+    assert.equal(invalid.status,400);
+  }
+  assert.equal(f.writes.length,writes);
 });
 
 test('invalid spacing and small-screen widths are rejected before any settings writes',async()=>{

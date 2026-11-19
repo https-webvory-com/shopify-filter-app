@@ -7,7 +7,7 @@ import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-ro
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 import {FILTER_WIDTH_KEYS,FILTER_WIDTH_LIMITS,isValidFilterWidth,normalizeFilterWidth} from '../utils/filterWidths.js';
-import {COLLECTION_SPACING_LIMITS,collectionLayoutSettings,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
+import {COLLECTION_SPACING_LIMITS,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -211,14 +211,14 @@ function SettingSelect({ label, description, value, onChange, options, disabled 
 }
 
 // â”€â”€ Section Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function SettingFilterWidth({ label, description, value, onChange, disabled, mobile=false }) {
+function SettingFilterWidth({ label, description, value, onChange, disabled, mobile=false, popover=false, defaultWidth=FILTER_WIDTH_LIMITS.default }) {
   const [draft,setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const valid = isValidFilterWidth(draft);
   const changed = valid && Number(draft) !== value;
   const id = label.toLowerCase().replaceAll(' ','-');
   const previewWidth = Math.min(90,(valid ? Number(draft) : value) / (mobile?480:900) * 100);
-  const drawer = /drawer/i.test(label)||mobile;
+  const drawer = !popover&&(/drawer/i.test(label)||mobile);
   const buttonStyle = {padding:'8px 12px',border:'1px solid #ddd6e7',borderRadius:8,background:'#fff',color:'#5b21b6',font:'inherit',fontSize:12,cursor:'pointer'};
   return <section aria-label={label+' settings'} style={{padding:20,border:'1px solid #e5dfed',borderRadius:14,background:'#fff',margin:'16px 0',boxSizing:'border-box'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginBottom:10}}>
@@ -229,9 +229,10 @@ function SettingFilterWidth({ label, description, value, onChange, disabled, mob
     <div style={{display:'flex',gap:24,flexWrap:'wrap',alignItems:'center'}}>
       <div aria-hidden="true" style={{flex:'1 1 210px',minWidth:0,height:130,position:'relative',overflow:'hidden',border:'1px solid #e8e3ef',borderRadius:10,background:'#f8f6fb'}}>
         <div style={{height:18,background:'#eae5f2',borderBottom:'1px solid #ddd6e7'}} />
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,padding:12,paddingLeft:drawer?12:previewWidth+'%'}}>{[1,2,3].map(i=><div key={i} style={{height:78,background:'#e9e3f1',borderRadius:5}} />)}</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,padding:12,paddingLeft:drawer||popover?12:previewWidth+'%'}}>{[1,2,3].map(i=><div key={i} style={{height:78,background:'#e9e3f1',borderRadius:5}} />)}</div>
         {drawer && <div style={{position:'absolute',inset:'19px 0 0',background:'rgba(37,24,55,.12)'}} />}
-        <div style={{position:'absolute',top:19,bottom:0,left:0,width:previewWidth+'%',minWidth:55,background:'#fff',borderRight:'2px solid #8b5cf6',padding:10,boxSizing:'border-box',boxShadow:drawer?'4px 0 12px #30253e1a':'none'}}>
+        {popover&&<div style={{position:'absolute',top:23,left:12,display:'flex',gap:6}}>{['Color','Size'].map(text=><span key={text} style={{fontSize:9,padding:'3px 7px',background:'#fff',border:'1px solid #d8d0e2',borderRadius:4}}>{text}</span>)}</div>}
+        <div style={{position:'absolute',top:popover?46:19,bottom:popover?'auto':0,height:popover?76:undefined,left:popover?12:0,width:previewWidth+'%',minWidth:55,background:'#fff',borderRight:'2px solid #8b5cf6',padding:10,boxSizing:'border-box',boxShadow:drawer||popover?'4px 0 12px #30253e1a':'none'}}>
           <div style={{height:5,width:'70%',background:'#8b5cf6',borderRadius:3,marginBottom:12}} />{[1,2,3,4].map(i=><div key={i} style={{height:4,background:'#e6e0ee',marginBottom:8,borderRadius:3}} />)}
         </div>
       </div>
@@ -244,43 +245,17 @@ function SettingFilterWidth({ label, description, value, onChange, disabled, mob
         </div>
         <input type="range" aria-label={label+' slider'} min={FILTER_WIDTH_LIMITS.min} max={FILTER_WIDTH_LIMITS.max} step="1" value={valid?Number(draft):value} onChange={e=>setDraft(e.target.value)} style={{width:'100%',margin:0,accentColor:'#7c3aed'}} />
         <div id={id+'-range'} style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#766c82'}}><span>{FILTER_WIDTH_LIMITS.min} px</span><span>{FILTER_WIDTH_LIMITS.max} px</span></div>
-        <div role="group" aria-label={label+' presets'} style={{display:'flex',gap:8,flexWrap:'wrap'}}>{[['Narrow',300],['Default',420],['Wide',520]].map(([name,width])=><button key={name} type="button" aria-pressed={valid&&Number(draft)===width} onClick={()=>setDraft(String(width))} style={{...buttonStyle,borderColor:valid&&Number(draft)===width?'#8b5cf6':'#ddd6e7',background:valid&&Number(draft)===width?'#f5f3ff':'#fff'}}>{name}</button>)}</div>
+        <div role="group" aria-label={label+' presets'} style={{display:'flex',gap:8,flexWrap:'wrap'}}>{(popover?[['Narrow',240],['Default',300],['Wide',420]]:[['Narrow',300],['Default',420],['Wide',520]]).map(([name,width])=><button key={name} type="button" aria-pressed={valid&&Number(draft)===width} onClick={()=>setDraft(String(width))} style={{...buttonStyle,borderColor:valid&&Number(draft)===width?'#8b5cf6':'#ddd6e7',background:valid&&Number(draft)===width?'#f5f3ff':'#fff'}}>{name}</button>)}</div>
         {!valid && <p role="alert" style={{margin:0,color:'#b42318',fontSize:12}}>Enter a whole number from {FILTER_WIDTH_LIMITS.min} to {FILTER_WIDTH_LIMITS.max} px.</p>}
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:2}}>
           <button type="button" aria-label={'Apply '+label.toLowerCase()} disabled={disabled||!changed} onClick={()=>onChange(Number(draft))} style={{...buttonStyle,borderColor:'#6d28d9',background:'#6d28d9',color:'#fff',opacity:(disabled||!changed)?0.5:1}}>Apply width</button>
-          <button type="button" aria-label={'Reset '+label.toLowerCase()} onClick={()=>{setDraft(String(FILTER_WIDTH_LIMITS.default));if(value!==FILTER_WIDTH_LIMITS.default)onChange(FILTER_WIDTH_LIMITS.default);}} style={buttonStyle}>Reset to {FILTER_WIDTH_LIMITS.default} px</button>
+          <button type="button" aria-label={'Reset '+label.toLowerCase()} onClick={()=>{setDraft(String(defaultWidth));if(value!==defaultWidth)onChange(defaultWidth);}} style={buttonStyle}>Reset to {defaultWidth} px</button>
         </div>
       </fieldset>
     </div>
   </section>;
 }
 
-function SettingCollectionWidth({value,onApply,disabled}) {
-  const [draft,setDraft]=useState(value);
-  useEffect(()=>setDraft(value),[value.collectionPageWidth,value.collectionSideSpacing,value.mobileCollectionSideSpacing]);
-  const custom=draft.collectionPageWidth==='custom';
-  const valid=!custom||Object.keys(COLLECTION_SPACING_LIMITS).every(key=>isValidCollectionSpacing(key,draft[key]));
-  const changed=Object.keys(value).some(key=>String(value[key])!==String(draft[key]));
-  const inputStyle={width:'100%',minWidth:0,padding:'10px 12px',border:'1px solid #d8d0e2',borderRadius:8,font:'inherit',background:'#fff',boxSizing:'border-box'};
-  return <section aria-label="Collection page width settings" style={{padding:20,border:'1px solid #e5dfed',borderRadius:14,margin:'16px 0'}}>
-    <label className="settings-label" htmlFor="collection-page-width">Collection page width</label>
-    <p className="settings-desc">Keep your theme’s content width and side spacing, or choose custom spacing on each side of the collection. Reload the storefront after saving.</p>
-    <fieldset disabled={disabled} style={{border:0,padding:0,margin:'16px 0 0',minWidth:0,display:'grid',gap:16}}>
-      <select id="collection-page-width" aria-label="Collection page width" value={draft.collectionPageWidth} onChange={e=>setDraft({...draft,collectionPageWidth:e.target.value})} style={inputStyle}>
-        <option value="theme">Use theme width and spacing</option><option value="custom">Custom side spacing</option>
-      </select>
-      {custom&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,180px),1fr))',gap:16}}>
-        {Object.entries(COLLECTION_SPACING_LIMITS).map(([key,limits])=><label key={key} style={{display:'grid',gap:7,fontSize:13}}>
-          {key==='collectionSideSpacing'?'Desktop side spacing (px)':'Small-screen side spacing (px)'}
-          <input type="number" aria-label={key==='collectionSideSpacing'?'Desktop side spacing (px)':'Small-screen side spacing (px)'} min={limits.min} max={limits.max} step="1" value={draft[key]} aria-invalid={!isValidCollectionSpacing(key,draft[key])} onChange={e=>setDraft({...draft,[key]:e.target.value})} style={inputStyle}/>
-          <small>{limits.min}–{limits.max} px on each side{key==='mobileCollectionSideSpacing'?' at screen widths up to 768 px':''}.</small>
-        </label>)}
-      </div>}
-      {!valid&&<p role="alert" style={{color:'#b42318',margin:0}}>Enter whole numbers within the spacing ranges shown above.</p>}
-      <button type="button" disabled={disabled||!valid||!changed} onClick={()=>onApply(custom?{...draft,...Object.fromEntries(Object.keys(COLLECTION_SPACING_LIMITS).map(key=>[key,Number(draft[key])]))}:{...value,collectionPageWidth:'theme'})} style={{justifySelf:'start',padding:'10px 14px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',fontWeight:600,cursor:'pointer',opacity:(disabled||!valid||!changed)?0.5:1}}>Apply page width</button>
-    </fieldset>
-  </section>;
-}
 
 function SettingBarColor({ value, onChange, disabled }) {
   const [custom, setCustom] = useState(!!value);
@@ -373,8 +348,7 @@ export default function FilterSettings() {
   const [drawerWidth,setDrawerWidth] = useState(normalizeFilterWidth(settings?.drawerWidth));
   const [verticalWidth,setVerticalWidth] = useState(normalizeFilterWidth(settings?.verticalFilterWidth));
   const [mobileDrawerWidth,setMobileDrawerWidth] = useState(normalizeFilterWidth(settings?.mobileDrawerWidth));
-  const [mobileVerticalWidth,setMobileVerticalWidth] = useState(normalizeFilterWidth(settings?.mobileVerticalFilterWidth));
-  const [pageLayout,setPageLayout] = useState(collectionLayoutSettings(settings));
+  const [mobileHorizontalWidth,setMobileHorizontalWidth] = useState(normalizeFilterWidth(settings?.mobileHorizontalFilterWidth,'mobileHorizontalFilterWidth'));
 
   const [showBreadcrumb, setShowBreadcrumb] = useState(settings?.showAttributeBasedBreadcrumb ?? true);
   const [showSingleItem, setShowSingleItem] = useState(settings?.showFilterOptionsWithOneItem || false);
@@ -398,8 +372,7 @@ export default function FilterSettings() {
     setDrawerWidth(normalizeFilterWidth(settings?.drawerWidth));
     setVerticalWidth(normalizeFilterWidth(settings?.verticalFilterWidth));
     setMobileDrawerWidth(normalizeFilterWidth(settings?.mobileDrawerWidth));
-    setMobileVerticalWidth(normalizeFilterWidth(settings?.mobileVerticalFilterWidth));
-    setPageLayout(collectionLayoutSettings(settings));
+    setMobileHorizontalWidth(normalizeFilterWidth(settings?.mobileHorizontalFilterWidth,'mobileHorizontalFilterWidth'));
     setShowBreadcrumb(settings?.showAttributeBasedBreadcrumb ?? true);
     setShowSingleItem(settings?.showFilterOptionsWithOneItem ?? false);
     setShowProductCount(settings?.showProductCount ?? true);
@@ -429,7 +402,7 @@ export default function FilterSettings() {
     else if (key === 'drawerWidth') setDrawerWidth(value);
     else if (key === 'verticalFilterWidth') setVerticalWidth(value);
     else if (key === 'mobileDrawerWidth') setMobileDrawerWidth(value);
-    else if (key === 'mobileVerticalFilterWidth') setMobileVerticalWidth(value);
+    else if (key === 'mobileHorizontalFilterWidth') setMobileHorizontalWidth(value);
     else if (key === "showAttributeBasedBreadcrumb") setShowBreadcrumb(value);
     else if (key === "showFilterOptionsWithOneItem") setShowSingleItem(value);
     else if (key === "showProductCount") setShowProductCount(value);
@@ -636,12 +609,6 @@ export default function FilterSettings() {
             description="Choose how many size options appear in each row. The default is four. Reload the storefront after saving."
             value={sizeColumns} onChange={value => handleSettingChange('sizeOptionsPerRow', value)}
             options={[2,3,4,5,6].map(value => ({value:String(value),label:String(value) + (value === 4 ? ' (default)' : '')}))} />
-          <SettingCollectionWidth disabled={isSaving} value={pageLayout} onApply={values=>{
-            if(isSaving)return;
-            setPageLayout(values);
-            const formData=new FormData();for(const [key,value] of Object.entries(values))formData.set(key,String(value));
-            submit(formData,{method:'post'});
-          }}/>
           <SettingSelect disabled={isSaving}
             label="Desktop filter layout"
             description="Choose how filters appear on desktop and tablet: Horizontal toolbar, Vertical sidebar, or Drawer."
@@ -667,10 +634,10 @@ export default function FilterSettings() {
               { value: "horizontal-scrolling", label: "Horizontal scrolling" },
             ]}
           />
-          <SettingFilterWidth disabled={isSaving||mobileLayout==='horizontal-scrolling'} mobile label="Small-screen drawer width" value={mobileDrawerWidth} onChange={value=>handleSettingChange('mobileDrawerWidth',value)}
-            description="Sets the off-canvas panel width on screens up to 768 px. The panel is capped at the screen width. Used with Drawer or Horizontal desktop styles."/>
-          <SettingFilterWidth disabled={isSaving||mobileLayout==='horizontal-scrolling'} mobile label="Small-screen vertical-filter width" value={mobileVerticalWidth} onChange={value=>handleSettingChange('mobileVerticalFilterWidth',value)}
-            description="When the desktop style is Vertical sidebar, sets its off-canvas panel width on screens up to 768 px. The panel is capped at the screen width."/>
+          {mobileLayout==='off-canvas'?<SettingFilterWidth disabled={isSaving} mobile label="Off-canvas filter width" value={mobileDrawerWidth} onChange={value=>handleSettingChange('mobileDrawerWidth',value)}
+            description="Sets the slide-out filter panel width on screens up to 768 px. The panel automatically fits within the screen."/>:
+          <SettingFilterWidth disabled={isSaving} mobile popover defaultWidth={300} label="Horizontal filter dropdown width" value={mobileHorizontalWidth} onChange={value=>handleSettingChange('mobileHorizontalFilterWidth',value)}
+            description="Sets the width of the options panel opened from the scrolling filter bar. It fits within the screen with space at each edge."/>}
           <SettingToggle disabled={isSaving}
                         label="Show attribute based breadcrumb"
             description="When enabled, the attribute based breadcrumb showing the active filters is displayed."

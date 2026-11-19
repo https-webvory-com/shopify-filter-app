@@ -2,8 +2,9 @@
 (function(){
   if(window.cfpApplyCollectionPageWidth)return;
   window.cfpApplyCollectionPageWidth=function(wrapper,settings){
-    if(!wrapper||!location.pathname.startsWith('/collections/'))return false;
-    const root=wrapper.closest('.cfp-v1-app-container')||wrapper;
+    if(!wrapper)return false;
+    const root=wrapper.closest('.cfp-v1-app-container');
+    if(!root)return false;
     const read=key=>settings?.[key]??settings?.integrations?.[key];
     // The renderer can attach before its settings arrive. Keep the layout
     // already applied by the early cards instead of flashing back to theme.

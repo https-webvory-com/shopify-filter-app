@@ -37,6 +37,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
     if(name==='../utils/filterWidths.js')return filterWidths;
     if(name==='../utils/collectionLayoutSettings.js')return collectionLayoutSettings;
+    if(name==='../components/PageWidthSettings')return {default:()=>null};
     if(name==='../utils/collectionSearchText.js')return collectionSearchText;
     if(name==='../hooks/usePickerRequest')return {usePickerRequest:()=>({})};
     if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};

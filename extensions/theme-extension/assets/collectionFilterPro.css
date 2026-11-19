@@ -3097,7 +3097,7 @@ facet-filters-form,
     position: fixed;
     top: 100%;
     left: 0;
-    width: min(300px, calc(100vw - 32px));
+    width: min(var(--cfp-mobile-horizontal-filter-width, 300px), calc(100vw - 32px));
     box-sizing: border-box;
     max-height: min(420px, 60dvh);
     overflow: auto;
@@ -3458,7 +3458,7 @@ body.cfp-no-filters #cfp-overlay {
   display: none !important;
 }
 
-/* Collection-only spacing. Theme mode leaves the theme container untouched.
+/* Shared collection/search page spacing. Theme mode leaves theme containers untouched.
    Margins create the breakout without a transform, so fixed drawers stay
    attached to the viewport rather than the product container. */
 .cfp-layout-wrapper.cfp-managed-page-width {
@@ -3489,8 +3489,5 @@ body.cfp-no-filters #cfp-overlay {
   body:not(.cfp-mobile-horizontal-scrolling) #cfp-sidebar.cfp-sidebar {
     width: min(var(--cfp-mobile-drawer-width, 420px), 100vw) !important;
     max-width: 100% !important;
-  }
-  body.cfp-vertical-style:not(.cfp-mobile-horizontal-scrolling) #cfp-sidebar.cfp-sidebar {
-    width: min(var(--cfp-mobile-vertical-width, 420px), 100vw) !important;
   }
 }
