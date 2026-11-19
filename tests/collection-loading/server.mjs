@@ -65,7 +65,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
       if(typeof filter==='string'){
         const fieldMatch=filter.match(/^(vendor|productType|collection_titles|tags|option_[^ ]+|metafield_[^ ]+) IN (\[.*\])$/);
         if(fieldMatch){const [,field,raw]=fieldMatch;let values;try{values=JSON.parse(raw);}catch{values=[...raw.matchAll(/'((?:\\.|[^'])*)'/g)].map(m=>m[1].replace(/\\'/g,"'").replace(/\\\\/g,'\\'));}
-          products=products.filter(p=>{const value=field.startsWith('option_')?p.options.find(o=>o.name===field.slice(7))?.values:p[field];return (Array.isArray(value)?value:[value]).some(v=>values.includes(v));});}
+          products=products.filter(p=>{const value=field.startsWith('option_')?p.options.find(o=>o.name===field.slice(7))?.values:p[field];return (Array.isArray(value)?value:[value]).some(v=>values.some(selected=>String(selected).trim().toLowerCase()===String(v).trim().toLowerCase()));});}
         if(filter.startsWith('priceMin >= ')||filter.startsWith('priceMin <= ')||filter.startsWith('((priceMin >= ')){
           const ranges=[...filter.matchAll(/priceMin >= ([\d.]+)(?: AND priceMin <= ([\d.]+))?/g)].map(m=>[Number(m[1]),m[2]?Number(m[2]):Infinity]);
           if(ranges.length)products=products.filter(p=>ranges.some(([min,max])=>p.priceMin>=min&&p.priceMin<=max));
@@ -181,7 +181,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
       getActivePinningRuleForCollection:async()=>state.noPins?null:({products:(state.pinList||[state.pin]).map(id=>({id:'gid://shopify/Product/'+id}))}),
       getActiveRuleForCollection:async()=>state.noMerchandising?null:({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
-    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?[]:key.startsWith('filterGroup:')?{resolvedCollectionId:key.endsWith(':search')?null:'gid://shopify/Collection/1',resolvedCollectionTitle:key.endsWith(':search')?'':'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
+    '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?(state.mergedValues||[]):key.startsWith('filterGroup:')?{resolvedCollectionId:key.endsWith(':search')?null:'gid://shopify/Collection/1',resolvedCollectionTitle:key.endsWith(':search')?'':'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
     '../services/collectionBestSelling.server.js':{getCollectionBestSellingState:async()=>state.orderMissing?{ids:null,revision:null,status:'pending'}:({ids:state.orderVersion?docs.map(p=>p.id):docs.map(p=>p.id).reverse(),revision:'native-order-v'+(state.orderVersion||0),status:'ready',updatedAt:1+(state.orderVersion||0)})},
       '../utils/collectionPage.js':{fetchCollectionPage},'../utils/rankedCollectionPage.js':ranked,'../utils/collectionCards.js':collectionCards,'../utils/collectionPinnedPrefix.js':pinnedPrefix,
@@ -199,12 +199,13 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
       const selected=new Set(productIds.map(id=>String(id).split('/').pop())),counts={};
       for(const [name,rawValues]of Object.entries(optionValues)){
         counts[name]={};
+        const labels=new Map(facetNormalization.groupFacetValues(name,rawValues,mergedValues).map(group=>[group.key,group.value]));
         for(const product of docs.filter(doc=>selected.has(doc.id))){
           const position=product.options.findIndex(option=>option.name.toLowerCase()===name.toLowerCase());
           if(position<0)continue;
           const values=new Set((product.variantPrices||[]).filter(variant=>variant.available===true)
             .map(variant=>variant[`option${position+1}`]).filter(value=>rawValues.some(raw=>raw.trim().toLowerCase()===String(value||'').trim().toLowerCase()))
-            .map(value=>facetNormalization.mappedFacetValue(name,value,mergedValues)));
+            .map(value=>labels.get(facetNormalization.facetValueKey(facetNormalization.mappedFacetValue(name,value,mergedValues)))));
           for(const value of values)counts[name][value]=(counts[name][value]||0)+1;
         }
       }

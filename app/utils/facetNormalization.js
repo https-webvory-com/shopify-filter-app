@@ -1,5 +1,27 @@
 export const facetDisplayValue = value => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
 export const facetValueKey = value => facetDisplayValue(value).toLocaleLowerCase('en');
+export const facetSelectionIncludes = (values, value) => Array.isArray(values) && values.some(selected => facetValueKey(selected) === facetValueKey(value));
+
+// Group only equal normalized labels after explicit merchant mappings. Keep
+// every raw token for exact OR filtering/counting and a stable display label.
+export function groupFacetValues(type, rawValues, mergedValues = [], mapper = createFacetValueMapper(mergedValues)) {
+  const preferred = new Map();
+  for (const rule of mergedValues) if (facetValueKey(rule.filterType) === facetValueKey(type)) {
+    const label = facetDisplayValue(rule.targetValue), key = facetValueKey(label);
+    if (!preferred.has(key)) preferred.set(key, label);
+  }
+  const score = label => /\p{Lu}/u.test(label) && /\p{Ll}/u.test(label) ? 0 : /\p{Ll}/u.test(label) ? 1 : 2;
+  const groups = new Map();
+  for (const raw of new Set(rawValues)) {
+    if (typeof raw !== 'string') continue;
+    const mapped = mapper(type, raw), label = facetDisplayValue(mapped), key = facetValueKey(mapped);
+    if (!groups.has(key)) groups.set(key, {key, value: preferred.get(key) ?? label, rawValues: []});
+    const group = groups.get(key);
+    if (!preferred.has(key) && (score(label) < score(group.value) || score(label) === score(group.value) && label.localeCompare(group.value, 'en') < 0)) group.value = label;
+    group.rawValues.push(raw);
+  }
+  return [...groups.values()];
+}
 
 const sizeAliases = {
   XS: ['XS', 'Extra Small', 'X Small', 'X-Small'],

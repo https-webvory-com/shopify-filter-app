@@ -10,6 +10,7 @@ import {isProductCodeQuery,productMatchesCode} from '../utils/skuSearch.js';
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import {savedVariantPriceSelections} from '../utils/availableVariants.js';
 import {priceSortVariant} from '../utils/savedMarketPricing.js';
+import {createFacetValueMapper,facetValueKey} from '../utils/facetNormalization.js';
 
 const gid = id => `gid://shopify/Product/${String(id).split('/').pop()}`;
 const variants = rows => (rows || []).map(v => ({ ...v,
@@ -138,9 +139,12 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     ranked.sort((a,b)=>compare(sortRows.get(a.id),sortRows.get(b.id))||a.id.localeCompare(b.id));
   }
   const effectiveIds = new Set(effectivePins.map(p => p.id));
-  const facetDistribution = {}, facetStats = {};
+  const facetDistribution = {}, facetStats = {}, normalizedFacetCounts = {};
+  const mapFacetValue=createFacetValueMapper(mergedValues);
   for (const key of facetKeys) {
-    const counts = {};
+    const counts = {}, normalizedCounts = {};
+    const type=({vendor:'vendor',productType:'product_type',tags:'tags',title:'title'})[key]||
+      (key.startsWith('option_')?key.slice(7):key.startsWith('metafield_')?key.slice(10):null);
     let minimum = Infinity, maximum = -Infinity;
     for (const p of ranked) {
       let value = p[key];
@@ -150,15 +154,19 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
         if (typeof productOptions === 'string') { try { productOptions = JSON.parse(productOptions); } catch { productOptions = []; } }
         value = productOptions.find(o => o.name?.toLowerCase() === optionName)?.values;
       }
+      const normalizedValues=new Set();
       for (const v of new Set((Array.isArray(value) ? value.flat() : [value]).filter(v => v != null && v !== ''))) {
         const text = String(v);
         counts[text] = (counts[text] || 0) + 1;
+        if(type)normalizedValues.add(facetValueKey(mapFacetValue(type,text)));
         if (key === 'priceMin' && Number.isFinite(Number(v))) {
           minimum = Math.min(minimum, Number(v)); maximum = Math.max(maximum, Number(v));
         }
       }
+      for(const value of normalizedValues)normalizedCounts[value]=(normalizedCounts[value]||0)+1;
     }
     facetDistribution[key] = counts;
+    if(type)normalizedFacetCounts[key]=normalizedCounts;
     if (Number.isFinite(minimum)) facetStats[key] = { min: minimum, max: maximum };
   }
   return { products: ranked.slice((page - 1) * limit, page * limit).map(p => {
@@ -168,5 +176,5 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
       images: selection.imageUrl ? [selection.imageUrl, ...(p.images || []).filter(image => image !== selection.imageUrl)] : p.images,
     } : {}) };
   }),
-    total: ranked.length, pinnedCount: effectiveIds.size, semanticHitCount, facetDistribution, facetStats, rankingMode: 'compatible' };
+    total: ranked.length, pinnedCount: effectiveIds.size, semanticHitCount, facetDistribution, facetStats, normalizedFacetCounts, rankingMode: 'compatible' };
 }

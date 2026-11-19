@@ -1,6 +1,6 @@
 import {Prisma} from '@prisma/client';
 import {createHash} from 'node:crypto';
-import {mappedFacetValue} from './facetNormalization.js';
+import {groupFacetValues} from './facetNormalization.js';
 
 const trimCharacters='\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff';
 const productGid=id=>/^\d+$/.test(String(id))?`gid://shopify/Product/${id}`:String(id);
@@ -13,14 +13,16 @@ export const availableOptionFacetSignature=(optionValues,mergedValues)=>
 export async function availableOptionFacetCounts(database,{shop,productIds,optionValues,mergedValues=[]}){
  if(!database?.$queryRaw||!Array.isArray(productIds)||!productIds.length)return {};
  const wanted=Object.entries(optionValues||{}).flatMap(([name,values])=>
-  [...new Set(values||[])].filter(value=>typeof value==='string'&&value).map(raw=>({name,raw,canonical:mappedFacetValue(name,raw,mergedValues)})));
+  groupFacetValues(name,(values||[]).filter(value=>typeof value==='string'&&value),mergedValues)
+    .flatMap(group=>group.rawValues.map(raw=>({name,raw,canonical:group.value}))));
  if(!wanted.length)return {};
  const wantedSql=Prisma.join(wanted.map(({name,raw,canonical})=>Prisma.sql`(${name},${raw},${canonical})`));
  const totals={};
  // PostgreSQL limits bind parameters; each chunk keeps a large collection
  // within that limit while each product contributes to exactly one chunk.
- for(let start=0;start<productIds.length;start+=10000){
-  const ids=productIds.slice(start,start+10000).map(productGid);
+ const uniqueIds=[...new Set(productIds.map(productGid))];
+ for(let start=0;start<uniqueIds.length;start+=10000){
+  const ids=uniqueIds.slice(start,start+10000);
   const rows=await database.$queryRaw(Prisma.sql`
    WITH wanted(name,raw,canonical) AS (VALUES ${wantedSql})
    SELECT wanted.name AS name,wanted.canonical AS value,count(DISTINCT p."id")::integer AS count

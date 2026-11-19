@@ -8,6 +8,7 @@ import { buildMeiliIncludeFilters, applyMerchandisingRules, selectMerchandisingV
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import {isProductCodeQuery,productMatchesCode} from '../utils/skuSearch.js';
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
+import {createFacetValueMapper,facetValueKey,groupFacetValues} from '../utils/facetNormalization.js';
 
 const gid = id => 'gid://shopify/Product/' + String(id).split('/').pop();
 const normal = p => ({ ...p, id: gid(p.id),
@@ -154,6 +155,37 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
       mergeFacets(distribution, stats, { [field]: Object.fromEntries(values.map(v => [v, 1])) },
         field === 'priceMin' && value != null && value !== '' && Number.isFinite(Number(value)) ? { [field]: { min: Number(value), max: Number(value) } } : {});
     }
+    const normalizedFacetCounts={}, groups=[],mapFacetValue=createFacetValueMapper(mergedValues);
+    for(const [field,values] of Object.entries(distribution)){
+      const type=({vendor:'vendor',productType:'product_type',tags:'tags',title:'title'})[field]||
+        (field.startsWith('option_')?field.slice(7):field.startsWith('metafield_')?field.slice(10):null);
+      if(type)for(const group of groupFacetValues(type,Object.keys(values),mergedValues,mapFacetValue))
+        if(group.rawValues.length>1)groups.push({...group,field,type});
+    }
+    if(groups.length){
+      // Tiers are disjoint. Count the OR of each label's encoded raw values
+      // inside each existing tier, retaining its exclusions/query/market scope.
+      const unionQueries=groups.flatMap(group=>queries.map(q=>({...q,filter:[...q.filter,
+        'cfpSearchFacetValues IN '+JSON.stringify(group.rawValues.map(value=>searchExactToken(JSON.stringify([group.field,value]))))],
+        hitsPerPage:1,page:1,attributesToRetrieve:[]})));
+      const key='normalizedNativeFacetCounts:v1:'+shop+':'+JSON.stringify([counts.semantic,unionQueries]);
+      const read=()=>searchPageBatch(unionQueries,counts.semantic);
+      const result=key.length<=32768?await getCached(key,read,30,{maxBytes:262144}):await read();
+      for(const [index,group] of groups.entries()){
+        let count=0;
+        for(let tier=0;tier<queries.length;tier++){
+          const total=result.results[index*queries.length+tier]?.totalHits;
+          if(!Number.isSafeInteger(total)||total<0)throw Error('Incomplete normalized search facet count');
+          count+=total;
+        }
+        for(const p of pins){
+          let value=p[group.field];
+          if(value==null&&group.field.startsWith('option_'))value=p.options?.find(o=>o.name?.toLowerCase()===group.field.slice(7).toLowerCase())?.values;
+          if((Array.isArray(value)?value.flat():[value]).some(v=>v!=null&&facetValueKey(mapFacetValue(group.type,String(v)))===group.key))count++;
+        }
+        (normalizedFacetCounts[group.field]||={})[group.key]=count;
+      }
+    }
     return { products: products.map((row, i) => {
       // Preserve score/image metadata on the visible page. Engine groups have
       // already allocated the slots; this never ranks a catalog in Node.
@@ -172,7 +204,7 @@ export async function rankNativeSearchPage({ shop, query, options, rule, pinning
         images: selection.imageUrl ? [selection.imageUrl, ...(p.images || []).filter(img => img !== selection.imageUrl)] : p.images,
       } : {}) };
     }), total, pinnedCount: pins.length, semanticHitCount: counts.semantic ? 1 : 0,
-    facetDistribution: distribution, facetStats: stats, rankingMode: 'native' };
+    facetDistribution: distribution, facetStats: stats, normalizedFacetCounts, rankingMode: 'native' };
   }
   try { return await read(); }
   catch { return read(false); } // restart counts AND hits together as keyword

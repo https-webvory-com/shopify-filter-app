@@ -7,6 +7,7 @@ import {normalizeManualValues,normalizeManualFacetConfig,normalizeManualFacetFil
 import {normalizeProductTitleFilter} from '../../app/utils/productTitleFilter.js';
 import {collectionConfiguration,visibleCollectionFacets} from '../../app/utils/collectionBootstrap.js';
 import {packCollectionResponse} from '../../app/utils/collectionResponse.js';
+import {facetValueKey} from '../../app/utils/facetNormalization.js';
 
 test('manual values preserve text, commas, order, duplicates and supported legacy list shapes',()=>{
  const values=Object.freeze([' Red ','Black, White','Red','']);
@@ -73,7 +74,7 @@ test('the actual remote facet-search handler keeps saved manual arrays unchanged
  const config=Object.freeze({useManualValues:true,manualValues:Object.freeze(['Red','Black, White'])});
  const empty={style:{}},wrapper={querySelectorAll:()=>[],querySelector:selector=>selector==='.cfp-empty-state'?empty:null};
  const input={value:'red',dataset:{inputName:'option-Color'},closest:()=>wrapper,addEventListener:(_name,fn)=>{listener=fn;}};
- const context={filterRoots:[{querySelectorAll:()=>[input]}],window:{location:{search:''}},document:{activeElement:null},shop:'tenant',collectionHandle:'prom',collectionId:null,API_DOMAIN:'https://fixture',URLSearchParams,
+ const context={facetValueKey,filterRoots:[{querySelectorAll:()=>[input]}],window:{location:{search:''}},document:{activeElement:null},shop:'tenant',collectionHandle:'prom',collectionId:null,API_DOMAIN:'https://fixture',URLSearchParams,
   cfpLastSettings:[{filterType:'option',filterKey:'Color',config}],cfpLastFacets:{options:{Color:[{value:'Blue',count:1}]}},cfpLastTotalCount:3,
   fetch:async()=>({json:async()=>({facetHits:[{value:'Red',count:2},{value:'Green',count:1},{value:null},null]})}),
   setTimeout:fn=>{timer=fn;return 1;},clearTimeout:()=>{},renderFilterSidebar:()=>{renders++;},console:{error:(...args)=>errors.push(args)}};

@@ -12,6 +12,9 @@ for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewS
     const manual=(await fs.readFile('app/utils/manualFacetValues.js','utf8')).replaceAll('export function','function');
     source=source.replace(/\/\* CFP_MANUAL_VALUES_START \*\/[\s\S]*?\/\* CFP_MANUAL_VALUES_END \*\//,
       '/* CFP_MANUAL_VALUES_START */\n'+manual+'\n  /* CFP_MANUAL_VALUES_END */');
+    const facetKeys=(await fs.readFile('app/utils/facetNormalization.js','utf8')).split(/\r?\n/).slice(0,3).join('\n').replaceAll('export const','const');
+    source=source.replace(/\/\* CFP_FACET_KEYS_START \*\/[\s\S]*?\/\* CFP_FACET_KEYS_END \*\//,
+      '/* CFP_FACET_KEYS_START */\n'+facetKeys+'\n  /* CFP_FACET_KEYS_END */');
     await fs.writeFile(assets+name+'.js',source);
   }
   const hash=createHash('sha256').update(source.replace(/\r\n/g,'\n')).digest('hex');

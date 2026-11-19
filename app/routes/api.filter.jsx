@@ -37,7 +37,7 @@ import {normalizeProductTitleFilter} from '../utils/productTitleFilter.js';
 import {normalizePriceFilter,normalizeManualFacetFilter} from '../utils/filterPresentation.js';
 import {resolveCollectionNavigation} from '../utils/collectionNavigation.js';
 import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../services/marketAvailability.server.js';
-import {createFacetValueMapper,expandMappedFacetValues} from '../utils/facetNormalization.js';
+import {createFacetValueMapper,expandMappedFacetValues,facetValueKey,groupFacetValues} from '../utils/facetNormalization.js';
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
@@ -102,6 +102,7 @@ export const loader = async ({ request, context }) => {
   let variantEligibilityMs=0;
   let rankingPreparationMs=0;
   let membershipProof=null;
+  let searchNormalizedFacetCounts=null;
   console.log("API Filter Request: ", request.url);
   try {
     const url = new URL(request.url);
@@ -1367,6 +1368,7 @@ export const loader = async ({ request, context }) => {
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
       collectionPageTotal = result.total;
       facetDistribution = result.facetDistribution;
+      searchNormalizedFacetCounts = result.normalizedFacetCounts || null;
       facetRes = { ...(facetRes || {}), totalHits: result.total, facetDistribution, facetStats: result.facetStats };
       searchRankingApplied = true;
       searchRankingMode = result.rankingMode || 'compatible';
@@ -1822,26 +1824,33 @@ export const loader = async ({ request, context }) => {
       const type = ({vendor:'vendor',productType:'product_type',tags:'tags',title:'title'})[field] ||
         (field.startsWith('option_') ? field.slice(7) : field.startsWith('metafield_') ? field.slice(10) : null);
       if (!type) continue;
-      for (const raw of Object.keys(values || {})) {
-        const canonical = getTargetValue(type, raw);
-        const key = `${field}\u0000${canonical}`;
-        if (!normalizedGroups.has(key)) normalizedGroups.set(key, { field, canonical, raw: [] });
-        normalizedGroups.get(key).raw.push(raw);
-      }
+      for (const group of groupFacetValues(type,Object.keys(values || {}),mergedValues,getTargetValue))
+        normalizedGroups.set(`${field}\u0000${group.key}`,{field,canonical:group.value,raw:group.rawValues});
     }
     const exactNormalizedCounts = new Map();
     const duplicateGroups = [...normalizedGroups.entries()].filter(([, group]) => group.raw.length > 1);
+    for(const [key,group] of duplicateGroups){
+      const count=searchNormalizedFacetCounts?.[group.field]?.[facetValueKey(group.canonical)];
+      if(Number.isSafeInteger(count)&&count>=0)exactNormalizedCounts.set(key,count);
+    }
+    const missingGroups=duplicateGroups.filter(([key])=>!exactNormalizedCounts.has(key));
     const normalizedCountStarted=Date.now();
-    if (duplicateGroups.length) {
+    if (missingGroups.length) {
       try {
-        const countQueries = duplicateGroups.map(([, group]) => ({ indexUid: 'products', q: textSearchQuery,
-          filter: [...baseFilters, ...activeCategories.filter(category => category !== group.field).map(category => categoryFilters[category]),
-            `${group.field} IN ${JSON.stringify(group.raw)}`], hitsPerPage: 1, page: 1, attributesToRetrieve: [] }));
-        const response = await searchPageBatch(countQueries, false);
-        duplicateGroups.forEach(([key], index) => {
+        const countExclusions=directSortExclusions(activeRule,pinnedIds);
+        const countQueries = missingGroups.map(([, group]) => ({ indexUid: 'products', q: textSearchQuery,...(isSearch?{_cfpSearchSurface:true}:{}),
+          filter: [...new Set([...baseFilters, ...activeCategories.filter(category => category !== group.field).map(category => categoryFilters[category]),
+            ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []),...intentFilters,
+            ...(countExclusions||[]),
+            ...(countExclusions===null&&rankingSession?.ids&&!categoryFilters[group.field]?['id IN '+JSON.stringify(rankingSession.ids)]:[]),
+            `${group.field} IN ${JSON.stringify(group.raw)}`])], hitsPerPage: 1, page: 1, attributesToRetrieve: [] }));
+        const cacheKey='normalizedFacetCounts:v2:'+shop+':'+availableOptionFacetSignature(countQueries,[]);
+        const read=()=>searchPageBatch(countQueries,false);
+        const response=await getCached(cacheKey,read,30,{maxBytes:262144});
+        missingGroups.forEach(([key], index) => {
           const result = response.results?.[index];
           const count = result?.totalHits ?? result?.estimatedTotalHits;
-          if (Number.isSafeInteger(count)) exactNormalizedCounts.set(key, count);
+          if (Number.isSafeInteger(count)&&count>=0) exactNormalizedCounts.set(key, count);
         });
       } catch (error) {
         console.error('CFP: Exact normalized facet counts unavailable:', error.name);
@@ -1849,10 +1858,12 @@ export const loader = async ({ request, context }) => {
     }
     const normalizedCountMs=Date.now()-normalizedCountStarted;
     const addNormalizedCount = (destination, field, type, raw, count) => {
-      const canonical = getTargetValue(type, raw);
-      const key = `${field}\u0000${canonical}`;
+      const mapped = getTargetValue(type, raw);
+      const key = `${field}\u0000${facetValueKey(mapped)}`;
+      const canonical=normalizedGroups.get(key)?.canonical??mapped;
       const duplicate = normalizedGroups.get(key)?.raw.length > 1;
-      const display = duplicate && !exactNormalizedCounts.has(key) ? raw : canonical;
+      if(duplicate&&!exactNormalizedCounts.has(key))throw new Error('Exact facet counts unavailable; retry the filters');
+      const display = canonical;
       destination[display] = duplicate && exactNormalizedCounts.has(key)
         ? exactNormalizedCounts.get(key) : (destination[display] || 0) + count;
     };
@@ -1930,7 +1941,8 @@ export const loader = async ({ request, context }) => {
     // Its displayed selected count must still agree with the exact ranked
     // result, including pins, Include rules and overlapping color aliases.
     for(const [name,values] of Object.entries(selectedOptionValues))if(values.length===1){
-      const label=getTargetValue(name,values[0]);
+      const mapped=getTargetValue(name,values[0]);
+      const label=normalizedGroups.get(`option_${name}\u0000${facetValueKey(mapped)}`)?.canonical??mapped;
       if(optionCounts[name]&&Object.hasOwn(optionCounts[name],label))optionCounts[name][label]=totalCount;
     }
 

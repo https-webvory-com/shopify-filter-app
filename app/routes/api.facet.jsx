@@ -3,6 +3,8 @@ import prisma from "../db.server";
 import meiliClient from "../services/meiliClient.server";
 
 import { rateLimit } from "../services/rateLimiter.server";
+import {getCached} from '../services/shopCache.server';
+import {groupFacetValues} from '../utils/facetNormalization.js';
 
 export const loader = async ({ request }) => {
   try {
@@ -81,8 +83,26 @@ export const loader = async ({ request }) => {
       maxFacetHits: 20
     });
 
+    const type=({vendor:'vendor',productType:'product_type',tags:'tags',title:'title',collection_titles:'collection'})[meiliFacetName]||
+      (meiliFacetName.startsWith('option_')?meiliFacetName.slice(7):meiliFacetName.startsWith('metafield_')?meiliFacetName.slice(10):meiliFacetName);
+    const mergedValues=await getCached(`mergedValues:${shop}`,()=>prisma.mergedValue.findMany({where:{shop,isActive:true}}),30);
+    const hits=(searchResponse.facetHits||[]).filter(hit=>typeof hit?.value==='string');
+    const groups=groupFacetValues(type,hits.map(hit=>hit.value),mergedValues);
+    // A facet-search window may omit another spelling of the same label.
+    // Count each returned choice's product union in one bounded batch.
+    const duplicateGroups=groups;
+    const exact=new Map();
+    if(duplicateGroups.length){
+      const queries=duplicateGroups.map(group=>({indexUid:'products',q:'',filter:[...meiliFilter,`${meiliFacetName} IN ${JSON.stringify(group.rawValues)}`],hitsPerPage:1,page:1,attributesToRetrieve:[]}));
+      const response=await getCached('facetSearchUnion:v1:'+shop+':'+JSON.stringify(queries),()=>meiliClient.multiSearch({queries}),30);
+      duplicateGroups.forEach((group,index)=>{
+        const count=response.results?.[index]?.totalHits;
+        if(!Number.isSafeInteger(count)||count<0)throw Error('Exact facet count unavailable');
+        exact.set(group.key,count);
+      });
+    }
     return data({
-      facetHits: searchResponse.facetHits
+      facetHits: groups.map(group=>({value:group.value,rawValues:group.rawValues,count:exact.has(group.key)?exact.get(group.key):hits.find(hit=>hit.value===group.rawValues[0]).count}))
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',

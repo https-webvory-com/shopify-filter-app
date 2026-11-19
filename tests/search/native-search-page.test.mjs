@@ -84,6 +84,19 @@ test('missing deployed ID filtering or projection readiness never issues unsuppo
   assert.equal(await notReady.service.rankNativeSearchPage(notReady.spec), null);
 });
 
+test('native case-alias counts use a product union inside the same query and exclusion tiers',async()=>{
+ const unions=[];
+ const f=await nativeFixture({batch:async queries=>{
+  if(queries[0].filter.some(filter=>typeof filter==='string'&&filter.startsWith('cfpSearchFacetValues IN '))){unions.push(...queries);return {semantic:false,results:queries.map(()=>({totalHits:3}))};}
+  if(queries[0].hitsPerPage===1)return {semantic:false,results:[{totalHits:3,facetDistribution:{cfpSearchFacetValues:{[searchExactToken(JSON.stringify(['option_Color','Teal']))]:2,[searchExactToken(JSON.stringify(['option_Color','TEAL']))]:2}}}]};
+  return {semantic:false,results:[{hits:[1,2,3].map(id=>({id:String(id)}))}]};
+ }});
+ const result=await f.service.rankNativeSearchPage({...f.spec,facetKeys:['option_Color'],rule:{conditions:[{action:'Exclude',field:'Available',maxValue:0}]}});
+ assert.equal(result.normalizedFacetCounts.option_Color.teal,3);assert.equal(unions.length,1);
+ assert.equal(unions[0].q,f.spec.query);assert.ok(unions[0].filter.some(filter=>filter.includes('NOT')&&filter.includes('cfpSearchInventory')));
+ assert.ok(unions[0].filter.includes("shop = 'fixture.myshopify.com'"));
+});
+
 test('a 50,000-result search returns only six documents with engine counts and facets', async () => {
   const calls=[];
   const f=await nativeFixture({batch:async(queries,mode)=>{

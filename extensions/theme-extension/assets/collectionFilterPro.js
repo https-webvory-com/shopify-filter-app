@@ -224,6 +224,12 @@ function normalizeManualFacetFilter(filter) {
 
   /* CFP_MANUAL_VALUES_END */
 
+  /* CFP_FACET_KEYS_START */
+const facetDisplayValue = value => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+const facetValueKey = value => facetDisplayValue(value).toLocaleLowerCase('en');
+const facetSelectionIncludes = (values, value) => Array.isArray(values) && values.some(selected => facetValueKey(selected) === facetValueKey(value));
+  /* CFP_FACET_KEYS_END */
+
   function getGlobalCurrencySymbol() {
     if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
       if (window.Shopify.currency.active === 'INR') return 'Rs. ';
@@ -2898,7 +2904,7 @@ function normalizeManualFacetFilter(filter) {
             <select class="cfp-select" name="${inputName}">
               <option value="">Any ${setting.label}</option>
               ${items.map(item => `
-                <option value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'selected' : ''}>
+                <option value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'selected' : ''}>
                   ${getDisplayLabel(item.label || item.value, prefix)} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}
                 </option>
               `).join('')}
@@ -2963,7 +2969,7 @@ function normalizeManualFacetFilter(filter) {
                     const hide = isViewMore && idx >= limit;
 
                     // Check if it's active
-                    const isActive = activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal));
+                    const isActive = facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal));
 
                     const isGrid = swatchLayout === 'Grid';
 
@@ -3041,7 +3047,7 @@ function normalizeManualFacetFilter(filter) {
                   const hide = isViewMore && idx >= limit;
                   return `
                   <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount===false?'':` (${item.count})`}`)}">
-                    <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
+                    <input type="checkbox" name="${inputName}" value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                     <span><span class="cfp-button-chip__text">${getDisplayLabel(item.label || item.value, prefix)}</span>${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}</span>
                   </label>
                   `;
@@ -3065,7 +3071,7 @@ function normalizeManualFacetFilter(filter) {
                 const hide = isViewMore && idx >= limit;
                 return `
                 <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount===false?'':` (${item.count})`}`)}">
-                  <input type="checkbox" name="${inputName}" value="${item.value}" ${(activeArray.includes(item.value) || ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
+                  <input type="checkbox" name="${inputName}" value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                   <span class="cfp-checkbox__box"></span>
                   <span class="cfp-checkbox__label">${getDisplayLabel(item.label || item.value, prefix)}</span>
                   ${globalSettings.showProductCount === false ? "" : `<span class="cfp-checkbox__count">${item.count}</span>`}
@@ -3105,8 +3111,8 @@ function normalizeManualFacetFilter(filter) {
         if (type === 'availability') return activeFilters.availability.length > 0;
 
         return items.some(item => 
-          activeArray.includes(item.value) || 
-          ((type === 'tag' || type === 'tags') && activeArray.includes(getCleanLabel('tag', item.value).cleanVal))
+          facetSelectionIncludes(activeArray,item.value) ||
+          ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))
         );
       })();
 
@@ -3147,9 +3153,9 @@ function normalizeManualFacetFilter(filter) {
       } else if (type === 'availability') {
         activeCount = activeFilters.availability.length;
       } else if (type === 'tag' || type === 'tags') {
-        activeCount = items.filter(item => activeArray.includes(item.value) || activeArray.includes(getCleanLabel('tag', item.value).cleanVal)).length;
+        activeCount = items.filter(item => facetSelectionIncludes(activeArray,item.value) || facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal)).length;
       } else if (Array.isArray(activeArray)) {
-        activeCount = activeArray.length;
+        activeCount = new Set(activeArray.map(facetValueKey)).size;
       }
       const hasActivePillSelections = activeCount > 0;
 
@@ -3728,7 +3734,7 @@ function normalizeManualFacetFilter(filter) {
                  if (targetFacetArray) {
                     data.facetHits.forEach(hit => {
                        if (typeof hit?.value !== 'string') return;
-                       const exists = targetFacetArray.find(v => typeof v?.value === 'string' && v.value.toLowerCase() === hit.value.toLowerCase());
+                       const exists = targetFacetArray.find(v => typeof v?.value === 'string' && facetValueKey(v.value) === facetValueKey(hit.value));
                        if (!exists) {
                           targetFacetArray.push({ value: hit.value, count: hit.count });
                           hasNew = true;
@@ -4026,10 +4032,9 @@ function normalizeManualFacetFilter(filter) {
 
   function updateFilterArray(arr, value, checked) {
     if (checked) {
-      if (!arr.includes(value)) arr.push(value);
+      if (!facetSelectionIncludes(arr,value)) arr.push(value);
     } else {
-      const idx = arr.indexOf(value);
-      if (idx > -1) arr.splice(idx, 1);
+      for(let index=arr.length-1;index>=0;index--)if(facetValueKey(arr[index])===facetValueKey(value))arr.splice(index,1);
     }
   }
 
@@ -4046,13 +4051,13 @@ function normalizeManualFacetFilter(filter) {
         const values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]||(templateName==='search'?[]:null):
           name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]||(templateName==='search'?[]:null):null);
         if(!values)continue;
-        const selected=values.includes(input.value)||((name==='tag'||name==='tags')&&values.includes(getCleanLabel('tag',input.value).cleanVal));
+        const selected=facetSelectionIncludes(values,input.value)||((name==='tag'||name==='tags')&&facetSelectionIncludes(values,getCleanLabel('tag',input.value).cleanVal));
         input.checked=selected;
         input.closest('.cfp-color-swatch')?.classList.toggle('cfp-color-swatch--selected',selected);
       }
       if(templateName==='search')for(const select of root.querySelectorAll('select.cfp-select')){
         const name=select.name,values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]:name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]:null);
-        select.value=values?.[0]||'';
+        select.value=[...select.options].find(option=>facetSelectionIncludes(values,option.value))?.value||'';
       }
       for(const group of root.querySelectorAll('.cfp-group, .cfp-horizontal-pill')){
         const first=group.querySelector('input[type="checkbox"]');if(!first)continue;
@@ -4170,23 +4175,23 @@ function normalizeManualFacetFilter(filter) {
       activeFilters.maxPrice = 999999;
       activeFilters.priceRanges = [];
     } else if (type === 'vendor') {
-      activeFilters.vendors = activeFilters.vendors.filter(x => x !== val);
+      activeFilters.vendors = activeFilters.vendors.filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type === 'type') {
-      activeFilters.types = activeFilters.types.filter(x => x !== val);
+      activeFilters.types = activeFilters.types.filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type === 'tag') {
-      activeFilters.tags = activeFilters.tags.filter(x => x !== val);
+      activeFilters.tags = activeFilters.tags.filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type === 'title') {
-      activeFilters.titles = activeFilters.titles.filter(x => x !== val);
+      activeFilters.titles = activeFilters.titles.filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type === 'collection') {
-      activeFilters.collections = activeFilters.collections.filter(x => x !== val);
+      activeFilters.collections = activeFilters.collections.filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type === 'availability') {
       activeFilters.availability = activeFilters.availability.filter(x => x !== val);
     } else if (type.startsWith('option-')) {
       const k = type.replace('option-', '');
-      activeFilters.options[k] = activeFilters.options[k].filter(x => x !== val);
+      activeFilters.options[k] = activeFilters.options[k].filter(x => facetValueKey(x) !== facetValueKey(val));
     } else if (type.startsWith('metafield-')) {
       const k = type.replace('metafield-', '');
-      activeFilters.metafields[k] = activeFilters.metafields[k].filter(x => x !== val);
+      activeFilters.metafields[k] = activeFilters.metafields[k].filter(x => facetValueKey(x) !== facetValueKey(val));
     }
     activeFilters.page = 1;
     renderBreadcrumbs();
@@ -4325,15 +4330,15 @@ function normalizeManualFacetFilter(filter) {
     let count = 0;
     count += (activeFilters.weightRanges||[]).length+(activeFilters.ratingRanges||[]).length+(activeFilters.locations||[]).length;
     count += (activeFilters.saleRanges || []).length;
-    count += activeFilters.vendors.length;
-    count += activeFilters.types.length;
-    count += activeFilters.tags.length;
-    count += (activeFilters.titles || []).length;
-    count += activeFilters.collections.length;
+    count += new Set(activeFilters.vendors.map(facetValueKey)).size;
+    count += new Set(activeFilters.types.map(facetValueKey)).size;
+    count += new Set(activeFilters.tags.map(facetValueKey)).size;
+    count += new Set((activeFilters.titles || []).map(facetValueKey)).size;
+    count += new Set(activeFilters.collections.map(facetValueKey)).size;
     count += activeFilters.availability.length;
 
-    Object.values(activeFilters.options).forEach(arr => count += arr.length);
-    Object.values(activeFilters.metafields).forEach(arr => count += arr.length);
+    Object.values(activeFilters.options).forEach(arr => count += new Set(arr.map(facetValueKey)).size);
+    Object.values(activeFilters.metafields).forEach(arr => count += new Set(arr.map(facetValueKey)).size);
 
     if (activeFilters.minPrice > 0) count++;
     if (activeFilters.maxPrice < maxPriceLimit) count++;
