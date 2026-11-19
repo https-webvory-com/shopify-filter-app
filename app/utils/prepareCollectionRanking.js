@@ -28,7 +28,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     if(spec.variantPriceSort){
       if(!savedSelections&&!Array.isArray(product.variantPrices)&&!Array.isArray(product.variants))return product;
       const key=String(product.id).split('/').pop(),selected=savedSelections?savedSelections.get(key):priceSortVariant(product,spec.variantPriceSort);
-      if(selected){selections.set(key,selected);missingMarketPriceIds.delete(key);ineligible.delete(key);return {...product,priceMin:selected.price};}
+      if(selected){selections.set(key,selected);missingMarketPriceIds.delete(key);ineligible.delete(key);return product;}
       if(savedSelections||product.variantPrices?.length)ineligible.add(key);else missingMarketPriceIds.add(key);
       return product;
     }
@@ -57,6 +57,13 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     const pins=typeof spec.pinningRule?.products==='string'?JSON.parse(spec.pinningRule.products):spec.pinningRule?.products;
     if(Array.isArray(pins))comparatorPins=pins.map(p=>p?.id).filter(Boolean);
   } catch { /* Preserve the existing behavior for malformed legacy pin data. */ }
+  const baseCompare=comparator?.(spec.sortBy,comparatorPins,{...sortSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder});
+  const compare=spec.variantPriceSort?(a,b)=>{
+    const price=p=>selections.get(String(p.id).split('/').pop())?.price??p.priceMin;
+    const left={...a,priceMin:price(a)},right={...b,priceMin:price(b)};
+    const result=baseCompare?baseCompare(left,right):(Number(left.priceMin)-Number(right.priceMin))*(spec.variantPriceSort.direction==='desc'?-1:1);
+    return result||String(a.id).localeCompare(String(b.id));
+  }:baseCompare;
   const ids = await buildCollectionSequence(rankingIndex, {
     query: spec.query, conditions: spec.rule?.conditions ?? [], sortBy: spec.sortBy,
     pinnedIds: spec.pinnedIds, orderedIds: spec.orderedIds,
@@ -67,7 +74,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
         if(sourceOutsideIds.length===1000)sourceOutsideIds=null;else sourceOutsideIds.push(id);
       }
     }}}:{}),
-    compare: comparator?.(spec.sortBy,comparatorPins,{...sortSettings,preserveCollectionBestSellingOrder:spec.needsShopifyOrder}),
+    compare,
     hydrateRanking: async products => {
       if(spec.allowIncompleteMarketPrice)for(const product of products)
         if(product._rankingPinPlaceholder)missingMarketPriceIds.add(String(product.id).split('/').pop());
@@ -95,6 +102,7 @@ export async function prepareCollectionRanking(spec, { index, prisma, arrange, c
     arrange: products => {
       const ranked = arrange(products, spec.rule, spec.sortBy, spec.pinningRule, spec.mergedValues,
         { ...sortSettings, preserveCollectionBestSellingOrder: spec.needsShopifyOrder });
+      if(spec.variantPriceSort)ranked.sort(compare);
       for (const p of ranked){
         const key=p.id.split('/').pop(),selection=selections.get(key);
         if(p.merchandisingScore||p.merchandisingImage||selection)metadata[key]={

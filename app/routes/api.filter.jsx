@@ -43,7 +43,7 @@ import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../uti
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
 import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
-import {savedMarketProduct,priceSortVariant} from '../utils/savedMarketPricing.js';
+import {savedMarketProduct,priceSortVariant,hydrateSavedMarketPrices,convertedPriceBound} from '../utils/savedMarketPricing.js';
 import {publicSearchProduct} from '../utils/searchConfiguration.js';
 import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 
@@ -551,11 +551,14 @@ export const loader = async ({ request, context }) => {
     // hydrating a second candidate set. Collection lookups keep their old key.
     const searchVariantContext = isSearch && parsedQuery?.colorIntent?.requested.length
       ? {searchColorValues: parsedQuery.colorIntent.values} : {};
+    // Eligibility belongs to the filter state, never to its selected ordering.
+    const canonicalVariantPrice = url.searchParams.get('priceFilterVersion') === '1' &&
+      (selectedPriceRanges.length > 0 || minPrice > 0 || maxPrice < 9999999 || Object.values(optionsFilters).some(values => values.length));
     const variantEligibilityKey = hideUnavailable ? JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues,
       ...(searchVariantContext.searchColorValues ? [searchVariantContext] : [])]) : '';
     // Start the exact same-available-variant lookup while rule and market reads
     // proceed. A failure is carried to the original eligibility gate below.
-    const earlyVariantEligibility=hideUnavailable&&!(marketPriceSortRequested&&url.searchParams.get('priceSortVersion')==='2')&&(fastCards||fastSearchCards)
+    const earlyVariantEligibility=hideUnavailable&&!canonicalVariantPrice&&!(marketPriceSortRequested&&url.searchParams.get('priceSortVersion')==='2')&&(fastCards||fastSearchCards)
       ? getCached('availableVariants:' + shop + ':' + variantEligibilityKey,
           () => availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...variantEligibilityScope},optionsFilters,mergedValues,null,{database:prisma,priceContext:searchVariantContext}),30)
           .then(value=>({value}),error=>({error})) : null;
@@ -596,11 +599,13 @@ export const loader = async ({ request, context }) => {
     const sortCountry=String(country||'').toUpperCase();
     const descendingPrice=['price-descending','price-desc'].includes(sortBy);
     const priceSortRate=Number(url.searchParams.get('priceSortRate')||1);
-    if(variantPriceV2&&(!Number.isFinite(priceSortRate)||priceSortRate<=0||priceSortRate>1e9))return data({error:'Invalid price currency rate'},{status:400});
-    const nativeRanges=variantPriceV2?(selectedPriceRanges.length?selectedPriceRanges:(minPrice>0||maxPrice<9999999)?[{min:minPrice,max:maxPrice}]:[]).map(range=>({min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:null})):[];
-    const variantPriceContext=variantPriceV2?{version:2,country:sortCountry,currency:savedUsBasePrice?'USD':null,basePrice:savedUsBasePrice,stockOnly:globalSettings?.showOnlyInStock===true||availability.includes('in_stock')&&!availability.includes('out_of_stock'),direction:descendingPrice?'desc':'asc',ranges:nativeRanges,options:optionsFilters,mergedValues}:null;
-    const variantEligibilityPriceContext=variantPriceContext?{...variantPriceContext}:null;
-    if(variantEligibilityPriceContext)delete variantEligibilityPriceContext.direction;
+    const priceCurrency=url.searchParams.get('priceCurrency');
+    if(priceCurrency&&!/^[A-Z]{3}$/.test(priceCurrency))return data({error:'Invalid price currency'},{status:400});
+    if((variantPriceV2||canonicalVariantPrice)&&(!/^[A-Z]{2}$/.test(sortCountry)||!Number.isFinite(priceSortRate)||priceSortRate<=0||priceSortRate>1e9))return data({error:'Invalid price currency context'},{status:400});
+    const boundDigits=selectedPriceRanges.length?0:priceCurrency?new Intl.NumberFormat('en',{style:'currency',currency:priceCurrency}).resolvedOptions().maximumFractionDigits:2;
+    const nativeRanges=variantPriceV2||canonicalVariantPrice?(selectedPriceRanges.length?selectedPriceRanges:(minPrice>0||maxPrice<9999999)?[{min:minPrice,max:maxPrice}]:[]).map(range=>({min:convertedPriceBound(range.min,priceSortRate,boundDigits),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate,boundDigits):null})):[];
+    const variantEligibilityPriceContext=variantPriceV2||canonicalVariantPrice?{version:2,country:sortCountry,currency:shop==='thedressoutlet.myshopify.com'&&sortCountry==='US'?'USD':priceCurrency,basePrice:shop==='thedressoutlet.myshopify.com'&&sortCountry==='US',stockOnly:hideUnavailable||globalSettings?.showOnlyInStock===true||availability.includes('in_stock')&&!availability.includes('out_of_stock'),ranges:nativeRanges,options:optionsFilters,mergedValues,...searchVariantContext,requirePrice:true}:null;
+    const variantPriceContext=variantPriceV2?{...variantEligibilityPriceContext,direction:descendingPrice?'desc':'asc'}:null;
     const marketSortReady=priceSortSelected&&!isSearch&&!searchQuery&&(variantPriceV2||!savedUsBasePrice)&&/^[A-Z]{2}$/.test(sortCountry)
       ? await marketPriceIntentReady(shop,sortCountry,{stockOnly:variantPriceContext?.stockOnly??globalSettings?.showOnlyInStock===true,...(variantPriceV2?{maximum:descendingPrice,basePrice:savedUsBasePrice}:{})}):false;
     const priceSortField=variantPriceV2?(savedUsBasePrice?`${variantPriceContext.stockOnly?'availablePrice':'price'}${descendingPrice?'Max':'Min'}`:`market${variantPriceContext.stockOnly?'Available':''}Price${descendingPrice?'Max':'Min'}_${sortCountry}`):priceSortSelected&&!savedUsBasePrice&&!isSearch&&!searchQuery&&/^[A-Z]{2}$/.test(sortCountry)
@@ -691,9 +696,9 @@ export const loader = async ({ request, context }) => {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
     const selectedPriceRange = minPrice > 0 || maxPrice < 9999999
-      ? { min: Math.max(0, minPrice - 0.5), max: maxPrice + 0.5 } : null;
+      ? { min: minPrice, max: maxPrice } : null;
     const eligibilityStarted=Date.now();
-    if (hideUnavailable&&!variantPriceV2) {
+    if (hideUnavailable&&!variantPriceV2&&!canonicalVariantPrice) {
       await getCached('variantEligibilityFilter:' + shop, async () => {
         await ensureVariantEligibilityFilter(meiliClient.index('products'), meiliClient.tasks);
         return true;
@@ -716,9 +721,9 @@ export const loader = async ({ request, context }) => {
     const categoryFilters = {};
     for(const [type,values] of Object.entries(selectedExtra)) if(type!=='stock_status'&&values.length)categoryFilters['extra_'+type]=extraIdsFilter(extraRows,type,values);
     if (selectedSaleRanges.length) categoryFilters.percentSale = saleIdsFilter(saleRows,selectedSaleRanges);
-    if (!variantPriceV2&&(minPrice > 0 || maxPrice < 9999999)) {
-      const bufferedMin = Math.max(0, minPrice - 0.5);
-      const bufferedMax = maxPrice + 0.5;
+    if (!variantPriceV2&&!canonicalVariantPrice&&(minPrice > 0 || maxPrice < 9999999)) {
+      const bufferedMin = minPrice;
+      const bufferedMax = maxPrice;
       if (hideUnavailable) {
         const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
         const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange,
@@ -730,19 +735,19 @@ export const loader = async ({ request, context }) => {
         categoryFilters["priceMin"] = `priceMin >= ${bufferedMin} AND priceMin <= ${bufferedMax}`;
       }
     }
-    if(!variantPriceV2&&selectedPriceRanges.length){
+    if(!variantPriceV2&&!canonicalVariantPrice&&selectedPriceRanges.length){
       if(hideUnavailable){
         const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
         const ids=new Set();for(const range of selectedPriceRanges)for(const id of await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,range,{database:prisma}))ids.add(id);
         categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_available_variant_price__"';
       }else categoryFilters.priceMin='('+selectedPriceRanges.map(range=>`(priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''})`).join(' OR ')+')';
     }
-    if(variantPriceV2&&!fastCards&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length))){
+    if((canonicalVariantPrice&&!variantPriceV2)||(variantPriceV2&&!fastCards&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length)))){
       const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
       for(const range of ranges){
         const normalized=range?{min:range.min,max:range.max??Infinity}:null;
-        const eligible=await getCached('availableVariants:'+shop+':sort-v2:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantPriceContext}),30);
+        const eligible=await getCached('availableVariants:'+shop+':filter-price-v1:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext}),30);
         for(const id of eligible)ids.add(id);
       }
       categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
@@ -1032,14 +1037,14 @@ export const loader = async ({ request, context }) => {
     let configuredPrices=[];if(String(priceSettings?.displayMode||'List').toLowerCase()==='list')try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
     const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
-    const priceEligibleIds=hideUnavailable||variantPriceV2?await Promise.all(priceCountRanges.map(range=>{
-      const eligibleRange=variantPriceV2?{min:range.min*priceSortRate,max:Number.isFinite(range.max)?range.max*priceSortRate:Infinity}:range;
+    const priceEligibleIds=hideUnavailable||variantPriceV2||canonicalVariantPrice?await Promise.all(priceCountRanges.map(range=>{
+      const eligibleRange=variantEligibilityPriceContext?{min:convertedPriceBound(range.min,priceSortRate),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate):Infinity}:range;
       return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext]),
-        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,eligibleRange,{database:prisma,...(variantPriceContext?{priceContext:variantPriceContext}:{})}),30,{maxBytes:1048576});
+        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext}),30,{maxBytes:1048576});
     })):[];
     for(const [index,range] of priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
-      if(hideUnavailable||variantPriceV2){
+      if(hideUnavailable||variantPriceV2||canonicalVariantPrice){
         const ids=priceEligibleIds[index];priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
       }
       queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
@@ -1073,7 +1078,7 @@ export const loader = async ({ request, context }) => {
     let collectionRankingApplied = false;
     let searchRankingApplied = false;
     let searchRankingMode = null;
-    const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion)+(variantPriceV2?':eligible-variant-price-v2':'');
+    const baseRankingFingerprint = marketRankingFingerprint(collectionRankingFingerprint(request.url),marketVersion)+(variantPriceV2?':eligible-variant-price-v3':'');
     const rankingFingerprint = `${priceSortField ? `${baseRankingFingerprint}:price:${priceSortField}:${partialMarketPriceSort?'partial':'complete'}` : baseRankingFingerprint}${exactPriceSortVersion?`:price-order-v${exactPriceSortVersion}`:''}`;
     let rankingSession = useRankedCollectionPagination
       ? await getCollectionRankingSession(shop, rankingFingerprint, url.searchParams.get("rankingToken")) : null;
@@ -1356,6 +1361,8 @@ export const loader = async ({ request, context }) => {
     if (needsRankedSearch) {
       const result = await rankSearchResults({ shop, query: textSearchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
+        stableMembership: userHasFilters,
+        variantPriceContext: canonicalVariantPrice&&priceSortSelected?{...variantEligibilityPriceContext,direction:descendingPrice?'desc':'asc'}:null,
         rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: fastSearchCards?[]:targetFacets });
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
       collectionPageTotal = result.total;
@@ -1522,8 +1529,12 @@ export const loader = async ({ request, context }) => {
     };
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
+    // Eligibility reads saved prices. Resolve only the visible page from the
+    // same source so stale indexed prices cannot choose a different variant.
+    if(canonicalVariantPrice&&!databasePriceSort&&!variantEligibilityPriceContext.basePrice)
+      await hydrateSavedMarketPrices(paginatedSlice,prisma.variant,shop,sortCountry);
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantPriceV2?null:selectedPriceRange,variantPriceContext||searchVariantContext) : [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable || canonicalVariantPrice ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantEligibilityPriceContext?null:selectedPriceRange,variantEligibilityPriceContext||searchVariantContext) : [...(p.variantPrices || [])];
       if(variantPriceV2&&!variantPriceContext.basePrice)localVariantPrices=localVariantPrices.filter(variant=>{
         const saved=variant.marketPrices?.[sortCountry];
         return saved&&saved.price!=null&&saved.price!==''&&Number.isFinite(Number(saved.price))&&Number(saved.price)>=0&&/^[A-Z]{3}$/.test(saved.currency||'');
@@ -1543,7 +1554,8 @@ export const loader = async ({ request, context }) => {
       const pinnedDefault=!isSearch&&!searchQuery&&!userHasFilters&&pinnedIds.some(id=>String(id).split('/').pop()===String(p.id).split('/').pop());
       const firstProductImage=productImages[0];
       const pinnedProductImage=pinnedDefault?(typeof firstProductImage==='string'?firstProductImage:firstProductImage?.url||firstProductImage?.src||firstProductImage?.image?.url||null):null;
-      const sortSelection=variantPriceContext?(p.priceSortSelection||priceSortVariant({...p,options:localOptions,variants:localVariantPrices},variantPriceContext)):null;
+      const selectionContext=variantPriceContext||(canonicalVariantPrice?{...variantEligibilityPriceContext,direction:'asc'}:null);
+      const sortSelection=selectionContext?(p.priceSortSelection||priceSortVariant({...p,options:localOptions,variants:localVariantPrices},selectionContext)):null;
       const sortedPriceVariants=priceSortField?localVariantPrices
         .filter(variant=>!globalSettings?.showOnlyInStock||variant.available===true)
         .filter(variant=>Number.isFinite(Number(variant.marketPrices?.[sortCountry]?.price)))
@@ -1719,7 +1731,7 @@ export const loader = async ({ request, context }) => {
         }
       });
 
-      return savedMarketProduct(productObj,country,{basePrice:variantPriceContext?.basePrice===true});
+      return savedMarketProduct(productObj,country,{basePrice:variantEligibilityPriceContext?.basePrice===true});
     });
 
     // Sort products by match score so the most relevant colors appear first on the page

@@ -132,6 +132,33 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     return 1;
   }
 
+  function getGlobalCurrencyDigits() {
+    try { return new Intl.NumberFormat('en', {style:'currency',currency:window.Shopify?.currency?.active||'USD'}).resolvedOptions().maximumFractionDigits; }
+    catch { return 2; }
+  }
+
+  /* CFP_PRICE_BOUNDS_START */
+// Non-negative decimal arithmetic keeps conversion independent of binary
+// floating-point error at a displayed boundary. Round half up, once.
+function convertedPriceBound(value, rate, digits = 0) {
+  if(value === Infinity || value == null)return value;
+  if(!Number.isFinite(Number(value))||Number(value)<0||!Number.isFinite(Number(rate))||Number(rate)<=0||!Number.isInteger(digits)||digits<0||digits>3)throw Error('Invalid price bound');
+  const decimal = input => {
+    const [mantissa, exponent = '0'] = String(Number(input)).toLowerCase().split('e');
+    const [whole, fraction = ''] = mantissa.split('.');
+    const scale = fraction.length - Number(exponent);
+    const coefficient = BigInt(whole + fraction);
+    return scale >= 0 ? [coefficient, 10n ** BigInt(scale)] : [coefficient * 10n ** BigInt(-scale), 1n];
+  };
+  const [amount, amountScale] = decimal(value), [exchange, exchangeScale] = decimal(rate);
+  const scale = 10n ** BigInt(digits), denominator = amountScale * exchangeScale;
+  const minor = (amount * exchange * scale * 2n + denominator) / (denominator * 2n);
+  if(minor > BigInt(Number.MAX_SAFE_INTEGER))throw Error('Price bound is too large');
+  return Number(minor) / Number(scale);
+}
+
+  /* CFP_PRICE_BOUNDS_END */
+
   function getGlobalCurrencySymbol() {
     if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
       if (window.Shopify.currency.active === 'INR') return 'Rs. ';
@@ -871,6 +898,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
       const country=window.Shopify?.country||window.cfpCollectionContext?.country;
       if(country)queryParams.append('country',country);
+      if(country&&((activeFilters.priceRanges||[]).length||activeFilters.minPrice>0||activeFilters.maxPrice<999999||Object.values(activeFilters.options||{}).some(values=>values.length))){
+        queryParams.set('priceFilterVersion','1');
+        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
+        if(window.Shopify?.currency?.active)queryParams.set('priceCurrency',window.Shopify.currency.active);
+      }
       if(templateName!=='search'&&['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)&&window.cfpPriceSortVersion!==1){
         queryParams.set('priceSortVersion','2');
         queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
@@ -2543,10 +2575,11 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         if (effectiveMax === 999999 || effectiveMax > maxLimit) effectiveMax = maxLimit;
         if (effectiveMax < minLimit) effectiveMax = minLimit;
 
-        const displayMinLimit = minLimit * rate;
-        const displayMaxLimit = maxLimit * rate;
-        const displayEffectiveMin = effectiveMin * rate;
-        const displayEffectiveMax = effectiveMax * rate;
+        const currencyDigits=getGlobalCurrencyDigits();
+        const displayMinLimit = convertedPriceBound(minLimit,rate,currencyDigits);
+        const displayMaxLimit = convertedPriceBound(maxLimit,rate,currencyDigits);
+        const displayEffectiveMin = convertedPriceBound(effectiveMin,rate,currencyDigits);
+        const displayEffectiveMax = convertedPriceBound(effectiveMax,rate,currencyDigits);
 
         const rangeDiff = displayMaxLimit - displayMinLimit;
         const fillLeft = rangeDiff > 0 ? ((displayEffectiveMin - displayMinLimit) / rangeDiff) * 100 : 0;
@@ -2589,7 +2622,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${Math.round(displayEffectiveMin)}" min="${Math.round(displayMinLimit)}" step="${step}">
+                  <input type="number" id="cfp-price-min" class="cfp-price-input" value="${displayEffectiveMin}" min="${displayMinLimit}" step="${10 ** -currencyDigits}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -2597,7 +2630,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
               <div class="cfp-price-input-wrap">
                 <div class="cfp-price-field">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol">${prefixStr}</span>` : ''}
-                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${Math.round(displayEffectiveMax)}" min="${Math.round(displayMinLimit)}" step="${step}">
+                  <input type="number" id="cfp-price-max" class="cfp-price-input" value="${displayEffectiveMax}" min="${displayMinLimit}" step="${10 ** -currencyDigits}">
                   ${s.showInputPrefixSuffix !== false ? `<span class="cfp-price-symbol" style="padding-left:4px">${suffixStr}</span>` : ''}
                 </div>
               </div>
@@ -2638,8 +2671,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
             const maxRaw = r.max != null ? r.max : (r.to === "" || r.to == null ? Infinity : r.to);
 
             // Format for display
-            let minStrDisp = Math.round(minRaw * rate).toString();
-            let maxStrDisp = Math.round(maxRaw * rate).toString();
+            let minStrDisp = convertedPriceBound(Number(minRaw), rate).toString();
+            let maxStrDisp = convertedPriceBound(Number(maxRaw), rate).toString();
 
             // Prepend symbol if label doesn't already include it
             let rawLabel = (r.label || (Number.isFinite(Number(maxRaw))?'{0} - {1}':'From {0}')).replace(/₹/g, 'Rs. ');
@@ -4196,8 +4229,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const rate = getGlobalCurrencyRate();
       const symbol = getGlobalCurrencySymbol();
       const displayMaxRaw = activeFilters.maxPrice === 999999 ? maxPriceLimit : activeFilters.maxPrice;
-      const minVal = Math.round(activeFilters.minPrice * rate);
-      const maxVal = Math.round(displayMaxRaw * rate);
+      const minVal = convertedPriceBound(activeFilters.minPrice,rate,getGlobalCurrencyDigits());
+      const maxVal = convertedPriceBound(displayMaxRaw,rate,getGlobalCurrencyDigits());
       addChip(`${horizontal ? 'Price: ' : ''}${symbol}${minVal} - ${symbol}${maxVal}`, 'price', 'range');
     }
 

@@ -35,6 +35,56 @@ async function fixture({ docs = Array.from({ length: 451 }, (_, i) => product(i 
   return { service, spec, calls, prisma, search };
 }
 
+test('filtered sorts share one relevance candidate set and cache before ordering and pagination', async () => {
+  const cache=new Map(),calls=[];
+  const docs=Array.from({length:53},(_,i)=>product(i+1));
+  const search=async(_q,options)=>{
+    calls.push(options);
+    // A sorted hybrid window can have different membership. Ordering must
+    // only happen after the common lexical/semantic candidate read.
+    const rows=options.sort?docs.slice(0,36):docs;
+    return {hits:rows.slice(options.offset||0,(options.offset||0)+options.limit),totalHits:rows.length};
+  };
+  const {rankSearchResults}=await loadRanking({},search,async(key,read)=>{
+    if(!cache.has(key))cache.set(key,await read());return cache.get(key);
+  });
+  let baseline;
+  for(const sortBy of ['best-selling','price-ascending','price-descending','trending','created-descending']){
+    const ids=[];
+    for(const page of [1,2,3,4]){
+      const result=await rankSearchResults({shop,query:'prom',stableMembership:true,
+        options:{filter:[`shop = '${shop}'`,"status = 'ACTIVE'"],sortBy,sort:['priceMin:asc']},page,limit:25,
+        globalSettings:{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true}});
+      assert.equal(result.total,53);if(page===4)assert.equal(result.products.length,0);
+      ids.push(...result.products.map(p=>p.id));
+    }
+    assert.equal(new Set(ids).size,53);
+    const set=ids.slice().sort();baseline ||= set;assert.deepEqual(set,baseline);
+  }
+  assert.equal(cache.size,1,'sort changes reuse eligibility instead of rereading the catalog');
+  assert.equal(calls.length,2,'one semantic and one keyword read for all sorts and pages');
+  assert.ok(calls.every(options=>!options.sort));
+});
+
+test('market sorting keeps Price Exclude eligibility and reuses compact SQL prices across pages',async()=>{
+ const docs=[product(1,{priceMin:15}),product(2,{priceMin:75}),product(3,{priceMin:75})];
+ const cache=new Map();let reads=0;
+ const prisma={$queryRaw:async()=>{reads++;return docs.map((p,i)=>({id:gid(p.id),selectedVariantId:'gid://shopify/ProductVariant/'+p.id,currency:'INR',price:[5000,7000,6000][i]}));}};
+ const search=async(_q,o)=>({hits:structuredClone(docs.slice(o.offset||0,(o.offset||0)+o.limit)),totalHits:docs.length});
+ const {rankSearchResults}=await loadRanking(prisma,search,async(key,read)=>{if(!cache.has(key))cache.set(key,await read());return cache.get(key);});
+ for(const direction of ['asc','desc']){
+  const ids=[];
+  for(const page of [1,2,3]){
+   const result=await rankSearchResults({shop,query:'prom',stableMembership:true,options:{filter:[`shop = '${shop}'`],sortBy:direction==='asc'?'price-ascending':'price-descending'},
+    rule:{conditions:[{action:'Exclude',field:'Price',minValue:0,maxValue:20}]},globalSettings:{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true},
+    variantPriceContext:{version:2,country:'IN',currency:'INR',direction,stockOnly:true,ranges:[],options:{},mergedValues:[]},page,limit:1});
+   assert.equal(result.total,2);ids.push(...result.products.map(p=>p.id));
+  }
+  assert.deepEqual(ids,direction==='asc'?[gid(3),gid(2)]:[gid(2),gid(3)]);
+ }
+ assert.equal(reads,2,'one compact SQL read per price direction, reused across pages');
+});
+
 test('ranks late boosted products and external pins before pagination with no duplicates or omissions', async () => {
   const docs = Array.from({ length: 451 }, (_, i) => product(i + 1, { tags: i === 450 ? ['featured'] : [] }));
   const saved = [product(900, { id: gid(900), variants: product(900).variantPrices })];

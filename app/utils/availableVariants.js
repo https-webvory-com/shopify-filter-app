@@ -49,8 +49,11 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
    currency=Prisma.sql`v."marketPrices" -> ${priceContext.country} ->> 'currency'`;
    compareAt=Prisma.sql`CASE WHEN (v."marketPrices" -> ${priceContext.country} ->> 'compareAtPrice') ~ '^[0-9]+([.][0-9]+)?$' THEN (v."marketPrices" -> ${priceContext.country} ->> 'compareAtPrice')::numeric ELSE NULL END`;
  }
- if(priceRange){
-  const ranges=Array.isArray(priceRange)?priceRange:[priceRange],predicates=[];
+ const effectiveRanges=priceRange?(Array.isArray(priceRange)?priceRange:[priceRange]):priceContext.ranges||[];
+ if(priceContext.currency&&!priceContext.basePrice)variants.push(Prisma.sql`${currency} = ${priceContext.currency}`);
+ if(priceContext.requirePrice&&!effectiveRanges.length)variants.push(Prisma.sql`(${amount} IS NOT NULL AND ${amount} >= 0)`);
+ if(effectiveRanges.length){
+  const ranges=effectiveRanges,predicates=[];
   for(const range of ranges){
    if(!Number.isFinite(range.min)||(range.max!==Infinity&&range.max!==null&&!Number.isFinite(range.max)))return null;
    predicates.push(Prisma.sql`(${amount} >= ${range.min}${Number.isFinite(range.max)?Prisma.sql` AND ${amount} <= ${range.max}`:Prisma.empty})`);
@@ -173,10 +176,14 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
       const position=(product.options||[]).findIndex(option=>/^colou?r$/i.test(String(option.name||'').trim()));
       if(position<0||!priceContext.searchColorValues.some(value=>normalize(value)===normalize(variant[`option${position+1}`])))return false;
     }
-    if (priceRange) {
+    const ranges=priceRange?(Array.isArray(priceRange)?priceRange:[priceRange]):priceContext.ranges||[];
+    if (ranges.length || priceContext.requirePrice) {
       const raw=priceContext.country&&!priceContext.basePrice?variant.marketPrices?.[priceContext.country]?.price:variant.price;
       const price = raw == null||raw==='' ? NaN : Number(raw);
-      if (!Number.isFinite(price) || price < priceRange.min || price > priceRange.max) return false;
+      const currency=priceContext.country&&!priceContext.basePrice?variant.marketPrices?.[priceContext.country]?.currency:priceContext.currency;
+      if (!Number.isFinite(price) || price < 0 || priceContext.requirePrice&&!/^[A-Z]{3}$/.test(currency||'')) return false;
+      if(priceContext.currency&&currency!==priceContext.currency)return false;
+      if (ranges.length&&!ranges.some(range=>price>=range.min&&(range.max==null||price<=range.max)))return false;
     }
     return Object.entries(filters).every(([name, selected]) => {
       if (!selected.length) return true;
@@ -205,9 +212,9 @@ export async function availableProductIds(productModel, where, filters, mergedVa
   // check below. This avoids transferring every available variant in a large
   // collection just to test a selected color/size in the web process.
   const variantWhere = priceContext.stockOnly===false?{}:{available:true};
-  if (priceRange){
-    if(priceContext.country&&!priceContext.basePrice)variantWhere.marketPrices={path:[priceContext.country,'price'],gte:priceRange.min,...(priceRange.max===Infinity?{}:{lte:priceRange.max})};
-    else variantWhere.price = { gte: priceRange.min, ...(priceRange.max===Infinity?{}:{lte:priceRange.max}) };
+  if (priceRange&&!Array.isArray(priceRange)){
+    if(priceContext.country&&!priceContext.basePrice)variantWhere.marketPrices={path:[priceContext.country,'price'],gte:priceRange.min,...(priceRange.max===Infinity||priceRange.max==null?{}:{lte:priceRange.max})};
+    else variantWhere.price = { gte: priceRange.min, ...(priceRange.max===Infinity||priceRange.max==null?{}:{lte:priceRange.max}) };
   }
   if (selected.length) variantWhere.AND = selected.map(([name, values]) => {
     const expanded = selectedVariantValues(name,values,mergedValues);
@@ -224,13 +231,13 @@ export async function availableProductIds(productModel, where, filters, mergedVa
   for (;;) {
     const rows = await productModel.findMany({
       where: { ...where, variants: { some: variantWhere } },
-      select: selected.length || priceRange || priceContext.searchColorValues
-        ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true, ...(priceRange ? {price: true,...(priceContext.country&&!priceContext.basePrice?{marketPrices:true}:{})} : {}) } } }
+      select: selected.length || priceRange || priceContext.ranges?.length || priceContext.requirePrice || priceContext.searchColorValues
+        ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true, ...(priceRange || priceContext.ranges?.length || priceContext.requirePrice ? {price: true,...(priceContext.country&&!priceContext.basePrice?{marketPrices:true}:{})} : {}) } } }
         : { id: true },
       orderBy: { id: 'asc' }, take: 1000,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    for (const row of rows) if ((!selected.length && !priceRange && !priceContext.searchColorValues) || matchingAvailableVariants(row, filters, mergedValues, priceRange,priceContext).length) ids.push(row.id.split('/').pop());
+    for (const row of rows) if ((!selected.length && !priceRange && !priceContext.ranges?.length && !priceContext.requirePrice && !priceContext.searchColorValues) || matchingAvailableVariants(row, filters, mergedValues, priceRange,priceContext).length) ids.push(row.id.split('/').pop());
     if (rows.length < 1000) break;
     cursor = rows.at(-1).id;
   }

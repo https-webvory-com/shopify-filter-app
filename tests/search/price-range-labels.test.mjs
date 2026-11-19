@@ -1,8 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import vm from 'node:vm';
+import {convertedPriceBound} from '../../app/utils/priceBounds.js';
 const source=await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js','utf8');
 const start=source.indexOf("        else if (type === 'price') {");
 const mapping=source.slice(start+"        else if (type === 'price') {".length,source.indexOf("        else if (type === 'vendor')",start)).replace(/}\s*$/,'');
-function labels(ranges){const context={facets:{priceRanges:{ranges}},items:[],getGlobalCurrencyRate:()=>1,getGlobalCurrencySymbol:()=>'£'};vm.createContext(context);vm.runInContext(mapping,context);return Array.from(context.items,v=>({value:v.value,label:v.label,count:v.count}));}
+function labels(ranges){const context={convertedPriceBound,facets:{priceRanges:{ranges}},items:[],getGlobalCurrencyRate:()=>1,getGlobalCurrencySymbol:()=>'£'};vm.createContext(context);vm.runInContext(mapping,context);return Array.from(context.items,v=>({value:v.value,label:v.label,count:v.count}));}
 test('saved price bands retain bounded custom labels and show an open upper limit without Infinity',()=>{
  const ranges=[{from:'0',to:'50',label:'{0} - {1}',count:4},{from:'50',to:'100',label:'From {0}',count:30},{from:'100',to:'150',label:'{0} - {1}'},{from:'150',to:'200',label:'{0} - {1}'},{from:'200',to:'',label:'{0} - {1}'}];
  const result=labels(ranges);assert.deepEqual(result.map(r=>r.label),['£0 - £50','From £50','£100 - £150','£150 - £200','From £200']);assert.equal(result[4].value,'200:Infinity');assert.equal(result[1].count,30);

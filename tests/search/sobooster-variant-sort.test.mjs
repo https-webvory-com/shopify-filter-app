@@ -4,9 +4,23 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {priceSortVariant,savedMarketProduct} from '../../app/utils/savedMarketPricing.js';
 import {prepareCollectionRanking} from '../../app/utils/prepareCollectionRanking.js';
+import {loadModule} from './helpers/search-ranking.mjs';
 
 const context={version:2,country:'US',currency:'USD',basePrice:true,stockOnly:true,direction:'desc',options:{},mergedValues:[],ranges:[]};
 const product={id:'1',options:[{name:'Color'},{name:'Size'}],variantPrices:[{id:'11',price:3190,available:true,option1:'Blue',option2:'S'},{id:'12',price:3410,available:true,option1:'Blue',option2:'L'},{id:'13',price:9000,available:false,option1:'Red',option2:'L'}]};
+
+test('market-price ordering cannot change Price Exclude rule eligibility',async()=>{
+ const docs=[1,2,3].map(n=>({id:String(n),priceMin:n*10,title:'Dress '+n,options:[],variantPrices:[{id:String(n)+'1',price:n*10,available:true,marketPrices:{GB:{price:n*1000,currency:'GBP'}}}]}));
+ const {applyMerchandisingRules:arrange,createMerchandisingComparator:comparator}=await loadModule('app/services/merchandising.server.js',{'../db.server.js':{default:{}}});
+ const rule={conditions:[{action:'Exclude',field:'Price',minValue:0,maxValue:15}]};
+ const settings={prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true};
+ assert.deepEqual(Array.from(arrange(structuredClone(docs),rule,'best-selling',null,[],settings),p=>p.id),['2','3']);
+ for(const direction of ['asc','desc']){
+  const index={search:async(_q,o)=>({hits:structuredClone(docs.slice(o.offset,o.offset+o.limit)),totalHits:docs.length})};
+  const result=await prepareCollectionRanking({shop:'fixture',sortBy:direction==='asc'?'price-ascending':'price-descending',priceSortField:'marketPriceMin_GB',variantPriceSort:{version:2,country:'GB',currency:'GBP',stockOnly:true,direction,ranges:[],options:{},mergedValues:[]},query:{q:'',filter:[]},pinnedIds:[],rule,globalSettings:settings},{index,prisma:{},arrange,comparator});
+  assert.deepEqual(result.ids,direction==='asc'?['2','3']:['3','2']);
+ }
+});
 
 test('verified US base prices render as saved USD without another price request',()=>{
  const p={variants:[{id:'1',price:3190},{id:'2',price:3410}]};
@@ -32,7 +46,8 @@ test('price, aliases and all selected options must match the same eligible varia
 
 test('country prices never use base currency or accept invalid amounts',()=>{
  const p={...product,variantPrices:product.variantPrices.map((v,i)=>({...v,marketPrices:{IN:{price:i===0?308200:329400,currency:'INR'}}}))};
- assert.equal(priceSortVariant(p,{...context,basePrice:false,country:'IN'}).price,329400);
+ assert.equal(priceSortVariant(p,{...context,basePrice:false,country:'IN',currency:'INR'}).price,329400);
+ assert.equal(priceSortVariant(p,{...context,basePrice:false,country:'IN',currency:'GBP'}),null);
  assert.equal(priceSortVariant(p,{...context,basePrice:false,country:'GB'}),null);
  for(const price of [null,'',-1,Infinity,NaN])assert.equal(priceSortVariant({variants:[{id:'1',price,available:true}]},context),null);
  assert.equal(priceSortVariant({variants:[{id:'1',price:0,available:true}]},context).price,0);

@@ -1,4 +1,5 @@
 import {canonicalSize,isSizeFacet} from './facetNormalization.js';
+export {convertedPriceBound} from './priceBounds.js';
 const countryPattern=/^[A-Z]{2}$/;
 const currencyPattern=/^[A-Z]{3}$/;
 const id=value=>String(value).split('/').pop();
@@ -13,6 +14,7 @@ export function priceSortVariant(product,context){
   const raw=context.basePrice?variant.price:variant.marketPrices?.[context.country]?.price;
   const currency=context.basePrice?context.currency:variant.marketPrices?.[context.country]?.currency;
   if(raw==null||raw===''||!Number.isFinite(Number(raw))||Number(raw)<0||!/^[A-Z]{3}$/.test(currency||''))continue;
+  if(context.currency&&currency!==context.currency)continue;
   const price=Number(raw);
   if(context.ranges?.length&&!context.ranges.some(range=>price>=range.min&&(range.max==null||price<=range.max)))continue;
   if(!Object.entries(selected).every(([name,values])=>{

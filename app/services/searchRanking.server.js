@@ -2,12 +2,14 @@ import prisma from '../db.server';
 import { createHash } from 'node:crypto';
 import { getCached } from './shopCache.server';
 import { semanticSearch, keywordSearch } from './semanticSearch.server';
-import { applyMerchandisingRules, buildMeiliIncludeFilters, selectMerchandisingVariant } from './merchandising.server';
+import { applyMerchandisingRules, buildMeiliIncludeFilters, selectMerchandisingVariant, createMerchandisingComparator } from './merchandising.server';
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import { hydrateCollectionInventory, hydrateCollectionSkus } from '../utils/rankedCollectionPage.js';
 import { rankNativeSearchPage } from './nativeSearchPage.server.js';
 import {isProductCodeQuery,productMatchesCode} from '../utils/skuSearch.js';
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
+import {savedVariantPriceSelections} from '../utils/availableVariants.js';
+import {priceSortVariant} from '../utils/savedMarketPricing.js';
 
 const gid = id => `gid://shopify/Product/${String(id).split('/').pop()}`;
 const variants = rows => (rows || []).map(v => ({ ...v,
@@ -16,16 +18,16 @@ const variants = rows => (rows || []).map(v => ({ ...v,
 // Both search surfaces rank the eligible set before allocating page slots.
 // Never inject an inactive product or a pin that violates the query's color.
 export async function rankSearchResults({ shop, query, options, rule, pinningRule,
-  parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [], membershipOnly = false }) {
+  parsedQuery, globalSettings = {}, mergedValues = [], page = 1, limit = 10, facetKeys = [], membershipOnly = false, stableMembership = false, variantPriceContext = null }) {
   try {
-    const result = !membershipOnly && await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
+    const result = !membershipOnly && !stableMembership && !variantPriceContext && await rankNativeSearchPage({ shop, query, options, rule, pinningRule,
       parsedQuery, globalSettings, mergedValues, page, limit, facetKeys });
     if (result) return result;
   } catch (error) {
     console.error('Native search page unavailable; using compatible ranking:', error.name);
   }
   const seen = new Set(), products = [];
-  const { limit: ignoredLimit, offset: ignoredOffset, sortBy, facets, attributesToHighlight,
+  const { limit: ignoredLimit, offset: ignoredOffset, sort: ignoredSort, sortBy, facets, attributesToHighlight,
     attributesToRetrieve, ...searchOptions } = options;
   // The admin pin picker only consumes IDs. Keep color eligibility fields,
   // but do not transfer images, descriptions, vectors or other card data.
@@ -35,7 +37,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
   const semanticWindow = 200;
   const includes = buildMeiliIncludeFilters(rule?.conditions?.filter(c => c.action === 'Include') || []);
   searchOptions.filter = [...(Array.isArray(searchOptions.filter) ? searchOptions.filter : [searchOptions.filter].filter(Boolean)), ...includes];
-  const cacheKey = `searchRankingCandidates:${shop}:${createHash('sha256').update(JSON.stringify(['lexical-and-semantic-v2', query, searchOptions])).digest('hex')}`;
+  const cacheKey = `searchRankingCandidates:${shop}:${createHash('sha256').update(JSON.stringify(['sort-independent-membership-v3', query, searchOptions])).digest('hex')}`;
   const candidates = await getCached(cacheKey, async () => {
     const hits = [], ids = new Set();
     // Semantic search can match the entire catalog. Use one fixed relevance
@@ -109,6 +111,18 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     return variant && (!globalSettings.showOnlyInStock || variant.available !== false);
   });
   if (membershipOnly) return { products: eligible.map(p => ({ id: p.id })), total: eligible.length };
+  if(variantPriceContext){
+    const ids=eligible.map(p=>p.id);
+    const key='searchVariantSelections:'+shop+':'+createHash('sha256').update(JSON.stringify([variantPriceContext,ids])).digest('hex');
+    const selections=typeof prisma.$queryRaw==='function'
+      ? new Map(await getCached(key,async()=>ids.length?[...await savedVariantPriceSelections(prisma,{shop,ids,context:variantPriceContext})]:[],30)) : null;
+    for(const product of eligible){
+      const selected=selections?selections.get(product.id.split('/').pop()):priceSortVariant(product,variantPriceContext);
+      // Retry a concurrent price change; never silently shrink just one sort.
+      if(!selected)throw Error('Search price eligibility changed; retry the search');
+      product.priceSortSelection=selected;
+    }
+  }
   if (rule?.conditions?.some(c => c.field === 'SKU')) await hydrateCollectionSkus(eligible, prisma.variant, shop);
   if (rule?.conditions?.some(c => c.field === 'Available')) await hydrateCollectionInventory(eligible, prisma.variant);
   const eligibleIds = new Set(eligible.map(p => p.id));
@@ -116,6 +130,13 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
   const effectiveRule = pinningRule ? { ...pinningRule, products: effectivePins } : null;
   const ranked = applyMerchandisingRules(eligible, rule, sortBy || 'relevance', effectiveRule, mergedValues,
     { ...globalSettings, preserveSearchRelevance: true });
+  if(variantPriceContext){
+    // Rule eligibility/scoring above retains its original price semantics.
+    // Only the ordering projection uses the matching market variant's price.
+    const sortRows=new Map(ranked.map(p=>[p.id,{...p,priceMin:p.priceSortSelection.price}]));
+    const compare=createMerchandisingComparator(sortBy,effectivePins.map(p=>p.id),{...globalSettings,preserveSearchRelevance:true});
+    ranked.sort((a,b)=>compare(sortRows.get(a.id),sortRows.get(b.id))||a.id.localeCompare(b.id));
+  }
   const effectiveIds = new Set(effectivePins.map(p => p.id));
   const facetDistribution = {}, facetStats = {};
   for (const key of facetKeys) {
