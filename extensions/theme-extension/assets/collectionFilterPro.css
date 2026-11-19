@@ -3465,7 +3465,7 @@ body.cfp-no-filters #cfp-overlay {
   box-sizing: border-box !important;
   padding-inline: 0 !important;
 }
-.cfp-v1-app-container.cfp-custom-page-width {
+:is(#cfp-v1-app-container, .cfp-v1-app-container).cfp-custom-page-width {
   --cfp-effective-side-spacing: min(var(--cfp-collection-side-spacing, 24px), 25vw);
   box-sizing: border-box !important;
   width: calc(var(--cfp-viewport-width, 100vw) - var(--cfp-effective-side-spacing) - var(--cfp-effective-side-spacing)) !important;
@@ -3483,7 +3483,7 @@ body.cfp-no-filters #cfp-overlay {
   }
 }
 @media (max-width: 768px) {
-  .cfp-v1-app-container.cfp-custom-page-width {
+  :is(#cfp-v1-app-container, .cfp-v1-app-container).cfp-custom-page-width {
     --cfp-effective-side-spacing: min(var(--cfp-mobile-collection-side-spacing, 16px), 25vw);
   }
   body:not(.cfp-mobile-horizontal-scrolling) #cfp-sidebar.cfp-sidebar {
