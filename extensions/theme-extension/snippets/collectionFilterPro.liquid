@@ -1,3 +1,4 @@
+{% render 'collection_layout' %}
 {%- assign cfp_collection_handle = collection.handle | default: '' -%}
 {%- assign cfp_collection_id = collection.id | default: '' -%}
 {%- comment -%}Fallback: extract handle from URL path for automated/smart collections{%- endcomment -%}

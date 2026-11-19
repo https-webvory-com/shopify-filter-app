@@ -69,3 +69,33 @@ test('authenticated admin can apply and reset both width controls without changi
   assert.equal(f.row().integrations.desktopFilterLayout,'horizontal');assert.equal(f.row().horizontalFilters,true);
   assert.ok(f.writes.every(w=>w.where.shop===f.row().shop));assert.equal(f.invalidations.length,4);
 });
+
+test('small-screen widths and collection spacing save independently without rebuilding saved ranking',async()=>{
+  const f=await fixture(),shop=f.row().shop;
+  const before=await f.service.getFilterGlobalSettings(shop);
+  assert.equal(before.collectionPageWidth,'theme');assert.equal(before.mobileDrawerWidth,420);
+  for(const payload of [{mobileDrawerWidth:'300'},{mobileVerticalFilterWidth:'350'},
+    {collectionPageWidth:'custom',collectionSideSpacing:'48',mobileCollectionSideSpacing:'12'},
+    {collectionPageWidth:'theme'}]){
+    const response=await f.route.action({request:new Request('https://fixture/app',{method:'POST',body:new URLSearchParams(payload)})});
+    assert.equal(response.success,true);assert.equal(f.invalidations.at(-1).options.kind,'presentation');
+  }
+  const saved=await f.service.getFilterGlobalSettings(shop);
+  assert.equal(saved.mobileDrawerWidth,300);assert.equal(saved.mobileVerticalFilterWidth,350);
+  assert.equal(saved.drawerWidth,420);assert.equal(saved.verticalFilterWidth,420);
+  assert.equal(saved.collectionPageWidth,'theme');assert.equal(saved.collectionSideSpacing,48);assert.equal(saved.mobileCollectionSideSpacing,12);
+  assert.equal(f.row().integrations.wishlist,true);assert.equal(f.row().integrations.desktopFilterLayout,'horizontal');
+  assert.ok(f.writes.every(write=>!('collectionPageWidth' in write.update)&&!('mobileDrawerWidth' in write.update)));
+});
+
+test('invalid spacing and small-screen widths are rejected before any settings writes',async()=>{
+  const f=await fixture();
+  for(const payload of [{mobileDrawerWidth:'239'},{mobileVerticalFilterWidth:'601'},
+    {collectionPageWidth:'full-store'},{collectionSideSpacing:'-1'},{collectionSideSpacing:'241'},
+    {mobileCollectionSideSpacing:'81'},{mobileCollectionSideSpacing:''},{collectionSideSpacing:'20px'},
+    {collectionSideSpacing:'20.5'},{collectionPageWidth:'custom',mobileCollectionSideSpacing:'Infinity'}]){
+    const response=await f.route.action({request:new Request('https://fixture/app',{method:'POST',body:new URLSearchParams(payload)})});
+    assert.equal(response.success,false);await assert.rejects(f.service.updateFilterGlobalSettings(f.row().shop,payload));
+  }
+  assert.equal(f.writes.length,0);assert.equal(f.invalidations.length,0);
+});

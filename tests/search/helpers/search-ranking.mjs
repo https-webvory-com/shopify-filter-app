@@ -25,6 +25,7 @@ import * as searchPinnedIntent from '../../../app/utils/searchPinnedIntent.js';
 import * as emptySearchPins from '../../../app/utils/emptySearchPins.js';
 import * as queryIntent from '../../../app/utils/queryIntent.js';
 import * as filterWidths from '../../../app/utils/filterWidths.js';
+import * as collectionLayoutSettings from '../../../app/utils/collectionLayoutSettings.js';
 import * as collectionSearchText from '../../../app/utils/collectionSearchText.js';
 import * as savedMarketPricing from '../../../app/utils/savedMarketPricing.js';
 import * as productMarketPrices from '../../../app/utils/readProductMarketPrices.js';
@@ -35,6 +36,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/readProductMarketPrices.js')return productMarketPrices;
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;
     if(name==='../utils/filterWidths.js')return filterWidths;
+    if(name==='../utils/collectionLayoutSettings.js')return collectionLayoutSettings;
     if(name==='../utils/collectionSearchText.js')return collectionSearchText;
     if(name==='../hooks/usePickerRequest')return {usePickerRequest:()=>({})};
     if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};

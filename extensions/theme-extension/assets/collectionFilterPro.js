@@ -1236,7 +1236,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function applyGlobalSettings(settings) {
     syncThemeBackgroundColor(settings);
-    for (const [key,variable] of [['drawerWidth','--cfp-drawer-width'],['verticalFilterWidth','--cfp-vertical-width']]) {
+    window.cfpApplyCollectionPageWidth?.(document.querySelector('.cfp-layout-wrapper'),settings);
+    for (const [key,variable] of [['drawerWidth','--cfp-drawer-width'],['verticalFilterWidth','--cfp-vertical-width'],['mobileDrawerWidth','--cfp-mobile-drawer-width'],['mobileVerticalFilterWidth','--cfp-mobile-vertical-width']]) {
       const width=Number(settings?.[key] ?? settings?.integrations?.[key]);
       const cssWidth = `${Number.isInteger(width)&&width>=240&&width<=600?width:420}px`;
       sidebar?.style.setProperty(variable,cssWidth);
@@ -4475,13 +4476,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       const wrapper = document.querySelector('.cfp-layout-wrapper') || document.createElement('div');
       if (!wrapper.classList.contains('cfp-layout-wrapper')) {
         wrapper.className = 'cfp-layout-wrapper';
-        if (window.cfpFullWidth) {
+        if (window.cfpFullWidth&&!location.pathname.startsWith('/collections/')) {
           wrapper.classList.add('cfp-full-width-mode');
         }
         container.appendChild(wrapper);
 
         // Expand the theme's native container if Full Width is enabled
-        if (window.cfpFullWidth) {
+        if (window.cfpFullWidth&&!location.pathname.startsWith('/collections/')) {
            const themeContainer = wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');
            if (themeContainer) {
               themeContainer.style.maxWidth = '100%';
@@ -4489,6 +4490,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
            }
         }
       }
+
+      window.cfpApplyCollectionPageWidth?.(wrapper,globalSettings||{});
 
       // Move the Search Header above the wrapper if it exists in the container
       const pageHeader = document.querySelector('.cfp-page-header');

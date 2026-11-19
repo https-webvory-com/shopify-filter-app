@@ -85,7 +85,7 @@
       // Use the final grid position from the outset, below the real toolbar.
       let wrapper=app.querySelector('.cfp-layout-wrapper');
       if(!wrapper){wrapper=document.createElement('div');wrapper.className='cfp-layout-wrapper';app.append(wrapper);}
-      if(window.cfpFullWidth){wrapper.classList.add('cfp-full-width-mode');const themeContainer=wrapper.closest('.page-width, .container, .wrapper, .site-wrapper');if(themeContainer){themeContainer.style.maxWidth='100%';themeContainer.style.padding='0 15px';}}
+      window.cfpApplyCollectionPageWidth?.(wrapper,payload.globalSettings||{});
       const settings=payload.globalSettings||{},mobile=matchMedia('(max-width:768px)').matches;
       const width=settings.verticalFilterWidth||settings.integrations?.verticalFilterWidth;
       if(width){const cssWidth=/^\d+(?:\.\d+)?$/.test(String(width))?width+'px':String(width);if(/^\d+(?:\.\d+)?(?:px|rem|vw|%)$/.test(cssWidth))wrapper.style.setProperty('--cfp-vertical-width',cssWidth);}

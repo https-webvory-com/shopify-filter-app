@@ -1,5 +1,5 @@
 export const FILTER_WIDTH_LIMITS = {min:240,max:600,default:420};
-export const FILTER_WIDTH_KEYS = ['drawerWidth','verticalFilterWidth'];
+export const FILTER_WIDTH_KEYS = ['drawerWidth','verticalFilterWidth','mobileDrawerWidth','mobileVerticalFilterWidth'];
 
 export function isValidFilterWidth(value) {
   const width = Number(value);

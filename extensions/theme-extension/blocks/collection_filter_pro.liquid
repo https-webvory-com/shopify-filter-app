@@ -3,7 +3,6 @@
     {% render 'collectionFilterPro',
       filter_bar_bg_color: block.settings.filter_bar_bg_color,
       filter_bg_color: block.settings.filter_bar_bg_color,
-      full_width: block.settings.full_width,
       show_price_filter: block.settings.show_price_filter,
       show_brand_filter: block.settings.show_brand_filter,
       show_color_filter: block.settings.show_color_filter,
@@ -37,12 +36,6 @@
   "target": "section",
   "javascript": "collectionWidget.js",
   "settings": [
-    {
-      "type": "checkbox",
-      "id": "full_width",
-      "label": "Enable Full Width Layout",
-      "default": true
-    },
     {
       "type": "color",
       "id": "filter_bar_bg_color",

@@ -5,6 +5,7 @@ import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as filterPresentation from '../../app/utils/filterPresentation.js';
 import * as filterWidths from '../../app/utils/filterWidths.js';
+import * as collectionLayoutSettings from '../../app/utils/collectionLayoutSettings.js';
 import * as collectionNavigation from '../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../app/utils/marketAvailability.js';
 import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
@@ -29,6 +30,7 @@ async function loadModule(file, mocks) {
     if(name==='../utils/savedMarketPricing.js')return savedMarketPricing;
     if(name==='../utils/filterPresentation.js')return filterPresentation;
     if(name==='../utils/filterWidths.js')return filterWidths;
+    if(name==='../utils/collectionLayoutSettings.js')return collectionLayoutSettings;
     if(name==='../utils/facetNormalization.js')return facetNormalization;
     if(name==='../utils/searchCachePolicy.js')return searchCachePolicy;
     if(name==='../utils/extraProductFilters.js')return extraProductFilters;

@@ -5,13 +5,14 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import {loadModule} from './helpers/search-ranking.mjs';
 import * as filterWidths from '../../app/utils/filterWidths.js';
+import * as collectionLayoutSettings from '../../app/utils/collectionLayoutSettings.js';
 
 async function action(file, dependencies, exportName='action') {
   const source=await fs.readFile(file,'utf8');
   const ast=ts.createSourceFile('route.jsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   const initializer=ast.statements.find(s=>ts.isVariableStatement(s)&&s.declarationList.declarations.some(d=>d.name.getText(ast)===exportName)).declarationList.declarations[0].initializer.getText(ast);
   return vm.runInNewContext('('+initializer+')',{
-    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},URL,...filterWidths,...dependencies,
+    authenticate:{admin:async()=>({session:{shop:'fixture.myshopify.com'}})},URL,...filterWidths,...collectionLayoutSettings,...dependencies,
   });
 }
 const request=values=>new Request('http://fixture/admin',{method:'POST',body:new URLSearchParams(values)});

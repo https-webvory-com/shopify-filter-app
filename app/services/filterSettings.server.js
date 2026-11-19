@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { invalidateShop } from "./shopCache.server";
 import {FILTER_WIDTH_KEYS,isValidFilterWidth,normalizeFilterWidth} from '../utils/filterWidths.js';
+import {COLLECTION_LAYOUT_KEYS,COLLECTION_SPACING_LIMITS,collectionLayoutSettings,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
 
 /**
  * Get global filter settings for a shop
@@ -23,8 +24,8 @@ export async function getFilterGlobalSettings(shop) {
   return {
     ...settings,
     desktopFilterLayout,
-    drawerWidth: normalizeFilterWidth(integrations.drawerWidth),
-    verticalFilterWidth: normalizeFilterWidth(integrations.verticalFilterWidth),
+    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(integrations[key])])),
+    ...collectionLayoutSettings(integrations),
     filterBarBackgroundColor: integrations.filterBarBackgroundColor,
     priceFilterDisplayMode: integrations.priceFilterDisplayMode === 'Range' ? 'Range' : 'List',
     sizeOptionsPerRow: Number.isInteger(integrations.sizeOptionsPerRow) && integrations.sizeOptionsPerRow >= 2 && integrations.sizeOptionsPerRow <= 6 ? integrations.sizeOptionsPerRow : 4,
@@ -42,7 +43,12 @@ export async function updateFilterGlobalSettings(shop, data) {
     updateData[key] = Number(data[key]);
   }
 
-  const presentationKeys = ['showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile', 'filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', ...FILTER_WIDTH_KEYS];
+  if(data.collectionPageWidth!==undefined&&!isValidCollectionPageWidth(data.collectionPageWidth))throw Error('Choose theme width or custom side spacing');
+  for(const key of Object.keys(COLLECTION_SPACING_LIMITS))if(data[key]!==undefined){
+    if(!isValidCollectionSpacing(key,data[key]))throw Error('Enter valid whole-number collection spacing');
+    updateData[key]=Number(data[key]);
+  }
+  const presentationKeys = ['showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile', 'filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', ...FILTER_WIDTH_KEYS,...COLLECTION_LAYOUT_KEYS];
   if (typeof data.desktopFilterLayout === 'string' || presentationKeys.some(key => data[key] !== undefined) || typeof data.horizontalFilters === 'boolean') {
     const current = await prisma.filterGlobalSetting.findUnique({
       where: { shop },
@@ -69,15 +75,15 @@ export async function updateFilterGlobalSettings(shop, data) {
     },
   });
   
-  const appearanceOnly = ['desktopFilterLayout','horizontalFilters','mobileFilterLayout','drawerWidth','verticalFilterWidth',
+  const appearanceOnly = ['desktopFilterLayout','horizontalFilters','mobileFilterLayout',...FILTER_WIDTH_KEYS,...COLLECTION_LAYOUT_KEYS,
     'filterBarBackgroundColor','sizeOptionsPerRow','showAttributeBasedBreadcrumb','showProductCount','scrollUpOnFilterValuesChange'];
   const keys = Object.keys(data);
   await invalidateShop(shop, keys.length && keys.every(key => appearanceOnly.includes(key)) ? {kind:'presentation'} : undefined);
   return {
     ...settings,
     filterBarBackgroundColor: settings.integrations?.filterBarBackgroundColor,
-    drawerWidth: normalizeFilterWidth(settings.integrations?.drawerWidth),
-    verticalFilterWidth: normalizeFilterWidth(settings.integrations?.verticalFilterWidth),
+    ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(settings.integrations?.[key])])),
+    ...collectionLayoutSettings(settings.integrations),
     desktopFilterLayout: settings.integrations?.desktopFilterLayout || updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),
   };
 }

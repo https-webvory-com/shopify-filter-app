@@ -1,4 +1,5 @@
 {% if template.name == 'collection' and collection %}
+  {% render 'collection_layout' %}
   {{ 'collectionLoading.min.js' | asset_url | preload_tag: as: 'script', fetchpriority: 'high' }}
   {% # theme-check-disable RemoteAsset %}
   {% # API connection hint, not a downloadable asset; this origin cannot be served by Shopify CDN. %}

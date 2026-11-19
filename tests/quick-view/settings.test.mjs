@@ -4,9 +4,10 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import { transform } from 'esbuild';
 import * as filterWidths from '../../app/utils/filterWidths.js';
+import * as collectionLayoutSettings from '../../app/utils/collectionLayoutSettings.js';
 
 async function moduleWithMocks(file, imports) {
-  imports = { '@shopify/app-bridge-react': {}, '../hooks/useCompletedSubmission': {useCompletedSubmission:()=>{}}, '../utils/filterWidths.js': filterWidths,
+  imports = { '@shopify/app-bridge-react': {}, '../hooks/useCompletedSubmission': {useCompletedSubmission:()=>{}}, '../utils/filterWidths.js': filterWidths, '../utils/collectionLayoutSettings.js':collectionLayoutSettings,
     '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
   const { code } = await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' });
   const context = { module: { exports: {} }, exports: {}, Response, URL, console,

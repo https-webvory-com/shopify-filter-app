@@ -1,0 +1,37 @@
+<script>
+(function(){
+  if(window.cfpApplyCollectionPageWidth)return;
+  window.cfpApplyCollectionPageWidth=function(wrapper,settings){
+    if(!wrapper||!location.pathname.startsWith('/collections/'))return false;
+    const root=wrapper.closest('.cfp-v1-app-container')||wrapper;
+    const read=key=>settings?.[key]??settings?.integrations?.[key];
+    // The renderer can attach before its settings arrive. Keep the layout
+    // already applied by the early cards instead of flashing back to theme.
+    if(read('collectionPageWidth')===undefined&&wrapper.classList.contains('cfp-managed-page-width'))return true;
+    const custom=read('collectionPageWidth')==='custom';
+    wrapper.classList.remove('cfp-full-width-mode');
+    wrapper.classList.add('cfp-managed-page-width');
+    root.classList.toggle('cfp-custom-page-width',custom);
+    for(const [key,variable,max,fallback] of [
+      ['collectionSideSpacing','--cfp-collection-side-spacing',240,24],
+      ['mobileCollectionSideSpacing','--cfp-mobile-collection-side-spacing',80,16],
+    ]){
+      const raw=read(key),value=Number(raw);
+      const valid=raw!==null&&raw!==undefined&&String(raw).trim()!==''&&Number.isInteger(value)&&value>=0&&value<=max;
+      root.style.setProperty(variable,(valid?value:fallback)+'px');
+    }
+    root.style.setProperty('--cfp-viewport-width',document.documentElement.clientWidth+'px');
+    return true;
+  };
+  let scheduled=false;
+  window.addEventListener('resize',function(){
+    if(scheduled)return;
+    scheduled=true;
+    requestAnimationFrame(function(){
+      scheduled=false;
+      const width=document.documentElement.clientWidth+'px';
+      document.querySelectorAll('.cfp-custom-page-width').forEach(root=>root.style.setProperty('--cfp-viewport-width',width));
+    });
+  },{passive:true});
+})();
+</script>
