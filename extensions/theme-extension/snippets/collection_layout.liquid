@@ -1,3 +1,4 @@
+{% render 'page_layout_initial' %}
 <script>
 (function(){
   if(window.cfpApplyCollectionPageWidth)return;
@@ -5,7 +6,8 @@
     if(!wrapper)return false;
     const root=wrapper.closest('.cfp-v1-app-container');
     if(!root)return false;
-    const read=key=>settings?.[key]??settings?.integrations?.[key];
+    // The document's Shopify snapshot wins over older cached product responses.
+    const read=key=>window.cfpInitialPageLayout?.[key]??settings?.[key]??settings?.integrations?.[key];
     // The renderer can attach before its settings arrive. Keep the layout
     // already applied by the early cards instead of flashing back to theme.
     if(read('collectionPageWidth')===undefined&&wrapper.classList.contains('cfp-managed-page-width'))return true;
@@ -22,6 +24,7 @@
       root.style.setProperty(variable,(valid?value:fallback)+'px');
     }
     root.style.setProperty('--cfp-viewport-width',document.documentElement.clientWidth+'px');
+    root.classList.add('cfp-page-width-ready');
     return true;
   };
   let scheduled=false;
@@ -34,5 +37,16 @@
       document.querySelectorAll('.cfp-custom-page-width').forEach(root=>root.style.setProperty('--cfp-viewport-width',width));
     });
   },{passive:true});
+  // Scrollbars can appear while HTML is still parsing. Update before paint,
+  // rather than waiting for the product response to correct viewport width.
+  if(window.ResizeObserver){
+    let lastWidth=0;
+    new ResizeObserver(function(){
+      const width=document.documentElement.clientWidth;
+      if(width===lastWidth)return;
+      lastWidth=width;
+      document.querySelectorAll('.cfp-v1-app-container').forEach(root=>root.style.setProperty('--cfp-viewport-width',width+'px'));
+    }).observe(document.documentElement);
+  }
 })();
 </script>

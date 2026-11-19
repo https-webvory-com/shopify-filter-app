@@ -8,6 +8,7 @@ import * as collectionLayoutSettings from '../../app/utils/collectionLayoutSetti
 
 async function moduleWithMocks(file, imports) {
   imports = { '@shopify/app-bridge-react': {}, '../hooks/useCompletedSubmission': {useCompletedSubmission:()=>{}}, '../utils/filterWidths.js': filterWidths, '../utils/collectionLayoutSettings.js':collectionLayoutSettings,
+    '../services/pageLayoutPublication.server.js':{publishPageLayout:async()=>{}},
     '../components/PageWidthSettings':{default:()=>null}, '../db.server.js': {}, '../services/marketAvailability.server.js': {}, ...imports };
   const { code } = await transform(await fs.readFile(file, 'utf8'), { loader: 'jsx', format: 'cjs' });
   const context = { module: { exports: {} }, exports: {}, Response, URL, console,

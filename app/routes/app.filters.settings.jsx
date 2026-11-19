@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import {publishPageLayout} from '../services/pageLayoutPublication.server.js';
 import { getFilterGlobalSettings, updateFilterGlobalSettings } from "../services/filterSettings.server";
 import {FILTER_WIDTH_KEYS,FILTER_WIDTH_LIMITS,isValidFilterWidth,normalizeFilterWidth} from '../utils/filterWidths.js';
 import {COLLECTION_SPACING_LIMITS,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
@@ -16,7 +17,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const formData = await request.formData();
   
   const payload = {};
@@ -70,7 +71,11 @@ export const action = async ({ request }) => {
     payload.sizeOptionsPerRow = value;
   }
   if (!Object.keys(payload).length) return { success: false, error: 'No filter settings supplied' };
-  await updateFilterGlobalSettings(session.shop, payload);
+  const saved=await updateFilterGlobalSettings(session.shop, payload);
+  if(['collectionPageWidth',...Object.keys(COLLECTION_SPACING_LIMITS)].some(key=>key in payload)){
+    try { await publishPageLayout(session.shop,saved,{admin,force:true}); }
+    catch { return {success:false,error:'Page spacing was saved but could not be applied to new page loads. Save again to retry.'}; }
+  }
   return { success: true };
 };
 

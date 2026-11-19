@@ -1,0 +1,29 @@
+{%- assign cfp_page_layout = app.metafields.cfp_layout.page_spacing.value -%}
+{%- if cfp_page_layout.collectionPageWidth == 'custom' -%}
+<style data-cfp-initial-page-layout>
+  :is(#cfp-v1-app-container,.cfp-v1-app-container):not(.cfp-page-width-ready) {
+    --cfp-collection-side-spacing: {{ cfp_page_layout.collectionSideSpacing | plus: 0 }}px;
+    --cfp-mobile-collection-side-spacing: {{ cfp_page_layout.mobileCollectionSideSpacing | plus: 0 }}px;
+    --cfp-effective-side-spacing: min(var(--cfp-collection-side-spacing),25vw);
+    box-sizing:border-box!important;
+    width:calc(var(--cfp-viewport-width,100vw) - var(--cfp-effective-side-spacing) - var(--cfp-effective-side-spacing))!important;
+    max-width:none!important;min-width:0!important;padding-inline:0!important;
+    margin-inline-start:calc((100% - var(--cfp-viewport-width,100vw))/2 + var(--cfp-effective-side-spacing))!important;
+    margin-inline-end:0!important;
+  }
+  @media(max-width:768px){
+    :is(#cfp-v1-app-container,.cfp-v1-app-container):not(.cfp-page-width-ready){--cfp-effective-side-spacing:min(var(--cfp-mobile-collection-side-spacing),25vw);}
+  }
+</style>
+{%- endif -%}
+<style>
+  .cfp-layout-wrapper:not(.cfp-managed-page-width){box-sizing:border-box!important;padding-inline:0!important;}
+  .cfp-layout-wrapper #cfp-top-bar{padding-inline:0!important;}
+</style>
+<script>
+  window.cfpInitialPageLayout={{ cfp_page_layout | json }};
+  (function(){
+    const root=document.currentScript.closest('.cfp-v1-app-container');
+    if(root)root.style.setProperty('--cfp-viewport-width',document.documentElement.clientWidth+'px');
+  })();
+</script>

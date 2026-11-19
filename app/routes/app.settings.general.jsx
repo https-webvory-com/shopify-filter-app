@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import PageWidthSettings from '../components/PageWidthSettings';
+import {publishPageLayout} from '../services/pageLayoutPublication.server.js';
 import {COLLECTION_SPACING_LIMITS,collectionLayoutSettings,isValidCollectionPageWidth,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
 import prisma from "../db.server.js";
 import { connectMarketAvailability } from "../services/marketAvailability.server.js";
@@ -16,8 +17,10 @@ import {
 
 export const loader = async ({ request }) => {
   try {
-    const { session } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     const settings = await getFilterGlobalSettings(session.shop);
+    // Repairs older installations without changing their saved settings.
+    await publishPageLayout(session.shop,settings,{admin}).catch(()=>console.warn('Initial page spacing publication unavailable'));
     const countryConnection = await prisma.marketStorefrontConnection.findUnique({where:{shop:session.shop},select:{countries:true}});
     return Response.json({ settings, countryConnection });
   } catch (error) {
@@ -57,7 +60,11 @@ export const action = async ({ request }) => {
   for (const key of ['quickViewStyle','quickViewInstantSearchStyle']) if (formData.has(key)) payload[key] = formData.get(key) === 'theme' ? 'theme' : 'app';
   if (!Object.keys(payload).length) return Response.json({success:false,error:'No display settings supplied.'},{status:400});
 
-  await updateFilterGlobalSettings(session.shop, payload);
+  const saved=await updateFilterGlobalSettings(session.shop, payload);
+  if(['collectionPageWidth',...Object.keys(COLLECTION_SPACING_LIMITS)].some(key=>key in payload)){
+    try { await publishPageLayout(session.shop,saved,{admin,force:true}); }
+    catch { return Response.json({success:false,error:'Page spacing was saved but could not be applied to new page loads. Save again to retry.'},{status:502}); }
+  }
   return Response.json({ success: true });
 };
 

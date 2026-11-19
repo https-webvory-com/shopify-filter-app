@@ -32,6 +32,7 @@ import * as productMarketPrices from '../../../app/utils/readProductMarketPrices
 
 export async function loadModule(file, mocks) {
   const context = { module: { exports: {} }, exports: {}, URL, Request, Response, AbortSignal, setTimeout, console, process: {env:mocks.testEnv || {}}, testParsedQuery: mocks.testParsedQuery || null, require: name => {
+    if(name==='../services/pageLayoutPublication.server.js')return mocks[name]||{publishPageLayout:async()=>{}};
     if(name==='../utils/savedMarketPricing.js')return savedMarketPricing;
     if(name==='../utils/readProductMarketPrices.js')return productMarketPrices;
     if(name==='../utils/productFilterFacts.js')return productFilterFacts;

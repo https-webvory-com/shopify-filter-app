@@ -27,6 +27,7 @@ async function loadModule(file, mocks) {
   const source = (await fs.readFile(file, "utf8")).replace('await import("../services/queryParser.server.js")', '({ parseQuery: () => testParsedQuery })');
   const context = { testParsedQuery: mocks.testParsedQuery || null, module: { exports: {} }, exports: {}, URL, Response, console: { log() {}, error() {} }, require(name) {if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};if(name==='../services/searchIndex.server.js')return {getSearchIndexContext:async()=>({settings:null}),configuredSuggestions:async()=>null};if(name==='../utils/searchConfiguration.js')return {publicSearchProduct:p=>p};
     if(name==='../utils/productTitleFilter.js')return productTitleFilter;
+    if(name==='../services/pageLayoutPublication.server.js')return {publishPageLayout:async()=>{}};
     if(name==='../utils/savedMarketPricing.js')return savedMarketPricing;
     if(name==='../utils/filterPresentation.js')return filterPresentation;
     if(name==='../utils/filterWidths.js')return filterWidths;
