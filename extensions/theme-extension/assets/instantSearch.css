@@ -520,13 +520,13 @@
 }
 
 .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap {
-  aspect-ratio: auto;
+  aspect-ratio: 3/4;
   background: transparent;
 }
 
 .cfp-search-modal[data-cfp-layout="fullscreen"] .cfp-search-product-image-wrap img {
   display: block;
-  height: auto;
+  height: 100%;
   object-fit: contain;
 }
 
