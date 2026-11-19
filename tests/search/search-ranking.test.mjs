@@ -292,6 +292,42 @@ test('actual full search loader preserves the same pins, boosts, counts and page
   assert.equal(ordinaryQueries, 0, 'ranked searches must not perform an ordinary search that is discarded');
 });
 
+test('filtered search keeps Include/Exclude eligibility, query scope and exact paginated totals without an ordinary product search',async()=>{
+ const f=await fixture({docs:[1,2,3,4].map(id=>product(id,{tags:['selected'],vendor:'Allowed'}))});
+ const rule={conditions:[{action:'Include',field:'Vendor',value:'Allowed'},{action:'Exclude',field:'Product',value:'Dress 4'}]};
+ const calls=[];let ordinary=0;
+ const route=await loadModule('app/routes/api.filter.jsx',{
+  'react-router':{data:(v,init)=>Response.json(v,init)},'../db.server':{default:f.prisma},
+  '../services/searchRanking.server.js':{rankSearchResults:async spec=>{calls.push(spec);return f.service.rankSearchResults(spec);}},
+  '../services/merchandising.server':{...f.service.merchandising,getActivePinningRuleForSearch:async()=>null,
+   getActiveRuleForSearch:async(s,q,tags,locale,country)=>{assert.equal(s,shop);assert.equal(q,'dress');assert.equal(locale,'en');assert.equal(country,'GB');return rule;}},
+  '../utils/searchColor.js':color,'../utils/availableVariants.js':availableVariants,'../utils/spellingCorrection.js':{spellingCorrection},
+  '../utils/rankedCollectionPage.js':{},'../utils/collectionPage.js':{},
+  '../services/semanticSearch.server':{semanticMultiSearch:async()=>{ordinary++;throw Error('No redundant ordinary product search');}},
+  '../services/meiliClient.server':{},'../services/filterSettings.server':{},'../shopify.server':{},
+  '../services/rateLimiter.server':{rateLimit:async()=>true},'../services/collectionBestSelling.server.js':{},
+  '../services/collectionPreparation.server.js':{},'../services/collectionRankingSession.server.js':{collectionRankingFingerprint:()=>''},
+  '../services/shopCache.server':{getCached:async key=>key.startsWith('globalSettings')?{}:key.startsWith('mergedValues')?[]:{resolvedCollectionId:null,resolvedCollectionTitle:'',activeGroupFilters:[]}},
+ });
+ for(const facet of ['', '&tags[]=selected','&vendor[]=Allowed']){
+  const ids=[];
+  for(const page of [1,2]){
+   const r=await (await route.loader({request:new Request(`https://fixture/api/filter?shop=${shop}&isSearch=true&q=dress&country=GB&locale=en&limit=2&page=${page}${facet}`)})).json();
+   assert.equal(r.totalCount,3);assert.equal(r.debug.searchRankingApplied,true);
+   ids.push(...r.products.map(p=>p.id));
+  }
+  assert.deepEqual(ids,[gid(1),gid(2),gid(3)]);assert.equal(new Set(ids).size,3);
+ }
+ assert.equal(ordinary,0);
+ assert.equal(calls.length,6);
+ for(const spec of calls){
+  assert.equal(spec.query,'dress');assert.equal(spec.rule,rule);
+  assert.ok(spec.options.filter.some(v=>v.includes("status = 'ACTIVE'")));
+  assert.ok(spec.options.filter.some(v=>v.includes('vendor IN')&&v.includes('Allowed')),'Include restriction survives facets');
+ }
+ assert.ok(calls[2].options.filter.some(v=>v.includes('tags IN')));
+});
+
 test('authenticated pin picker retains target-query scope when searching by title or excluding saved pins', async () => {
   const calls = [];
   const prisma = { product: { count: async args => { calls.push(args.where); return 1; },

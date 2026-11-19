@@ -2,6 +2,51 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
 
+test('search color intent and selected size restrict the same available variant, without broad alias expansion',async()=>{
+ const options=[{name:'Size'},{name:'Colour'}];
+ const variant=(size,color,available=true)=>({option1:size,option2:color,available});
+ const products=[
+  {id:'1',options,variants:[variant('M',' Red ')]},
+  {id:'2',options,variants:[variant('M','Blue'),variant('L','Red')]},
+  {id:'3',options,variants:[variant('M','Blue'),variant('M','Red',false)]},
+  {id:'4',options,variants:[variant('M','Pink')]},
+ ];
+ const aliases=[{optionName:'Colour',targetValue:'Red',sourceValues:['Pink']}];
+ const context={searchColorValues:['Red']};
+ const baseline=products.filter(p=>matchingAvailableVariants(p,{},aliases,null,context).length).map(p=>p.id);
+ const filtered=products.filter(p=>matchingAvailableVariants(p,{Size:['M']},aliases,null,context).length).map(p=>p.id);
+ assert.deepEqual(baseline,['1','2']);assert.deepEqual(filtered,['1']);
+ assert.ok(filtered.every(id=>baseline.includes(id)));
+ const model={findMany:async query=>{
+  assert.equal(query.where.shop,'fixture');assert.equal(query.where.variants.some.available,true);
+  assert.equal(query.where.variants.some.AND.length,2,'query color uses the same prefiltered variants as size');
+  return products;
+ }};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},{Size:['M']},aliases,null,{priceContext:context}),['1']);
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},{Size:['M']},aliases,null,{database:{$queryRaw:async()=>{throw Error('fallback');}},priceContext:context}),['1']);
+});
+
+test('search intent adds one bound same-variant predicate to the existing SQL read; collections keep the original SQL',async()=>{
+ const queries=[];
+ const database={$queryRaw:async query=>{queries.push(query);return [{id:'gid://shopify/Product/1'}];}};
+ const model={findMany:()=>{throw Error('Must not hydrate candidate variants');}};
+ const where={shop:'fixture',status:{equals:'active',mode:'insensitive'},collections:{some:{collectionId:'collection'}}};
+ const filters={Size:['M']};
+ const context={searchColorValues:["Red' OR 1=1 --"]};
+ assert.deepEqual(await availableProductIds(model,where,filters,[],null,{database,priceContext:context}),['1']);
+ assert.equal(queries.length,1);
+ assert.ok(queries[0].text.includes("IN ('color','colour')"));
+ assert.ok(queries[0].text.includes('pc."collectionId"'));
+ assert.ok(queries[0].text.includes('v."available" = true'));
+ assert.ok(queries[0].values.includes(context.searchColorValues[0].toLowerCase()));
+ assert.ok(!queries[0].text.includes(context.searchColorValues[0]));
+ await availableProductIds(model,where,filters,[],null,{database});
+ assert.equal(queries.length,2);
+ assert.equal(queries[1].text.includes("IN ('color','colour')"),false,'collection path has no additional predicate or query');
+ assert.deepEqual(await availableProductIds(model,where,filters,[],null,{database,priceContext:{searchColorValues:[]}}),[]);
+ assert.equal(queries.length,2,'unknown query color returns empty without another database call');
+});
+
 test('open-ended prices omit the upper bound in SQL and Prisma fallback',async()=>{
  const filters={Color:['Burgundy']},range={min:10,max:Infinity};
  const product={id:'gid://shopify/Product/1',options:[{name:'Color'}],variants:[{available:true,option1:'Wine',price:20000}]};

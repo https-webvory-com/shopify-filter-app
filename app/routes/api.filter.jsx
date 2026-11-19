@@ -546,11 +546,18 @@ export const loader = async ({ request, context }) => {
     const fastSearchCards=url.searchParams.get('responseProfile')==='search-fast-cards-v1'&&isSearch&&!!searchQuery&&page===1&&limit<=40;
     const hideUnavailable = globalSettings?.hideUnavailableVariantsWhenSelected === true && userHasFilters;
     const variantEligibilityScope = resolvedCollectionId ? {collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}} : {};
+    // Query color remains a restriction when a shopper selects another facet.
+    // Put it in the existing same-variant lookup, rather than scanning or
+    // hydrating a second candidate set. Collection lookups keep their old key.
+    const searchVariantContext = isSearch && parsedQuery?.colorIntent?.requested.length
+      ? {searchColorValues: parsedQuery.colorIntent.values} : {};
+    const variantEligibilityKey = hideUnavailable ? JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues,
+      ...(searchVariantContext.searchColorValues ? [searchVariantContext] : [])]) : '';
     // Start the exact same-available-variant lookup while rule and market reads
     // proceed. A failure is carried to the original eligibility gate below.
     const earlyVariantEligibility=hideUnavailable&&!(marketPriceSortRequested&&url.searchParams.get('priceSortVersion')==='2')&&(fastCards||fastSearchCards)
-      ? getCached('availableVariants:' + shop + ':' + JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues]),
-          () => availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...variantEligibilityScope},optionsFilters,mergedValues,null,{database:prisma}),30)
+      ? getCached('availableVariants:' + shop + ':' + variantEligibilityKey,
+          () => availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...variantEligibilityScope},optionsFilters,mergedValues,null,{database:prisma,priceContext:searchVariantContext}),30)
           .then(value=>({value}),error=>({error})) : null;
 
     // ── 4. Parallel fetch: pinning + merchandising rules (ALWAYS FRESH FROM DB) ────────
@@ -658,10 +665,9 @@ export const loader = async ({ request, context }) => {
       baseFilters.push(`available = true`);
     }
 
-    // Build Include rules filters (only when user has NO active filters)
-    // When user has active filters (color, price, tag etc.), bypass merchandising Include rules
-    // so the full filtered catalog is shown, not just merchandised products
-    const includeConditions = (!userHasFilters && activeRule?.conditions?.filter((c) => c.action === "Include")) || [];
+    // Search facets narrow the same eligible set, including Include rules.
+    // Preserve the existing collection membership/ranking behavior.
+    const includeConditions = ((isSearch || !userHasFilters) && activeRule?.conditions?.filter((c) => c.action === "Include")) || [];
     const includeMeiliFilters = buildMeiliIncludeFilters(includeConditions);
 
     if (resolvedCollectionId || (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all")) {
@@ -694,8 +700,8 @@ export const loader = async ({ request, context }) => {
       }, 60);
       const early=earlyVariantEligibility?await earlyVariantEligibility:null;
       if(early?.error)throw early.error;
-      const eligible=early?early.value:await getCached('availableVariants:' + shop + ':' + JSON.stringify([variantEligibilityScope, optionsFilters, mergedValues]),
-        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...variantEligibilityScope}, optionsFilters, mergedValues, null, {database:prisma}), 30);
+      const eligible=early?early.value:await getCached('availableVariants:' + shop + ':' + variantEligibilityKey,
+        () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...variantEligibilityScope}, optionsFilters, mergedValues, null, {database:prisma,priceContext:searchVariantContext}), 30);
       baseFilters.push(eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant__"');
     }
     // The cards response does not render facet choices or counts. Only load
@@ -715,8 +721,9 @@ export const loader = async ({ request, context }) => {
       const bufferedMax = maxPrice + 0.5;
       if (hideUnavailable) {
         const scope = resolvedCollectionId ? { collections: { some: { collectionId: resolvedCollectionId.includes('gid://') ? resolvedCollectionId : 'gid://shopify/Collection/' + resolvedCollectionId } } } : {};
-        const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange]),
-          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange, {database:prisma}), 30);
+        const eligible = await getCached('availableVariantPrices:' + shop + ':' + JSON.stringify([scope, optionsFilters, mergedValues, selectedPriceRange,
+          ...(searchVariantContext.searchColorValues ? [searchVariantContext] : [])]),
+          () => availableProductIds(prisma.product, {shop, status: {equals: 'active', mode: 'insensitive'}, ...scope}, optionsFilters, mergedValues, selectedPriceRange, {database:prisma,priceContext:searchVariantContext}), 30);
         // Keep this in the price category so disjunctive price facets can remove it.
         categoryFilters["priceMin"] = eligible.length ? 'id IN [' + eligible.map(id => JSON.stringify(id)).join(',') + ']' : 'id = "__no_available_variant_price__"';
       } else {
@@ -1198,7 +1205,7 @@ export const loader = async ({ request, context }) => {
 
     // Ranked search owns its counts, facets and page retrieval. Do not run a
     // second ordinary search whose products would immediately be discarded.
-    const needsRankedSearch = isSearch && searchQuery && !userHasFilters && (activeRule || activePinningRule);
+    const needsRankedSearch = isSearch && searchQuery && (activeRule || activePinningRule);
     if(cardsOnly||fastCards&&!directSort){
       const result=await readRankedCollectionPage(meiliClient.index('products'),{
         ids:rankingSession.ids,page,limit:pinnedPrefix?rankingSession.ids.length:limit,shop,batchOwner:meiliClient,attributes:mainQuery.attributesToRetrieve,
@@ -1349,7 +1356,7 @@ export const loader = async ({ request, context }) => {
     if (needsRankedSearch) {
       const result = await rankSearchResults({ shop, query: textSearchQuery,
         options: { filter: allFiltersList, ...(meiliSort ? { sort: meiliSort } : {}), sortBy },
-        rule: activeRule, pinningRule: activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: fastSearchCards?[]:targetFacets });
+        rule: activeRule, pinningRule: userHasFilters ? null : activePinningRule, parsedQuery, globalSettings, mergedValues, page, limit, facetKeys: fastSearchCards?[]:targetFacets });
       meiliRes = { hits: result.products.map(p => ({ ...p, id: String(p.id).split('/').pop(), variantPrices: p.variants })), estimatedTotalHits: result.total };
       collectionPageTotal = result.total;
       facetDistribution = result.facetDistribution;
@@ -1516,7 +1523,7 @@ export const loader = async ({ request, context }) => {
     const searchTokens = searchQuery ? normalizeTokens(searchQuery) : [];
 
     let products = paginatedSlice.map((p) => {
-      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantPriceV2?null:selectedPriceRange,variantPriceContext||{}) : [...(p.variantPrices || [])];
+      let localVariantPrices = hideUnavailable ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantPriceV2?null:selectedPriceRange,variantPriceContext||searchVariantContext) : [...(p.variantPrices || [])];
       if(variantPriceV2&&!variantPriceContext.basePrice)localVariantPrices=localVariantPrices.filter(variant=>{
         const saved=variant.marketPrices?.[sortCountry];
         return saved&&saved.price!=null&&saved.price!==''&&Number.isFinite(Number(saved.price))&&Number(saved.price)>=0&&/^[A-Z]{3}$/.test(saved.currency||'');

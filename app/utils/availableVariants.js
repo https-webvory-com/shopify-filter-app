@@ -72,6 +72,23 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
    ORDER BY opt.position LIMIT 1
   ) IN (${Prisma.join(expanded)})`);
  }
+ if(priceContext.searchColorValues){
+  const values=priceContext.searchColorValues.map(normalize);
+  if(!values.length)return [];
+  // Search intent is already resolved to exact catalog colors. Do not expand
+  // it through broader merchant aliases a second time. This predicate shares
+  // the same v row as explicit size/color/price restrictions.
+  variants.push(Prisma.sql`(
+   SELECT CASE opt.position
+    WHEN 1 THEN lower(btrim(coalesce(v."option1", ''), ${trimCharacters}))
+    WHEN 2 THEN lower(btrim(coalesce(v."option2", ''), ${trimCharacters}))
+    WHEN 3 THEN lower(btrim(coalesce(v."option3", ''), ${trimCharacters}))
+    ELSE '' END
+   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p."options") = 'array' THEN p."options" ELSE '[]'::jsonb END) WITH ORDINALITY AS opt(value, position)
+   WHERE lower(btrim(coalesce(opt.value->>'name', ''), ${trimCharacters})) IN ('color','colour')
+   ORDER BY opt.position LIMIT 1
+  ) IN (${Prisma.join(values)})`);
+ }
  if(sortPage){
   const direction=priceContext.direction==='desc'?Prisma.sql`DESC`:Prisma.sql`ASC`;
   const bound=priceContext.direction==='desc'?Prisma.sql`MAX(${amount})`:Prisma.sql`MIN(${amount})`;
@@ -152,6 +169,10 @@ export async function ensureVariantEligibilityFilter(index, tasks) {
 export function matchingAvailableVariants(product, filters = {}, mergedValues = [], priceRange = null,priceContext={}) {
   return (product.variants || product.variantPrices || []).filter(variant => {
     if (priceContext.stockOnly!==false&&variant.available !== true) return false;
+    if(priceContext.searchColorValues){
+      const position=(product.options||[]).findIndex(option=>/^colou?r$/i.test(String(option.name||'').trim()));
+      if(position<0||!priceContext.searchColorValues.some(value=>normalize(value)===normalize(variant[`option${position+1}`])))return false;
+    }
     if (priceRange) {
       const raw=priceContext.country&&!priceContext.basePrice?variant.marketPrices?.[priceContext.country]?.price:variant.price;
       const price = raw == null||raw==='' ? NaN : Number(raw);
@@ -174,6 +195,7 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
 }
 
 export async function availableProductIds(productModel, where, filters, mergedValues, priceRange = null, {database,priceContext={}} = {}) {
+ if(priceContext.searchColorValues&&!priceContext.searchColorValues.length)return [];
  // Return IDs directly from an exact database EXISTS query. Transferring all
  // matching variants just to test them again in JavaScript is unnecessary.
  if(database)try{const ids=await availableProductIdsInDatabase(database,where,filters,mergedValues,priceRange,priceContext);if(ids!==null)return ids;}catch{/* Preserve the established path if this optional optimization is unavailable. */}
@@ -194,17 +216,21 @@ export async function availableProductIds(productModel, where, filters, mergedVa
       ...(value === '' ? [{ [`option${position}`]: null }] : []),
     ])) };
   });
+  if(priceContext.searchColorValues){
+    variantWhere.AND ||= [];
+    variantWhere.AND.push({OR:priceContext.searchColorValues.flatMap(value=>[1,2,3].map(position=>({[`option${position}`]:{contains:normalize(value),mode:'insensitive'}})))});
+  }
   let cursor;
   for (;;) {
     const rows = await productModel.findMany({
       where: { ...where, variants: { some: variantWhere } },
-      select: selected.length || priceRange
+      select: selected.length || priceRange || priceContext.searchColorValues
         ? { id: true, options: true, variants: { where: variantWhere, select: { available: true, option1: true, option2: true, option3: true, ...(priceRange ? {price: true,...(priceContext.country&&!priceContext.basePrice?{marketPrices:true}:{})} : {}) } } }
         : { id: true },
       orderBy: { id: 'asc' }, take: 1000,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
-    for (const row of rows) if ((!selected.length && !priceRange) || matchingAvailableVariants(row, filters, mergedValues, priceRange,priceContext).length) ids.push(row.id.split('/').pop());
+    for (const row of rows) if ((!selected.length && !priceRange && !priceContext.searchColorValues) || matchingAvailableVariants(row, filters, mergedValues, priceRange,priceContext).length) ids.push(row.id.split('/').pop());
     if (rows.length < 1000) break;
     cursor = rows.at(-1).id;
   }
