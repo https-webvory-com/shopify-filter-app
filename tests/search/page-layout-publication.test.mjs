@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loadModule} from './helpers/search-ranking.mjs';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+import {transform} from 'esbuild';
+import * as React from 'react';
+import * as jsxRuntime from 'react/jsx-runtime';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as layoutSettings from '../../app/utils/collectionLayoutSettings.js';
 
 async function fixture(saved=null,fail=false){
   const calls=[];
@@ -51,4 +58,14 @@ test('General save reports initial layout publication failure and can retry with
   const failed=await route.action({request:request()});assert.equal(failed.status,502);assert.equal((await failed.json()).success,false);
   const retried=await route.action({request:request()});assert.equal(retried.status,200);assert.equal((await retried.json()).success,true);
   assert.equal(writes,2);assert.equal(publications,2);
+});
+test('page spacing can be retried after publication fails even when the database values already match',async()=>{
+  const source=await fs.readFile('app/components/PageWidthSettings.jsx','utf8');
+  const compiled=await transform(source,{loader:'jsx',format:'cjs',jsx:'automatic'});
+  const context={module:{exports:{}},exports:{},require:name=>({'react':React,'react/jsx-runtime':jsxRuntime,'../utils/collectionLayoutSettings.js':layoutSettings})[name]};
+  vm.runInNewContext(compiled.code,context);
+  const component=context.module.exports.default,value=layoutSettings.collectionLayoutSettings({collectionPageWidth:'custom'});
+  const normal=renderToStaticMarkup(React.createElement(component,{value,onApply:()=>{}}));
+  const retry=renderToStaticMarkup(React.createElement(component,{value,onApply:()=>{},retry:true}));
+  assert.match(normal,/<button[^>]*disabled/);assert.doesNotMatch(retry,/<button[^>]*disabled/);
 });

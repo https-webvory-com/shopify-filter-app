@@ -458,7 +458,7 @@ export default function Settings() {
 
       <s-stack direction="block" gap="base">
         <s-section heading="Page layout">
-          <PageWidthSettings value={collectionLayoutSettings(settings)} disabled={fetcher.state!=='idle'} onApply={values=>{
+          <PageWidthSettings value={collectionLayoutSettings(settings)} disabled={fetcher.state!=='idle'} retry={!!fetcher.data?.error} onApply={values=>{
             if(fetcher.state!=='idle')return;
             fetcher.submit(Object.fromEntries(Object.entries(values).map(([key,value])=>[key,String(value)])),{method:'POST'});
           }}/>

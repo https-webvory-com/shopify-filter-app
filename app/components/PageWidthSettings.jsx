@@ -1,12 +1,13 @@
 import {useEffect,useState} from 'react';
 import {COLLECTION_SPACING_LIMITS,isValidCollectionSpacing} from '../utils/collectionLayoutSettings.js';
 
-export default function PageWidthSettings({value,onApply,disabled}) {
+export default function PageWidthSettings({value,onApply,disabled,retry=false}) {
   const [draft,setDraft]=useState(value);
   useEffect(()=>setDraft(value),[value.collectionPageWidth,value.collectionSideSpacing,value.mobileCollectionSideSpacing]);
   const custom=draft.collectionPageWidth==='custom';
   const valid=!custom||Object.keys(COLLECTION_SPACING_LIMITS).every(key=>isValidCollectionSpacing(key,draft[key]));
   const changed=Object.keys(value).some(key=>String(value[key])!==String(draft[key]));
+  const canApply=valid&&(changed||retry);
   const inputStyle={width:'100%',minWidth:0,padding:'10px 12px',border:'1px solid #d8d0e2',borderRadius:8,font:'inherit',background:'#fff',boxSizing:'border-box'};
   return <section aria-label="Page width settings" style={{padding:20,border:'1px solid #e5dfed',borderRadius:14,margin:'16px 0'}}>
     <label style={{display:"block",marginBottom:8,fontSize:15,fontWeight:700,color:"#1e1b4b"}} htmlFor="page-width">Page width</label>
@@ -23,7 +24,7 @@ export default function PageWidthSettings({value,onApply,disabled}) {
         </label>)}
       </div>}
       {!valid&&<p role="alert" style={{color:'#b42318',margin:0}}>Enter whole numbers within the spacing ranges shown above.</p>}
-      <button type="button" disabled={disabled||!valid||!changed} onClick={()=>onApply(custom?{...draft,...Object.fromEntries(Object.keys(COLLECTION_SPACING_LIMITS).map(key=>[key,Number(draft[key])]))}:{...value,collectionPageWidth:'theme'})} style={{justifySelf:'start',padding:'10px 14px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',fontWeight:600,cursor:'pointer',opacity:(disabled||!valid||!changed)?0.5:1}}>Apply page width</button>
+      <button type="button" disabled={disabled||!canApply} onClick={()=>onApply(custom?{...draft,...Object.fromEntries(Object.keys(COLLECTION_SPACING_LIMITS).map(key=>[key,Number(draft[key])]))}:{...value,collectionPageWidth:'theme'})} style={{justifySelf:'start',padding:'10px 14px',border:0,borderRadius:8,background:'#5b21b6',color:'#fff',fontWeight:600,cursor:'pointer',opacity:(disabled||!canApply)?0.5:1}}>Apply page width</button>
     </fieldset>
   </section>;
 }
