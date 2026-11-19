@@ -150,7 +150,8 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
   let PAGE_SIZE = 25;
   let activeFetchController = null;
 
-  let activeFilters = {
+  function emptyFilterState() { return {
+    q: '',
     vendors: [],
     types: [],
     tags: [],
@@ -168,21 +169,28 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     maxPrice: 999999,
     sortBy: window.location.pathname.includes('/search') ? 'relevance' : 'best-selling',
     page: 1
-  };
+  }; }
+  let activeFilters = emptyFilterState();
+  let searchHistoryState = null;
 
   let maxPriceLimit = 1000;
 
   // URL state synchronization setup
   function parseURLState() {
+    const restoringHistory = arguments[0] === true;
+    const searchPage = templateName === 'search' || (!templateName && /\/search\/?$/i.test(window.location.pathname));
+    if (searchPage) Object.assign(activeFilters, emptyFilterState());
     const urlParams = new URLSearchParams(window.location.search);
 
     if (urlParams.has('q')) activeFilters.q = urlParams.get('q');
-    else if (searchTerms) activeFilters.q = searchTerms;
+    else if (!restoringHistory && searchTerms) activeFilters.q = searchTerms;
+    else if (searchPage) activeFilters.q = '';
 
     if (urlParams.has('page')) activeFilters.page = parseInt(urlParams.get('page')) || 1;
     if (urlParams.has('sort_by') || urlParams.has('sortBy')) activeFilters.sortBy = urlParams.get('sort_by') || urlParams.get('sortBy');
-    if (urlParams.has('minPrice')) activeFilters.minPrice = parseInt(urlParams.get('minPrice')) || 0;
-    if (urlParams.has('maxPrice')) activeFilters.maxPrice = parseInt(urlParams.get('maxPrice')) || 999999;
+    if (urlParams.has('minPrice')) activeFilters.minPrice = (searchPage ? parseFloat : parseInt)(urlParams.get('minPrice')) || 0;
+    if (urlParams.has('maxPrice')) activeFilters.maxPrice = (searchPage ? parseFloat : parseInt)(urlParams.get('maxPrice')) || 999999;
+    if (searchPage && urlParams.get('maxPrice') === '0') activeFilters.maxPrice = 0;
     activeFilters.priceRanges = urlParams.getAll('price[]');
     activeFilters.availability = urlParams.getAll('availability[]').concat(urlParams.getAll('availability')).filter(Boolean);
     activeFilters.weightRanges = urlParams.getAll('weight[]');
@@ -210,6 +218,13 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
         const meta = key.replace('metafield_', '');
         activeFilters.metafields[meta] = value.split(',');
       }
+    }
+    if (searchPage) {
+      searchTerms = activeFilters.q || '';
+      if (sidebar) sidebar.dataset.searchTerms = searchTerms;
+      const input = document.querySelector('.cfp-inline-search-form input[name="q"]');
+      if (input) input.value = searchTerms;
+      if (restoringHistory) searchHistoryState = JSON.stringify(activeFilters);
     }
   }
 
@@ -275,8 +290,17 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
       else if (activeFilters.metafields[meta].length > 0) params.set('metafield_' + meta, activeFilters.metafields[meta].join(','));
     });
 
-    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-    window.history.replaceState(null, '', newUrl);
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + (templateName === 'search' ? window.location.hash : '');
+    if (templateName === 'search') {
+      const state = JSON.stringify(activeFilters);
+      // Fetches and popstate never create history entries or rewrite the URL
+      // restored by the browser. Only a changed shopper selection adds one.
+      if (state === searchHistoryState) return;
+      const method = searchHistoryState === null ? 'replaceState' : 'pushState';
+      searchHistoryState = state;
+      if (newUrl !== window.location.pathname + window.location.search + window.location.hash)
+        window.history[method](window.history.state, '', newUrl);
+    } else window.history.replaceState(null, '', newUrl);
   }
 
   function selectSort(value) {
@@ -289,11 +313,20 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     params.delete('sortBy');
     if (value === (templateName === 'search' ? 'relevance' : 'best-selling')) params.delete('sort_by');
     else params.set('sort_by', value);
-    if (shouldUpdateBrowserURL()) window.history.pushState(null, '', window.location.pathname + (params.toString() ? '?' + params : ''));
+    if (templateName !== 'search' && shouldUpdateBrowserURL()) window.history.pushState(null, '', window.location.pathname + (params.toString() ? '?' + params : ''));
     fetchAndRenderData();
   }
 
   window.addEventListener('popstate', () => {
+    if (templateName === 'search') {
+      parseURLState(true);
+      syncSortControls();
+      syncCheckboxSelections();
+      renderBreadcrumbs();
+      updateActiveCountBadge();
+      fetchAndRenderData();
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     activeFilters.sortBy = params.get('sort_by') || params.get('sortBy') || (templateName === 'search' ? 'relevance' : 'best-selling');
     activeFilters.page = Number.parseInt(params.get('page'), 10) || 1;
@@ -3926,12 +3959,16 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
     for(const root of [sidebar,document.getElementById('cfp-horizontal-filters'),document.getElementById('cfp-horizontal-extra-filters')].filter(Boolean)){
       for(const input of root.querySelectorAll('input[type="checkbox"]')){
         const name=input.name;
-        const values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]:
-          name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]:null);
+        const values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]||(templateName==='search'?[]:null):
+          name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]||(templateName==='search'?[]:null):null);
         if(!values)continue;
         const selected=values.includes(input.value)||((name==='tag'||name==='tags')&&values.includes(getCleanLabel('tag',input.value).cleanVal));
         input.checked=selected;
         input.closest('.cfp-color-swatch')?.classList.toggle('cfp-color-swatch--selected',selected);
+      }
+      if(templateName==='search')for(const select of root.querySelectorAll('select.cfp-select')){
+        const name=select.name,values=valuesByName[name]||(name.startsWith('option-')?activeFilters.options[name.slice(7)]:name.startsWith('metafield-')?activeFilters.metafields[name.slice(10)]:null);
+        select.value=values?.[0]||'';
       }
       for(const group of root.querySelectorAll('.cfp-group, .cfp-horizontal-pill')){
         const first=group.querySelector('input[type="checkbox"]');if(!first)continue;
@@ -3958,6 +3995,7 @@ var API_DOMAIN = 'https://aisearchfilter.webvory.com';
 
   function clearAllFilters() {
     activeFilters = {
+      ...(templateName === 'search' ? {q: searchTerms} : {}),
       vendors: [],
       types: [],
       tags: [],
