@@ -3465,6 +3465,9 @@ body.cfp-no-filters #cfp-overlay {
   box-sizing: border-box !important;
   padding-inline: 0 !important;
 }
+.cfp-layout-wrapper.cfp-managed-page-width #cfp-top-bar {
+  padding-inline: 0 !important;
+}
 :is(#cfp-v1-app-container, .cfp-v1-app-container).cfp-custom-page-width {
   --cfp-effective-side-spacing: min(var(--cfp-collection-side-spacing, 24px), 25vw);
   box-sizing: border-box !important;
