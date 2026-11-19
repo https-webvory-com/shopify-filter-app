@@ -6,6 +6,7 @@ import { Checkbox } from "./Checkbox";
 import Tooltip from "./Tooltip";
 import { normalizeSwatchHex } from '../../utils/swatchColor.js';
 import { navigationCollectionsHelp } from '../../utils/collectionNavigation.js';
+import { normalizeManualFacetConfig } from '../../utils/manualFacetValues.js';
 
 const TooltipIcon = ({ content }) => (
   <Tooltip content={content}>
@@ -301,6 +302,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
   const [navCollections, setNavCollections] = useState(false);
   const [useManualValues, setUseManualValues] = useState(false);
   const [manualValues, setManualValues] = useState([]);
+  const [manualValuesError, setManualValuesError] = useState('');
   const [sortManualValues, setSortManualValues] = useState(false);
   const [multipleSelection, setMultipleSelection] = useState(false);
   const [narrowDown, setNarrowDown] = useState(false);
@@ -400,7 +402,9 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         setNarrowDown(initialData.narrowDown || false);
         setUseManualValues(initialData.useManualValues || false);
         setExcludedValues(initialData.excludedValues || []);
-        setManualValues(initialData.manualValues || []);
+        const manualConfig=normalizeManualFacetConfig({manualValues:initialData.manualValues});
+        setManualValues(manualConfig.manualValues);
+        setManualValuesError(initialData.manualValuesInvalid || manualConfig.manualValuesInvalid ? 'Choose the manual values again before saving this filter.' : '');
         setSortManualValues(initialData.sortManualValues || false);
         if (initialData.displayMode) {
           const mode = initialData.displayMode;
@@ -435,6 +439,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         setUseManualValues(false);
         setExcludedValues([]);
         setManualValues([]);
+        setManualValuesError('');
         setSortManualValues(false);
         setAdvanced({
           valuesTransformation: "Default",
@@ -1523,7 +1528,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             </div>
                             <MultiSelectDropdown 
                               value={manualValues}
-                              onChange={setManualValues}
+                              onChange={values=>{setManualValues(values);setManualValuesError('');}}
                               options={currentOptionsLabels}
                               placeholder="Select values to show"
                               renderTagsOutside={true}
@@ -1615,7 +1620,7 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
                             </div>
                             <MultiSelectDropdown 
                               value={manualValues}
-                              onChange={setManualValues}
+                              onChange={values=>{setManualValues(values);setManualValuesError('');}}
                               options={currentOptionsLabels}
                               placeholder="Select values to show"
                               renderTagsOutside={true}
@@ -2078,12 +2083,13 @@ export function CreateFilterModal({ isOpen, onClose, onSave, shopifyCollections 
         {invalidSwatchColors.length > 0 && <p role="alert" style={{ padding: "0 24px", color: "#b42318" }}>Enter a valid HEX color for {invalidSwatchColors.map(([label]) => label).join(', ')} (for example #e91e63 or e91e63).</p>}
         {/* Footer */}
         <div style={{ padding: "16px 24px", display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #e1e3e5", background: "#fff" }}>
+          {useManualValues && manualValuesError && <span role="alert" style={{color:'#b91c1c'}}>{manualValuesError}</span>}
           <Button variant="default" onClick={onClose} style={{ borderRadius: "10px", padding: "8px 24px", color: "#8c9196", border: "1px solid #e1e3e5" }}>
             CANCEL
           </Button>
           <Button 
             variant="primary" 
-            disabled={invalidSwatchColors.length > 0}
+            disabled={invalidSwatchColors.length > 0 || (useManualValues && !!manualValuesError)}
             onClick={() => onSave({ 
               filterId: initialData?.id,
               optionType, prefix, filterTitle, navCollections, childType, mainCollections, keepMainCollectionsUnchanged, multipleSelection, narrowDown, 

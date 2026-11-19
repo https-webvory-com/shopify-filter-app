@@ -159,6 +159,71 @@ function convertedPriceBound(value, rate, digits = 0) {
 
   /* CFP_PRICE_BOUNDS_END */
 
+  /* CFP_MANUAL_VALUES_START */
+// Canonical storage is string[]. Read compatibility accepts the older JSON
+// array string and comma/newline list, including quoted commas and quotes.
+function normalizeManualValues(value) {
+  if (value == null) return [];
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try { value = JSON.parse(text); }
+      catch { throw new Error('Manual values must be a list of text values.'); }
+    } else {
+      const values = [];
+      let field = '', quoted = false, closed = false, wasQuoted = false;
+      const finish = () => { const item = wasQuoted ? field : field.trim(); if (item || wasQuoted) values.push(item); field = ''; closed = false; wasQuoted = false; };
+      for (let index = 0; index < text.length; index++) {
+        const character = text[index];
+        if (quoted) {
+          if (character === '"' && text[index + 1] === '"') { field += '"'; index++; }
+          else if (character === '"') { quoted = false; closed = true; }
+          else field += character;
+        } else if (character === ',' || character === '\n' || character === '\r') {
+          finish();
+          if (character === '\r' && text[index + 1] === '\n') index++;
+        } else if (character === '"' && !field.trim() && !closed) {
+          field = ''; quoted = true; wasQuoted = true;
+        } else if (closed) {
+          if (character.trim()) throw new Error('Manual values contain an invalid quoted list.');
+        } else field += character;
+      }
+      if (quoted) throw new Error('Manual values contain an unclosed quote.');
+      finish();
+      value = values;
+    }
+  }
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string'))
+    throw new Error('Manual values must be a list of text values.');
+  return value.slice();
+}
+
+function normalizeManualFacetConfig(value, {strict = false} = {}) {
+  let config;
+  try {
+    config = typeof value === 'string' ? JSON.parse(value) : value ?? {};
+    if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Filter configuration must be an object.');
+    if (!Object.prototype.hasOwnProperty.call(config, 'manualValues')) return config;
+    if (!strict && config.manualValuesInvalid) return {...config, manualValues: [], manualValuesInvalid: true};
+    const result = {...config, manualValues: normalizeManualValues(config.manualValues)};
+    delete result.manualValuesInvalid;
+    return result;
+  } catch (error) {
+    if (strict) throw new Error(error instanceof SyntaxError ? 'Filter configuration must be valid JSON.' : error.message);
+    // A malformed saved allow-list must neither crash nor broaden its values.
+    return {...(config && typeof config === 'object' && !Array.isArray(config) ? config : {}), manualValues: [], manualValuesInvalid: true};
+  }
+}
+
+function normalizeManualFacetFilter(filter) {
+  if (filter?.config == null) return filter;
+  const config = normalizeManualFacetConfig(filter.config);
+  return Object.prototype.hasOwnProperty.call(config, 'manualValues') ? {...filter, config} : filter;
+}
+
+  /* CFP_MANUAL_VALUES_END */
+
   function getGlobalCurrencySymbol() {
     if (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) {
       if (window.Shopify.currency.active === 'INR') return 'Rs. ';
@@ -2464,12 +2529,7 @@ function convertedPriceBound(value, rate, digits = 0) {
       let type = setting.filterType || setting.type;
       if (type === 'stock_status') type = 'availability';
       const key = setting.filterKey || setting.key;
-      let config = {};
-      try {
-        config = typeof setting.config === "string" ? JSON.parse(setting.config) : (setting.config || {});
-      } catch (e) {
-        config = {};
-      }
+      const config = normalizeManualFacetConfig(setting.config);
 
       const adv = config.advanced || {};
       const showOptionSearch = window.matchMedia('(max-width: 768px)').matches ? adv.mobileSearchBox === true : adv.desktopSearchBox === true;
@@ -2721,7 +2781,8 @@ function convertedPriceBound(value, rate, digits = 0) {
         if (!navigation && config.excludedValues && config.excludedValues.length > 0) {
           items = items.filter(i => !config.excludedValues.includes(i.value) && !(type==='inventory_locations'&&config.excludedValues.includes(i.label)));
         }
-        if (!navigation && config.useManualValues && config.manualValues && config.manualValues.length > 0) {
+        if (!navigation && config.useManualValues && config.manualValuesInvalid) items = [];
+        if (!navigation && config.useManualValues && config.manualValues?.length > 0) {
           const manualLower = config.manualValues.map(v => v.toLowerCase().trim());
           const prefixLower = prefix ? prefix.toLowerCase().trim() : '';
 
@@ -3640,7 +3701,7 @@ function convertedPriceBound(value, rate, digits = 0) {
               const response = await fetch(`${API_DOMAIN}/api/facet?${queryParams.toString()}`);
               const data = await response.json();
 
-              if (data && data.facetHits && data.facetHits.length > 0) {
+              if (Array.isArray(data?.facetHits) && data.facetHits.length > 0) {
                  let hasNew = false;
                  let targetFacetArray = null;
                  if (facetName.startsWith('options.')) {
@@ -3666,24 +3727,14 @@ function convertedPriceBound(value, rate, digits = 0) {
 
                  if (targetFacetArray) {
                     data.facetHits.forEach(hit => {
-                       const exists = targetFacetArray.find(v => v.value.toLowerCase() === hit.value.toLowerCase());
+                       if (typeof hit?.value !== 'string') return;
+                       const exists = targetFacetArray.find(v => typeof v?.value === 'string' && v.value.toLowerCase() === hit.value.toLowerCase());
                        if (!exists) {
                           targetFacetArray.push({ value: hit.value, count: hit.count });
                           hasNew = true;
 
-                          // Also append to manualValues if this group uses it, so it can be rendered
-                          if (cfpLastSettings) {
-                             const groupSetting = cfpLastSettings.find(s => (s.filterType === 'option' && s.filterKey === inputName.replace('option-', '')) || (s.filterType === 'metafield' && s.filterKey === inputName.replace('metafield-', '')) || (s.filterType === inputName));
-                             if (groupSetting && groupSetting.config && groupSetting.config.useManualValues) {
-                                if (groupSetting.config.manualValues) {
-                                   if (!groupSetting.config.manualValues.toLowerCase().includes(hit.value.toLowerCase())) {
-                                      groupSetting.config.manualValues += `, ${hit.value}`;
-                                   }
-                                } else {
-                                   groupSetting.config.manualValues = hit.value;
-                                }
-                             }
-                          }
+                          // Search hydrates facet data only. Each group's saved
+                          // manual allow-list and ordering remain authoritative.
                        }
                     });
                  }

@@ -1,10 +1,13 @@
 export const navigationCollectionsHelp = 'Turn collection choices into links that open the selected collection page, rather than filtering the current results. Choose the destinations under Main collection; manual values are not required. The links appear only on pages assigned to this filter group and using the app’s filter block.';
 
+import {normalizeManualFacetConfig} from './manualFacetValues.js';
+
 function configFor(filter) {
   try { const config = typeof filter.config === 'string' ? JSON.parse(filter.config) : filter.config; return config && typeof config === 'object' && !Array.isArray(config) ? config : {}; } catch { return {}; }
 }
 export const isCollectionNavigation = filter => filter?.filterType === 'collection' && configFor(filter).navCollections === true;
 export function navigationCollectionTitles(config) {
+  config=normalizeManualFacetConfig(config);
   const main = Array.isArray(config.mainCollections) ? config.mainCollections.map(item => item?.collection).filter(value => typeof value === 'string' && value.trim()) : [];
   const fallback = config.useManualValues && Array.isArray(config.manualValues) ? config.manualValues.filter(value => typeof value === 'string' && value.trim()) : [];
   return [...new Set(main.length ? main : fallback)];

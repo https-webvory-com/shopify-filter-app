@@ -18,7 +18,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { invalidateShop } from "../services/shopCache.server";
 import { normalizeProductTitleFilter } from "../utils/productTitleFilter.js";
-import { normalizePriceFilter, priceFilterDisplayMode } from '../utils/filterPresentation.js';
+import { normalizePriceFilter, priceFilterDisplayMode, normalizeManualFacetConfig, normalizeManualFacetFilter } from '../utils/filterPresentation.js';
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { CreateFilterModal } from "../components/ui/CreateFilterModal";
 import { ExportFilterItemsModal } from "../components/ui/ExportFilterItemsModal";
@@ -231,7 +231,7 @@ export const loader = async ({ request, params }) => {
   };
 
   return {
-    group: {...group, filters: group.filters.map(filter => normalizePriceFilter(filter, presentationSettings))},
+    group: {...group, filters: group.filters.map(filter => normalizeManualFacetFilter(normalizePriceFilter(filter, presentationSettings)))},
     detectedOptions: Array.from(optionNamesSet).sort(),
     shopifyCollections,
     storeData,
@@ -253,8 +253,22 @@ export const action = async ({ request, params }) => {
   if (!group)
     return data({ success: false, error: "Not found" }, { status: 404 });
 
+  let config;
+  if (['addFilter','updateFilter'].includes(intent) && formData.get('config')) {
+    try { config = normalizeManualFacetConfig(formData.get('config'), {strict:true}); }
+    catch (error) { return data({success:false,error:error.message,intent},{status:400}); }
+  }
+
   if (intent === "importFilters") {
-    const filtersData = JSON.parse(formData.get("filters") || "[]");
+    let filtersData;
+    try {
+      filtersData = JSON.parse(formData.get("filters") || "[]");
+      if (!Array.isArray(filtersData)) throw new Error('Filters must be a list.');
+      filtersData = filtersData.map(filter => {
+        if (!filter || typeof filter !== 'object' || Array.isArray(filter)) throw new Error('Each filter must be an object.');
+        return filter.config == null ? filter : {...filter,config:normalizeManualFacetConfig(filter.config,{strict:true})};
+      });
+    } catch (error) { return data({success:false,error:error.message,intent},{status:400}); }
     
     // Process imports
     for (const importedFilter of filtersData) {
@@ -396,9 +410,6 @@ export const action = async ({ request, params }) => {
     if (filterType?.toLowerCase() === "title") { filterType = "title"; filterKey = null; }
     const label = formData.get("label");
     const displayMode = formData.get("displayMode") || "list";
-    const config = formData.get("config")
-      ? JSON.parse(formData.get("config"))
-      : undefined;
 
     // Fix for option types (e.g. "color", "size", "title", "denominations")
     // Storefront expects filterType="option" and filterKey="Color"
@@ -455,9 +466,6 @@ export const action = async ({ request, params }) => {
     let filterKey = formData.get("filterKey") || null;
     if (filterType?.toLowerCase() === "title") { filterType = "title"; filterKey = null; }
     
-    const config = formData.get("config")
-      ? JSON.parse(formData.get("config"))
-      : undefined;
 
     // Fix for option types
     const isDynamicOption = ![
@@ -850,6 +858,7 @@ export default function FilterGroupDetail() {
       useManualValues: parsedConfig.useManualValues || false,
       excludedValues: parsedConfig.excludedValues || [],
       manualValues: parsedConfig.manualValues || [],
+      manualValuesInvalid: parsedConfig.manualValuesInvalid === true,
       sortManualValues: parsedConfig.sortManualValues || false,
       advanced: parsedConfig.advanced || {},
       displayMode: filter.displayMode || "List",

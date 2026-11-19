@@ -1,3 +1,5 @@
+export {normalizeManualValues, normalizeManualFacetConfig, normalizeManualFacetFilter} from './manualFacetValues.js';
+
 export function priceFilterDisplayMode(settings = {}) {
   return (settings?.priceFilterDisplayMode ?? settings?.integrations?.priceFilterDisplayMode) === 'Range' ? 'Range' : 'List';
 }

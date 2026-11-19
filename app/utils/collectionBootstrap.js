@@ -1,7 +1,8 @@
 import {createHash} from 'node:crypto';
+import {normalizeManualFacetFilter,normalizeManualFacetConfig} from './manualFacetValues.js';
 
 export function collectionConfiguration(payload) {
-  const configuration = JSON.parse(JSON.stringify({settings:payload.settings || [], mergedValues:payload.mergedValues || [], globalSettings:payload.globalSettings || {}}));
+  const configuration = JSON.parse(JSON.stringify({settings:(payload.settings || []).map(normalizeManualFacetFilter), mergedValues:payload.mergedValues || [], globalSettings:payload.globalSettings || {}}));
   const version = createHash('sha256').update(JSON.stringify(configuration)).digest('hex');
   return {configuration, version};
 }
@@ -34,10 +35,10 @@ export function visibleCollectionFacets(facets, settings) {
       if (Object.hasOwn(facets,name)) result[name]=facets[name];
       if (name in consumers) {
         let config;
-        try {config=typeof setting.config==='string'?JSON.parse(setting.config):(setting.config || {});} catch {return facets;}
+        try {config=normalizeManualFacetConfig(setting.config);} catch {return facets;}
         if (config.prefix && typeof config.prefix!=='string') return facets;
         if (config.excludedValues && !Array.isArray(config.excludedValues)) return facets;
-        if (config.manualValues && (!Array.isArray(config.manualValues) || config.manualValues.some(value=>typeof value!=='string'))) return facets;
+        if (config.manualValuesInvalid) return facets;
         const prefix=(config.prefix || '').toLowerCase(), manualPrefix=prefix.trim();
         const manual=config.useManualValues && config.manualValues?.length ? config.manualValues.map(value=>value.toLowerCase().trim()) : null;
         consumers[name].push(item=>{

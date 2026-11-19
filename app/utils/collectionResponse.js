@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {productRankingFingerprint} from './shopCacheInvalidation.js';
 import {collectionConfiguration, visibleCollectionFacets} from './collectionBootstrap.js';
+import {normalizeManualFacetFilter} from './manualFacetValues.js';
 
 export const collectionPageFingerprint = products => products.every(p => p.shop && String(p.status).toUpperCase() === 'ACTIVE') ? productRankingFingerprint(products) : null;
 
@@ -22,6 +23,7 @@ export function encodeCollectionMetadata(value) {
 
 export function packCollectionResponse(payload, {profile='collection-v1'} = {}) {
   const normalized = JSON.parse(JSON.stringify(payload));
+  if(Array.isArray(normalized.settings))normalized.settings=normalized.settings.map(normalizeManualFacetFilter);
   if (profile === 'collection-v2') {
     const {version} = collectionConfiguration(normalized);
     const facets = visibleCollectionFacets(normalized.facets, normalized.settings);

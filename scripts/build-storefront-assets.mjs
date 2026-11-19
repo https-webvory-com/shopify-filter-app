@@ -9,6 +9,9 @@ for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewS
     const shared=(await fs.readFile('app/utils/priceBounds.js','utf8')).replace('export function','function');
     source=source.replace(/\/\* CFP_PRICE_BOUNDS_START \*\/[\s\S]*?\/\* CFP_PRICE_BOUNDS_END \*\//,
       '/* CFP_PRICE_BOUNDS_START */\n'+shared+'\n  /* CFP_PRICE_BOUNDS_END */');
+    const manual=(await fs.readFile('app/utils/manualFacetValues.js','utf8')).replaceAll('export function','function');
+    source=source.replace(/\/\* CFP_MANUAL_VALUES_START \*\/[\s\S]*?\/\* CFP_MANUAL_VALUES_END \*\//,
+      '/* CFP_MANUAL_VALUES_START */\n'+manual+'\n  /* CFP_MANUAL_VALUES_END */');
     await fs.writeFile(assets+name+'.js',source);
   }
   const hash=createHash('sha256').update(source.replace(/\r\n/g,'\n')).digest('hex');
