@@ -554,6 +554,7 @@ export default function FilterGroups() {
 
   return (
     <s-page heading="Filter Groups">
+      <p style={{fontSize: 13, color: '#64748b'}}>Disabled groups are not applied. When no enabled assignment matches a page, its enabled default group is used. Review assignments and default fallback before activating or migrating filters.</p>
       <ui-title-bar title="Filter Groups">
         <button variant="breadcrumb" onClick={() => navigate("/app/filters")}>
           Filters

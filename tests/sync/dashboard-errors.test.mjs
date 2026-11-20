@@ -7,6 +7,11 @@ import React from "react";
 import * as jsxRuntime from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../../app/utils/syncError.js";
+import {syncDashboardState} from '../../app/utils/syncDashboard.js';
+
+const summaryContext={module:{exports:{}},exports:{},require:name=>name==='react/jsx-runtime'?jsxRuntime:{syncDashboardState}};
+vm.runInNewContext((await transform(await fs.readFile('app/components/ui/SyncStatusSummary.jsx','utf8'),{format:'cjs',loader:'jsx',jsx:'automatic'})).code,summaryContext);
+const SyncStatusSummary=summaryContext.module.exports.default;
 
 async function routeFixture(job, queueState = "missing") {
   const prisma={product:{count:async()=>48860},syncJob:{
@@ -95,6 +100,7 @@ async function renderDashboard(data, stats = null) {
     "react-router":{useLoaderData:()=>data,useFetcher:()=>({state:"idle",data:stats}),useRevalidator:()=>({revalidate(){}}),useNavigate:()=>()=>{}},
     "@shopify/app-bridge-react":{useAppBridge:()=>({toast:{show(){}}})},
     "../components/ui/LoadingSpinner":{__esModule:true,default:()=>React.createElement("span",null,"Loading")},
+    "../components/ui/SyncStatusSummary":{__esModule:true,default:SyncStatusSummary},
     "../components/ui/SyncErrorBanner":{__esModule:true,default:()=>React.createElement("div",{"data-sync-error-banner":true},"Sync did not complete")},
   };
   const ctx={module:{exports:{}},exports:{},require:name=>mocks[name]||{}};
@@ -143,8 +149,9 @@ test("verified unpublished products are explained separately from a waiting scan
   const data=await routeFixture({id:"small-store",status:"IN_PROGRESS",productsProcessed:45,totalProducts:51,updatedAt:new Date()},"waiting");
   data.syncedProductsCount=45;
   const html=await renderDashboard(data,{activeProducts:51,publishedProducts:45,unpublishedProducts:6});
-  assert.match(html,/6 unpublished products excluded from listings/);
-  assert.ok(html.includes("45 products in database / 45 published products"));
+  assert.match(html,/6 active unpublished products excluded from listings/);
+  assert.match(html,/Database rows for this store: <strong>45<\/strong>/);
+  assert.match(html,/Shopify active, published products: <strong>45<\/strong>/);
   assert.match(html,/Sync is queued/);
   assert.ok(!html.includes("Fully Synced"));
 });
@@ -162,4 +169,15 @@ test("dashboard hides the sync error box while keeping stopped progress and reco
   assert.ok(!html.includes("Sync did not complete"));
   assert.match(html,/sync stopped/);
   assert.match(html,/Resume Sync/);
+});
+
+test('reported 52735/52735 stopped run never implies verified coverage or incremental freshness',async()=>{
+ const data=await routeFixture({id:'reported',status:'FAILED',productsProcessed:52735,totalProducts:52735,lastError:'Sales ranking update did not finish'});
+ data.syncedProductsCount=51519;data.lastSyncedAt='2026-10-16T00:00:00Z';
+ const html=await renderDashboard(data,{activeProducts:52735,publishedProducts:51619,unpublishedProducts:1116});
+ assert.match(html,/Scan complete — sync stopped before verified completion/);
+ assert.match(html,/100% of the product scan/);
+ assert.match(html,/51,519/);assert.match(html,/51,619/);
+ assert.match(html,/ID reconciliation not verified/);assert.match(html,/Incremental freshness: not verified/);
+ assert.ok(!html.includes('Last sync completed'));assert.ok(!html.includes('100 missing'));
 });

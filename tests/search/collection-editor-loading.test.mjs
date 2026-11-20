@@ -9,6 +9,7 @@ import * as merchandisingMarketInvalidation from '../../app/utils/merchandisingM
 const shop = 'fixture.myshopify.com';
 const normalize = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const common = prisma => ({
+  '../components/ui/RuleControls': {},
   '../utils/merchandisingSelection.js': {},
   '../utils/marketRuleCountries.js': marketRuleCountries,
   '../utils/merchandisingMarketInvalidation.js': merchandisingMarketInvalidation,

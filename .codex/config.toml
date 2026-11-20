@@ -4,3 +4,15 @@ args = [
     "@shopify/dev-mcp@latest",
 ]
 command = "npx"
+
+[mcp_servers.shopify-dev-mcp.tools.learn_shopify_api]
+approval_mode = "approve"
+
+[mcp_servers.shopify-dev-mcp.tools.validate]
+approval_mode = "approve"
+
+[mcp_servers.shopify-dev-mcp.tools.feedback]
+approval_mode = "approve"
+
+[mcp_servers.shopify-dev-mcp.tools.validate_theme]
+approval_mode = "approve"

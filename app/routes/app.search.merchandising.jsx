@@ -1,3 +1,4 @@
+import {RuleAction, RuleStatusSwitch, RuleDialog} from '../components/ui/RuleControls';
 import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { merchandisingRuleIds } from "../utils/merchandisingSelection.js";
@@ -1098,7 +1099,7 @@ export default function MerchandisingIndex() {
                                 gap: "10px",
                               }}
                             >
-                              {filteredRules.length > 0 && (<input
+                              {filteredRules.length > 0 && (<input aria-label="Select all rules"
                                 type="checkbox"
                                 checked={filteredRules.length > 0 && filteredRules.every(rule => selectedRules.some(selected => selected.id === rule.id))}
                                 onChange={(e) => {
@@ -1176,7 +1177,7 @@ export default function MerchandisingIndex() {
                                         d="M4 8h16M4 16h16"
                                       ></path>
                                     </svg>
-                                    <input
+                                    <input aria-label={"Select " + (rule.name || "rule")}
                                       type="checkbox"
                                       checked={selectedRules.some(r => r.id === rule.id)}
                                       onChange={(e) => {
@@ -1192,7 +1193,7 @@ export default function MerchandisingIndex() {
                                         height: "15px",
                                       }}
                                     />
-                                    <span
+                                    <RuleAction label={"Edit " + (rule.name || "rule")} disabled={fetcher.state !== "idle"}
                                       title={rule.name}
                                       onClick={() => {
                                         setRuleToEdit(rule);
@@ -1219,7 +1220,7 @@ export default function MerchandisingIndex() {
                                       }
                                     >
                                       {rule.name}
-                                    </span>
+                                    </RuleAction>
                                   </div>
                                 </td>
                               );
@@ -1272,8 +1273,7 @@ export default function MerchandisingIndex() {
                             if (c.id === "Status") {
                               return (
                                 <td key={c.id} style={{ padding: "16px 24px" }}>
-                                  <div
-                                    onClick={() =>
+                                  <RuleStatusSwitch name={rule.name || 'Rule'} checked={rule.status !== false} disabled={fetcher.state !== "idle"} onChange={() =>
                                       fetcher.submit(
                                         {
                                           actionType: "toggleRule",
@@ -1281,36 +1281,7 @@ export default function MerchandisingIndex() {
                                           status: !rule.status,
                                         },
                                         { method: "POST" },
-                                      )
-                                    }
-                                    style={{
-                                      width: "42px",
-                                      height: "22px",
-                                      background: rule.status
-                                        ? "#5B21B6"
-                                        : "#e2e8f0",
-                                      borderRadius: "11px",
-                                      position: "relative",
-                                      cursor: "pointer",
-                                      transition: "0.2s ease",
-                                      opacity:
-                                        fetcher.state !== "idle" ? 0.7 : 1,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        width: "18px",
-                                        height: "18px",
-                                        background: "#fff",
-                                        borderRadius: "50%",
-                                        position: "absolute",
-                                        top: "2px",
-                                        left: rule.status ? "22px" : "2px",
-                                        transition: "0.2s ease",
-                                        boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                                      }}
-                                    ></div>
-                                  </div>
+                                      )} />
                                 </td>
                               );
                             }
@@ -1328,16 +1299,15 @@ export default function MerchandisingIndex() {
                                       style={{ position: "relative" }}
                                       title="Duplicate"
                                     >
-                                      <svg
-                                        onClick={() =>
+                                      <RuleAction label={"Duplicate " + (rule.name || 'rule')} disabled={fetcher.state !== "idle"} onClick={() =>
                                           fetcher.submit(
                                             {
                                               actionType: "duplicateRule",
                                               id: rule.id,
                                             },
                                             { method: "POST" },
-                                          )
-                                        }
+                                          )}><svg aria-hidden="true" focusable="false"
+
                                         style={{
                                           width: "18px",
                                           height: "18px",
@@ -1366,10 +1336,10 @@ export default function MerchandisingIndex() {
                                           strokeWidth="2"
                                           d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
                                         ></path>
-                                      </svg>
+                                      </svg></RuleAction>
                                     </div>
-                                    <svg
-                                      onClick={() => setRuleToDelete(rule)}
+                                    <RuleAction label={"Delete " + (rule.name || 'rule')} disabled={fetcher.state !== "idle"} onClick={() => setRuleToDelete(rule)}><svg aria-hidden="true" focusable="false"
+
                                       style={{
                                         width: "18px",
                                         height: "18px",
@@ -1398,7 +1368,7 @@ export default function MerchandisingIndex() {
                                         strokeWidth="2"
                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                       ></path>
-                                    </svg>
+                                    </svg></RuleAction>
                                   </div>
                                 </td>
                               );
@@ -1615,7 +1585,7 @@ export default function MerchandisingIndex() {
                 justifyContent: "center",
               }}
             >
-              <div
+              <RuleDialog label="Delete rule confirmation" onCancel={() => setRuleToDelete(null)}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   background: "#fff",
@@ -1687,7 +1657,7 @@ export default function MerchandisingIndex() {
                     Delete Rules
                   </button>
                 </div>
-              </div>
+              </RuleDialog>
             </div>
           )}
 
@@ -1707,7 +1677,7 @@ export default function MerchandisingIndex() {
               zIndex: 1000,
             }}
           >
-            <div
+            <RuleDialog label="Delete rule confirmation" onCancel={() => setRuleToDelete(null)}
               style={{
                 background: "#fff",
                 width: "400px",
@@ -1782,7 +1752,7 @@ export default function MerchandisingIndex() {
                   Delete
                 </button>
               </div>
-            </div>
+            </RuleDialog>
           </div>
         )}
 

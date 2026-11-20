@@ -40,7 +40,7 @@ const settingsCards = [
     title: "General Settings",
     tag: "Core",
     description:
-      "Configure automatic sync frequency, manage Storefront API credentials, and control product statuses included in sync.",
+      "Manage inventory visibility, quick view, country availability and wholesale settings.",
     path: "/app/settings/general",
     comingSoon: false,
     icon: (
@@ -96,7 +96,7 @@ const settingsCards = [
     title: "Integrations",
     tag: "Apps",
     description:
-      "Connect AI Search & Filter with your favorite Shopify apps like product reviews, translation, and currencies.",
+      "Manage the supported Wishlist Growth adapter. Review country availability separately in General Settings.",
     path: "/app/settings/integrations",
     comingSoon: false,
     icon: (

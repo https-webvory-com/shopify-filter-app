@@ -253,9 +253,9 @@ export default function Integrations() {
       <s-stack direction="block" gap="base">
         <s-section heading="Connect Third-Party Apps">
           <s-paragraph>
-            Integrate AI Search & Filter with your favorite Shopify apps to
-            add rating stars, currency conversion, and translation options to
-            your search and filtering widget.
+            Manage the currently supported Wishlist Growth adapter.
+            Enabling its setting does not verify installation or connection health.
+            Ratings, currency and translation adapters are not offered on this page.
           </s-paragraph>
 
           <div className="int-grid">
@@ -268,6 +268,7 @@ export default function Integrations() {
                   <label className="int-toggle">
                     <input
                       type="checkbox"
+                      aria-label={`${item.name} integration setting`}
                       checked={item.enabled}
                       onChange={() => handleToggle(item.id)}
                     />
@@ -285,6 +286,7 @@ export default function Integrations() {
                     )}
                   </h3>
                   <p className="int-desc">{item.desc}</p>
+                  <p className="int-desc">Setting: {item.enabled ? "Enabled" : "Disabled"}. Connection health: not verified.</p>
                 </div>
               </div>
             ))}

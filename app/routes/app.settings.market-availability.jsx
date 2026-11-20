@@ -81,6 +81,7 @@ export default function MarketAvailability(){
           </div>
           <h2 id="country-connection-heading">Show the right products in every country</h2>
           <p>Keep collection results relevant to each shopper with product availability from their selected Shopify country.</p>
+          <p className="country-help">Country eligibility and currency display are separate. Connecting availability does not by itself verify currency conversion or every search and quick-view surface.</p>
           <div className="country-callout"><strong>Country stock takes priority</strong><p>Products unavailable in the shopper’s country are hidden even when “Show only in-stock products” is turned off.</p></div>
           <button className="country-primary" type="button" disabled={connecting} aria-busy={connecting} onClick={connect}>{connecting?'Connecting…':connection?'Refresh connection and countries':'Connect country availability'}</button>
           <p className="country-help">{connection?'Refresh to verify your connection and enabled Shopify countries.':'Approve read-only product listings access in Shopify. No API key needed.'}</p>

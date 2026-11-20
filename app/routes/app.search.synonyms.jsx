@@ -199,6 +199,7 @@ export default function SearchSynonyms() {
 
   return (
     <s-page heading="Search Synonyms" full-width="true">
+      <p style={{fontSize: 13, color: '#64748b'}}>Saved synonyms currently expand in both directions. Review equivalent terms and product relevance before adding or removing entries; one-way mappings are not supported by this editor.</p>
       <ui-title-bar title="Search Synonyms">
         <button variant="breadcrumb" onClick={() => navigate("/app/search")}>
           Search

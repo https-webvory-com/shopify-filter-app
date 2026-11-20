@@ -8,6 +8,7 @@ import { syncProducts, startBulkProductSync } from "../services/sync.server";
 import { syncHistoricalOrders } from "../services/orders.server";
 import { productSyncQueue } from "../services/productSyncQueue.server.js";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import SyncStatusSummary from "../components/ui/SyncStatusSummary";
 import { syncErrorMessage, syncIssueForJob, productSyncJobWhere, isCompletedSyncTransition } from "../utils/syncError.js";
 
 export const loader = async ({ request }) => {
@@ -68,6 +69,7 @@ export const loader = async ({ request }) => {
     syncIssue: syncIssueForJob(latestJob),
     latestSyncId: latestJob?.id ?? null,
     latestSyncStatus: latestJob?.status ?? "IDLE",
+    latestSyncCompletedAt: latestJob?.completedAt ?? null,
     syncProgress: progress,
     resumableJob: failed ? progress : null,
   };
@@ -117,7 +119,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncIssue, syncProgress, resumableJob, latestSyncStatus, latestSyncId } = useLoaderData();
+  const { syncQueueState, syncedProductsCount, isSyncingBackground, lastSyncedAt, syncIssue, syncProgress, resumableJob, latestSyncStatus, latestSyncId, latestSyncCompletedAt } = useLoaderData();
   const syncFetcher = useFetcher();
   const statsFetcher = useFetcher();
   const ordersSyncStatusFetcher = useFetcher();
@@ -462,7 +464,7 @@ export default function Index() {
                 { label: "Total Collections",   value: shopifyStats.allCollections,     dot: "#7c3aed", icon: "📁" },
                 { label: "Published",           value: shopifyStats.publishedCollections, dot: "#2563eb", icon: "●" },
                 { label: "Smart Collections",   value: shopifyStats.smartCollections,   dot: "#e11d48", icon: "⚡" },
-                { label: "Synced to DB",        value: syncedProductsCount,             dot: "#5B21B6", icon: "✓",  highlight: true },
+                { label: "Database product rows",        value: syncedProductsCount,             dot: "#5B21B6", icon: "✓",  highlight: true },
               ].map(({ label, value, dot, icon, highlight }) => (
                 <div
                   key={label}
@@ -522,76 +524,12 @@ export default function Index() {
             {isSyncingBackground && syncQueueState === "unavailable" && (
               <p role="status">Sync queue status is temporarily unavailable. Saved progress is preserved.</p>
             )}
-            {/* Synced vs Total */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "14px", color: "#64748b" }}>
-                {/* During active sync — show live processed count */}
-                {syncProgress ? (
-                  <>
-                    <strong style={{ color: "#7c3aed", fontSize: "16px" }}>
-                      {syncProgress.processed.toLocaleString()}
-                    </strong>
-                    {syncProgress.total && syncProgress.processed <= syncProgress.total
-                      ? <span> / {syncProgress.total.toLocaleString()} {latestSyncStatus === "COMPLETED" ? "processed" : latestSyncStatus === "FAILED" ? "sync stopped" : "syncing..."}</span>
-                      : <span> products processed{latestSyncStatus === "FAILED" ? " before sync stopped" : ""}</span>}
-                  </>
-                ) : shopifyActiveCount ? (
-                  <>
-                    <strong style={{ color: "#1E1B4B", fontSize: "16px" }}>
-                      {Math.min(currentCount, shopifyActiveCount).toLocaleString()}
-                    </strong>
-                    <span> / {shopifyActiveCount.toLocaleString()} active products synced</span>
-                  </>
-                ) : (
-                  <>
-                    <strong style={{ color: "#1E1B4B", fontSize: "16px" }}>{currentCount.toLocaleString()}</strong>
-                    <span> products synced</span>
-                  </>
-                )}
-              </span>
-
-              {/* Fully synced */}
-              {!isSyncing && latestSyncStatus === "COMPLETED" && !syncIssue && (
-                <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "12px", fontWeight: "600", padding: "2px 10px", borderRadius: "20px" }}>
-                  ✓ Last sync completed
-                </span>
-              )}
-              {shopifyUnpublishedCount > 0 && (
-                <span style={{ background: "#f1f5f9", color: "#475569", fontSize: "12px", padding: "2px 10px", borderRadius: "20px" }}>
-                  {shopifyUnpublishedCount.toLocaleString()} unpublished products excluded from listings
-                </span>
-              )}
-              {shopifyPublishedCount !== null && (
-                <span style={{ fontSize: "12px", color: "#64748b" }}>
-                  {currentCount.toLocaleString()} products in database / {shopifyPublishedCount.toLocaleString()} published products
-                </span>
-              )}
-            </div>
-
-            {/* Progress bar — live during sync OR static DB progress */}
-            {(() => {
-              const total = syncProgress ? syncProgress.total : shopifyActiveCount;
-              const done  = syncProgress ? syncProgress.processed : currentCount;
-              if (!total || total === 0) return null;
-              const pct = Math.min(100, Math.round((done / total) * 100));
-              const color = latestSyncStatus === "COMPLETED" ? "#16a34a" : latestSyncStatus === "FAILED" ? "#dc2626" : "#7c3aed";
-              return (
-                <div style={{ marginBottom: "6px" }}>
-                  <div style={{ background: "#e2e8f0", borderRadius: "999px", height: "8px", width: "100%", maxWidth: "340px" }}>
-                    <div style={{ background: color, borderRadius: "999px", height: "8px", width: `${pct}%`, transition: "width 0.6s ease" }} />
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "3px" }}>
-                    {pct}% — {done.toLocaleString()}{done <= total ? ` / ${total.toLocaleString()}` : ' products processed'}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {lastSyncedAt && !isSyncing && (
-              <p style={{ color: "#94a3b8", margin: 0, fontSize: "12px" }}>
-                Last completed sync: {new Date(lastSyncedAt).toLocaleString()}
-              </p>
-            )}
+            <SyncStatusSummary
+              status={latestSyncStatus} queueState={syncQueueState} progress={syncProgress}
+              completedAt={latestSyncCompletedAt} lastCompletedAt={lastSyncedAt} issue={syncIssue}
+              databaseCount={currentCount} publishedCount={shopifyPublishedCount}
+              unpublishedCount={shopifyUnpublishedCount}
+            />
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", marginTop: "20px", paddingTop: "18px", borderTop: "1px solid rgba(91, 33, 182, 0.12)" }}>

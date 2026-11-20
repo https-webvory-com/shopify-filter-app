@@ -1,3 +1,4 @@
+import {RuleAction, RuleStatusSwitch, RuleDialog} from '../components/ui/RuleControls';
 import {useCompletedSubmission} from '../hooks/useCompletedSubmission';
 import AdminNoSearchResults from '../components/ui/AdminNoSearchResults';
 import { sortPinningRules, withCollectionPinSortKeys } from "../utils/pinImportOrder.js";
@@ -968,7 +969,7 @@ export default function PinningIndex() {
                 justifyContent: "center",
               }}
             >
-              <div
+              <RuleDialog label="Delete rule confirmation" onCancel={() => setDeleteRuleId(null)}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   background: "#fff",
@@ -1037,7 +1038,7 @@ export default function PinningIndex() {
                     Delete
                   </button>
                 </div>
-              </div>
+              </RuleDialog>
             </div>
           )}
 
@@ -1057,7 +1058,7 @@ export default function PinningIndex() {
                 justifyContent: "center",
               }}
             >
-              <div
+              <RuleDialog label="Delete selected rules confirmation" onCancel={() => setIsBulkDeleteModalOpen(false)}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   background: "#fff",
@@ -1126,7 +1127,7 @@ export default function PinningIndex() {
                     Delete Rules
                   </button>
                 </div>
-              </div>
+              </RuleDialog>
             </div>
           )}
 
@@ -1616,7 +1617,7 @@ export default function PinningIndex() {
                   }}
                 >
                   <th style={{ padding: "12px 16px", width: "40px" }}>
-                    <input
+                    <input aria-label="Select all rules"
                       type="checkbox"
                       checked={pinningRules.length > 0 && selectedRules.length === pinningRules.length}
                       onChange={(e) => {
@@ -1669,7 +1670,7 @@ export default function PinningIndex() {
                       style={{ borderBottom: "1px solid #f1f5f9" }}
                     >
                       <td style={{ padding: "16px", width: "40px" }}>
-                        <input
+                        <input aria-label={"Select " + (rule.name || "rule")}
                           type="checkbox"
                           checked={selectedRules.some(r => r.id === rule.id)}
                           onChange={(e) => {
@@ -1701,7 +1702,7 @@ export default function PinningIndex() {
                                   color: "#1E1B4B",
                                 }}
                               >
-                                <span
+                                <RuleAction label={"Edit " + (rule.name || "rule")} disabled={navigation.state !== "idle"}
                                   onClick={() =>
                                     navigate(
                                       `/app/collections/pinning/${rule.id}`,
@@ -1713,7 +1714,7 @@ export default function PinningIndex() {
                                   }}
                                 >
                                   {rule.name || "Pinning Rule"}
-                                </span>
+                                </RuleAction>
                                   {rule.name !== collText && (
                                     <div
                                       style={{
@@ -1738,38 +1739,8 @@ export default function PinningIndex() {
                                   color: "#64748b",
                                 }}
                               >
-                                <div
-                                  onClick={() =>
-                                    handleToggleStatus(rule.id, rule.status)
-                                  }
-                                  style={{
-                                    width: "40px",
-                                    height: "24px",
-                                    background:
-                                      rule.status !== false
-                                        ? "#5B21B6"
-                                        : "rgba(91, 33, 182, 0.2)",
-                                    borderRadius: "12px",
-                                    position: "relative",
-                                    cursor: "pointer",
-                                    transition: "background 0.3s",
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      width: "18px",
-                                      height: "18px",
-                                      background: "#fff",
-                                      borderRadius: "50%",
-                                      position: "absolute",
-                                      top: "3px",
-                                      left:
-                                        rule.status !== false ? "19px" : "3px",
-                                      transition: "left 0.3s",
-                                      boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-                                    }}
-                                  ></div>
-                                </div>
+                                <RuleStatusSwitch name={rule.name || 'Rule'} checked={rule.status !== false} disabled={navigation.state !== "idle"} onChange={() =>
+                                    handleToggleStatus(rule.id, rule.status)} />
                               </td>
                             );
                           }
@@ -1819,12 +1790,11 @@ export default function PinningIndex() {
                                     alignItems: "center",
                                   }}
                                 >
-                                  <svg
-                                    onClick={() =>
+                                  <RuleAction label={"Edit " + (rule.name || 'rule')} disabled={navigation.state !== "idle"} href={`/app/collections/pinning/${encodeURIComponent(rule.id)}`} onClick={() =>
                                       navigate(
                                         `/app/collections/pinning/${encodeURIComponent(rule.id)}`,
-                                      )
-                                    }
+                                      )}><svg aria-hidden="true" focusable="false"
+
                                     title="Edit"
                                     style={{
                                       width: "16px",
@@ -1842,9 +1812,9 @@ export default function PinningIndex() {
                                       strokeWidth="2"
                                       d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                                     ></path>
-                                  </svg>
-                                  <svg
-                                    onClick={() => handleDuplicate(rule.id)}
+                                  </svg></RuleAction>
+                                  <RuleAction label={"Duplicate " + (rule.name || 'rule')} disabled={navigation.state !== "idle"} onClick={() => handleDuplicate(rule.id)}><svg aria-hidden="true" focusable="false"
+
                                     title="Duplicate"
                                     style={{
                                       width: "16px",
@@ -1862,9 +1832,9 @@ export default function PinningIndex() {
                                       strokeWidth="2"
                                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                                     ></path>
-                                  </svg>
-                                  <svg
-                                    onClick={() => handleDelete(rule.id)}
+                                  </svg></RuleAction>
+                                  <RuleAction label={"Delete " + (rule.name || 'rule')} disabled={navigation.state !== "idle"} onClick={() => handleDelete(rule.id)}><svg aria-hidden="true" focusable="false"
+
                                     title="Delete"
                                     style={{
                                       width: "16px",
@@ -1882,7 +1852,7 @@ export default function PinningIndex() {
                                       strokeWidth="2"
                                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                                     ></path>
-                                  </svg>
+                                  </svg></RuleAction>
                                 </div>
                               </td>
                             );
