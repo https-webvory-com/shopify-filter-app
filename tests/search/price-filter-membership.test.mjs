@@ -9,7 +9,7 @@ test('filtered search uses one market-priced Red/M variant across all sorts and 
  const shop='fixture.myshopify.com',contexts=[],cache=new Map();
  const variant=(id,amount,option1='Red',option2='M',available=true)=>({id:String(id),price:75,available,option1,option2,marketPrices:{IN:{price:amount,currency:'INR'}},imageUrl:'dress.jpg'});
  const options=[{name:'Color',values:['Red','Blue']},{name:'Size',values:['M','L']}];
- const docs=Array.from({length:28},(_,i)=>({id:String(i+1),shop,status:'ACTIVE',title:'Prom '+i,handle:'prom-'+i,options,priceMin:75,images:['dress.jpg'],variantPrices:[variant(i+100,7000)]}));
+ const docs=Array.from({length:28},(_,i)=>({id:String(i+1),shop,status:'ACTIVE',title:'Prom '+i,handle:'prom-'+i,options,priceMin:75,images:['dress.jpg'],variantPrices:[variant('blue-'+i,5000,'Blue','M'),variant('red-l-'+i,7000,'Red','L'),variant(i+100,7000),variant('red-expensive-'+i,9600)]}));
  docs[0].priceMin=15;
  docs.push({id:'99',shop,status:'ACTIVE',title:'B8402',handle:'b8402',options,priceMin:75,images:['dress.jpg'],variantPrices:[variant('63954324390259',9600),variant('2',7000,'Red','L'),variant('3',7000,'Blue','M')]});
  const productModel={findMany:async()=>docs.map(p=>({...p,variants:p.variantPrices}))};
@@ -40,7 +40,16 @@ test('filtered search uses one market-priced Red/M variant across all sorts and 
    const response=await route.loader({request:new Request(url)}),body=await response.json();
    assert.equal(response.status,200,body.error);assert.equal(body.totalCount,27);
    assert.equal(body.products.length,page===1?25:page===2?2:0);
-   for(const p of body.products){assert.equal(p.variants.length,1);assert.equal(p.variants[0].option1,'Red');assert.equal(p.variants[0].option2,'M');assert.equal(p.variants[0].price,7000);assert.ok(p.selectedVariantId);}
+   for(const p of body.products){
+    assert.equal(p.variants.length,4,'other colors, sizes and out-of-band prices remain choices');
+    assert.equal(new Set(p.variants.map(v=>v.id)).size,4);
+    const selected=p.variants.find(v=>v.id.split('/').pop()===String(p.selectedVariantId).split('/').pop());
+    assert.ok(selected);assert.equal(selected.option1,'Red');assert.equal(selected.option2,'M');assert.equal(selected.price,7000);
+    assert.equal(p.variants[0].id,selected.id,'the eligible selection is the default card variant');
+    assert.deepEqual(p.options[0].values,['Red','Blue']);
+    assert.ok(p.variants.some(v=>v.option1==='Blue'&&v.price===5000));
+    assert.ok(p.variants.some(v=>v.price===9600));
+   }
    ids.push(...body.products.map(p=>p.id));
   }
   assert.equal(new Set(ids).size,27);const set=ids.slice().sort();baseline ||= set;assert.deepEqual(set,baseline);

@@ -203,7 +203,7 @@ test('filter endpoint hides unavailable combinations before pagination, reports 
  let enabled=true;
  const options=[{name:'Color',values:['Blue','Black']},{name:'Size',values:['large','small']}];
  const docs=[1,2,3].map(id=>({id:String(id),title:'Product '+id,handle:'p'+id,shop:'fixture',status:'ACTIVE',priceMin:10,images:[],options,
-  variantPrices:id===1?product.variants:[{id:'v'+id,option1:'Blue',option2:'large',available:true,price:10},{id:'sold'+id,option1:'Black',option2:'small',available:false,price:10}]}));
+  variantPrices:id===1?product.variants:[{id:'v'+id,option1:'Blue',option2:'large',available:true,price:10},{id:'other'+id,option1:'Black',option2:'large',available:true,price:20},{id:'sold'+id,option1:'Black',option2:'small',available:false,price:10}]}));
  const select=query=>{
   const eligibility=(query.filter||[]).find(f=>typeof f==='string'&&f.startsWith('id IN'));
   const ids=eligibility?JSON.parse(eligibility.slice(6)):null;
@@ -233,7 +233,9 @@ test('filter endpoint hides unavailable combinations before pagination, reports 
   assert.equal(response.products.length,1);
   assert.equal(response.products[0].id,'gid://shopify/Product/'+(page+1));
   assert.ok(response.products[0].variants.every(v=>v.available===true));
-  assert.deepEqual(response.products[0].options[0].values,['Blue']);
+  assert.deepEqual(response.products[0].options[0].values,['Blue','Black']);
+  assert.deepEqual(response.products[0].variants.map(v=>v.option1),['Blue','Black']);
+  assert.equal(response.products[0].selectedVariantId,'v'+(page+1));
  }
  enabled=false;
  const disabled=await load(1);

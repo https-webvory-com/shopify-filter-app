@@ -1536,6 +1536,10 @@ export const loader = async ({ request, context }) => {
     if(canonicalVariantPrice&&!databasePriceSort&&!variantEligibilityPriceContext.basePrice)
       await hydrateSavedMarketPrices(paginatedSlice,prisma.variant,shop,sortCountry);
     let products = paginatedSlice.map((p) => {
+      // Keep card choices independent from the variants eligible for selection.
+      // Filters choose the default variant; they must not erase other colors/sizes.
+      const cardVariantPrices = (p.variantPrices || []).filter(variant =>
+        !hideUnavailable || variant.available === true);
       let localVariantPrices = hideUnavailable || canonicalVariantPrice ? matchingAvailableVariants({...p, variants: p.variantPrices || []}, optionsFilters, mergedValues, variantEligibilityPriceContext?null:selectedPriceRange,variantEligibilityPriceContext||searchVariantContext) : [...(p.variantPrices || [])];
       if(variantPriceV2&&!variantPriceContext.basePrice)localVariantPrices=localVariantPrices.filter(variant=>{
         const saved=variant.marketPrices?.[sortCountry];
@@ -1546,7 +1550,7 @@ export const loader = async ({ request, context }) => {
       if (hideUnavailable) {
         localOptions = localOptions.map((option, index) => ({
           ...option,
-          values: (option.values || []).filter(value => localVariantPrices.some(variant =>
+          values: (option.values || []).filter(value => cardVariantPrices.some(variant =>
             String(variant[`option${index + 1}`] || '').toLowerCase() === String(value).toLowerCase())),
         }));
       }
@@ -1712,7 +1716,9 @@ export const loader = async ({ request, context }) => {
         searchColorImage: activeVariant?.searchColor ? activeVariant.imageUrl : null,
         merchandisingImage: pinnedProductImage || (activeVariant ? (activeVariant.imageUrl || productImages[0] || null) : (p.merchandisingImage || null)),
         _matchScore: matchScore,
-        variants: localVariantPrices.map((v) => ({
+        variants: (activeVariant
+          ? [activeVariant, ...cardVariantPrices.filter(v => String(v.id) !== String(activeVariant.id))]
+          : cardVariantPrices).map((v) => ({
           id: v.id && String(v.id).includes('gid://') ? v.id : `gid://shopify/ProductVariant/${v.id}`,
           sku: v.sku,
           price: v.price,
