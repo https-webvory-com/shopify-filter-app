@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import vm from "node:vm";
 import {productRankingFingerprint,productContentFingerprint} from '../../app/utils/shopCacheInvalidation.js';
+import {productPriceFingerprint} from '../../app/utils/priceEvents.js';
 
 async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content') {
-  const calls = [],invalidations=[],marketChanges=[];
+  const calls = [],invalidations=[],marketChanges=[],priceChanges=[];
   const admin = {graphql:async()=>({json:async()=>({data:{inventoryItem:{variant:{product:{id:'gid://shopify/Product/1'}}}}})})};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
   const source = (await fs.readFile("app/workers/webhookWorker.server.js", "utf8"))
@@ -13,11 +14,12 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     .replaceAll("await import(", "await loadModule(")
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
-    productRankingFingerprint,productContentFingerprint,
-    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
+    productRankingFingerprint,productContentFingerprint,productPriceFingerprint,
+    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,variantPrices:[{id:'11',price:synced&&!unchanged&&changeMode==='prices'?80:100,marketPrices:{GB:{price:synced&&!unchanged&&changeMode==='prices'?60:70,currency:'GBP'}}}],priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
     prisma: {marketStorefrontConnection:{deleteMany:async({where})=>marketChanges.push(['connection-deleted',where.shop])},marketAvailabilitySnapshot:{deleteMany:async({where})=>marketChanges.push(['snapshots-deleted',where.shop])},product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
+      if(path.includes('priceEvents.server'))return {publishProductPriceChange:async(shop,id)=>priceChanges.push({shop,id,invalidations:invalidations.length})};
       if(path.includes('searchIndex.server'))return {scheduleSearchIndexProducts:async(shop,ids,task)=>marketChanges.push(['search-index',shop,Array.from(ids),task])};
       if(path.includes('marketAvailability'))return {invalidateMarketAvailability:async(shop,id)=>marketChanges.push(['stock',shop,id])};
       if (path.includes("collectionBestSelling")) return { invalidateCollectionBestSelling: async (shop, collectionId) => calls.push(["collection-stale", shop, collectionId]), refreshCollectionBestSelling: async (shop, collectionId) => {
@@ -45,8 +47,20 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
   });
   vm.runInContext(source, context);
   const processor=vm.runInContext("processWebhookJob", context);
-  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls,invalidations,marketChanges };
+  return { process:job=>{job.updateData=async data=>{job.data=data;};return processor(job);}, calls,invalidations,marketChanges,priceChanges };
 }
+
+test('price events publish after successful indexing and invalidation, preserving the original price comparison on retry',async()=>{
+ const worker=await loadWorker(undefined,false,true,'prices');
+ const job={name:'PRODUCTS_UPDATE',data:{shop:'fixture.myshopify.com',payload:{id:123}}};
+ await assert.rejects(worker.process(job),/Invalidation unavailable/);
+ assert.equal(worker.priceChanges.length,0);
+ await worker.process(job);
+ assert.deepEqual(worker.priceChanges,[{shop:'fixture.myshopify.com',id:'gid://shopify/Product/123',invalidations:2}]);
+ const unchanged=await loadWorker(undefined,true,false,'prices');
+ await unchanged.process({name:'PRODUCTS_UPDATE',data:{shop:'fixture.myshopify.com',payload:{id:123}}});
+ assert.equal(unchanged.priceChanges.length,0);
+});
 
 test("collection updates synchronize eligibility and refresh Shopify ordering", async () => {
   const worker = await loadWorker();

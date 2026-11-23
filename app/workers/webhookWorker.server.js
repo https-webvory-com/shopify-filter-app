@@ -6,6 +6,8 @@ import meiliClient from "../services/meiliClient.server.js";
 import {productRankingFingerprint,productContentFingerprint} from '../utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../utils/processCollectionRankingJob.js';
 
+import {productPriceFingerprint} from '../utils/priceEvents.js';
+
 let webhookWorker;
 
 async function processWebhookJob(job) {
@@ -189,6 +191,7 @@ async function handleProductUpdate(shop, payload, job) {
   if (!job.data.rankingBefore) {
     await job.updateData({...job.data, rankingBefore: {
       fingerprint: productRankingFingerprint(before),
+      priceFingerprint: productPriceFingerprint(before),
       contentFingerprint: productContentFingerprint(before),
       scoreFingerprint: JSON.stringify([before?.bestSellingScore,before?.trendingScore]),
       tags: before==null?[]:Array.isArray(before.tags)&&before.tags.every(t=>typeof t==='string')?before.tags:null,
@@ -204,6 +207,12 @@ async function handleProductUpdate(shop, payload, job) {
     const contentChanged=typeof job.data.rankingBefore.contentFingerprint!=='string'||job.data.rankingBefore.contentFingerprint!==productContentFingerprint(after);
     const scoresChanged=job.data.rankingBefore.scoreFingerprint!==JSON.stringify([after?.bestSellingScore,after?.trendingScore]);
     if(contentChanged||scoresChanged)await invalidateShop(shop,{kind:contentChanged?'products':'scores',collectionIds,externalProof});
+  }
+  // Publish only after the database, index and cache invalidation succeed.
+  // Retain the before-price comparison across retries, just like ranking data.
+  if (job.data.rankingBefore.priceFingerprint !== productPriceFingerprint(after)) {
+    const {publishProductPriceChange} = await import('../services/priceEvents.server.js');
+    await publishProductPriceChange(shop, productId);
   }
   console.log(`CFP Worker: Product update synced for ${productId}`);
 }

@@ -1764,6 +1764,8 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false, partialPrefix = false) {
     const version = ++marketRenderVersion;
     const pricingProducts = products;
+    if (templateName !== 'search' && !isLoadMore && !products.length)
+      window.cfpMarketPricing?.watchCollection?.([], {shop, onPriced: () => {}});
     // Render cards immediately, without displaying unverified market prices.
     // Each price arrives independently; a slow product cannot hold the grid.
     products = products.map(p => ({...p, _marketPricingUnavailable:!window.cfpMarketPricing?.saved?.(p)}));
@@ -2407,9 +2409,34 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     });
     if(previewOnly&&!pricePreview)return;
     const applyPricing=()=>{
+    const patchPrice = (product, index) => {
+      const card = grid.querySelector('[data-pricing-render="' + version + '"][data-pricing-index="' + index + '"]');
+      updateMarketCardPrice(card, window.cfpMarketPricing.latest?.(product) || product);
+    };
+    const pricesChanged = () => {
+      // Keep the shopper's scroll position and cards stable. A price change
+      // can alter sort order, sale/price bands or matching variant eligibility.
+      // Let the shopper request a new canonical result set explicitly.
+      if (grid.parentElement.querySelector('.cfp-live-price-notice')) return;
+      const notice = document.createElement('div');
+      notice.className = 'cfp-live-price-notice'; notice.setAttribute('role', 'status');
+      const button = document.createElement('button'); button.type = 'button';
+      button.textContent = 'Prices updated. Refresh results';
+      button.addEventListener('click', () => {
+        notice.remove(); collectionRankingTokens.clear(); initialRankingToken = null;
+        activeFilters.page = 1;
+        // Browser snapshots must not restore the old ordering on this action.
+        try { for (let i = sessionStorage.length - 1; i >= 0; i--) {
+          const key = sessionStorage.key(i); if (key?.startsWith(browserResultPrefix)) sessionStorage.removeItem(key);
+        } } catch {}
+        fetchAndRenderData(false, false);
+      });
+      notice.append(button); grid.before(notice);
+    };
+    if (templateName !== 'search') window.cfpMarketPricing?.watchCollection?.(pricingProducts, {shop, append:isLoadMore, onPriced:patchPrice, onChanged:pricesChanged});
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);
-      updateMarketCardPrice(card, product);
+      updateMarketCardPrice(card, window.cfpMarketPricing.latest?.(product) || product);
     }).catch(error => console.error('CFP: Market pricing unavailable', error));
     };
     if(window.cfpMarketPricing)applyPricing();

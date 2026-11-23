@@ -3,6 +3,10 @@
   const cache = new Map();
   const savedPrices = new Map();
   const savedPriceReads = new Map();
+  const liveCards = new Map();
+  let liveSource, liveScope = '', liveShop, liveGeneration = 0, liveTimer, liveAbort;
+  let liveReading = false, liveListeners = false, liveRetry = 0;
+  const livePending = new Set();
   const cleanId = id => String(id).split('/').pop();
   const savedKey = product => [window.Shopify?.shop,window.Shopify?.country,window.Shopify?.currency?.active,cleanId(product.id||'')].join('|');
   function saved(product){
@@ -18,13 +22,137 @@
     product.priceMin=source.priceMin;product.priceMax=source.priceMax;product.pricingContext=source.pricingContext;
     return true;
   }
+  function latest(product) {
+    const entry = savedPrices.get(savedKey(product));
+    // Live values remain authoritative for this page until a newer event or
+    // reconnect read replaces them. An old collection snapshot must not undo
+    // an update simply because its one-minute fallback cache expired.
+    if (entry?.live && useSavedProduct(product, entry.product)) {
+      product._marketPricingApplied = true; product._marketPricingUnavailable = false;
+    }
+    return product;
+  }
+  function stopLive() {
+    liveGeneration++; liveSource?.close(); liveSource = null;
+    liveAbort?.abort(); liveAbort = null;
+    clearTimeout(liveTimer); liveTimer = null;
+    liveReading = false; livePending.clear(); liveScope = '';
+  }
+  function queueLive(ids) {
+    ids.forEach(id => { if (liveCards.has(id)) livePending.add(id); });
+    if (!liveTimer && !liveReading && livePending.size) liveTimer = setTimeout(readLive, 100);
+  }
+  async function readLive() {
+    liveTimer = null;
+    if (liveReading || !livePending.size || document.hidden || !liveScope) return;
+    const generation = liveGeneration, scope = liveScope;
+    const country = window.Shopify?.country, currency = window.Shopify?.currency?.active;
+    const ids = [...livePending].slice(0, 40);
+    ids.forEach(id => livePending.delete(id));
+    liveReading = true;
+    const controller = new AbortController(); liveAbort = controller;
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const params = new URLSearchParams({shop: liveShop, country, currency, ids: ids.join(',')});
+      const origin = typeof API_DOMAIN === 'string' ? API_DOMAIN : 'https://aisearchfilter.webvory.com';
+      const response = await fetch(origin + '/api/market-prices?' + params, {signal: controller.signal, cache: 'no-store'});
+      if (!response.ok) throw Error('Price refresh unavailable');
+      const data = await response.json();
+      if (generation !== liveGeneration || scope !== liveScope || country !== window.Shopify?.country || currency !== window.Shopify?.currency?.active) return;
+      if (data.country !== country || data.currency !== currency) throw Error('Price scope changed');
+      const records = new Map((data.products || []).filter(product => ids.includes(cleanId(product.id)) && saved(product)).map(product => [cleanId(product.id), product]));
+      // A country without complete saved coverage uses the existing Shopify
+      // storefront fallback, in this browser's market. Never substitute a
+      // different country's saved price. Bound parallel requests to eight.
+      let next = 0;
+      await Promise.all(Array.from({length: Math.min(8, ids.length)}, async () => {
+        while (next < ids.length) {
+          const id = ids[next++], card = liveCards.get(id);
+          if (records.has(id) || !card?.product.handle) continue;
+          try {
+            const source = await getProduct(card.product.handle, true);
+            records.set(id, {
+              id, priceMin: source.price_min / 100, priceMax: source.price_max / 100,
+              variants: (source.variants || []).map(variant => ({id: variant.id, price: variant.price / 100, compareAtPrice: variant.compare_at_price == null ? null : variant.compare_at_price / 100, available: variant.available === true})),
+              pricingContext: {source: 'saved', country, currency},
+            });
+          } catch { /* Keep the last displayed price during an outage. */ }
+        }
+      }));
+      if (generation !== liveGeneration || country !== window.Shopify?.country || currency !== window.Shopify?.currency?.active) return;
+      for (const id of ids) {
+        const card = liveCards.get(id), source = records.get(id);
+        if (!card) continue;
+        if (!source) { livePending.add(id); liveRetry = 30000; continue; }
+        const product = {...card.product, variants: (card.product.variants || []).map(variant => ({...variant}))};
+        if (!useSavedProduct(product, source)) continue;
+        const before = JSON.stringify((card.product.variants || []).map(variant => [variant.id, variant.price, variant.compareAtPrice, variant.available]));
+        savedPrices.set(savedKey(product), {at: Date.now(), product: source, live: true});
+        while (savedPrices.size > 500) savedPrices.delete(savedPrices.keys().next().value);
+        product._marketPricingApplied = true; product._marketPricingUnavailable = false;
+        card.product = product;
+        card.onPriced(product);
+        const after = JSON.stringify(product.variants.map(variant => [variant.id, variant.price, variant.compareAtPrice, variant.available]));
+        if (before !== after) card.onChanged?.();
+      }
+      if (!livePending.size) liveRetry = 0;
+    } catch {
+      if (generation === liveGeneration) {
+        ids.forEach(id => livePending.add(id));
+        liveRetry = Math.min((liveRetry || 1500) * 2, 30000);
+      }
+    } finally {
+      clearTimeout(timer);
+      if (generation === liveGeneration) {
+        liveReading = false; liveAbort = null;
+        if (livePending.size && !document.hidden) liveTimer = setTimeout(readLive, liveRetry || 100);
+      }
+    }
+  }
+  function connectLive() {
+    const country = window.Shopify?.country, currency = window.Shopify?.currency?.active;
+    const ids = [...liveCards.keys()].sort();
+    const params = new URLSearchParams({shop: liveShop, country, currency, ids: ids.join(',')});
+    const scope = params.toString();
+    if (!window.EventSource || document.hidden || !ids.length || !liveShop || !/^[A-Z]{2}$/.test(country || '') || !/^[A-Z]{3}$/.test(currency || '')) { stopLive(); return; }
+    if (liveSource && scope === liveScope) return;
+    stopLive(); liveScope = scope;
+    const origin = typeof API_DOMAIN === 'string' ? API_DOMAIN : 'https://aisearchfilter.webvory.com';
+    let source;
+    try { source = new window.EventSource(origin + '/api/price-events?' + params); }
+    catch { stopLive(); return; } // Optional live transport must not break cards.
+    liveSource = source;
+    source.addEventListener('ready', () => { if (source === liveSource) queueLive([...liveCards.keys()]); });
+    source.addEventListener('prices', event => {
+      if (source !== liveSource) return;
+      try { const data = JSON.parse(event.data); if (Array.isArray(data.ids)) queueLive(data.ids); } catch { /* Ignore malformed notifications. */ }
+    });
+  }
+  function watchCollection(products, {shop, append = false, onPriced, onChanged}) {
+    if (!window.EventSource) return;
+    if (!append) liveCards.clear();
+    liveShop = shop;
+    products.forEach((product, index) => {
+      const id = cleanId(product.id || '');
+      if (/^\d{1,20}$/.test(id)) liveCards.set(id, {product: latest({...product, variants: (product.variants || []).map(variant => ({...variant}))}), onPriced: value => onPriced(value, index), onChanged});
+    });
+    while (liveCards.size > 500) liveCards.delete(liveCards.keys().next().value);
+    if (!liveListeners) {
+      liveListeners = true;
+      window.addEventListener('pagehide', stopLive);
+      window.addEventListener('pageshow', connectLive);
+      window.addEventListener('online', () => { connectLive(); queueLive([...liveCards.keys()]); });
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stopLive(); else connectLive(); });
+    }
+    connectLive();
+  }
   async function readSavedPage(products){
     const shop=window.Shopify?.shop,country=window.Shopify?.country,currency=window.Shopify?.currency?.active;
     const result=new Map();
     const missing=products.filter(product=>{
       if(saved(product))return false;
       const entry=savedPrices.get(savedKey(product));
-      if(entry&&Date.now()-entry.at<60000&&useSavedProduct(product,entry.product)){result.set(cleanId(product.id),entry.product);return false;}
+      if(entry&&(entry.live||Date.now()-entry.at<60000)&&useSavedProduct(product,entry.product)){result.set(cleanId(product.id),entry.product);return false;}
       if(entry)savedPrices.delete(savedKey(product));
       return true;
     });
@@ -55,11 +183,11 @@
     try{for(const [id,product]of await read)result.set(id,product);return result;}
     finally{savedPriceReads.delete(readKey);}
   }
-  async function getProduct(handle) {
+  async function getProduct(handle, fresh = false) {
     const root = window.Shopify?.routes?.root || '/';
     const key = [root, window.Shopify?.country, window.Shopify?.currency?.active, handle].join('|');
     const saved = cache.get(key);
-    if (saved && Date.now() - saved.at < 60000) return saved.promise;
+    if (!fresh && saved && Date.now() - saved.at < 60000) return saved.promise;
     const promise = (async () => {
       const controller = new AbortController();
       // HTTP/1 connections can queue these behind the first product images.
@@ -67,7 +195,7 @@
       const timer = setTimeout(() => controller.abort(), 8000);
       try {
         const response = await fetch(`${root}products/${encodeURIComponent(handle)}.js`, {
-          credentials: 'same-origin', signal: controller.signal, priority: 'high',
+          credentials: 'same-origin', signal: controller.signal, priority: 'high', cache: fresh ? 'no-store' : 'default',
         });
         if (!response.ok) throw new Error('Storefront price unavailable');
         const product = await response.json();
@@ -82,6 +210,8 @@
   }
   window.cfpMarketPricing = {
     saved,
+    latest,
+    watchCollection,
     async apply(products, onPriced) {
       // Clone cached search data so one market never changes another market's result.
       const result = products.map(p => ({...p,variants:(p.variants || []).map(v=>({...v}))}));
@@ -91,7 +221,7 @@
       // product's background database read is slow or unavailable.
       result.forEach((product,index)=>{
         const entry=savedPrices.get(savedKey(product));
-        if(!saved(product)&&entry&&Date.now()-entry.at<60000)useSavedProduct(product,entry.product);
+        if(!saved(product)&&entry&&(entry.live||Date.now()-entry.at<60000))useSavedProduct(product,entry.product);
         if(saved(product))publish(product,index);
       });
       const stored=await readSavedPage(result);
