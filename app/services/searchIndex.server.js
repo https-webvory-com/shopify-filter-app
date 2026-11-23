@@ -378,6 +378,13 @@ export async function scheduleSearchIndexProducts(shop,ids,sourceTaskUid){
  const unique=[...new Set(ids.map(id=>String(id).split('/').pop()))].filter(id=>/^\d+$/.test(id));
  for(let i=0;i<unique.length;i+=20){const batch=unique.slice(i,i+20);await enqueue('SEARCH_INDEX_PRODUCTS',{shop,ids:batch,sourceTaskUid},'search-products-'+hash([shop,batch,sourceTaskUid??Date.now()]),7);}
 }
+// Price refresh completion means both the shared catalog and configured search
+// projections are ready. Keep the durable delta as crash recovery as well.
+export async function refreshSearchIndexProductPrices(shop,ids,sourceTaskUid){
+ await scheduleSearchIndexProducts(shop,ids,sourceTaskUid);
+ const row=await prisma.searchSetting.findUnique({where:{shop}});
+ if(row)await updateSearchIndexProducts(shop,ids,row);
+}
 async function updateSearchIndexProducts(shop,ids,row){
  const state=stateOf(row),targets=[state.active&&{...state.active,config:state.update?.applied?validateSearchSettings(row.config):state.active.config},state.build&&{uid:state.build.uid,config:validateSearchSettings(row.config)}].filter(t=>t?.uid&&t.config);
  if(!targets.length)return {skipped:true};

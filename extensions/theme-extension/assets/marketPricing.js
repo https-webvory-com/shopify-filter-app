@@ -4,9 +4,10 @@
   const savedPrices = new Map();
   const savedPriceReads = new Map();
   const liveCards = new Map();
-  let liveSource, liveScope = '', liveShop, liveGeneration = 0, liveTimer, liveAbort;
+  let liveSource, liveScope = '', liveShop, liveGeneration = 0, liveTimer, liveRecheck, liveAbort;
   let liveReading = false, liveListeners = false, liveRetry = 0;
   const livePending = new Set();
+  const liveVerify = new Set();
   const cleanId = id => String(id).split('/').pop();
   const savedKey = product => [window.Shopify?.shop,window.Shopify?.country,window.Shopify?.currency?.active,cleanId(product.id||'')].join('|');
   function saved(product){
@@ -36,11 +37,22 @@
     liveGeneration++; liveSource?.close(); liveSource = null;
     liveAbort?.abort(); liveAbort = null;
     clearTimeout(liveTimer); liveTimer = null;
-    liveReading = false; livePending.clear(); liveScope = '';
+    clearTimeout(liveRecheck); liveRecheck = null;
+    liveReading = false; livePending.clear(); liveVerify.clear(); liveScope = '';
   }
-  function queueLive(ids) {
-    ids.forEach(id => { if (liveCards.has(id)) livePending.add(id); });
+  function queueLive(ids, verify = true) {
+    ids.forEach(id => { if (liveCards.has(id)) {livePending.add(id);if(verify)liveVerify.add(id);} });
     if (!liveTimer && !liveReading && livePending.size) liveTimer = setTimeout(readLive, 100);
+  }
+  function scheduleRecheck() {
+    clearTimeout(liveRecheck);
+    if (!liveScope || document.hidden) return;
+    liveRecheck = setTimeout(() => {
+      // Market prices can change without a product notification (for example
+      // after a currency conversion changes). Revalidate only this loaded page.
+      queueLive([...liveCards.keys()]);
+      scheduleRecheck();
+    }, 60000);
   }
   async function readLive() {
     liveTimer = null;
@@ -48,29 +60,49 @@
     const generation = liveGeneration, scope = liveScope;
     const country = window.Shopify?.country, currency = window.Shopify?.currency?.active;
     const ids = [...livePending].slice(0, 40);
+    const verifyIds = ids.filter(id => liveVerify.has(id));
     ids.forEach(id => livePending.delete(id));
+    verifyIds.forEach(id => liveVerify.delete(id));
     liveReading = true;
     const controller = new AbortController(); liveAbort = controller;
-    const timer = setTimeout(() => controller.abort(), 8000);
+    let readTimer;
     try {
-      const params = new URLSearchParams({shop: liveShop, country, currency, ids: ids.join(',')});
+      // Ask the server to verify and persist this scope independently. Only IDs
+      // and context are sent; trusted Shopify reads supply the saved amounts.
       const origin = typeof API_DOMAIN === 'string' ? API_DOMAIN : 'https://aisearchfilter.webvory.com';
-      const response = await fetch(origin + '/api/market-prices?' + params, {signal: controller.signal, cache: 'no-store'});
-      if (!response.ok) throw Error('Price refresh unavailable');
+      if(verifyIds.length){
+        const params = new URLSearchParams({shop:liveShop,country,currency,ids:verifyIds.join(',')});
+        void fetch(origin+'/api/market-prices?'+params,{method:'POST',cache:'no-store',signal:controller.signal}).then(response=>{
+          if(!response.ok&&generation===liveGeneration)verifyIds.forEach(id=>liveVerify.add(id));
+        }).catch(()=>{if(generation===liveGeneration)verifyIds.forEach(id=>liveVerify.add(id));});
+      }
+      const params = new URLSearchParams({shop:liveShop,country,currency,ids:ids.join(',')});
+      readTimer = setTimeout(()=>controller.abort(),8000);
+      const response = await fetch(origin+'/api/market-prices?'+params,{cache:'no-store',signal:controller.signal});
+      if(!response.ok)throw Error('Saved price refresh unavailable');
       const data = await response.json();
-      if (generation !== liveGeneration || scope !== liveScope || country !== window.Shopify?.country || currency !== window.Shopify?.currency?.active) return;
-      if (data.country !== country || data.currency !== currency) throw Error('Price scope changed');
-      const records = new Map((data.products || []).filter(product => ids.includes(cleanId(product.id)) && saved(product)).map(product => [cleanId(product.id), product]));
-      // A country without complete saved coverage uses the existing Shopify
-      // storefront fallback, in this browser's market. Never substitute a
-      // different country's saved price. Bound parallel requests to eight.
+      clearTimeout(readTimer);
+      if(data.country!==country||data.currency!==currency)throw Error('Price scope changed');
+      const records = new Map((data.products||[]).filter(product=>ids.includes(cleanId(product.id))&&saved(product)).map(product=>[cleanId(product.id),product]));
+      // Initial reads can use the dataset immediately. The server independently
+      // verifies those saved amounts; its SSE event is sent only after DB/index
+      // completion, so the next read uses the same values as sorting/filtering.
+      // Countries with missing coverage retain the existing storefront fallback.
       let next = 0;
       await Promise.all(Array.from({length: Math.min(8, ids.length)}, async () => {
         while (next < ids.length) {
+          if (controller.signal.aborted) return;
           const id = ids[next++], card = liveCards.get(id);
           if (records.has(id) || !card?.product.handle) continue;
           try {
-            const source = await getProduct(card.product.handle, true);
+            const source = await getProduct(card.product.handle, true, controller.signal);
+            if (cleanId(source.id) !== id) throw Error('Storefront product changed');
+            const byId = new Map((source.variants || []).map(variant => [cleanId(variant.id), variant]));
+            if (!card.product.variants?.length || card.product.variants.some(variant => {
+              const value = byId.get(cleanId(variant.id));
+              return !value || !Number.isFinite(value.price) || value.price < 0 ||
+                (value.compare_at_price != null && (!Number.isFinite(value.compare_at_price) || value.compare_at_price < 0)) || typeof value.available !== 'boolean';
+            })) throw Error('Incomplete storefront variant prices');
             records.set(id, {
               id, priceMin: source.price_min / 100, priceMax: source.price_max / 100,
               variants: (source.variants || []).map(variant => ({id: variant.id, price: variant.price / 100, compareAtPrice: variant.compare_at_price == null ? null : variant.compare_at_price / 100, available: variant.available === true})),
@@ -79,7 +111,7 @@
           } catch { /* Keep the last displayed price during an outage. */ }
         }
       }));
-      if (generation !== liveGeneration || country !== window.Shopify?.country || currency !== window.Shopify?.currency?.active) return;
+      if (generation !== liveGeneration || scope !== liveScope || country !== window.Shopify?.country || currency !== window.Shopify?.currency?.active) return;
       for (const id of ids) {
         const card = liveCards.get(id), source = records.get(id);
         if (!card) continue;
@@ -102,9 +134,10 @@
         liveRetry = Math.min((liveRetry || 1500) * 2, 30000);
       }
     } finally {
-      clearTimeout(timer);
+      clearTimeout(readTimer);
       if (generation === liveGeneration) {
-        liveReading = false; liveAbort = null;
+        liveReading = false;
+        liveAbort = null;
         if (livePending.size && !document.hidden) liveTimer = setTimeout(readLive, liveRetry || 100);
       }
     }
@@ -122,10 +155,20 @@
     try { source = new window.EventSource(origin + '/api/price-events?' + params); }
     catch { stopLive(); return; } // Optional live transport must not break cards.
     liveSource = source;
-    source.addEventListener('ready', () => { if (source === liveSource) queueLive([...liveCards.keys()]); });
+    // Do not depend on stream readiness to correct a stale saved price.
+    queueLive(ids);
+    scheduleRecheck();
+    let connected = false;
+    source.addEventListener('ready', () => {
+      if (source !== liveSource) return;
+      // A delayed first handshake can miss completion of the initial job.
+      // Re-read on every ready frame, but only re-verify on later reconnects.
+      queueLive([...liveCards.keys()], connected);
+      connected = true;
+    });
     source.addEventListener('prices', event => {
       if (source !== liveSource) return;
-      try { const data = JSON.parse(event.data); if (Array.isArray(data.ids)) queueLive(data.ids); } catch { /* Ignore malformed notifications. */ }
+      try { const data = JSON.parse(event.data); if (Array.isArray(data.ids)) queueLive(data.ids, false); } catch { /* Ignore malformed notifications. */ }
     });
   }
   function watchCollection(products, {shop, append = false, onPriced, onChanged}) {
@@ -183,13 +226,16 @@
     try{for(const [id,product]of await read)result.set(id,product);return result;}
     finally{savedPriceReads.delete(readKey);}
   }
-  async function getProduct(handle, fresh = false) {
+  async function getProduct(handle, fresh = false, signal) {
     const root = window.Shopify?.routes?.root || '/';
     const key = [root, window.Shopify?.country, window.Shopify?.currency?.active, handle].join('|');
     const saved = cache.get(key);
     if (!fresh && saved && Date.now() - saved.at < 60000) return saved.promise;
     const promise = (async () => {
       const controller = new AbortController();
+      const abort = () => controller.abort();
+      if (signal?.aborted) controller.abort();
+      else signal?.addEventListener('abort', abort, {once: true});
       // HTTP/1 connections can queue these behind the first product images.
       // Keep the price request alive through that queue without holding cards.
       const timer = setTimeout(() => controller.abort(), 8000);
@@ -201,7 +247,7 @@
         const product = await response.json();
         if (!Number.isFinite(product.price_min) || !Number.isFinite(product.price_max)) throw new Error('Invalid storefront price');
         return product;
-      } finally { clearTimeout(timer); }
+      } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
     })();
     cache.set(key, {at:Date.now(),promise});
     while (cache.size > 200) cache.delete(cache.keys().next().value);

@@ -196,6 +196,20 @@ test('catalog changes restart offset scans and update or delete only that storeâ
  assert.ok(f.calls.some(c=>c[0]==='wait'&&c[1]===8));
 });
 
+test('country price completion updates the serving search projection before returning, without rebuilding it',async()=>{
+ const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();
+ const uid=(await f.service.getSearchIndexContext(shop)).uid,previous=plain(f.indexes.get(uid).get('2'));
+ const clears=f.calls.filter(c=>c[0]==='clear').length;
+ f.catalog[0].marketPriceMin_IN=13300;f.catalog[0].marketPriceCurrency_IN='INR';
+ f.catalog[0].variantPrices[0].marketPrices={IN:{price:13300,currency:'INR'}};
+ await f.service.refreshSearchIndexProductPrices(shop,['1'],8);
+ assert.equal(f.indexes.get(uid).get('1').marketPriceMin_IN,13300);
+ assert.equal(f.indexes.get(uid).get('1').variantPrices[0].marketPrices.IN.price,13300);
+ assert.deepEqual(f.indexes.get(uid).get('2'),previous);
+ assert.equal(f.calls.filter(c=>c[0]==='clear').length,clears);
+ assert.ok(f.jobs.some(j=>j.name==='SEARCH_INDEX_PRODUCTS'),'Durable recovery delta remains queued');
+});
+
 test('query policies keep normal collections on the shared index and isolate search field scopes',async()=>{
  const f=await fixture(settings({fields:fields({title:{weight:0},sku:{weight:1,suggest:true}}),smartSkuSearch:true,broadMatch:false}));
  await f.service.scheduleSearchIndex(shop);await f.drain();

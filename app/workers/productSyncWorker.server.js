@@ -4,6 +4,10 @@ import prisma from "../db.server.js";
 import { syncErrorMessage } from "../utils/syncError.js";
 
 export async function processProductSyncJob(job, token) {
+  if(job.name==='REFRESH_MARKET_PRICES'){
+    const {processMarketPriceRefresh}=await import('../services/marketPriceRefresh.server.js');
+    return processMarketPriceRefresh(job);
+  }
   if(job.name==='INSTALL_MARKET_PRICES'){
     const {prepareInstallationPrices}=await import('../services/marketPriceInstallation.server.js');
     return prepareInstallationPrices(job.data.shop);

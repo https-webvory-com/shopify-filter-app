@@ -174,6 +174,10 @@ async function handleOrderCancelled(shop, orderPayload) {
 }
 
 async function handleProductUpdate(shop, payload, job) {
+  const {withProductPriceLock}=await import('../services/productPriceLock.server.js');
+  return withProductPriceLock(shop,payload.admin_graphql_api_id||payload.id,assertOwned=>handleLockedProductUpdate(shop,payload,job,assertOwned));
+}
+async function handleLockedProductUpdate(shop, payload, job, assertOwned) {
   if (!payload.id) throw new Error("Product webhook is missing its product ID");
   const productId = payload.admin_graphql_api_id || `gid://shopify/Product/${payload.id}`;
   // Load at processing time to avoid the Redis -> worker -> sync -> Redis cycle.
@@ -198,7 +202,9 @@ async function handleProductUpdate(shop, payload, job) {
       collectionIds: [...new Set([...beforeLinks.map(link=>link.collectionId),...(before?.collections||[])])],
     }});
   }
+  await assertOwned();
   await syncSingleProduct(shop, admin, productId, { retrySearchErrors: true });
+  await assertOwned();
   const after=await read();
   if(job.data.rankingBefore.fingerprint!==productRankingFingerprint(after)) {
     const collectionIds=[...new Set([...job.data.rankingBefore.collectionIds,...beforeLinks.map(link=>link.collectionId),...(after?.collections||[])])];
