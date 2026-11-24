@@ -2413,27 +2413,8 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       const card = grid.querySelector('[data-pricing-render="' + version + '"][data-pricing-index="' + index + '"]');
       updateMarketCardPrice(card, window.cfpMarketPricing.latest?.(product) || product);
     };
-    const pricesChanged = () => {
-      // Keep the shopper's scroll position and cards stable. A price change
-      // can alter sort order, sale/price bands or matching variant eligibility.
-      // Let the shopper request a new canonical result set explicitly.
-      if (grid.parentElement.querySelector('.cfp-live-price-notice')) return;
-      const notice = document.createElement('div');
-      notice.className = 'cfp-live-price-notice'; notice.setAttribute('role', 'status');
-      const button = document.createElement('button'); button.type = 'button';
-      button.textContent = 'Prices updated. Refresh results';
-      button.addEventListener('click', () => {
-        notice.remove(); collectionRankingTokens.clear(); initialRankingToken = null;
-        activeFilters.page = 1;
-        // Browser snapshots must not restore the old ordering on this action.
-        try { for (let i = sessionStorage.length - 1; i >= 0; i--) {
-          const key = sessionStorage.key(i); if (key?.startsWith(browserResultPrefix)) sessionStorage.removeItem(key);
-        } } catch {}
-        fetchAndRenderData(false, false);
-      });
-      notice.append(button); grid.before(notice);
-    };
-    if (templateName !== 'search') window.cfpMarketPricing?.watchCollection?.(pricingProducts, {shop, append:isLoadMore, onPriced:patchPrice, onChanged:pricesChanged});
+    // Apply live prices in place without adding a notice or interrupting browsing.
+    if (templateName !== 'search') window.cfpMarketPricing?.watchCollection?.(pricingProducts, {shop, append:isLoadMore, onPriced:patchPrice});
     window.cfpMarketPricing?.apply(pricingProducts, (product, index) => {
       const card = grid.querySelector(`[data-pricing-render="${version}"][data-pricing-index="${index}"]`);
       updateMarketCardPrice(card, window.cfpMarketPricing.latest?.(product) || product);

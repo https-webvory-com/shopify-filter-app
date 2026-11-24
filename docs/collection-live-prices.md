@@ -53,14 +53,12 @@ This is not a country-wide freshness audit: off-page products still depend on
 webhooks or subsequent checks. Unvisited markets require their own reconciliation
 for market-wide changes that produce no product notification.
 
-Live updates preserve the shopper's current ordering and loaded cards. A
-"Prices updated. Refresh results" action requests the existing canonical collection
-flow, clears its old ranking token and browser snapshots, and restarts at page one.
-This lets the shopper refresh sort order and price/sale filter membership; SSE does
-not itself recompute ranking or silently move/remove products. The existing
-background collection preparation still determines when replacement results are
-available. Events apply to displayed products; products newly entering a price
-band require refreshing results.
+Live updates silently patch displayed prices while preserving the shopper's
+current ordering, loaded cards and scroll position. No price-update notice or
+refresh button is inserted above the collection cards. SSE does not itself
+recompute ranking or move/remove products. Subsequent collection requests use
+the existing result flow and background preparation; live card updates alone
+do not refresh price/sale filter membership or add newly eligible products.
 
 Deployment requires matching backend and theme-extension assets, shared Redis
 connectivity between web and worker processes, and a proxy that supports streaming.
