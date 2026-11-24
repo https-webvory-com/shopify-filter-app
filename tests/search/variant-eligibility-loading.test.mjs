@@ -26,7 +26,7 @@ test('search color intent and selected size restrict the same available variant,
  assert.deepEqual(await availableProductIds(model,{shop:'fixture'},{Size:['M']},aliases,null,{database:{$queryRaw:async()=>{throw Error('fallback');}},priceContext:context}),['1']);
 });
 
-test('search intent adds one bound same-variant predicate to the existing SQL read; collections keep the original SQL',async()=>{
+test('search intent adds one bound same-variant predicate; collection reads do not inherit query colors',async()=>{
  const queries=[];
  const database={$queryRaw:async query=>{queries.push(query);return [{id:'gid://shopify/Product/1'}];}};
  const model={findMany:()=>{throw Error('Must not hydrate candidate variants');}};
@@ -35,16 +35,30 @@ test('search intent adds one bound same-variant predicate to the existing SQL re
  const context={searchColorValues:["Red' OR 1=1 --"]};
  assert.deepEqual(await availableProductIds(model,where,filters,[],null,{database,priceContext:context}),['1']);
  assert.equal(queries.length,1);
- assert.ok(queries[0].text.includes("IN ('color','colour')"));
+ assert.ok(queries[0].values.includes('color'));assert.ok(queries[0].values.includes('colour'));
  assert.ok(queries[0].text.includes('pc."collectionId"'));
  assert.ok(queries[0].text.includes('v."available" = true'));
  assert.ok(queries[0].values.includes(context.searchColorValues[0].toLowerCase()));
  assert.ok(!queries[0].text.includes(context.searchColorValues[0]));
  await availableProductIds(model,where,filters,[],null,{database});
  assert.equal(queries.length,2);
- assert.equal(queries[1].text.includes("IN ('color','colour')"),false,'collection path has no additional predicate or query');
+ assert.equal(queries[1].values.includes('colour'),false,'collection path has no additional query-color predicate or query');
  assert.deepEqual(await availableProductIds(model,where,filters,[],null,{database,priceContext:{searchColorValues:[]}}),[]);
  assert.equal(queries.length,2,'unknown query color returns empty without another database call');
+});
+
+test('eligibility resolves option positions once per scoped product while retaining same-variant predicates',async()=>{
+ let query;
+ const database={$queryRaw:async value=>{query=value;return [{id:'gid://shopify/Product/1'}];}};
+ const where={shop:'fixture',status:{equals:'active',mode:'insensitive'},id:{in:['gid://shopify/Product/1']},collections:{some:{collectionId:'collection'}}};
+ assert.deepEqual(await availableProductIds({findMany:()=>{throw Error('Unexpected fallback');}},where,{Color:['Black'],Size:['M']},[],{min:99,max:159},{database}),['1']);
+ const variantRead=query.text.indexOf('FROM "Variant" v');
+ assert.ok(variantRead>query.text.lastIndexOf('jsonb_array_elements'),'option JSON walks occur before the variant EXISTS read');
+ assert.equal(query.text.match(/jsonb_array_elements/g).length,2);
+ assert.ok(query.text.includes('AS MATERIALIZED'));
+ assert.ok(query.text.includes('v."productId" = p."id"'));assert.ok(query.text.includes('v."available" = true'));
+ for(const bound of [99,159,'fixture','collection','black','m'])assert.ok(query.values.includes(bound));
+ assert.ok(query.text.includes('IS NULL THEN NULL'),'missing option names cannot match an empty selected value');
 });
 
 test('open-ended prices omit the upper bound in SQL and Prisma fallback',async()=>{

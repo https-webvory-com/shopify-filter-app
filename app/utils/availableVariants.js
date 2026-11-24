@@ -60,20 +60,33 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
   }
   if(predicates.length)variants.push(Prisma.sql`(${Prisma.join(predicates,' OR ')})`);
  }
- for(const [name,values]of Object.entries(filters||{}))if(values.length){
-  const expanded=selectedVariantValues(name,values,mergedValues),key=normalize(name);
-  // Match option names at their actual position. All predicates refer to this
-  // same available variant, including price, aliases and empty option values.
-  variants.push(Prisma.sql`(
+ const optionPositions=[];
+ function optionValue(names){
+  const lookup=Prisma.sql`FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p."options") = 'array' THEN p."options" ELSE '[]'::jsonb END) WITH ORDINALITY AS opt(value, position)
+   WHERE lower(btrim(coalesce(opt.value->>'name', ''), ${trimCharacters})) IN (${Prisma.join(names)})
+   ORDER BY opt.position LIMIT 1`;
+  if(sortPage)return Prisma.sql`(
    SELECT CASE opt.position
     WHEN 1 THEN lower(btrim(coalesce(v."option1", ''), ${trimCharacters}))
     WHEN 2 THEN lower(btrim(coalesce(v."option2", ''), ${trimCharacters}))
     WHEN 3 THEN lower(btrim(coalesce(v."option3", ''), ${trimCharacters}))
-    ELSE '' END
-   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p."options") = 'array' THEN p."options" ELSE '[]'::jsonb END) WITH ORDINALITY AS opt(value, position)
-   WHERE lower(btrim(coalesce(opt.value->>'name', ''), ${trimCharacters})) = ${key}
-   ORDER BY opt.position LIMIT 1
-  ) IN (${Prisma.join(expanded)})`);
+    ELSE '' END ${lookup}
+  )`;
+  // Resolve the option name once per scoped product, rather than walking the
+  // same JSON option list again for each candidate variant in the EXISTS read.
+  const name='cfpOptionPosition'+optionPositions.length,position=Prisma.raw(`p."${name}"`);
+  optionPositions.push(Prisma.sql`(SELECT opt.position ${lookup}) AS ${Prisma.raw(`"${name}"`)}`);
+  return Prisma.sql`CASE ${position}
+   WHEN 1 THEN lower(btrim(coalesce(v."option1", ''), ${trimCharacters}))
+   WHEN 2 THEN lower(btrim(coalesce(v."option2", ''), ${trimCharacters}))
+   WHEN 3 THEN lower(btrim(coalesce(v."option3", ''), ${trimCharacters}))
+   ELSE CASE WHEN ${position} IS NULL THEN NULL ELSE '' END END`;
+ }
+ for(const [name,values]of Object.entries(filters||{}))if(values.length){
+  const expanded=selectedVariantValues(name,values,mergedValues),key=normalize(name);
+  // Match option names at their actual position. All predicates refer to this
+  // same available variant, including price, aliases and empty option values.
+  variants.push(Prisma.sql`(${optionValue([key])}) IN (${Prisma.join(expanded)})`);
  }
  if(priceContext.searchColorValues){
   const values=priceContext.searchColorValues.map(normalize);
@@ -81,16 +94,7 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
   // Search intent is already resolved to exact catalog colors. Do not expand
   // it through broader merchant aliases a second time. This predicate shares
   // the same v row as explicit size/color/price restrictions.
-  variants.push(Prisma.sql`(
-   SELECT CASE opt.position
-    WHEN 1 THEN lower(btrim(coalesce(v."option1", ''), ${trimCharacters}))
-    WHEN 2 THEN lower(btrim(coalesce(v."option2", ''), ${trimCharacters}))
-    WHEN 3 THEN lower(btrim(coalesce(v."option3", ''), ${trimCharacters}))
-    ELSE '' END
-   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p."options") = 'array' THEN p."options" ELSE '[]'::jsonb END) WITH ORDINALITY AS opt(value, position)
-   WHERE lower(btrim(coalesce(opt.value->>'name', ''), ${trimCharacters})) IN ('color','colour')
-   ORDER BY opt.position LIMIT 1
-  ) IN (${Prisma.join(values)})`);
+  variants.push(Prisma.sql`(${optionValue(['color','colour'])}) IN (${Prisma.join(values)})`);
  }
  if(sortPage){
   const direction=priceContext.direction==='desc'?Prisma.sql`DESC`:Prisma.sql`ASC`;
@@ -135,8 +139,12 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
   },{timeout:10000});
   return database.$queryRaw(query);
  }
- clauses.push(Prisma.sql`EXISTS (SELECT 1 FROM "Variant" v WHERE ${Prisma.join(variants,' AND ')})`);
- const rows=await database.$queryRaw(Prisma.sql`SELECT p."id" FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')} ORDER BY p."id"`);
+ const membership=Prisma.sql`EXISTS (SELECT 1 FROM "Variant" v WHERE ${Prisma.join(variants,' AND ')})`;
+ const rows=await database.$queryRaw(optionPositions.length?Prisma.sql`
+  WITH scoped_products AS MATERIALIZED (
+   SELECT p."id", ${Prisma.join(optionPositions)} FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')}
+  ) SELECT p."id" FROM scoped_products p WHERE ${membership} ORDER BY p."id"`
+  :Prisma.sql`SELECT p."id" FROM "Product" p WHERE ${Prisma.join([...clauses,membership],' AND ')} ORDER BY p."id"`);
  return rows.map(row=>row.id.split('/').pop());
 }
 

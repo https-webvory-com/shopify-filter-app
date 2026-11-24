@@ -62,8 +62,15 @@ test('candidate reads include every capped page, rather than treating the first 
   assert.equal(calls.candidates.length,2);assert.equal(calls.eligibility[0].where.id.in.length,2);
 });
 
-test('single-category requests and submitted search keep their existing eligibility path',async()=>{
-  for(const options of [{categories:{option_Color:'option_Color IN ["Blue"]'}},{isSearch:true}]){
+test('the first and second category already narrow variant work to the complete indexed candidates',async()=>{
+  for(const categories of [{option_Color:'option_Color IN ["Blue"]'},{option_Color:'option_Color IN ["Blue"]',option_Size:'option_Size IN ["M"]'}]){
+    const clauses=Object.values(categories),{calls}=await check({categories});assert.equal(calls.candidates.length,1);assert.equal(calls.eligibility[0].where.id.in.length,2);
+    for(const clause of clauses)assert.ok(calls.candidates[0].filter.includes(clause));
+  }
+});
+
+test('price-only requests and submitted search keep their existing eligibility path',async()=>{
+  for(const options of [{categories:{}},{isSearch:true}]){
     const {calls}=await check(options);assert.equal(calls.candidates.length,0);assert.equal(calls.eligibility[0].where.id,undefined);
   }
 });

@@ -802,10 +802,10 @@ export const loader = async ({ request, context }) => {
       const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
       // Cards need only the intersection of the selected categories. Restrict
       // the same-variant database check to complete indexed candidates instead
-      // of scanning the whole collection for every multi-filter combination.
+      // of scanning the whole collection on the first filter or later changes.
       // Facet requests retain their wider scope for disjunctive counts.
       const candidateFilters=fastCards&&!isSearch&&!searchQuery&&canonicalVariantPrice&&!variantPriceV2&&
-        Object.keys(categoryFilters).length+Number(nativeRanges.length>0)>=3
+        Object.keys(categoryFilters).length>0
         ? [...baseFilters,...Object.values(categoryFilters),...intentFilters] : null;
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
       for(const range of ranges){
