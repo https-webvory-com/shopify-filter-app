@@ -2984,7 +2984,7 @@ facet-filters-form,
 .cfp-layout-wrapper #cfp-top-bar {
   position: sticky;
   top: var(--cfp-sticky-top, 0px);
-  z-index: 3;
+  z-index: 2;
   background: var(--cfp-filter-bar-bg, transparent);
 }
 
