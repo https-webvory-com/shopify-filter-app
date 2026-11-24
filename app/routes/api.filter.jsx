@@ -107,6 +107,7 @@ export const loader = async ({ request, context }) => {
   let variantEligibilityDetail;
   let rankingPreparationMs=0;
   let membershipProof=null;
+  let membershipReuse='not-requested';
   let searchNormalizedFacetCounts=null;
   console.log("API Filter Request: ", request.url);
   try {
@@ -1155,45 +1156,47 @@ export const loader = async ({ request, context }) => {
     const missingNativeOrder=needsShopifyOrder&&!Array.isArray(collectionBestSellingIds);
     // Age alone must not block browsing. A complete last-good Shopify snapshot
     // remains the ranking source while its durable refresh runs in the worker.
-    if (missingNativeOrder&&!canPreviewPins) {
-      const orderStatus = collectionBestSellingState.status === "stale"
-        ? collectionBestSellingState.refreshState === "failed" ? "failed" : "pending"
-        : collectionBestSellingState.status;
-      return data({ products: [], totalCount: 0, debug: {
-        collectionBestSellingApplied: false,
-        collectionBestSellingStatus: orderStatus,
-        collectionBestSellingRefreshState: collectionBestSellingState.refreshState,
-        collectionBestSellingPending: orderStatus === "pending",
-      } }, { status: orderStatus === "failed" ? 503 : 202,
-        headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } });
-    }
-
     if(useRankedCollectionPagination&&resolvedCollectionId&&!customerTagsStr){
       membershipProof=await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
         marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
-        orderRevision:collectionBestSellingState.revision});
+        orderRevision:collectionBestSellingState.revision,snapshot:needsShopifyOrder});
       const parentToken=url.searchParams.get('membershipParentToken');
       const parentQuery=url.searchParams.get('membershipParentQuery');
+      if(parentToken)membershipReuse='unavailable';
       if(!rankingSession&&membershipProof&&parentToken&&parentQuery&&parentQuery.length<=4096)try{
         const parentUrl=new URL(request.url);parentUrl.search=parentQuery;
+        membershipReuse='different-filters';
         if(narrowerCollectionFilters(parentUrl,request.url)){
           const parentFingerprint=marketRankingFingerprint(collectionRankingFingerprint(parentUrl),marketVersion);
           const parent=await getCollectionRankingSession(shop,parentFingerprint,parentToken);
-          if(parent.membershipProof===membershipProof){
+          membershipReuse='changed-context';
+          if(parent?.membershipProof===membershipProof){
+            const snapshot=membershipProof.startsWith('snapshot-v1:');
             const filter=allFiltersList.filter((_,index)=>index!==marketFilterIndex);
             const parentHasFilters=[...parentUrl.searchParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+            membershipReuse='membership-unavailable';
             const ids=await readNarrowerCollectionMembership(meiliClient.index('products'),{
-              filter,parentIds:parent.ids,shop,baseAlreadyScoped:!parentHasFilters});
+              filter,parentIds:parent.ids,shop,baseAlreadyScoped:!snapshot&&!parentHasFilters});
             const currentProof=ids?await collectionMembershipProof({shop,collectionId:resolvedCollectionId,configuration:preparationRevision,
               marketVersion,rule:activeRule,pinningRule:activePinningRule,mergedValues,globalSettings,
-              orderRevision:collectionBestSellingState.revision}):null;
+              orderRevision:collectionBestSellingState.revision,snapshot:needsShopifyOrder}):null;
+            if(ids)membershipReuse='changed-during-read';
             if(ids&&currentProof===membershipProof){
               const metadata=Object.fromEntries(ids.filter(id=>parent.metadata?.[id]).map(id=>[id,parent.metadata[id]]));
               rankingSession=await saveCollectionRankingSession(shop,rankingFingerprint,ids,parent.updatedAt,metadata,membershipProof);
+              membershipReuse='reused';
             }
           }
         }
-      }catch(error){console.info('CFP: Narrowed membership unavailable:',error.name);}
+      }catch(error){membershipReuse='session-unavailable';console.info('CFP: Narrowed membership unavailable:',error.name);}
+    }
+
+    if(missingNativeOrder&&!rankingSession&&!canPreviewPins){
+      const orderStatus=collectionBestSellingState.status==='stale'
+        ?collectionBestSellingState.refreshState==='failed'?'failed':'pending':collectionBestSellingState.status;
+      return data({products:[],totalCount:0,debug:{collectionBestSellingApplied:false,collectionBestSellingStatus:orderStatus,
+        collectionBestSellingRefreshState:collectionBestSellingState.refreshState,collectionBestSellingPending:orderStatus==='pending',membershipReuse}},
+        {status:orderStatus==='failed'?503:202,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     }
 
     // A warmup only needs to schedule/refresh the complete ranking. Pending
@@ -1834,7 +1837,7 @@ export const loader = async ({ request, context }) => {
         ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
-      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,variantEligibilityDetail,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
+      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,variantEligibilityDetail,membershipReuse,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     }
 

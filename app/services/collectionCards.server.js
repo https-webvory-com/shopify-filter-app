@@ -44,7 +44,7 @@ const store=createCollectionCardStore({redis,readState:createCardStateReader(red
  observe:event=>recordCardEvent(event).catch(()=>{}),
  validateCards:(entry,prepared,options)=>validateCollectionCardDocuments(meili.index('products'),entry,prepared,{...options,batchOwner:meili}),
  createSession,
- makeMembershipProof:(spec,collectionId)=>collectionMembershipProof({shop:spec.shop,collectionId,configuration:spec.revision,marketVersion:spec.marketAvailabilityVersion,rule:spec.rule,pinningRule:spec.pinningRule,mergedValues:spec.mergedValues,globalSettings:spec.globalSettings,orderRevision:spec.orderRevision}),
+ makeMembershipProof:(spec,collectionId)=>collectionMembershipProof({shop:spec.shop,collectionId,configuration:spec.revision,marketVersion:spec.marketAvailabilityVersion,rule:spec.rule,pinningRule:spec.pinningRule,mergedValues:spec.mergedValues,globalSettings:spec.globalSettings,orderRevision:spec.orderRevision,snapshot:spec.needsShopifyOrder===true}),
 });
 export const getPreparedCollectionCards=store.get;
 export const getPreparedCollectionFilters=(request,options)=>publishedPages.get(request,{...options,filtersOnly:true});

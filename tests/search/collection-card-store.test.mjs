@@ -33,6 +33,13 @@ test('retained working cards use current layout settings without rebuilding thei
  current={...current,showOnlyInStock:true};assert.equal(await f.store.get(f.request),null);
 });
 
+test('working card snapshots retain the complete collection reuse proof when creating a browsing session',async()=>{
+ const proof='snapshot-v1:'+'a'.repeat(64),f=fixture({makeMembershipProof:async()=>proof});
+ await(await f.begin()).finish(f.payload,'fp');
+ assert.ok(await f.store.get(f.request));
+ assert.equal(f.sessions.at(-1).entry.membershipProof,proof);
+});
+
 test('saved first fifty supply the complete first 25 before a separate card copy or pin fallback',async()=>{
  const f=fixture();
  f.prepared.ids=Array.from({length:70},(_,i)=>String(i+1));f.setSource(encodePreparation(f.prepared));

@@ -6,6 +6,9 @@ const assets='extensions/theme-extension/assets/';
 for(const name of ['collectionLoading','collectionFilterPro','collectionPreviewStream','collectionFilters']){
   let source=await fs.readFile(assets+name+'.js','utf8');
   if(name==='collectionFilterPro'){
+    const membership=(await fs.readFile('app/utils/collectionFilterMembership.js','utf8')).split('// The parent IDs')[0].replace(/^import[^\n]*\n/,'').replaceAll('export function','function');
+    source=source.replace(/\/\* CFP_MEMBERSHIP_START \*\/[\s\S]*?\/\* CFP_MEMBERSHIP_END \*\//,
+      '/* CFP_MEMBERSHIP_START */\nconst canNarrowCollectionMembership=(()=>{\n'+membership+'\nreturn narrowerCollectionFilters;\n})();\n  /* CFP_MEMBERSHIP_END */');
     const shared=(await fs.readFile('app/utils/priceBounds.js','utf8')).replace('export function','function');
     source=source.replace(/\/\* CFP_PRICE_BOUNDS_START \*\/[\s\S]*?\/\* CFP_PRICE_BOUNDS_END \*\//,
       '/* CFP_PRICE_BOUNDS_START */\n'+shared+'\n  /* CFP_PRICE_BOUNDS_END */');

@@ -11,7 +11,7 @@ async function read(cards,full){
  const context={URL,sidebar,globalSettings:{},cfpLastSettings:[],cfpLastFacets:{},cfpLastTotalCount:0,window:{},document:{createElement:node},wishlistProducts:new Map(),
   fetchCollectionResponse:async url=>{calls.requests.push(new URL(url));return {status:200,json:async()=>full};},
   renderFilterSidebar:()=>calls.renders++,renderBreadcrumbs(){},updateActiveCountBadge(){},updatePriceSortNotice(){},updateProductCount(){},renderPagination(){},syncWishlistProducts(){},saveBrowserResult(){},
-  getProductContainer:()=>({querySelectorAll:()=>[]}),renderProducts:async()=>{},collectionRankingTokens:new Map(),activeFilters:{},
+  getProductContainer:()=>({querySelectorAll:()=>[]}),renderProducts:async()=>{},collectionRankingTokens:new Map(),activeFilters:{},rememberCollectionMembership(){},
  };
  vm.createContext(context);vm.runInContext(complete,context);
  await context.completeCollectionFacets(cards,'https://fixture/api/filter?shop=fixture.myshopify.com&collectionId=1&sortBy=price-ascending&responseProfile=fast-cards-v1',{aborted:false},false,'key');return calls;

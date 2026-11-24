@@ -24,8 +24,8 @@ function fixture(options={}){
  return{store,request,values,rows,ids,payload,publish,advance:ms=>time+=ms,now:()=>time,sessionCalls:()=>sessionCalls,lastSession:()=>lastSession};
 }
 
-test('published first page retains a complete membership proof for the first filter',async()=>{
- const f=fixture(),proof='a'.repeat(64);
+for(const proof of ['a'.repeat(64),'snapshot-v1:'+'a'.repeat(64)])test('published first page retains a complete membership proof for the first filter '+proof.slice(0,12),async()=>{
+ const f=fixture();
  await f.publish({membershipProof:proof});
  const first=await(await f.store.get(f.request())).json();
  const saved=decodePreparation([...f.rows.values()][0].payload);

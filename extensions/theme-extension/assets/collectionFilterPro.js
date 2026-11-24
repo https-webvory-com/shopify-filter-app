@@ -889,7 +889,47 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   }
 
   let lastFilterValues;
-  let lastMembershipResult = null;
+  /* CFP_MEMBERSHIP_START */
+const canNarrowCollectionMembership=(()=>{
+const baseKeys=new Set(['shop','collectionId','collectionHandle','locale','language','country','sortBy','limit','q','isSearch','customerTags','customer_tags']);
+const transportKeys=new Set(['page','responseProfile','rankingToken','membershipParentToken','membershipParentQuery']);
+const clean=id=>String(id).split('/').pop();
+const values=(params,key)=>params.getAll(key).sort();
+
+// Adding a new filter category narrows the previous result. Adding another
+// value to an existing category can broaden it, so that uses full ranking.
+function narrowerCollectionFilters(parentUrl,childUrl){
+ const parent=new URL(parentUrl).searchParams,child=new URL(childUrl).searchParams;
+ for(const key of baseKeys)if(JSON.stringify(values(parent,key))!==JSON.stringify(values(child,key)))return false;
+ if(parent.get('page')!=='1'||child.get('page')!=='1')return false;
+ const selected=params=>new Set([...params.keys()].filter(key=>!baseKeys.has(key)&&!transportKeys.has(key)));
+ const prior=selected(parent),next=selected(child);
+ for(const key of prior)if(!next.has(key)||JSON.stringify(values(parent,key))!==JSON.stringify(values(child,key)))return false;
+ return [...next].some(key=>!prior.has(key));
+}
+
+
+return narrowerCollectionFilters;
+})();
+  /* CFP_MEMBERSHIP_END */
+  const collectionMembershipResults = new Map();
+  function rememberCollectionMembership(params,result){
+    if(!result?.rankingToken||result.cfpCards?.preview||result.cfpCards?.prefix||params.get('page')!=='1')return;
+    const query=new URLSearchParams(params);
+    for(const key of ['rankingToken','membershipParentToken','membershipParentQuery','responseProfile'])query.delete(key);
+    query.sort();const key=query.toString();
+    collectionMembershipResults.delete(key);collectionMembershipResults.set(key,{token:result.rankingToken,query:key});
+    // Keep the full unfiltered collection as well as a bounded recent history.
+    if(collectionMembershipResults.size>8){
+      const remove=[...collectionMembershipResults.keys()].find(value=>[...new URLSearchParams(value).keys()].some(name=>name.endsWith('[]')||name==='minPrice'||name==='maxPrice'));
+      collectionMembershipResults.delete(remove??collectionMembershipResults.keys().next().value);
+    }
+  }
+  function collectionMembershipParent(params){
+    const child='https://collection.invalid/api/filter?'+params.toString();
+    return [...collectionMembershipResults.values()].reverse().find(parent=>
+      canNarrowCollectionMembership('https://collection.invalid/api/filter?'+parent.query,child));
+  }
   let pendingFilterScroll = false;
   let initialSearchSettingsRead = false;
   function scrollAfterFilterChange() {
@@ -1054,9 +1094,10 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
         queryParams.set('responseProfile','price-sort-page-v1');
       if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
         queryParams.set('responseProfile','search-fast-cards-v1');
-      if (templateName!=='search'&&!collectionQuery&&hasSelectedFilters && !isLoadMore && activeFilters.page===1 && lastMembershipResult?.token) {
-        queryParams.set('membershipParentToken', lastMembershipResult.token);
-        queryParams.set('membershipParentQuery', lastMembershipResult.query);
+      const membershipParent=templateName!=='search'&&!collectionQuery&&hasSelectedFilters&&!isLoadMore&&activeFilters.page===1?collectionMembershipParent(queryParams):null;
+      if (membershipParent) {
+        queryParams.set('membershipParentToken', membershipParent.token);
+        queryParams.set('membershipParentQuery', membershipParent.query);
       }
       const rankingKeyParams = new URLSearchParams(queryParams);
       rankingKeyParams.delete('page');
@@ -1083,6 +1124,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
             const previousSettings = globalSettings;
             try {
               collectionRankingTokens.set(rankingKey, cachedBrowserResult.rankingToken);
+              rememberCollectionMembership(queryParams,cachedBrowserResult);
               globalSettings = cachedBrowserResult.globalSettings || {};
               await renderProducts(cachedBrowserResult.products, cachedBrowserResult.totalCount, false,
                 cachedBrowserResult.mergedValues, cachedBrowserResult.contextualPricingApplied);
@@ -1178,11 +1220,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       }
       if (data.rankingToken) {
         collectionRankingTokens.set(rankingKey, data.rankingToken);
-        if (!isLoadMore && activeFilters.page===1 && !data.cfpCards?.preview && !data.cfpCards?.prefix) {
-          const source=new URLSearchParams(queryParams);
-          source.delete('rankingToken');source.delete('membershipParentToken');source.delete('membershipParentQuery');
-          lastMembershipResult={token:data.rankingToken,query:source.toString()};
-        }
+        if (!isLoadMore)rememberCollectionMembership(queryParams,data);
       }
       console.log('[CFP] API response:', { products: data.products?.length, totalCount: data.totalCount });
 
@@ -1350,6 +1388,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
         activeFilters.page=1;
         if(rankingKey)collectionRankingTokens.set(rankingKey,full.rankingToken);
       }
+      rememberCollectionMembership(request.searchParams,full);
       if(full.globalSettings){globalSettings=full.globalSettings;window.cfpGlobalSettings=globalSettings;window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);}
       cfpLastSettings=full.settings;cfpLastFacets=full.facets;cfpLastTotalCount=full.totalCount;
       renderFilterSidebar(full.settings,full.facets,full.totalCount);renderBreadcrumbs();updateActiveCountBadge();

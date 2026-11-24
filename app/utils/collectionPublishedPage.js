@@ -128,7 +128,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
   if(external&&readExternalProof&&!externalRevision)return false;
   if(readExternalProof&&externalDependencies&&typeof prepared.reusableDataRevision==='string'&&
     prepared.reusableDataRevision.split(':')[2]!==externalRevision)return false;
-  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),...(typeof membershipProof==='string'&&/^[a-f0-9]{64}$/.test(membershipProof)?{membershipProof}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards,external:Boolean(external),externalDependencies,externalRevision};
+  const entry={version:1,cardPresentationVersion:collectionCardPresentationVersion,marketAvailabilityVersion,...(configuration!=null?{configuration:String(configuration)}:{}),...(typeof membershipProof==='string'&&/^(?:snapshot-v1:)?[a-f0-9]{64}$/.test(membershipProof)?{membershipProof}:{}),shop,collectionId:String(collectionId),aliases:[...aliases],at,ids:prepared.ids,metadata:prepared.metadata,sessionUpdatedAt,payload:cards,external:Boolean(external),externalDependencies,externalRevision};
   if(!valid(entry))return false;
   const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>2*1024*1024)return false;
   // Durable upsert serializes publication and rejects a delayed older builder.

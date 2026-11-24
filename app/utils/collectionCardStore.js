@@ -191,7 +191,8 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      if(facetsReady&&facets&&Array.isArray(cards.settings)){
       cards.facets=facets;cards.cfpCards={version:1,facetsReady:true};
      }
-     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,priceSortField:spec.priceSortField??null,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
+     const membershipProof=makeMembershipProof?await makeMembershipProof(spec,collectionId):null;
+     const entry={version:1,policyVersion:2,cardPresentationVersion:collectionCardPresentationVersion,...identity,...(membershipProof?{membershipProof}:{}),marketAvailabilityVersion:spec.marketAvailabilityVersion??null,priceSortField:spec.priceSortField??null,configuration:spec.revision,state,sequence,sessionUpdatedAt:rankingSession.updatedAt??null,attributes,validationFingerprint,
       ...(typeof previewValidationFingerprint==='string'?{previewValidationFingerprint}:{}),payload:cards,at:now()};
      const encoded=encodePreparation(entry);if(Buffer.byteLength(encoded)>Math.min(maxEntryBytes,maxBytes))return;
      const aliases=new Set([key]);
@@ -207,7 +208,6 @@ export function createCollectionCardStore({redis,readState,validateCards,createS
      const finalState=await readState(identity),finalPrepared=current(finalState,external);
      if(!finalPrepared||stateSignature(finalState,external)!==state||sequenceSignature(finalPrepared)!==sequence)return;
      if(pageSize===50&&publishedPages){
-      const membershipProof=makeMembershipProof?await makeMembershipProof(spec,collectionId):null;
       if(!await publishedPages.publish({request,collectionId,collectionHandle,prepared:finalPrepared,payload,configuration:spec.revision,marketAvailabilityVersion:spec.marketAvailabilityVersion??null,external:entry.external,at:startedAt??entry.at,sessionUpdatedAt:rankingSession.updatedAt??null,membershipProof}))return false;
      }
      if(pageSize===50)await saveCards();

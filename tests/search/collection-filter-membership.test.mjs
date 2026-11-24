@@ -50,3 +50,12 @@ test('unstable or cross-shop membership falls back to full ranking',async()=>{
   assert.equal(await readNarrowerCollectionMembership(index,{filter:[],parentIds,shop:'fixture.myshopify.com'}),null);
  }
 });
+
+test('snapshot reuse checks the full current query and declines matches outside the frozen collection',async()=>{
+ const filter=['shop = "fixture.myshopify.com"','option_Color = "Blue"'];
+ const index={getSettings:async()=>({}),getDocuments:async options=>{
+  assert.deepEqual(options.filter,filter);
+  return {total:2,results:[{id:'1',shop:'fixture.myshopify.com',status:'ACTIVE'},{id:'3',shop:'fixture.myshopify.com',status:'ACTIVE'}]};
+ }};
+ assert.equal(await readNarrowerCollectionMembership(index,{filter,parentIds:['2','1'],shop:'fixture.myshopify.com',baseAlreadyScoped:true}),null);
+});
