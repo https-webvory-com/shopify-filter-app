@@ -25,22 +25,28 @@ try{
   try{
    await page.goto(origin+'/collections/fixture',{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.body.classList.contains('cfp-filters-ready')&&!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)').length===25);
-   const builds=fixture.state.builds;fixture.state.rankingFailure='throw';fixture.state.orderMissing=true;
-   const apply=async choices=>{
+   const builds=fixture.state.builds;fixture.state.rankingFailure='throw';fixture.state.orderMissing=true;fixture.state.apiDelay=300;fixture.state.facetDelay=800;
+   const apply=async(choices,waitForFacets=true)=>{
     const response=page.waitForResponse(r=>r.status()===200&&new URL(r.url()).searchParams.get('responseProfile')==='fast-cards-v1');
     response.catch(()=>{});
     await page.evaluate(choices=>{for(const [name,value,checked=true]of choices){const input=[...document.querySelectorAll('#cfp-sidebar input[type=checkbox]')].find(i=>i.name===name&&i.value===value);if(!input)throw Error('Missing '+name+'='+value);input.checked=checked;input.dispatchEvent(new Event('change',{bubbles:true}));}},choices);
-    const body=await(await response).json();assert.equal(body.debug.membershipReuse,'reused');assert.equal(body.debug.rankingPreparationMs,0);
+    assert.equal(await page.locator('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)').first().isVisible(),true);
+    assert.equal(await page.locator('#cfp-products-container .cfp-skeleton-card').count(),0);
+    const received=await response,body=await received.json();body.requestUrl=received.url();assert.equal(body.debug.membershipReuse,'reused');assert.equal(body.debug.rankingPreparationMs,0);
     await page.waitForFunction(ids=>!document.querySelector('#cfp-products-container.cfp-loading-retained')&&JSON.stringify([...document.querySelectorAll('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)')].map(n=>n.dataset.cfpProductId))===JSON.stringify(ids),body.products.map(p=>String(p.id)));
-    await page.waitForFunction(()=>!document.querySelector('#cfp-sidebar.cfp-loading'));
+    if(waitForFacets)await page.waitForFunction(()=>!document.querySelector('#cfp-sidebar.cfp-loading'));
     assert.equal(fixture.state.builds,builds);return body;
    };
-   const blue=await apply([['option-Color','Blue'],['option-Size','M'],['vendor','Fixture'],['price','0:1000']]);assert.equal(blue.totalCount,40);
+   const first=await apply([['option-Color','Blue']],false);
+   assert.equal(await page.locator('#cfp-sidebar').evaluate(n=>n.classList.contains('cfp-loading')),true);
+   const second=await apply([['option-Size','M']],false);
+   assert.equal(new URL(second.requestUrl).searchParams.get('membershipParentToken'),first.rankingToken);
+   const blue=await apply([['vendor','Fixture'],['price','0:1000']]);assert.equal(blue.totalCount,40);
    const noColor=await apply([['option-Color','Blue',false]]);assert.equal(noColor.totalCount,60);
    const red=await apply([['option-Color','Red']]);assert.equal(red.totalCount,20);
    const removed=await apply([['option-Size','M',false]]);assert.equal(removed.totalCount,20);assert.deepEqual(removed.products.map(p=>p.id),red.products.map(p=>p.id));
    assert.equal(await page.locator('.cfp-order-error,.cfp-facet-error').count(),0);assert.deepEqual(errors,[]);
-   proof.cases.push({width,fourFilters:40,changedColor:20,removedSize:20,newRankingBuilds:fixture.state.builds-builds,currentOrderUnavailable:true,externalRequestsAllowed:0});console.log('PASS '+JSON.stringify(proof.cases.at(-1)));
+   proof.cases.push({width,fourFilters:40,changedColor:20,removedSize:20,newRankingBuilds:fixture.state.builds-builds,currentOrderUnavailable:true,retainsVisibleCards:true,reusesCardTokenBeforeFacets:true,externalRequestsAllowed:0});console.log('PASS '+JSON.stringify(proof.cases.at(-1)));
   }finally{await context.close();}
  }
  await fs.writeFile('scratch/prepared-membership-browser-proof-20261124.json',JSON.stringify(proof,null,2));

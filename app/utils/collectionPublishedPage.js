@@ -74,7 +74,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    }
    const optionCountsChanged=entry.payload.globalSettings?.hideUnavailableVariantsWhenSelected===true&&entry.payload.facets?.variantCountVersion!==1;
    const legacyFacetScope=!hasCurrentCollectionFacetScope(entry.payload);
-   const refreshDue=stockChanged||configurationChanged||catalogChanged||optionCountsChanged||legacyFacetScope||now()-entry.at>=lifetime*1000;
+   const legacyMembershipProof=typeof entry.membershipProof==='string'&&!entry.membershipProof.startsWith('snapshot-v1:');
+   const refreshDue=stockChanged||configurationChanged||catalogChanged||optionCountsChanged||legacyFacetScope||legacyMembershipProof||now()-entry.at>=lifetime*1000;
    if(probe&&refreshDue)return null;
    // Presentation preferences must be fresh even while the last complete
    // product publication is retained. Eligibility changes require a new order.

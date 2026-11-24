@@ -33,7 +33,7 @@ test('browser retains the full collection for changed or removed categories and 
  vm.runInContext(block+'\nthis.remember=rememberCollectionMembership;this.parent=collectionMembershipParent;this.size=()=>collectionMembershipResults.size;',context);
  const base=new URLSearchParams('shop=s&country=IN&collectionHandle=one&sortBy=best-selling&page=1&limit=25');
  const params=(color,size)=>{const p=new URLSearchParams(base);if(color)p.set('options[Color][]',color);if(size)p.set('options[Size][]',size);return p;};
- context.remember(base,{rankingToken:'full'});context.remember(params('Blue'),{rankingToken:'blue'});
+ context.remember(base,{rankingToken:'full'});context.remember(params('Blue'),{rankingToken:'blue',cfpCards:{version:2,preview:true,filtered:true}});
  assert.equal(context.parent(params('Blue','M')).token,'blue');
  context.remember(params('Blue','M'),{rankingToken:'blue-m'});
  assert.equal(context.parent(params('Red','M')).token,'full');
@@ -44,6 +44,8 @@ test('browser retains the full collection for changed or removed categories and 
  const sorted=params('Red');sorted.set('sortBy','price-ascending');assert.equal(context.parent(sorted),undefined);
  context.remember(params('Preview'),{rankingToken:'preview',cfpCards:{preview:true}});
  assert.equal(context.parent(params('Preview','M')).token,'full');
+ context.remember(params('Direct'),{rankingToken:'direct',cfpCards:{version:2,preview:true,filtered:true,directSort:{version:1}}});
+ assert.equal(context.parent(params('Direct','M')).token,'full');
 });
 
 test('filtering a complete prepared native collection reuses order without preparing ranking or waiting for order refresh',async()=>{

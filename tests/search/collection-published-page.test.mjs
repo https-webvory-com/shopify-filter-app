@@ -49,6 +49,18 @@ test('legacy Include facets refresh without discarding already published product
  const fresh=await(await f.store.get(f.request())).json();assert.deepEqual(fresh.products.map(p=>p.id),cards.products.map(p=>p.id));assert.equal(fresh.cfpCards.published,true);
 });
 
+test('legacy native membership proofs refresh in the background while complete cards remain usable',async()=>{
+ const hits=[],f=fixture();
+ await f.publish({membershipProof:'a'.repeat(64)});
+ const response=await f.store.get(f.request(),{onHit:value=>hits.push(value)}),body=await response.json();
+ assert.equal(body.products.length,25);assert.equal(body.totalCount,70);assert.equal(body.cfpCards.refreshDue,true);
+ await Promise.resolve();assert.equal(hits.at(-1).refreshDue,true);
+ assert.equal(await f.store.get(f.request(),{probe:true}),null);
+ f.advance(1);await f.publish({membershipProof:'snapshot-v1:'+'b'.repeat(64)});
+ const current=await(await f.store.get(f.request())).json();assert.equal(current.cfpCards.refreshDue,false);
+ assert.deepEqual(current.products,body.products);
+});
+
 test('saved filters load from durable publication without product sessions and reject incompatible scopes',async()=>{
  const f=fixture({readConfigurationRevision:async()=> '1'});
  f.payload.settings=[{isEnabled:true,filterType:'option',filterKey:'Color'}];
