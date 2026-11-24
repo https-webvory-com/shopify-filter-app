@@ -13,7 +13,7 @@ async function check({fastCards=true,isSearch=false,categories,read}={}){
   const context={canonicalVariantPrice:true,variantPriceV2:false,fastCards,isSearch,searchQuery:'',resolvedCollectionId:collectionId,
     nativeRanges:[{min:99,max:159}],variantEligibilityPriceContext:{country:'US',currency:'USD',stockOnly:true},
     categoryFilters,baseFilters:[`shop = '${shop}'`,"status = 'ACTIVE'",`collections = '${collectionId}'`],intentFilters:[],
-    cancelled:()=>false,
+    cancelled:()=>false,variantEligibilityDetail:null,
     shop,optionsFilters:{Color:['Blue'],Size:['M']},mergedValues:[],prisma:{product:{}},eligibilityStarted:Date.now(),variantEligibilityMs:0,
     meiliClient:{index:()=>({getDocuments:async options=>{calls.candidates.push(options);return read?read(options):{results:[{id:'2'},{id:'3'}],total:2};}})},
     collectionPriceCandidateIds,

@@ -61,6 +61,17 @@ test('eligibility resolves option positions once per scoped product while retain
  assert.ok(query.text.includes('IS NULL THEN NULL'),'missing option names cannot match an empty selected value');
 });
 
+test('interactive option eligibility disables compilation only inside its own read transaction',async()=>{
+ const events=[],model={findMany:()=>{throw Error('Unexpected fallback');}};
+ const database={$queryRaw:()=>{throw Error('Query escaped its transaction');},$transaction:async(work,options)=>{
+  assert.equal(options.timeout,10000);events.push('begin');
+  const result=await work({$executeRaw:async strings=>{assert.equal(strings.join(''),'SET LOCAL jit = off');events.push('local');},$queryRaw:async query=>{assert.ok(query.values.includes('black'));events.push('query');return [{id:'gid://shopify/Product/1'}];}});
+  events.push('end');return result;
+ }};
+ assert.deepEqual(await availableProductIds(model,{shop:'fixture'},{Color:['Black']},[],null,{database}),['1']);
+ assert.deepEqual(events,['begin','local','query','end']);
+});
+
 test('open-ended prices omit the upper bound in SQL and Prisma fallback',async()=>{
  const filters={Color:['Burgundy']},range={min:10,max:Infinity};
  const product={id:'gid://shopify/Product/1',options:[{name:'Color'}],variants:[{available:true,option1:'Wine',price:20000}]};

@@ -103,6 +103,7 @@ export const loader = async ({ request, context }) => {
   let pinnedPrefix=false;
   let pinnedPrefixVersion;
   let variantEligibilityMs=0;
+  let variantEligibilityDetail;
   let rankingPreparationMs=0;
   let membershipProof=null;
   let searchNormalizedFacetCounts=null;
@@ -808,17 +809,23 @@ export const loader = async ({ request, context }) => {
         Object.keys(categoryFilters).length>0
         ? [...baseFilters,...Object.values(categoryFilters),...intentFilters] : null;
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
+      variantEligibilityDetail={candidateMs:0,databaseMs:0,candidates:null,cacheMisses:0};
       for(const range of ranges){
         const normalized=range?{min:range.min,max:range.max??Infinity}:null;
         const eligible=await getCached('availableVariants:'+shop+':filter-price-v1:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized,...(candidateFilters?[candidateFilters]:[])]),async()=>{
-          let narrowedScope=scope;
+          let narrowedScope=scope;variantEligibilityDetail.cacheMisses++;
+          const candidateStart=Date.now();
           if(candidateFilters)try{
             const candidates=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:candidateFilters});
+            variantEligibilityDetail.candidates=candidates.length;
             if(candidates.some(id=>!/^\d+$/.test(id)))throw Error('Invalid variant candidate IDs');
             if(!candidates.length)return [];
             narrowedScope={...scope,id:{in:candidates.map(id=>'gid://shopify/Product/'+id)}};
           }catch{/* An incomplete or unavailable candidate read keeps the full scoped check. */}
-          return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...narrowedScope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext});
+          finally{variantEligibilityDetail.candidateMs+=Date.now()-candidateStart;}
+          const databaseStart=Date.now();
+          try{return await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...narrowedScope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext});}
+          finally{variantEligibilityDetail.databaseMs+=Date.now()-databaseStart;}
         },30);
         for(const id of eligible)ids.add(id);
       }
@@ -1806,7 +1813,7 @@ export const loader = async ({ request, context }) => {
         ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
-      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
+      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,variantEligibilityDetail,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     }
 

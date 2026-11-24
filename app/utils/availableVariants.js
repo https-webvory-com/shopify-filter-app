@@ -140,11 +140,20 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
   return database.$queryRaw(query);
  }
  const membership=Prisma.sql`EXISTS (SELECT 1 FROM "Variant" v WHERE ${Prisma.join(variants,' AND ')})`;
- const rows=await database.$queryRaw(optionPositions.length?Prisma.sql`
+ const query=optionPositions.length?Prisma.sql`
   WITH scoped_products AS MATERIALIZED (
    SELECT p."id", ${Prisma.join(optionPositions)} FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')}
   ) SELECT p."id" FROM scoped_products p WHERE ${membership} ORDER BY p."id"`
-  :Prisma.sql`SELECT p."id" FROM "Product" p WHERE ${Prisma.join([...clauses,membership],' AND ')} ORDER BY p."id"`);
+  :Prisma.sql`SELECT p."id" FROM "Product" p WHERE ${Prisma.join([...clauses,membership],' AND ')} ORDER BY p."id"`;
+ // Like saved-price pages, these interactive eligibility reads must not spend
+ // their latency budget compiling JSON/option expressions. The setting is
+ // confined to this read and never changes the database or pooled session.
+ const rows=optionPositions.length&&typeof database.$transaction==='function'
+  ?await database.$transaction(async transaction=>{
+    await transaction.$executeRaw`SET LOCAL jit = off`;
+    return transaction.$queryRaw(query);
+   },{timeout:10000})
+  :await database.$queryRaw(query);
  return rows.map(row=>row.id.split('/').pop());
 }
 
