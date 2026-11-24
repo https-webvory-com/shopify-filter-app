@@ -75,7 +75,7 @@ test('the actual remote facet-search handler keeps saved manual arrays unchanged
  const empty={style:{}},wrapper={querySelectorAll:()=>[],querySelector:selector=>selector==='.cfp-empty-state'?empty:null};
  const input={value:'red',dataset:{inputName:'option-Color'},closest:()=>wrapper,addEventListener:(_name,fn)=>{listener=fn;}};
  const context={facetValueKey,filterRoots:[{querySelectorAll:()=>[input]}],window:{location:{search:''}},document:{activeElement:null},shop:'tenant',collectionHandle:'prom',collectionId:null,API_DOMAIN:'https://fixture',URLSearchParams,
-  cfpLastSettings:[{filterType:'option',filterKey:'Color',config}],cfpLastFacets:{options:{Color:[{value:'Blue',count:1}]}},cfpLastTotalCount:3,
+  cfpLastSettings:[{filterType:'option',filterKey:'Color',config}],cfpLastFacets:{options:{Color:[{value:'Blue',count:1}]}},cfpLastTotalCount:3,cfpCountsPending:false,
   fetch:async()=>({json:async()=>({facetHits:[{value:'Red',count:2},{value:'Green',count:1},{value:null},null]})}),
   setTimeout:fn=>{timer=fn;return 1;},clearTimeout:()=>{},renderFilterSidebar:()=>{renders++;},console:{error:(...args)=>errors.push(args)}};
  vm.runInNewContext(handler,context);listener();await timer();

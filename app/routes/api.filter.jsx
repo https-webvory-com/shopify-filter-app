@@ -90,6 +90,9 @@ function directSortExclusions(rule, pinnedIds) {
  */
 export const loader = async ({ request, context }) => {
   const startTime = Date.now();
+  const cancelled = () => request.signal?.aborted === true;
+  const cancelledResponse = () => new Response(null,{status:499,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+  if(cancelled())return cancelledResponse();
   let preparedSpec;
   let preparedCacheKey;
   let collectionResponse;
@@ -435,6 +438,7 @@ export const loader = async ({ request, context }) => {
     const activeGroupFilters = await resolveCollectionNavigation(savedGroupFilters?.map(filter => normalizeManualFacetFilter(normalizePriceFilter(normalizeProductTitleFilter(filter), globalSettings))) || null,
       titles => getCached(`collectionNavigation:${shop}:${JSON.stringify(titles)}`, () => prisma.collection.findMany({where:{shop,title:{in:titles}},select:{title:true,handle:true}})));
     const configurationReadyMs=Date.now()-startTime;
+    if(cancelled())return cancelledResponse();
 
     // Stable bootstrap data has its own browser validator and never waits for
     // rankings, facets or product hydration. Updated clients request it in parallel.
@@ -821,6 +825,7 @@ export const loader = async ({ request, context }) => {
       categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
     }
     variantEligibilityMs=Date.now()-eligibilityStarted;
+    if(cancelled())return cancelledResponse();
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []), ...intentFilters];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
@@ -1048,16 +1053,31 @@ export const loader = async ({ request, context }) => {
         facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
     const priceCountQueryStart=queries.length;
+    if(cancelled())return cancelledResponse();
     const priceSettings=activeGroupFilters?.find(f=>f.isEnabled&&f.filterType==='price');
     // Slider bounds come from priceMin facet stats. Saved list ranges are
     // irrelevant in Range mode and can trigger costly variant-price scans.
     let configuredPrices=[];if(String(priceSettings?.displayMode||'List').toLowerCase()==='list')try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
     const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+    // Price-list counts remove only the selected price category. All other
+    // selected categories still apply, so the same complete indexed candidates
+    // can bound every range's exact variant check without changing counts.
+    const priceCountCandidateFilters=!isSearch&&!searchQuery&&activeCategories.filter(key=>key!=='priceMin').length>=2
+      ? [...baseFilters,...activeCategories.filter(key=>key!=='priceMin').map(key=>categoryFilters[key]),...intentFilters] : null;
+    let priceCountScopePromise;
+    const readPriceCountScope=()=>priceCountScopePromise??=(async()=>{
+      if(priceCountCandidateFilters)try{
+        const ids=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:priceCountCandidateFilters});
+        if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Invalid price-count candidate IDs');
+        return {...priceScope,id:{in:ids.map(id=>'gid://shopify/Product/'+id)}};
+      }catch{/* Preserve the existing full scope if the candidate read is incomplete. */}
+      return priceScope;
+    })();
     const priceEligibleIds=hideUnavailable||variantPriceV2||canonicalVariantPrice?await Promise.all(priceCountRanges.map(range=>{
       const eligibleRange=variantEligibilityPriceContext?{min:convertedPriceBound(range.min,priceSortRate),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate):Infinity}:range;
-      return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext]),
-        ()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...priceScope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext}),30,{maxBytes:1048576});
+      return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
+        async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return [];return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext});},30,{maxBytes:1048576});
     })):[];
     for(const [index,range] of priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
@@ -1079,6 +1099,7 @@ export const loader = async ({ request, context }) => {
       if (intentFilters.length) query.filter = [...new Set([...(query.filter || []), ...intentFilters])];
     }
     const queryReadyMs=Date.now()-startTime;
+    if(cancelled())return cancelledResponse();
     const meiliStart = Date.now();
     let collectionRankingStatus = "inactive";
     if (useRankedCollectionPagination && !context?.rankingWarmup) {
@@ -1156,6 +1177,7 @@ export const loader = async ({ request, context }) => {
     // A warmup only needs to schedule/refresh the complete ranking. Pending
     // visitors also need no facet queries until that ranking is usable.
     if (useRankedCollectionPagination && !rankingSession) {
+      if(cancelled())return cancelledResponse();
       preparedSpec = {
         pinEligibilityVersion: 2,
         ...(marketVersion?{marketAvailabilityVersion:marketVersion}:{}),
@@ -1184,6 +1206,7 @@ export const loader = async ({ request, context }) => {
         deferDirect:canPreviewPins,
       });}catch(error){if(!canPreviewPins)throw error;prepared={status:'pending'};reportCollectionHead(preparedSpec,'background-unavailable',error.name);}
       rankingPreparationMs=Date.now()-rankingStarted;
+      if(cancelled())return cancelledResponse();
       if(canPreviewPins&&prepared.status!=='ready')try{
         let declineReason;
         const version=await getCollectionHeadVersion(preparedSpec);
@@ -1462,6 +1485,7 @@ export const loader = async ({ request, context }) => {
 
     // ── 12.5 Fallback for missing data (injected pinned products) ──
     const productsNeedingFallback = paginatedSlice.filter(p => !p.title);
+    if(cancelled())return cancelledResponse();
     if (productsNeedingFallback.length > 0) {
       try {
         const missingIds = productsNeedingFallback.map(p => p.id);
@@ -1857,6 +1881,7 @@ export const loader = async ({ request, context }) => {
     }
     const missingGroups=duplicateGroups.filter(([key])=>!exactNormalizedCounts.has(key));
     const normalizedCountStarted=Date.now();
+    if(cancelled())return cancelledResponse();
     if (missingGroups.length) {
       try {
         const countExclusions=directSortExclusions(activeRule,pinnedIds);

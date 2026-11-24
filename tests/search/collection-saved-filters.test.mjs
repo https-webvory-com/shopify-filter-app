@@ -58,20 +58,31 @@ test('a stalled saved-filter request times out and a fresh request can recover',
  assert.equal((await window.cfpLoadSavedFilters(params)).cfpFilters.version,1);assert.equal(requests,2);
 });
 
-async function retryFixture({savedReads=[],early=null,onDelay=()=>{}}={}){
+async function retryFixture({savedReads=[],early=null,onDelay=()=>{},extraParams={}}={}){
  const source=await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js','utf8');
  const block=source.slice(source.indexOf('  function startIndependentCollectionFilters('),source.indexOf('  async function fetchCollectionConfiguration('));
  const params=new URLSearchParams({shop:'fixture.myshopify.com',country:'US',locale:'en',collectionHandle:'one'});
- let clock=0,reads=0,renders=0;
+ for(const [key,value]of Object.entries(extraParams))params.set(key,value);
+ let clock=0,reads=0,renders=0;const requested=[];
  const controller=new AbortController();
  const context={templateName:'collection',filtersReady:false,cfpLastSettings:[],cfpLastFacets:{},cfpLastTotalCount:0,globalSettings:{},URLSearchParams,
   Date:{now:()=>clock},setTimeout:(callback,ms)=>setTimeout(()=>{clock+=ms;onDelay(context,controller);callback();},0),clearTimeout,
-  window:{_cfpSavedFilters:{params:params.toString(),promise:Promise.resolve(early)},cfpLoadSavedFilters:async()=>{const value=savedReads[reads++]??null;return typeof value==='function'?value(controller):value;}},
-  sidebar:{classList:{remove:()=>{}}},applyGlobalSettings:()=>{},renderFilterSidebar:()=>{renders++;context.filtersReady=true;},renderBreadcrumbs:()=>{},updateActiveCountBadge:()=>{},performance:{mark:()=>{}},
+  window:{_cfpSavedFilters:{params:params.toString(),promise:Promise.resolve(early)},cfpLoadSavedFilters:async params=>{requested.push(params.toString());const value=savedReads[reads++]??null;return typeof value==='function'?value(controller):value;}},
+  sidebar:{classList:{remove:()=>{}}},applyGlobalSettings:()=>{},renderFilterSidebar:(_settings,_facets,_total,pending)=>{renders++;context.filtersReady=true;context.countsPending=pending;},renderBreadcrumbs:()=>{},updateActiveCountBadge:()=>{},performance:{mark:()=>{}},
  };
  vm.runInNewContext(block+'\nthis.start=startIndependentCollectionFilters;',context);
- return {context,controller,params,run:()=>context.start(params,controller.signal),reads:()=>reads,renders:()=>renders};
+ return {context,controller,params,requested,run:()=>context.start(params,controller.signal),reads:()=>reads,renders:()=>renders};
 }
+
+test('a filtered reload loads saved controls independently with the same market/customer scope and suppresses baseline counts',async()=>{
+ const saved={cfpFilters:{version:1},settings:[{id:'color'}],facets:{},totalCount:1234,globalSettings:{showProductCount:true}};
+ const f=await retryFixture({savedReads:[saved],extraParams:{'options[Color][]':'Blue','options[Size][]':'M','price[]':'99:159','vendor[]':'Fixture',customer_tags:'Shop'}});
+ await f.run();assert.equal(f.renders(),1);assert.equal(f.context.countsPending,true);assert.ok(Number.isNaN(f.context.cfpLastTotalCount));
+ const query=new URLSearchParams(f.requested[0]);assert.equal(query.get('customer_tags'),'Shop');assert.equal(query.get('country'),'US');assert.equal(query.get('collectionHandle'),'one');assert.equal(query.get('sortBy'),'best-selling');
+ for(const key of ['options[Color][]','options[Size][]','price[]','vendor[]'])assert.equal(query.has(key),false);
+ assert.equal(f.context.globalSettings.showProductCount,true,'merchant preference is not mutated');
+ assert.equal(f.params.get('options[Color][]'),'Blue','actual product filter parameters remain intact');
+});
 
 test('an empty early filter read is retried independently until saved filters become ready',async()=>{
  const saved={cfpFilters:{version:1},settings:[{id:'color'}],facets:{},totalCount:25,globalSettings:{desktopFilterLayout:'vertical'}};

@@ -441,6 +441,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   let cfpLastSettings = [];
   let cfpLastFacets = {};
   let cfpLastTotalCount = 0;
+  let cfpCountsPending = false;
   let cfpGroupToggleState = {};
   let cfpGroupScrollState = {};
 
@@ -679,6 +680,16 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   const collectionConfigurationCache = new Map();
   function startIndependentCollectionFilters(params,signal){
     if(templateName==='search'||filtersReady&&cfpLastSettings.length>0)return;
+    if(params.has('q'))return;
+    // Saved controls depend on collection/market/customer scope, not selected
+    // values. Reloading a filtered URL can use them while exact counts load.
+    const scopeKeys=['shop','collectionId','collectionHandle','country','locale','language','customer_tags'];
+    const countsPending=[...params.keys()].some(key=>!scopeKeys.includes(key)&&!['page','limit','responseProfile','sortBy'].includes(key))||
+      !['best-selling','bestselling'].includes(params.get('sortBy')||'best-selling');
+    if(countsPending){
+      params=new URLSearchParams([...params].filter(([key])=>scopeKeys.includes(key)));
+      params.set('sortBy','best-selling');params.set('page','1');params.set('limit','25');
+    }
     const read=async()=>{
       if(signal.aborted||!window.cfpLoadSavedFilters)return;
       const identity=value=>{const query=new URLSearchParams(value);for(const key of ['responseProfile','page','limit'])query.delete(key);query.sort();return query.toString();};
@@ -702,8 +713,8 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
         }
         globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
         window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
-        cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=saved.totalCount;
-        renderFilterSidebar(saved.settings,saved.facets,saved.totalCount);
+        cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=countsPending?NaN:saved.totalCount;
+        renderFilterSidebar(saved.settings,saved.facets,saved.totalCount,countsPending);
         renderBreadcrumbs();updateActiveCountBadge();sidebar.classList.remove('cfp-loading');
         performance.mark?.('cfp-filters-ready');
         return;
@@ -1029,7 +1040,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       queryParams.append('limit', PAGE_SIZE);
       const collectionQuery = templateName === 'collection' && Boolean(activeFilters.q);
       const hasSelectedFilters=collectionQuery || [...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
-      if(!isLoadMore&&!hasSelectedFilters&&activeFilters.page===1)startIndependentCollectionFilters(queryParams,fetchSignal);
+      if(!isLoadMore)startIndependentCollectionFilters(queryParams,fetchSignal);
       if (templateName !== 'search' && !collectionQuery && activeFilters.sortBy !== 'manual') {
         queryParams.set('responseProfile','collection-v1');
         const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
@@ -2515,8 +2526,10 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     fetchAndRenderData();
   }
 
-  function renderFilterSidebar(settings, facets, totalCount) {
-    updateVerticalFilterSummary(totalCount);
+  function renderFilterSidebar(settings, facets, totalCount, countsPending = false) {
+    cfpCountsPending = countsPending;
+    const showCounts = !countsPending && globalSettings.showProductCount !== false;
+    updateVerticalFilterSummary(countsPending ? NaN : totalCount);
     const body = sidebar.querySelector('.cfp-sidebar__body');
     if (!body) return;
     body.querySelectorAll('.cfp-facet-error').forEach(notice=>notice.remove());
@@ -2586,7 +2599,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
         if(stock.outOfStock?.enabled)choices.push(['out_of_stock',stock.outOfStock.label]);
         groupContent=choices.map(([value,label])=>{
           const count=facets.extraFilters?.choices?.find(c=>c.type==='stock_status'&&c.value===value)?.count ?? (value==='in_stock'?facets.availability?.inStock:facets.availability?.outOfStock) ?? 0;
-          return `<label class="cfp-checkbox" title="${escapeCardHtml(`${label||value.replaceAll('_',' ')}${globalSettings.showProductCount===false?'':` (${count})`}`)}"><input type="checkbox" name="availability" value="${value}" ${activeFilters.availability.includes(value)?'checked':''}><span class="cfp-checkbox__box"></span><span class="cfp-checkbox__label">${escapeCardHtml(label||value.replaceAll('_',' '))}</span>${globalSettings.showProductCount===false?'':`<span class="cfp-checkbox__count">${count}</span>`}</label>`;
+          return `<label class="cfp-checkbox" title="${escapeCardHtml(`${label||value.replaceAll('_',' ')}${!showCounts?'':` (${count})`}`)}"><input type="checkbox" name="availability" value="${value}" ${activeFilters.availability.includes(value)?'checked':''}><span class="cfp-checkbox__box"></span><span class="cfp-checkbox__label">${escapeCardHtml(label||value.replaceAll('_',' '))}</span>${!showCounts?'':`<span class="cfp-checkbox__count">${count}</span>`}</label>`;
         }).join('');
       }
       else if (['percent_sale','weight','review_rating'].includes(type) && displayMode.toLowerCase() === 'range') {
@@ -2913,7 +2926,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
               <option value="">Any ${setting.label}</option>
               ${items.map(item => `
                 <option value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'selected' : ''}>
-                  ${getDisplayLabel(item.label || item.value, prefix)} ${globalSettings && globalSettings.showProductCount === false ? '' : ` (${item.count})`}
+                  ${getDisplayLabel(item.label || item.value, prefix)} ${!showCounts ? '' : ` (${item.count})`}
                 </option>
               `).join('')}
             </select>
@@ -3020,12 +3033,12 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
                     const visualHeight=isColor?`var(--cfp-color-swatch-size, ${vHeight})`:vHeight;
                     let visualHtml = `<span class="cfp-swatch-circle" style="${bgStyle} width: ${visualWidth} !important; height: ${visualHeight} !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; ${borderRadiusStyle} flex-shrink: 0; margin: ${visualMargin} !important;">${imageHtml}</span>`;
 
-                    const countHtml = globalSettings && globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
+                    const countHtml = !showCounts ? '' : `<span class="cfp-checkbox__count ${isTopRightCount ? 'cfp-swatch-count--top-right' : ''}">${item.count}</span>`;
 
                     const spanWidthStyle = labelFlexDir === 'row' ? 'flex: 1;' : 'width: 100%;';
 
                     return `
-                      <label class="cfp-color-swatch ${isImageItem ? 'cfp-color-swatch--image' : ''} ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount===false?'':` (${item.count})`}`)}">
+                      <label class="cfp-color-swatch ${isImageItem ? 'cfp-color-swatch--image' : ''} ${isActive ? 'cfp-color-swatch--selected' : ''} ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''} position: relative !important; display: flex; align-items: center !important; gap: ${gap} !important; cursor: pointer; flex-direction: ${labelFlexDir} !important; justify-content: ${labelJustify} !important; text-align: ${textAlign} !important; width: 100%; box-sizing: border-box; padding: ${isTopRightCount ? '8px 4px' : '0'} !important; border-radius: 6px !important;" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${!showCounts?'':` (${item.count})`}`)}">
                         <input type="checkbox" name="${inputName}" value="${item.value}" ${isActive ? 'checked' : ''} style="display:none;">
                         ${isTopRightCount ? countHtml : ''}
                         ${visualHtml}
@@ -3054,9 +3067,9 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
                 ${items.map((item, idx) => {
                   const hide = isViewMore && idx >= limit;
                   return `
-                  <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount===false?'':` (${item.count})`}`)}">
+                  <label class="cfp-button-chip ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${!showCounts?'':` (${item.count})`}`)}">
                     <input type="checkbox" name="${inputName}" value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
-                    <span><span class="cfp-button-chip__text">${getDisplayLabel(item.label || item.value, prefix)}</span>${globalSettings.showProductCount === false ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}</span>
+                    <span><span class="cfp-button-chip__text">${getDisplayLabel(item.label || item.value, prefix)}</span>${!showCounts ? '' : `<span class="cfp-checkbox__count">${item.count}</span>`}</span>
                   </label>
                   `;
                 }).join('')}
@@ -3078,11 +3091,11 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
               ${items.map((item, idx) => {
                 const hide = isViewMore && idx >= limit;
                 return `
-                <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${globalSettings.showProductCount===false?'':` (${item.count})`}`)}">
+                <label class="cfp-checkbox ${hide ? 'cfp-view-more-hidden' : ''}" style="${hide ? 'display: none;' : ''}" title="${escapeCardHtml(`${getDisplayLabel(item.label || item.value, prefix)}${!showCounts?'':` (${item.count})`}`)}">
                   <input type="checkbox" name="${inputName}" value="${item.value}" ${(facetSelectionIncludes(activeArray,item.value) || ((type === 'tag' || type === 'tags') && facetSelectionIncludes(activeArray,getCleanLabel('tag', item.value).cleanVal))) ? 'checked' : ''}>
                   <span class="cfp-checkbox__box"></span>
                   <span class="cfp-checkbox__label">${getDisplayLabel(item.label || item.value, prefix)}</span>
-                  ${globalSettings.showProductCount === false ? "" : `<span class="cfp-checkbox__count">${item.count}</span>`}
+                  ${!showCounts ? "" : `<span class="cfp-checkbox__count">${item.count}</span>`}
                 </label>
                 `;
               }).join('')}
@@ -3382,7 +3395,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
           window.cfpSyncPillsLayout();
           observeHorizontalToolbar();
         } else if (cfpLastSettings?.length) {
-          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
         }
       });
     });
@@ -3427,7 +3440,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       clearTimeout(horizontalResizeTimer);
       horizontalResizeTimer = setTimeout(() => {
         if (typeof window.cfpSyncPillsLayout !== 'function' && isHorizontalFilterLayout() && cfpLastSettings.length) {
-          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+          renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
         }
         document.querySelectorAll('.cfp-horizontal-pill__popover.is-open').forEach(positionHorizontalFilterPopover);
       }, 150);
@@ -3436,7 +3449,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     window.visualViewport?.addEventListener('scroll', scheduleStickyOffsets, { passive: true });
     window.matchMedia('(max-width: 768px)').addEventListener('change', () => {
       closeSidebar();
-      if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+      if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
       applyGlobalSettings(globalSettings || {});
       renderBreadcrumbs();
     });
@@ -3758,7 +3771,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
                     const activeSearchInputName = document.activeElement ? document.activeElement.dataset?.inputName : null;
                     const activeSearchInputValue = document.activeElement ? document.activeElement.value : '';
 
-                    renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+                    renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
 
                     if (activeSearchInputName) {
                        const newSearchInput = sidebar.querySelector(`.cfp-search-input[data-input-name="${activeSearchInputName}"]`);
@@ -4115,7 +4128,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     syncCheckboxSelections();
     // Reset every rendered control and pill badge from the cleared state now;
     // the next product response may reuse facets without rebuilding filters.
-    if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+    if (cfpLastSettings) renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
     if (templateName === 'collection') updateVerticalFilterSummary(cfpLastTotalCount);
     renderBreadcrumbs();
     updateActiveCountBadge();
@@ -4167,7 +4180,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     activeFilters.page = 1;
     renderBreadcrumbs();
     if (typeof cfpLastSettings !== 'undefined' && cfpLastSettings) {
-      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
     }
     fetchAndRenderData();
   }
@@ -4204,7 +4217,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     activeFilters.page = 1;
     renderBreadcrumbs();
     if (typeof cfpLastSettings !== 'undefined' && cfpLastSettings) {
-      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+      renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
     }
     fetchAndRenderData();
   }
@@ -4363,7 +4376,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     if (isHorizontalFilterLayout()) {
       if (typeof window.cfpSyncPillsLayout === 'function') window.cfpSyncPillsLayout();
       else if (previousControlsWidth !== (activeCount?.getBoundingClientRect().width||0) + (topClearBtn?.getBoundingClientRect().width||0) && cfpLastSettings?.length) {
-        renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount);
+        renderFilterSidebar(cfpLastSettings, cfpLastFacets, cfpLastTotalCount, cfpCountsPending);
       }
     }
   }
