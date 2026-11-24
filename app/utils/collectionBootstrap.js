@@ -20,7 +20,7 @@ export function configurationResponse(request, payload) {
 // Unknown/malformed filter definitions retain the original facets.
 export function visibleCollectionFacets(facets, settings) {
   if (!facets || !Array.isArray(settings)) return facets;
-  const result={}, consumers={tags:[],collections:[]};
+  const result={...(facets.collectionScopeVersion?{collectionScopeVersion:facets.collectionScopeVersion}:{})}, consumers={tags:[],collections:[]};
   const names={vendor:'vendors',product_type:'productTypes',collection:'collections',tag:'tags',tags:'tags',title:'titles',price:'priceRanges',percent_sale:'percentSale',weight:'extraFilters',review_rating:'extraFilters',inventory_locations:'extraFilters',availability:'availability',stock_status:'availability'};
   for (const setting of settings) {
     if (!setting.isEnabled) continue;

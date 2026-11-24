@@ -2,6 +2,7 @@ import {packCollectionResponse} from './collectionResponse.js';
 import {gzip,createGzip,constants} from 'node:zlib';
 import {Readable} from 'node:stream';
 import {promisify} from 'node:util';
+import {withoutLegacyCollectionFacets} from './collectionFacetScope.js';
 const compress=promisify(gzip);
 export {collectionPageFingerprint} from './collectionResponse.js';
 // Bump when saved card presentation must be rebuilt from current documents.
@@ -48,6 +49,7 @@ export function collectionPreviewPayload(payload,{limit=5,fullCards=false}={}){
   }))};
 }
 export async function collectionCardsResponse(payload,state='miss',request,{previewLimit=25}={}){
+ payload=withoutLegacyCollectionFacets(payload);
  const preview=request&&new URL(request.url).searchParams.get('responseProfile')==='collection-preview-v1';
  const stream=preview&&(request.headers.get('accept')||'').split(',').some(value=>{const [type,...params]=value.trim().split(';');return type==='application/x-ndjson'&&!params.some(p=>/^\s*q\s*=\s*0(?:\.0*)?\s*$/i.test(p));});
  if(stream){

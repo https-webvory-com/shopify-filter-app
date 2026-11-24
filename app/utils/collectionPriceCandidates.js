@@ -1,3 +1,4 @@
+import {readIndexedProductIds} from './indexedProductIds.js';
 const clean=id=>String(id).split('/').pop();
 export function savedPriceCollectionScope(collectionId,exclusions,pinnedIds,stockOnly){
  if(!collectionId||!Array.isArray(exclusions))return null;
@@ -12,9 +13,11 @@ export function savedPriceCollectionScope(collectionId,exclusions,pinnedIds,stoc
 }
 // Membership is already indexed. Reading IDs must not ask the search engine
 // to rank every matching product before SQL selects the requested price page.
-export async function collectionPriceCandidateIds(index,{q='',filter}){
+export async function collectionPriceCandidateIds(index,{q='',filter,onRead}){
  const maximum=100000;
+ if(!q){const ids=await readIndexedProductIds(index,{filter,maxDocuments:maximum});if(ids!==null){onRead?.('id-facets');return ids;}}
  if(!q&&typeof index.getDocuments==='function'){
+  onRead?.('documents');
   const read=offset=>index.getDocuments({filter,fields:['id'],limit:maximum,offset});
   try{
    const first=await read(0),rows=[...(first.results||[])],total=first.total;
@@ -31,6 +34,7 @@ export async function collectionPriceCandidateIds(index,{q='',filter}){
    if(!['invalid_document_filter','route_not_found'].includes(error.code)&&![404,405].includes(error.httpStatus))throw error;
   }
  }
+ onRead?.('search');
  const result=await index.search(q,{filter,limit:maximum,offset:0,attributesToRetrieve:['id']});
  const ids=(result.hits||[]).map(product=>clean(product.id)),total=result.totalHits??result.estimatedTotalHits??ids.length;
  if(ids.length!==total||new Set(ids).size!==ids.length)throw Error('Incomplete saved-price candidate membership');

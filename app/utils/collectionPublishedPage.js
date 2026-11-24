@@ -6,6 +6,7 @@ import {hasUsableProductTitleFacets} from './productTitleFilter.js';
 import {hasUsableCollectionNavigation} from './collectionNavigation.js';
 import {isPublicCollectionCards,collectionCardsResponse,acceptsPublishedCollectionPage,collectionCardPresentationVersion} from './collectionCards.js';
 import {visibleCollectionFacets} from './collectionBootstrap.js';
+import {hasCurrentCollectionFacetScope} from './collectionFacetScope.js';
 
 export function publishedCollectionKey(request){
  const url=new URL(request.url),page=url.searchParams.get('page');
@@ -72,7 +73,8 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     return null;
    }
    const optionCountsChanged=entry.payload.globalSettings?.hideUnavailableVariantsWhenSelected===true&&entry.payload.facets?.variantCountVersion!==1;
-   const refreshDue=stockChanged||configurationChanged||catalogChanged||optionCountsChanged||now()-entry.at>=lifetime*1000;
+   const legacyFacetScope=!hasCurrentCollectionFacetScope(entry.payload);
+   const refreshDue=stockChanged||configurationChanged||catalogChanged||optionCountsChanged||legacyFacetScope||now()-entry.at>=lifetime*1000;
    if(probe&&refreshDue)return null;
    // Presentation preferences must be fresh even while the last complete
    // product publication is retained. Eligibility changes require a new order.
@@ -91,6 +93,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    if(probe)return new Response(null,{status:200,headers:{'X-CFP-Collection-Cards':'published'}});
    // Read already-computed collection-wide filters without creating a product
    // session, hydrating cards, scanning the index or waiting for ranking.
+   if(filtersOnly&&legacyFacetScope)return null;
    if(filtersOnly){const text=JSON.stringify({settings:entry.payload.settings,mergedValues:entry.payload.mergedValues||[],globalSettings,
     facets:visibleCollectionFacets(entry.payload.facets,entry.payload.settings),totalCount:entry.payload.totalCount,
     cfpFilters:{version:1,publishedAt:entry.at,refreshDue}});

@@ -18,7 +18,7 @@ function readBounds(facetRes, page) {
 
 test('initial and fallback queries request full-result price stats without a selected price', () => {
   const context = { activeGroupFilters: [], queries: [], searchQuery: '', textSearchQuery:'', tier1Filter: ['shop = "fixture"'],
-    hasTier1StrictFilters: true, useCollectionPagination: false, useRankedCollectionPagination:false, allFiltersList: ['shop = "fixture"'] };
+    hasTier1StrictFilters: true, useCollectionPagination: false, useRankedCollectionPagination:false, allFiltersList: ['shop = "fixture"'],collectionFacetClause:null };
   vm.runInNewContext(facetQueries, context);
   for (const query of context.queries) {
     assert.ok(query.facets.includes('priceMin'));
@@ -32,7 +32,7 @@ test('initial and fallback queries request full-result price stats without a sel
 
 test('ranked collection facets retain full-result price stats without an exhaustive hit-count query',()=>{
  const context={activeGroupFilters:[],queries:[],searchQuery:'',textSearchQuery:'',tier1Filter:['shop = "fixture"'],hasTier1StrictFilters:true,
-  useCollectionPagination:true,useRankedCollectionPagination:true,allFiltersList:['shop = "fixture"'],tier2QueryIndex:0};
+  useCollectionPagination:true,useRankedCollectionPagination:true,allFiltersList:['shop = "fixture"'],tier2QueryIndex:0,collectionFacetClause:null};
  context.queries.push({filter:context.allFiltersList});
  vm.runInNewContext(facetQueries,context);
  for(const query of context.queries.slice(1)){
@@ -57,6 +57,7 @@ test('price bounds query excludes its own range while retaining other selections
     activeCategories: ['priceMin', 'option_Fabric'], categoryFilters: {
       priceMin: 'id IN ["price-qualified-variant"]', option_Fabric: 'option_Fabric = "Chiffon"',
     } };
+  context.facetBaseFilters=context.baseFilters;
   vm.runInNewContext(source.slice(start, end), context);
   const priceQuery = context.queries.find(query => query.facets.includes('priceMin'));
   assert.ok(priceQuery.filter.includes('option_Fabric = "Chiffon"'));

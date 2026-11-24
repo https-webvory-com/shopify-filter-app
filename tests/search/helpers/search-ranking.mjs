@@ -17,6 +17,7 @@ import * as filterPresentation from '../../../app/utils/filterPresentation.js';
 import * as collectionNavigation from '../../../app/utils/collectionNavigation.js';
 import * as marketAvailability from '../../../app/utils/marketAvailability.js';
 import * as collectionFilterMembership from '../../../app/utils/collectionFilterMembership.js';
+import * as collectionFacetScope from '../../../app/utils/collectionFacetScope.js';
 import * as skuSearch from '../../../app/utils/skuSearch.js';
 import * as searchConfiguration from '../../../app/utils/searchConfiguration.js';
 import * as marketPricingIndex from '../../../app/utils/marketPricingIndex.js';
@@ -42,6 +43,7 @@ export async function loadModule(file, mocks) {
     if(name==='../utils/collectionLayoutSettings.js')return collectionLayoutSettings;
     if(name==='../components/PageWidthSettings')return {default:()=>null};
     if(name==='../utils/collectionSearchText.js')return collectionSearchText;
+    if(name==='../utils/collectionFacetScope.js')return collectionFacetScope;
     if(name==='../hooks/usePickerRequest')return {usePickerRequest:()=>({})};
     if(name==='../hooks/useCompletedSubmission')return {useCompletedSubmission:()=>{}};
     if(name==='../components/ui/AdminNoSearchResults')return {default:()=>null};

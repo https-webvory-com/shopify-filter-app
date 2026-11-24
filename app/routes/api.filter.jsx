@@ -40,6 +40,7 @@ import {getMarketAvailabilityState,getMarketAvailableProductIds} from '../servic
 import {createFacetValueMapper,expandMappedFacetValues,facetValueKey,groupFacetValues} from '../utils/facetNormalization.js';
 import {marketIdsFilter,marketRankingFingerprint} from '../utils/marketAvailability.js';
 import {narrowerCollectionFilters,readNarrowerCollectionMembership} from '../utils/collectionFilterMembership.js';
+import {collectionFacetScopeVersion} from '../utils/collectionFacetScope.js';
 import {collectionMembershipProof} from '../services/collectionFilterMembership.server.js';
 import {getSearchIndexContext} from '../services/searchIndex.server.js';
 import {marketPriceIntentReady} from '../services/marketPriceCoverage.server.js';
@@ -680,6 +681,7 @@ export const loader = async ({ request, context }) => {
     // Preserve the existing collection membership/ranking behavior.
     const includeConditions = ((isSearch || !userHasFilters) && activeRule?.conditions?.filter((c) => c.action === "Include")) || [];
     const includeMeiliFilters = buildMeiliIncludeFilters(includeConditions);
+    let collectionUnionClause=null,collectionFacetClause=null;
 
     if (resolvedCollectionId || (resolvedCollectionTitle && resolvedCollectionTitle.toLowerCase() !== "all")) {
       const collClauseParts = [];
@@ -697,7 +699,9 @@ export const loader = async ({ request, context }) => {
 
       // Include adds eligible products without changing Shopify membership.
       // Tenant, publication/status, availability and customer filters remain ANDed.
-      baseFilters.push(`(${[collClause, ...includeMeiliFilters].join(" OR ")})`);
+      collectionUnionClause=`(${[collClause, ...includeMeiliFilters].join(" OR ")})`;
+      collectionFacetClause=!isSearch&&!searchQuery&&includeMeiliFilters.length?`(${collClause})`:null;
+      baseFilters.push(collectionUnionClause);
     } else if (includeMeiliFilters.length > 0) {
       baseFilters.push(`(${includeMeiliFilters.join(" OR ")})`);
     }
@@ -809,14 +813,14 @@ export const loader = async ({ request, context }) => {
         Object.keys(categoryFilters).length>0
         ? [...baseFilters,...Object.values(categoryFilters),...intentFilters] : null;
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
-      variantEligibilityDetail={candidateMs:0,databaseMs:0,candidates:null,cacheMisses:0};
+      variantEligibilityDetail={candidateMs:0,databaseMs:0,candidates:null,cacheMisses:0,candidatePath:null};
       for(const range of ranges){
         const normalized=range?{min:range.min,max:range.max??Infinity}:null;
         const eligible=await getCached('availableVariants:'+shop+':filter-price-v1:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized,...(candidateFilters?[candidateFilters]:[])]),async()=>{
           let narrowedScope=scope;variantEligibilityDetail.cacheMisses++;
           const candidateStart=Date.now();
           if(candidateFilters)try{
-            const candidates=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:candidateFilters});
+            const candidates=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:candidateFilters,onRead:path=>{variantEligibilityDetail.candidatePath=path;}});
             variantEligibilityDetail.candidates=candidates.length;
             if(candidates.some(id=>!/^\d+$/.test(id)))throw Error('Invalid variant candidate IDs');
             if(!candidates.length)return [];
@@ -927,6 +931,11 @@ export const loader = async ({ request, context }) => {
     const hasTier1StrictFilters = ruleMeiliFilters.length > 0 || (!isSearch && queryParserMeiliFilters.length > 0);
 
     const queries = [];
+    // Filter selections remove outside Include products. Facet choices must
+    // describe that same selectable scope, while product ranking keeps the
+    // merchant's existing unfiltered Include behavior.
+    const scopeFacetFilters=filters=>collectionFacetClause?filters.map(clause=>clause===collectionUnionClause?collectionFacetClause:clause):filters;
+    const facetBaseFilters=scopeFacetFilters(baseFilters);
 
     // Query A1: Tier 1 Boosted Rule Products OR Strict Parsed Query Products
     const tier1Filter = hasTier1StrictFilters 
@@ -1031,11 +1040,17 @@ export const loader = async ({ request, context }) => {
       });
     }
 
+    // Keep the existing product totals, including configured Include products.
+    // One bounded facet-only query describes the selectable collection instead.
+    const collectionFacetQueryIndex=collectionFacetClause?queries.length:-1;
+    if(collectionFacetQueryIndex>=0)queries.push({indexUid:'products',q:textSearchQuery,
+      filter:scopeFacetFilters(allFiltersList),facets:targetFacets,limit:0,attributesToRetrieve:[]});
+
     // Query C: Per active-category queries for disjunctive faceting
     const categoryQueryStartIndex = queries.length;
     for (const cat of activeCategories) {
       const filterForThisCat = [
-        ...baseFilters,
+        ...facetBaseFilters,
         ...activeCategories
           .filter((c) => c !== cat)
           .map((c) => categoryFilters[c]),
@@ -1055,7 +1070,7 @@ export const loader = async ({ request, context }) => {
     const saleCountRanges = fastCards||fastSearchCards?[]:[...new Map(saleRangesConfig.map(r => [r.value,r])).values()];
     for (const range of saleCountRanges) {
       queries.push({indexUid:'products',q:textSearchQuery,
-        filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
+        filter:[...facetBaseFilters,...Object.entries(categoryFilters).filter(([key]) => key !== 'percentSale').map(([,value]) => value),
           ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []),saleIdsFilter(saleRows,[range])],
         facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
@@ -1071,7 +1086,7 @@ export const loader = async ({ request, context }) => {
     // selected categories still apply, so the same complete indexed candidates
     // can bound every range's exact variant check without changing counts.
     const priceCountCandidateFilters=!isSearch&&!searchQuery&&activeCategories.filter(key=>key!=='priceMin').length>=2
-      ? [...baseFilters,...activeCategories.filter(key=>key!=='priceMin').map(key=>categoryFilters[key]),...intentFilters] : null;
+      ? [...facetBaseFilters,...activeCategories.filter(key=>key!=='priceMin').map(key=>categoryFilters[key]),...intentFilters] : null;
     let priceCountScopePromise;
     const readPriceCountScope=()=>priceCountScopePromise??=(async()=>{
       if(priceCountCandidateFilters)try{
@@ -1091,13 +1106,13 @@ export const loader = async ({ request, context }) => {
       if(hideUnavailable||variantPriceV2||canonicalVariantPrice){
         const ids=priceEligibleIds[index];priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
       }
-      queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+      queries.push({indexUid:'products',q:textSearchQuery,filter:[...facetBaseFilters,...Object.entries(categoryFilters).filter(([key])=>key!=='priceMin').map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),priceClause],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
     let exactPriceCounts=[];
     const extraCountQueryStart=queries.length;
     for(const choice of fastCards||fastSearchCards?[]:extraChoices){
       const category=choice.type==='stock_status'?'available':'extra_'+choice.type;
-      queries.push({indexUid:'products',q:textSearchQuery,filter:[...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
+      queries.push({indexUid:'products',q:textSearchQuery,filter:[...facetBaseFilters,...Object.entries(categoryFilters).filter(([key])=>key!==category).map(([,value])=>value),...(parsedQuery?.colorFilter?[parsedQuery.colorFilter]:[]),extraIdsFilter(extraRows,choice.type,[choice.type==='weight'||choice.type==='review_rating'?choice:choice.value])],facets:[],hitsPerPage:1,page:1,attributesToRetrieve:[]});
     }
     let extraCounts={};
     let saleCounts = {};
@@ -1371,6 +1386,12 @@ export const loader = async ({ request, context }) => {
         collectionPageTotal = result.total;
         collectionPaginationApplied = true;
         collectionBestSellingApplied = Array.isArray(collectionBestSellingIds);
+      }
+
+      if(collectionFacetQueryIndex>=0){
+        const scoped=multiSearchRes.results[collectionFacetQueryIndex];
+        facetDistribution={...(scoped?.facetDistribution||{})};
+        facetRes={...(facetRes||{}),facetDistribution,facetStats:scoped?.facetStats||{}};
       }
 
       // Merge disjunctive facet counts
@@ -1893,7 +1914,7 @@ export const loader = async ({ request, context }) => {
       try {
         const countExclusions=directSortExclusions(activeRule,pinnedIds);
         const countQueries = missingGroups.map(([, group]) => ({ indexUid: 'products', q: textSearchQuery,...(isSearch?{_cfpSearchSurface:true}:{}),
-          filter: [...new Set([...baseFilters, ...activeCategories.filter(category => category !== group.field).map(category => categoryFilters[category]),
+          filter: [...new Set([...facetBaseFilters, ...activeCategories.filter(category => category !== group.field).map(category => categoryFilters[category]),
             ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []),...intentFilters,
             ...(countExclusions||[]),
             ...(countExclusions===null&&rankingSession?.ids&&!categoryFilters[group.field]?['id IN '+JSON.stringify(rankingSession.ids)]:[]),
@@ -1984,8 +2005,12 @@ export const loader = async ({ request, context }) => {
           .filter(([key])=>key.startsWith('option_'))
           .map(([key,counts])=>[key.slice(7),Object.keys(counts||{})]));
         const signature=availableOptionFacetSignature(rawOptions,mergedValues);
-        const exact=await getCached(`availableOptionFacetCounts:${shop}:${rankingSession.token}:${signature}`,
-          ()=>availableOptionFacetCounts(prisma,{shop,productIds:rankingSession.ids,optionValues:rawOptions,mergedValues}),60);
+        const exact=await getCached(`availableOptionFacetCounts:${shop}:${rankingSession.token}:${collectionFacetClause?'collection-only-v1:':''}${signature}`,
+          async()=>{
+            let productIds=rankingSession.ids;
+            if(collectionFacetClause){const ids=new Set(await collectionPriceCandidateIds(meiliClient.index('products'),{filter:facetBaseFilters}));productIds=productIds.filter(id=>ids.has(String(id).split('/').pop()));}
+            return availableOptionFacetCounts(prisma,{shop,productIds,optionValues:rawOptions,mergedValues});
+          },60);
         for(const [name,counts] of Object.entries(optionCounts))for(const value of Object.keys(counts))
           counts[value]=exact[name]?.[value]??0;
         exactAvailableOptionCounts=true;
@@ -2149,6 +2174,7 @@ export const loader = async ({ request, context }) => {
         },
       },
       facets: {
+        ...(!isSearch&&!searchQuery?{collectionScopeVersion:collectionFacetScopeVersion}:{}),
         ...(exactAvailableOptionCounts?{variantCountVersion:1}:{}),
         vendors: Object.entries(vendorCounts)
           .map(([value, count]) => ({ value, count }))

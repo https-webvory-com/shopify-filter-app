@@ -1,6 +1,7 @@
 import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
 import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as collectionPriceCandidates from '../../app/utils/collectionPriceCandidates.js';
+import * as collectionFacetScope from '../../app/utils/collectionFacetScope.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import http from 'node:http';
 import {gunzipSync} from 'node:zlib';
@@ -60,6 +61,12 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
     let products=docs.filter(p=>p.status==='ACTIVE').map(p=>({...p}));
     if(state.noMatchQuery && options.q===state.noMatchQuery)products=[];
     for(const filter of [options.filter || []].flat(Infinity)){
+      if(state.enforceCollections&&typeof filter==='string'&&filter.includes('collections = ')){
+        const collectionIds=[...filter.matchAll(/collections = (['"])(.*?)\1/g)].map(match=>match[2]);
+        const included=filter.match(/ OR tags IN (\[[^\]]*\])/);
+        const tags=included?[...included[1].matchAll(/['"]([^'"]+)['"]/g)].map(match=>match[1]):[];
+        products=products.filter(p=>(p.collections||[]).some(id=>collectionIds.some(value=>String(id).split('/').pop()===String(value).split('/').pop()))||(p.tags||[]).some(tag=>tags.includes(tag)));
+      }
       if(typeof filter==='string'&&filter.startsWith('id IN ')) { const ids=JSON.parse(filter.slice(6));products=products.filter(p=>ids.includes(p.id)); }
       if(filter==='id = "__no_sale_match__"'||filter==='id = "__no_extra_filter_match__"'||filter==='id = "__no_eligible_price_variant__"')products=[];
       if(typeof filter==='string'){
@@ -174,12 +181,13 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
   const mocks={
     '../utils/savedMarketPricing.js':savedMarketPricing,
     '../utils/collectionPriceCandidates.js':collectionPriceCandidates,
+    '../utils/collectionFacetScope.js':collectionFacetScope,
     'node:crypto':{createHash},
     '../services/searchRanking.server.js':{},
     'react-router':{data:(value,init)=>Response.json(value,init)},'../db.server':{__esModule:true,default:prisma},
     '../services/merchandising.server':{...merch,getActivePinningRuleForSearch:async()=>null,getActiveRuleForSearch:async()=>null,
       getActivePinningRuleForCollection:async()=>state.noPins?null:({products:(state.pinList||[state.pin]).map(id=>({id:'gid://shopify/Product/'+id}))}),
-      getActiveRuleForCollection:async()=>state.noMerchandising?null:({conditions:[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
+      getActiveRuleForCollection:async()=>state.noMerchandising?null:({conditions:state.ruleConditions||[state.colorRule?{field:'Color',action:'Boost',value:'Blue'}:{field:'Tags',action:'Boost',value:'product-'+state.boost,operator:'contains'}]})},
     '../services/filterSettings.server':{},'../services/meiliClient.server':{__esModule:true,default:{index:()=>index}},
     '../services/shopCache.server':{getCached:async(key,fn)=>key.startsWith('globalSettings:')?{prioritizeSortOverPinning:true,prioritizeSortOverMerchandising:true,showProductCount:true,...(state.wishlist?{integrations:{wishlist:true}}:{}),...(state.globalSettings||{})}:key.startsWith('mergedValues:')?(state.mergedValues||[]):key.startsWith('filterGroup:')?{resolvedCollectionId:key.endsWith(':search')?null:'gid://shopify/Collection/1',resolvedCollectionTitle:key.endsWith(':search')?'':'Fixture collection',activeGroupFilters:state.filterSettings||[]}:fn()},
     '../shopify.server':{},'../services/rateLimiter.server':{rateLimit:async()=>true},
@@ -296,7 +304,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
         if(updates.reset){state.country=null;state.realToolbar=false;state.independentFilters=false;state.savedFilterDelay=0;state.savedFilterFailures=0;state.savedFilterAttempts=0;state.themeIntro=false;state.noMatchQuery=null;}
         if(updates.reset){for(const socket of sockets)if(socket!==req.socket)socket.destroy();for(const timer of timers)clearTimeout(timer);timers.clear();if(redisLayer)await redisLayer.reset();values.clear();sessions.clear();jobs.clear();responseCache.clear();requests.length=0;requestStarts.length=0;docs.forEach(doc=>doc.status='ACTIVE');delete state.stormTimer;Object.assign(state,{delay:100,priceDelay:50,imageDelay:50,pin:'1',boost:'2',fail:false,hold:false,builds:0,completed:0,revision:0,apiFailure:null,directFacts:false,facetDelay:0,searchFacetDelay:0,facetFailure:false,cardSnapshots:false,noPins:false,headRenderer:false,themeDelay:0,htmlDelay:0,wishlist:false});}
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
-        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;}
+        if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;state.ruleConditions=null;state.enforceCollections=false;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
         if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields))Object.assign(byId.get(id),fields);
         if(updates.productVariants)for(const [id,variants]of Object.entries(updates.productVariants)){

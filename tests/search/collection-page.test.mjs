@@ -2,6 +2,7 @@ import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
 import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
+import * as collectionFacetScope from '../../app/utils/collectionFacetScope.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as filterPresentation from '../../app/utils/filterPresentation.js';
@@ -232,6 +233,7 @@ test("the storefront loader returns the full count, pinned cards, and the final 
     if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async(_shop,country)=>countryMarket?{status:countryMarket.pending?'pending':'ready',version:country+countryMarket.version}:{status:'disabled',version:null},getMarketAvailableProductIds:async(_shop,country)=>countryMarket.ids[country]};
     if(name==='../services/marketPriceCoverage.server.js')return {marketPriceIntentReady:async()=>false};
     if(name==='../utils/collectionFilterMembership.js')return {};
+    if(name==='../utils/collectionFacetScope.js')return collectionFacetScope;
     if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
     if (name === "../utils/searchColor.js") return searchColor;
     if (name === '../utils/searchPinnedIntent.js') return {pinnedProductMatchesAppliedIntent:()=>true};

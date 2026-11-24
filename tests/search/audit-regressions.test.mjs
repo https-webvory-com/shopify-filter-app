@@ -2,6 +2,7 @@ import * as extraProductFilters from '../../app/utils/extraProductFilters.js';
 import * as savedMarketPricing from '../../app/utils/savedMarketPricing.js';
 import * as percentSaleFilter from '../../app/utils/percentSaleFilter.js';
 import * as collectionCards from '../../app/utils/collectionCards.js';
+import * as collectionFacetScope from '../../app/utils/collectionFacetScope.js';
 import * as pinnedPrefix from '../../app/utils/collectionPinnedPrefix.js';
 import * as productTitleFilter from '../../app/utils/productTitleFilter.js';
 import * as filterPresentation from '../../app/utils/filterPresentation.js';
@@ -122,6 +123,7 @@ async function route(file,mocks){
      if(name==='../utils/marketAvailability.js')return marketAvailability;
      if(name==='../services/marketAvailability.server.js')return {getMarketAvailabilityState:async()=>({status:'disabled',version:null}),getMarketAvailableProductIds:async()=>null};
      if(name==='../utils/collectionFilterMembership.js')return {};
+     if(name==='../utils/collectionFacetScope.js')return collectionFacetScope;
      if(name==='../services/collectionFilterMembership.server.js')return {collectionMembershipProof:async()=>null};
       if (name === "../utils/pinImportOrder.js") return pinImportOrder;
       if (name === "../utils/merchandisingSelection.js") return {merchandisingRuleIds};

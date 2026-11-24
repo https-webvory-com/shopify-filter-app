@@ -35,6 +35,20 @@ test('published first page retains a complete membership proof for the first fil
  assert.equal(f.lastSession().membershipProof,proof);
 });
 
+test('legacy Include facets refresh without discarding already published product cards',async()=>{
+ const f=fixture(),hits=[];f.payload.debug.activeRuleConditions=[{action:'Include',field:'Tags',value:'TopWedding'}];
+ f.payload.settings=[{isEnabled:true,filterType:'option',filterKey:'Color'}];await f.publish();
+ assert.equal(await f.store.get(f.request(),{filtersOnly:true}),null);assert.equal(f.sessionCalls(),0);
+ assert.equal(await f.store.get(f.request(),{probe:true}),null,'background rendering replaces legacy facets');
+ const cards=await(await f.store.get(f.request(),{onHit:value=>hits.push(value)})).json();
+ assert.deepEqual(cards.products.map(p=>p.id),f.ids.slice(0,25));assert.equal(cards.totalCount,70);
+ assert.equal(cards.cfpCards.version,2);assert.equal(cards.cfpCards.published,false);assert.equal(cards.cfpCards.facetsReady,false);
+ await Promise.resolve();assert.equal(hits[0].refreshDue,true);
+ f.payload.facets.collectionScopeVersion=1;f.advance(1);await f.publish();
+ const filters=await(await f.store.get(f.request(),{filtersOnly:true})).json();assert.equal(filters.facets.collectionScopeVersion,1);
+ const fresh=await(await f.store.get(f.request())).json();assert.deepEqual(fresh.products.map(p=>p.id),cards.products.map(p=>p.id));assert.equal(fresh.cfpCards.published,true);
+});
+
 test('saved filters load from durable publication without product sessions and reject incompatible scopes',async()=>{
  const f=fixture({readConfigurationRevision:async()=> '1'});
  f.payload.settings=[{isEnabled:true,filterType:'option',filterKey:'Color'}];

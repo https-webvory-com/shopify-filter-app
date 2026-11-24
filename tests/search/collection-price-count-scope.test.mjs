@@ -16,6 +16,7 @@ async function run({read,search=false,categories}={}){
   getCached:async(key,fn)=>{calls.keys.push(key);return fn();},
   availableProductIds:async(_model,where,_options,_merges,range)=>{calls.eligibility.push({where,range});return Object.entries(prices).filter(([id,price])=>(!where.id||where.id.in.includes('gid://shopify/Product/'+id))&&price>=range.min&&price<=range.max).map(([id])=>id);},
  };
+ context.facetBaseFilters=context.baseFilters;
  vm.runInNewContext(`async function run(){${block};return priceEligibleIds;}this.run=run;`,context);
  return {calls,ids:JSON.parse(JSON.stringify(await context.run()))};
 }

@@ -1,3 +1,4 @@
+import {readIndexedProductIds} from './indexedProductIds.js';
 const baseKeys=new Set(['shop','collectionId','collectionHandle','locale','language','country','sortBy','limit','q','isSearch','customerTags','customer_tags']);
 const transportKeys=new Set(['page','responseProfile','rankingToken','membershipParentToken','membershipParentQuery']);
 const clean=id=>String(id).split('/').pop();
@@ -28,6 +29,11 @@ export async function readNarrowerCollectionMembership(index,{filter,parentIds,s
   // predicate already scopes the candidate query, so avoid a huge ID clause.
   // Every returned ID is still checked against the frozen parent membership.
   const scoped=baseAlreadyScoped?filter:[...filter,`id IN ${JSON.stringify([...allowed])}`];
+  const indexed=await readIndexedProductIds(index,{filter:scoped,maxDocuments,settings});
+  if(indexed!==null){
+   if(indexed.some(id=>!allowed.has(id)))return null;
+   const selected=new Set(indexed);return parentIds.filter(id=>selected.has(clean(id)));
+  }
   let total=null;
   const read=offset=>index.getDocuments({filter:scoped,fields:['id','shop','status'],limit:1000,offset});
   function accept(page,offset){
