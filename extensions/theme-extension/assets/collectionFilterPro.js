@@ -1583,15 +1583,13 @@ return narrowerCollectionFilters;
     // prepares. Other collection changes keep their existing retained-card UI.
     const priceSort = ['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy);
     const retaining = previousCards > 0 && !priceSort;
-    const keepVisible=retaining&&templateName==='collection';
-    productContainer.classList.toggle('cfp-retaining-visible',keepVisible);
     productContainer.querySelectorAll(':scope > .cfp-skeleton-card').forEach(card => card.remove());
     const oldPagination = productContainer.querySelector('.cfp-load-more-container');
     if (oldPagination) oldPagination.style.setProperty('display', 'none', 'important');
 
     // Inject skeleton cards inside the exact container where products will load
     let skeletonHtml = '';
-    for (let i = 0; i < (keepVisible ? 0 : retaining ? Math.min(previousCards, PAGE_SIZE) : 8); i++) {
+    for (let i = 0; i < (retaining ? Math.min(previousCards, PAGE_SIZE) : 8); i++) {
       skeletonHtml += `
         <div class="cfp-product-card cfp-skeleton-card">
           <div class="cfp-skeleton-image cfp-skeleton">&nbsp;</div>

@@ -1910,7 +1910,7 @@ facet-filters-form,
 }
 
 /* Skeleton Loader */
-.cfp-products-grid.cfp-loading-retained:not(.cfp-retaining-visible) > :not(.cfp-skeleton-card) {
+.cfp-products-grid.cfp-loading-retained > :not(.cfp-skeleton-card) {
   display: none !important;
 }
 @keyframes cfpSkeletonGlassShimmer {

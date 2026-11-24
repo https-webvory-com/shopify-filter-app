@@ -1,5 +1,6 @@
 import {Prisma} from '@prisma/client';
-import {canonicalSize,isSizeFacet,expandMappedFacetValues} from './facetNormalization.js';
+import {isSizeFacet,expandMappedFacetValues} from './facetNormalization.js';
+import {compileVariantOptionMatcher} from './variantOptionMatcher.js';
 export {availableOptionFacetCounts,availableOptionFacetSignature} from './availableOptionFacetCounts.js';
 export {collectionPriceCandidateIds,savedPriceCollectionScope} from './collectionPriceCandidates.js';
 
@@ -187,13 +188,15 @@ export async function ensureVariantEligibilityFilter(index, tasks) {
 
 // OR within an option; AND across options, on the same available variant.
 export function matchingAvailableVariants(product, filters = {}, mergedValues = [], priceRange = null,priceContext={}) {
+  const matchesOptions=compileVariantOptionMatcher(product.options,filters,mergedValues);
+  const searchColorPosition=priceContext.searchColorValues?(product.options||[]).findIndex(option=>/^colou?r$/i.test(String(option.name||'').trim())):-1;
+  const searchColors=priceContext.searchColorValues?new Set(priceContext.searchColorValues.map(normalize)):null;
+  const ranges=priceRange?(Array.isArray(priceRange)?priceRange:[priceRange]):priceContext.ranges||[];
   return (product.variants || product.variantPrices || []).filter(variant => {
     if (priceContext.stockOnly!==false&&variant.available !== true) return false;
     if(priceContext.searchColorValues){
-      const position=(product.options||[]).findIndex(option=>/^colou?r$/i.test(String(option.name||'').trim()));
-      if(position<0||!priceContext.searchColorValues.some(value=>normalize(value)===normalize(variant[`option${position+1}`])))return false;
+      if(searchColorPosition<0||!searchColors.has(normalize(variant[`option${searchColorPosition+1}`])))return false;
     }
-    const ranges=priceRange?(Array.isArray(priceRange)?priceRange:[priceRange]):priceContext.ranges||[];
     if (ranges.length || priceContext.requirePrice) {
       const raw=priceContext.country&&!priceContext.basePrice?variant.marketPrices?.[priceContext.country]?.price:variant.price;
       const price = raw == null||raw==='' ? NaN : Number(raw);
@@ -202,19 +205,7 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
       if(priceContext.currency&&currency!==priceContext.currency)return false;
       if (ranges.length&&!ranges.some(range=>price>=range.min&&(range.max==null||price<=range.max)))return false;
     }
-    return Object.entries(filters).every(([name, selected]) => {
-      if (!selected.length) return true;
-      const position = (product.options || []).findIndex(option => normalize(option.name) === normalize(name));
-      if (position < 0) return false;
-      const actual = normalize(variant[`option${position + 1}`]);
-      return selected.some(value => {
-        if (actual === normalize(value)) return true;
-        if (isSizeFacet(name) && canonicalSize(actual) && canonicalSize(actual) === canonicalSize(value)) return true;
-        return mergedValues.some(rule => normalize(rule.targetValue) === normalize(value) &&
-          (!rule.optionName || normalize(rule.optionName) === normalize(name)) &&
-          (rule.sourceValues || []).some(source => normalize(source) === actual));
-      });
-    });
+    return matchesOptions(variant);
   });
 }
 

@@ -1,5 +1,5 @@
 import {Prisma} from '@prisma/client';
-import {canonicalSize,isSizeFacet} from './facetNormalization.js';
+import {compileVariantOptionMatcher} from './variantOptionMatcher.js';
 export {convertedPriceBound} from './priceBounds.js';
 const countryPattern=/^[A-Z]{2}$/;
 const currencyPattern=/^[A-Z]{3}$/;
@@ -7,8 +7,8 @@ const id=value=>String(value).split('/').pop();
 
 export function priceSortVariant(product,context){
  if(!context||!['asc','desc'].includes(context.direction))return null;
- const normalize=value=>String(value??'').trim().toLowerCase();
- const options=product.options||[],selected=context.options||{},merged=context.mergedValues||[];
+ const selected=Object.fromEntries(Object.entries(context.options||{}).filter(([,values])=>values?.length));
+ const matchesOptions=compileVariantOptionMatcher(product.options,selected,context.mergedValues||[]);
  let result=null;
  for(const variant of product.variants||product.variantPrices||[]){
   if(context.stockOnly&&variant.available!==true)continue;
@@ -18,13 +18,7 @@ export function priceSortVariant(product,context){
   if(context.currency&&currency!==context.currency)continue;
   const price=Number(raw);
   if(context.ranges?.length&&!context.ranges.some(range=>price>=range.min&&(range.max==null||price<=range.max)))continue;
-  if(!Object.entries(selected).every(([name,values])=>{
-   if(!values?.length)return true;
-   const position=options.findIndex(option=>normalize(option.name)===normalize(name));
-   if(position<0)return false;
-   const actual=normalize(variant['option'+(position+1)]);
-   return values.some(value=>actual===normalize(value)||isSizeFacet(name)&&canonicalSize(actual)&&canonicalSize(actual)===canonicalSize(value)||merged.some(rule=>(!rule.optionName||normalize(rule.optionName)===normalize(name))&&normalize(rule.targetValue)===normalize(value)&&(rule.sourceValues||[]).some(source=>normalize(source)===actual)));
-  }))continue;
+  if(!matchesOptions(variant))continue;
   if(!result||(context.direction==='desc'?price>result.price:price<result.price)||price===result.price&&id(variant.id)<result.variantId)
    result={version:2,country:context.country,currency,variantId:id(variant.id),price};
  }

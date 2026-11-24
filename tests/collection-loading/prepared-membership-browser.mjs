@@ -30,8 +30,8 @@ try{
     const response=page.waitForResponse(r=>r.status()===200&&new URL(r.url()).searchParams.get('responseProfile')==='fast-cards-v1');
     response.catch(()=>{});
     await page.evaluate(choices=>{for(const [name,value,checked=true]of choices){const input=[...document.querySelectorAll('#cfp-sidebar input[type=checkbox]')].find(i=>i.name===name&&i.value===value);if(!input)throw Error('Missing '+name+'='+value);input.checked=checked;input.dispatchEvent(new Event('change',{bubbles:true}));}},choices);
-    assert.equal(await page.locator('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)').first().isVisible(),true);
-    assert.equal(await page.locator('#cfp-products-container .cfp-skeleton-card').count(),0);
+    assert.equal(await page.locator('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)').first().isVisible(),false);
+    assert.equal(await page.locator('#cfp-products-container .cfp-skeleton-card').first().isVisible(),true);
     const received=await response,body=await received.json();body.requestUrl=received.url();assert.equal(body.debug.membershipReuse,'reused');assert.equal(body.debug.rankingPreparationMs,0);
     await page.waitForFunction(ids=>!document.querySelector('#cfp-products-container.cfp-loading-retained')&&JSON.stringify([...document.querySelectorAll('#cfp-products-container .cfp-product-card:not(.cfp-skeleton-card)')].map(n=>n.dataset.cfpProductId))===JSON.stringify(ids),body.products.map(p=>String(p.id)));
     if(waitForFacets)await page.waitForFunction(()=>!document.querySelector('#cfp-sidebar.cfp-loading'));
@@ -46,7 +46,7 @@ try{
    const red=await apply([['option-Color','Red']]);assert.equal(red.totalCount,20);
    const removed=await apply([['option-Size','M',false]]);assert.equal(removed.totalCount,20);assert.deepEqual(removed.products.map(p=>p.id),red.products.map(p=>p.id));
    assert.equal(await page.locator('.cfp-order-error,.cfp-facet-error').count(),0);assert.deepEqual(errors,[]);
-   proof.cases.push({width,fourFilters:40,changedColor:20,removedSize:20,newRankingBuilds:fixture.state.builds-builds,currentOrderUnavailable:true,retainsVisibleCards:true,reusesCardTokenBeforeFacets:true,externalRequestsAllowed:0});console.log('PASS '+JSON.stringify(proof.cases.at(-1)));
+   proof.cases.push({width,fourFilters:40,changedColor:20,removedSize:20,newRankingBuilds:fixture.state.builds-builds,currentOrderUnavailable:true,immediatePlaceholders:true,reusesCardTokenBeforeFacets:true,externalRequestsAllowed:0});console.log('PASS '+JSON.stringify(proof.cases.at(-1)));
   }finally{await context.close();}
  }
  await fs.writeFile('scratch/prepared-membership-browser-proof-20261124.json',JSON.stringify(proof,null,2));
