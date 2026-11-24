@@ -7,6 +7,17 @@ import {readNarrowerCollectionMembership} from '../../app/utils/collectionFilter
 const settings={distinctAttribute:null,displayedAttributes:['*'],filterableAttributes:['id','shop'],faceting:{maxValuesPerFacet:100000},pagination:{maxTotalHits:100000}};
 const values=ids=>Object.fromEntries(ids.map(id=>[id,1]));
 
+test('ID queries read only current small safety settings instead of the full synonym dictionary',async()=>{
+ const calls=[],index={getSettings:()=>{throw Error('Do not read unrelated settings');},
+  getDistinctAttribute:async()=>{calls.push('distinct');return null;},getPagination:async()=>{calls.push('pagination');return settings.pagination;},getFaceting:async()=>{calls.push('faceting');return settings.faceting;},
+  search:async()=>({totalHits:2,facetDistribution:{id:{'1':1,'2':1}}})};
+ assert.deepEqual(await readIndexedProductIds(index,{filter:['shop = "fixture"']}),['1','2']);
+ assert.deepEqual(calls.sort(),['distinct','faceting','pagination']);
+ assert.deepEqual(await readNarrowerCollectionMembership(index,{filter:['shop = "fixture"'],parentIds:['2','1'],shop:'fixture'}),['2','1']);
+ index.getPagination=async()=>({maxTotalHits:1});assert.equal(await readIndexedProductIds(index,{filter:[]}),null);
+ index.getPagination=async()=>settings.pagination;index.getDistinctAttribute=async()=> 'vendor';assert.equal(await readIndexedProductIds(index,{filter:[]}),null);
+});
+
 test('complete indexed ID membership avoids hydrating thousands of product documents',async()=>{
  const ids=Array.from({length:6000},(_,i)=>String(i+1)),filter=['shop = "fixture"','id IN '+JSON.stringify(ids),'option_Color = "Black"'];
  let searches=0;const index={getSettings:async()=>settings,getDocuments:()=>{throw Error('Product document hydration is not needed');},search:async(q,options)=>{

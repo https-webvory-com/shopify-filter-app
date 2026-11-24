@@ -2,9 +2,18 @@
 // document. Accept them only with an exact total and provably sufficient caps.
 // Unsupported settings/endpoints retain the existing document-browse path.
 export async function readIndexedProductIds(index,{filter,maxDocuments=100000,settings}={}){
- if(typeof index.getSettings!=='function'||typeof index.search!=='function')return null;
+ if(typeof index.search!=='function')return null;
  try{
-  settings??=await index.getSettings();
+  if(!settings){
+   // Full settings can include the entire synonym dictionary. Keep these
+   // safety checks current without transferring unrelated index settings.
+   if(['getDistinctAttribute','getPagination','getFaceting'].every(name=>typeof index[name]==='function')){
+    const [distinctAttribute,pagination,faceting]=await Promise.all([index.getDistinctAttribute(),index.getPagination(),index.getFaceting()]);
+    // A successful ID facet query below also proves that id is filterable.
+    settings={distinctAttribute,pagination,faceting,filterableAttributes:['id']};
+   }else if(typeof index.getSettings==='function')settings=await index.getSettings();
+   else return null;
+  }
   if(settings.distinctAttribute||!settings.filterableAttributes?.some(field=>field==='id'||field==='*')||
     !(settings.pagination?.maxTotalHits>=maxDocuments)||!(settings.faceting?.maxValuesPerFacet>=maxDocuments))return null;
   const result=await index.search('',{filter,facets:['id'],hitsPerPage:1,page:1,attributesToRetrieve:[]});

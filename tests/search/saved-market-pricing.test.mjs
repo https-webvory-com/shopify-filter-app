@@ -16,6 +16,23 @@ test('background price reconciliation reads only the visible products and the au
  assert.deepEqual(query.where.productId.in,['gid://shopify/Product/1','gid://shopify/Product/2']);assert.equal(query.where.product.shop,'owner.myshopify.com');assert.equal(products[0].variantPrices[0].marketPrices.IN.price,20);assert.equal(products[1].variantPrices[0].marketPrices.IN.price,30);
 });
 
+test('visible saved prices can project only the requested country without weakening tenant and product ownership',async()=>{
+ const products=[{id:'1',variantPrices:[{id:'11',marketPrices:{IN:{price:1},GB:{price:2}}},{id:'12',marketPrices:{IN:{price:3}}},{id:'13',marketPrices:{IN:{price:4}}}]}];let query;
+ await hydrateSavedMarketPrices(products,{findMany:()=>{throw Error('No complete market JSON read');}},'owner.myshopify.com','IN',{database:{$queryRaw:async value=>{
+  query=value;return [{id:'11',productId:'gid://shopify/Product/1',marketPrices:{IN:{price:100,currency:'INR'}}},{id:'12',productId:'gid://shopify/Product/1',marketPrices:{IN:null}},{id:'13',productId:'gid://shopify/Product/2',marketPrices:{IN:{price:900}}}];
+ }}});
+ assert.match(query.text,/jsonb_build_object/);assert.match(query.text,/JOIN "Product"/);assert.match(query.text,/jsonb_typeof/);
+ assert.ok(query.values.includes('owner.myshopify.com'));assert.ok(query.values.includes('gid://shopify/Product/1'));assert.ok(query.values.includes('IN'));
+ assert.equal(products[0].variantPrices[0].marketPrices.IN.price,100);assert.equal(products[0].variantPrices[0].marketPrices.GB.price,2);
+ assert.equal(products[0].variantPrices[1].marketPrices.IN,null);assert.equal(products[0].variantPrices[2].marketPrices.IN.price,4);
+});
+
+test('unavailable country projection retains the original saved-price read',async()=>{
+ const products=[{id:'1',variantPrices:[{id:'11'}]}];let reads=0;
+ await hydrateSavedMarketPrices(products,{findMany:async()=>{reads++;return [{id:'11',productId:'gid://shopify/Product/1',marketPrices:{IN:{price:100,currency:'INR'}}}];}},'owner.myshopify.com','IN',{database:{$queryRaw:async()=>{throw Error('Unavailable');}}});
+ assert.equal(reads,1);assert.equal(products[0].variantPrices[0].marketPrices.IN.price,100);
+});
+
 test('price sorting recognizes saved country fields without a coverage scan or revision proof',async()=>{
  const calls=[];
  const service=await loadModule('app/services/marketPriceCoverage.server.js',{

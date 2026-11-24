@@ -48,6 +48,17 @@ test('browser retains the full collection for changed or removed categories and 
  assert.equal(context.parent(params('Direct','M')).token,'full');
 });
 
+test('ready collection cards cancel obsolete facet work during successive selections without delaying cards',async()=>{
+ const source=await fs.readFile('extensions/theme-extension/assets/collectionFilterPro.js','utf8');
+ const block=source.slice(source.indexOf('  async function scheduleCollectionFacets'),source.indexOf('  async function completeCollectionFacets'));
+ let calls=0;const context={setTimeout,clearTimeout,filtersReady:true,cfpLastSettings:[{}],completeCollectionFacets:async()=>{calls++;}};
+ vm.createContext(context);vm.runInContext(block,context);
+ const controller=new AbortController(),pending=context.scheduleCollectionFacets({cfpCards:{filtered:true}},'url',controller.signal);
+ assert.equal(calls,0);controller.abort();await pending;assert.equal(calls,0);
+ await context.scheduleCollectionFacets({cfpCards:{}},'url',new AbortController().signal);assert.equal(calls,1);
+ await context.scheduleCollectionFacets({cfpCards:{filtered:true}},'url',new AbortController().signal);assert.equal(calls,2);
+});
+
 test('filtering a complete prepared native collection reuses order without preparing ranking or waiting for order refresh',async()=>{
  const f=await createLoadingServer();
  try{

@@ -108,6 +108,7 @@ export const loader = async ({ request, context }) => {
   let rankingPreparationMs=0;
   let membershipProof=null;
   let membershipReuse='not-requested';
+  let savedPriceHydrationMs=0,cardShapingMs=0;
   let searchNormalizedFacetCounts=null;
   console.log("API Filter Request: ", request.url);
   try {
@@ -1604,8 +1605,11 @@ export const loader = async ({ request, context }) => {
 
     // Eligibility reads saved prices. Resolve only the visible page from the
     // same source so stale indexed prices cannot choose a different variant.
+    const priceHydrationStarted=Date.now();
     if(canonicalVariantPrice&&!databasePriceSort&&!variantEligibilityPriceContext.basePrice)
-      await hydrateSavedMarketPrices(paginatedSlice,prisma.variant,shop,sortCountry);
+      await hydrateSavedMarketPrices(paginatedSlice,prisma.variant,shop,sortCountry,{database:prisma});
+    savedPriceHydrationMs=Date.now()-priceHydrationStarted;
+    const cardShapingStarted=Date.now();
     let products = paginatedSlice.map((p) => {
       // Keep card choices independent from the variants eligible for selection.
       // Filters choose the default variant; they must not erase other colors/sizes.
@@ -1812,6 +1816,7 @@ export const loader = async ({ request, context }) => {
 
       return savedMarketProduct(productObj,country,{basePrice:variantEligibilityPriceContext?.basePrice===true});
     });
+    cardShapingMs=Date.now()-cardShapingStarted;
 
     // Sort products by match score so the most relevant colors appear first on the page
     if (!directSort && !collectionRankingApplied && !searchRankingApplied && (searchTokens.length > 0 || Object.keys(optionsFilters).length > 0)) {
@@ -1837,7 +1842,7 @@ export const loader = async ({ request, context }) => {
         ...(directSort?{directSort:{version:1,sortBy,collectionId:resolvedCollectionId}}:{}),
         ...(pinnedPrefix?{prefix:true,proof:{version:2,inputVersion:pinnedPrefixVersion}}:{})},
       ...(priceSortSelected?{priceSortSource:partialMarketPriceSort?'partial-market':marketSortReady?'verified-market':savedUsBasePrice?'saved-usd-base':'base'}:{}),
-      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,variantEligibilityDetail,membershipReuse,rankingPreparationMs,meiliMs:meiliTime,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
+      debug:{configurationReadyMs,queryReadyMs,variantEligibilityMs,variantEligibilityDetail,membershipReuse,rankingPreparationMs,meiliMs:meiliTime,savedPriceHydrationMs,cardShapingMs,...(databasePriceSort?{savedPriceTiming}:{}),totalMs:Date.now()-startTime}},
       {headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
     }
 

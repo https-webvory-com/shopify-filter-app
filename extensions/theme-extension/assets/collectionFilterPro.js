@@ -1262,8 +1262,8 @@ return narrowerCollectionFilters;
         cfpLastTotalCount = data.totalCount;
         renderFilterSidebar(data.settings, data.facets, data.totalCount);
       }
-      // Start the canonical filter read before building the product grid. Its
-      // network work can overlap card rendering instead of waiting behind it.
+      // Ready cards take priority. A brief idle window for an already-usable
+      // sidebar cancels obsolete facet work during successive selections.
       const savedFiltersReady=data.cfpCards?.facetsReady===true&&data.settings&&data.facets&&data.rankingToken&&!data.cfpCards.preview&&!data.cfpCards.prefix;
       const keepPriceFiltersUsable=queryParams.get('priceSortVersion')==='2'&&data.cfpCards?.directSort?.version===1&&filtersReady&&cfpLastSettings.length>0&&
         Number.isFinite(data.totalCount)&&Array.isArray(data.products)&&data.products.length===Math.min(PAGE_SIZE,data.totalCount);
@@ -1273,7 +1273,7 @@ return narrowerCollectionFilters;
         if(!keepPriceFiltersUsable)sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
           ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)
-          :completeCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
+          :scheduleCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
       }
       if (data.products) {
         const sameCachedCards = cachedBrowserResult && !isLoadMore &&
@@ -1359,6 +1359,18 @@ return narrowerCollectionFilters;
       retry.addEventListener('click',()=>{if(signal.aborted||retry.disabled)return;retry.disabled=true;notice.remove();sidebar.classList.add('cfp-loading');completeSearchFacets(cards,requestUrl,signal);});
       notice.append(message,retry);(sidebar.querySelector('.cfp-sidebar__body')||sidebar).prepend(notice);
     }finally{if(!signal.aborted)sidebar.classList.remove('cfp-loading');}
+  }
+
+  async function scheduleCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
+    if(cards.cfpCards?.filtered===true&&filtersReady&&cfpLastSettings.length){
+      await new Promise(resolve=>{
+        const finish=()=>{clearTimeout(timer);signal.removeEventListener('abort',finish);resolve();};
+        const timer=setTimeout(finish,300);
+        if(signal.aborted)finish();else signal.addEventListener('abort',finish,{once:true});
+      });
+    }
+    if(signal.aborted)return;
+    return completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey);
   }
 
   async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){

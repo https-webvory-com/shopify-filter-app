@@ -1,3 +1,4 @@
+import {Prisma} from '@prisma/client';
 import {canonicalSize,isSizeFacet} from './facetNormalization.js';
 export {convertedPriceBound} from './priceBounds.js';
 const countryPattern=/^[A-Z]{2}$/;
@@ -50,11 +51,22 @@ export function savedMarketProduct(product,country,{basePrice=false}={}){
 
 // Canonical/background responses inspect only their visible page. This reads
 // existing variant data; it never syncs products or updates an index.
-export async function hydrateSavedMarketPrices(products,variantModel,shop,country){
+export async function hydrateSavedMarketPrices(products,variantModel,shop,country,{database}={}){
  if(!countryPattern.test(country||'')||typeof variantModel?.findMany!=='function')return;
  if(!products.length)return;
  const ids=products.map(product=>'gid://shopify/Product/'+id(product.id));
- const rows=await variantModel.findMany({where:{productId:{in:ids},product:{shop}},select:{productId:true,id:true,marketPrices:true}});
+ let rows;
+ if(typeof database?.$queryRaw==='function')try{
+  // Keep the saved-price source and tenant boundary, but transfer only the
+  // requested country instead of every market's JSON for every visible variant.
+  rows=await database.$queryRaw(Prisma.sql`SELECT v."id",v."productId",
+   jsonb_build_object(${country}::text,v."marketPrices" -> ${country}::text) AS "marketPrices"
+   FROM "Variant" v JOIN "Product" p ON p."id"=v."productId"
+   WHERE p."shop"=${shop} AND v."productId" IN (${Prisma.join(ids)})
+   AND jsonb_typeof(v."marketPrices")='object' AND v."marketPrices" ? ${country}::text`);
+  if(!Array.isArray(rows))rows=undefined;
+ }catch{/* Older infrastructure retains the existing scoped read. */}
+ rows??=await variantModel.findMany({where:{productId:{in:ids},product:{shop}},select:{productId:true,id:true,marketPrices:true}});
  const byId=new Map(rows.map(row=>[id(row.id),row]));
  for(const product of products)for(const variant of product.variantPrices||[]){
   const stored=byId.get(id(variant.id));
