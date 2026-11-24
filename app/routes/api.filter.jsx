@@ -743,17 +743,6 @@ export const loader = async ({ request, context }) => {
         categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_available_variant_price__"';
       }else categoryFilters.priceMin='('+selectedPriceRanges.map(range=>`(priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''})`).join(' OR ')+')';
     }
-    if((canonicalVariantPrice&&!variantPriceV2)||(variantPriceV2&&!fastCards&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length)))){
-      const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
-      const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
-      for(const range of ranges){
-        const normalized=range?{min:range.min,max:range.max??Infinity}:null;
-        const eligible=await getCached('availableVariants:'+shop+':filter-price-v1:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized]),()=>availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext}),30);
-        for(const id of eligible)ids.add(id);
-      }
-      categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
-    }
-    variantEligibilityMs=Date.now()-eligibilityStarted;
     if (availability.length > 0 && needsExtraFacts) categoryFilters.available=extraIdsFilter(extraRows,'stock_status',availability);
     else if (availability.length > 0) {
       if (
@@ -805,6 +794,33 @@ export const loader = async ({ request, context }) => {
       }
     }
 
+    if((canonicalVariantPrice&&!variantPriceV2)||(variantPriceV2&&!fastCards&&(nativeRanges.length||Object.values(optionsFilters).some(values=>values.length)))){
+      const scope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
+      // Cards need only the intersection of the selected categories. Restrict
+      // the same-variant database check to complete indexed candidates instead
+      // of scanning the whole collection for every multi-filter combination.
+      // Facet requests retain their wider scope for disjunctive counts.
+      const candidateFilters=fastCards&&!isSearch&&!searchQuery&&canonicalVariantPrice&&!variantPriceV2&&
+        Object.keys(categoryFilters).length+Number(nativeRanges.length>0)>=3
+        ? [...baseFilters,...Object.values(categoryFilters),...intentFilters] : null;
+      const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
+      for(const range of ranges){
+        const normalized=range?{min:range.min,max:range.max??Infinity}:null;
+        const eligible=await getCached('availableVariants:'+shop+':filter-price-v1:'+JSON.stringify([scope,variantEligibilityPriceContext,normalized,...(candidateFilters?[candidateFilters]:[])]),async()=>{
+          let narrowedScope=scope;
+          if(candidateFilters)try{
+            const candidates=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:candidateFilters});
+            if(candidates.some(id=>!/^\d+$/.test(id)))throw Error('Invalid variant candidate IDs');
+            if(!candidates.length)return [];
+            narrowedScope={...scope,id:{in:candidates.map(id=>'gid://shopify/Product/'+id)}};
+          }catch{/* An incomplete or unavailable candidate read keeps the full scoped check. */}
+          return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...narrowedScope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext});
+        },30);
+        for(const id of eligible)ids.add(id);
+      }
+      categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
+    }
+    variantEligibilityMs=Date.now()-eligibilityStarted;
     const allFiltersList = [...baseFilters, ...Object.values(categoryFilters), ...(parsedQuery?.colorFilter ? [parsedQuery.colorFilter] : []), ...intentFilters];
     const activeCategories = Object.keys(categoryFilters);
     const useCollectionPagination = !isSearch && !searchQuery;
