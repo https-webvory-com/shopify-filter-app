@@ -1179,19 +1179,20 @@ return narrowerCollectionFilters;
             return (pending || read())
               .then(result => ({ result }), error => ({ error }));
           })() : null;
-        // Filtered collection counts do not depend on card order. Read them
-        // alongside the cards instead of after them; the result is adopted only
-        // when it describes the same filters and total (see completeCollectionFacets).
-        const collectionFacetsRead = templateName !== 'search' && !isLoadMore && activeFilters.page === 1 &&
+        // Filtered collection counts do not depend on card order. They start as
+        // soon as the cards have arrived, so the cards never share the search
+        // engine with them; the result is adopted only when it describes the same
+        // filters and total (see completeCollectionFacets).
+        const startCollectionFacets = templateName !== 'search' && !isLoadMore && activeFilters.page === 1 &&
           queryParams.get('responseProfile') === 'fast-cards-v1' && hasSelectedFilters
-          ? (() => {
+          ? () => {
             const request = new URL(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
             request.searchParams.set('responseProfile', 'collection-facets-v1');
             request.searchParams.delete('rankingToken');
             return fetchCollectionResponse(request.toString(), fetchSignal)
               .then(response => response.status === 200 ? response.json() : null)
               .catch(() => null);
-          })() : null;
+          } : null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
         if (window._cfpEarlyFetch && templateName !== 'search' && !collectionQuery && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
@@ -1304,7 +1305,7 @@ return narrowerCollectionFilters;
         if(!keepPriceFiltersUsable)sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
           ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)
-          :scheduleCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey,collectionFacetsRead);
+          :scheduleCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey,startCollectionFacets?.());
       }
       if (data.products) {
         const sameCachedCards = cachedBrowserResult && !isLoadMore &&
