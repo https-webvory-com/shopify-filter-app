@@ -32,6 +32,30 @@ export function productContentFingerprint(product){
  const {bestSellingScore,trendingScore,cfpCollectionInputSource,...content}=product;
  return productRankingFingerprint(content);
 }
+// Exact stock numbers are stored only as these two scalars; variants carry just
+// available/unavailable. A count moving within the same rule band (7 -> 6)
+// cannot change eligibility, order or cards, so it needs no collection rebuild.
+const stockCountFields=['inventoryTotal','cfpSearchInventory'];
+export function productStockFreeFingerprint(product){
+ if(product==null)return productContentFingerprint(product);
+ const copy={...product};for(const key of stockCountFields)delete copy[key];
+ return productContentFingerprint(copy);
+}
+export function productStockCount(product){
+ const value=product?.inventoryTotal??product?.cfpSearchInventory;
+ return Number.isFinite(value)?value:null;
+}
+// True when a count change crosses zero or any configured Available bound, or
+// when either value is unknown (then the existing rebuild must run).
+export function stockChangeCrossesBounds(from,to,bounds=[]){
+ if(!Number.isFinite(from)||!Number.isFinite(to))return true;
+ if(from===to)return false;
+ for(const bound of [0,...bounds]){
+  if(!Number.isFinite(bound))return true;
+  if((from<bound)!==(to<bound)||(from<=bound)!==(to<=bound))return true;
+ }
+ return false;
+}
 export function createShopCacheInvalidation({redis, warm = async()=>{}}) {
   return async function invalidate(shop, {kind = 'configuration', collectionIds = [],externalProof,countries=[]} = {}) {
     // Appearance changes need fresh settings, not a collection-wide rebuild.

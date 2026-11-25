@@ -2,10 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import vm from "node:vm";
-import {productRankingFingerprint,productContentFingerprint} from '../../app/utils/shopCacheInvalidation.js';
+import {productRankingFingerprint,productContentFingerprint,productStockFreeFingerprint,productStockCount,stockChangeCrossesBounds} from '../../app/utils/shopCacheInvalidation.js';
 import {productPriceFingerprint} from '../../app/utils/priceEvents.js';
 
-async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content') {
+// Exact stock counts live only in these two scalars (variants carry just available).
+function stockFields(mode){
+  const count={stock:6,stockOut:0,stockTag:6,stockWide:20}[mode]??7;
+  return {inventoryTotal:count,cfpSearchInventory:count,...(mode==='stockTag'?{tags:['NewTag']}:{})};
+}
+async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=false,changeMode='content',bounds=[['-99999','0']]) {
   const calls = [],invalidations=[],marketChanges=[],priceChanges=[];
   const admin = {graphql:async()=>({json:async()=>({data:{inventoryItem:{variant:{product:{id:'gid://shopify/Product/1'}}}}})})};
   let synced=false,deleted=false,activeShop='fixture.myshopify.com';
@@ -14,10 +19,10 @@ async function loadWorker(syncError, unchanged=false, invalidationFailsOnce=fals
     .replaceAll("await import(", "await loadModule(")
     .replace("export function initWebhookWorker", "function initWebhookWorker");
   const context = vm.createContext({
-    productRankingFingerprint,productContentFingerprint,productPriceFingerprint,
-    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,variantPrices:[{id:'11',price:synced&&!unchanged&&changeMode==='prices'?80:100,marketPrices:{GB:{price:synced&&!unchanged&&changeMode==='prices'?60:70,currency:'GBP'}}}],priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1']}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
+    productRankingFingerprint,productContentFingerprint,productPriceFingerprint,productStockFreeFingerprint,productStockCount,stockChangeCrossesBounds,
+    meiliClient:{index:()=>({getDocument:async()=>({shop:activeShop,variantPrices:[{id:'11',price:synced&&!unchanged&&changeMode==='prices'?80:100,marketPrices:{GB:{price:synced&&!unchanged&&changeMode==='prices'?60:70,currency:'GBP'}}}],priceMin:synced&&!unchanged&&changeMode==='content'?2:1,tags:synced&&!unchanged&&changeMode==='content'?['NewTag']:['OldTag'],bestSellingScore:synced&&changeMode==='scores'?2:1,cfpCollectionInputSource:synced&&changeMode==='derived'?'new-derived':'original-derived',cfpFilterFacts:{weights:[synced&&changeMode==='filterFacts'?200:100]},collections:['gid://shopify/Collection/1'],...stockFields(synced&&!unchanged?changeMode:'')}),deleteDocument:async()=>({taskUid:1})}),tasks:{waitForTask:async()=>({status:'succeeded'})}},
     console: { log() {}, error() {} },
-    prisma: {marketStorefrontConnection:{deleteMany:async({where})=>marketChanges.push(['connection-deleted',where.shop])},marketAvailabilitySnapshot:{deleteMany:async({where})=>marketChanges.push(['snapshots-deleted',where.shop])},product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
+    prisma: {merchandisingRuleCondition:{findMany:async({where})=>{assert.equal(where.field,'Available');assert.equal(where.rule.shop,activeShop);assert.equal(where.rule.status,true);return bounds.map(([minValue,maxValue])=>({value:minValue,minValue,maxValue}));}},marketStorefrontConnection:{deleteMany:async({where})=>marketChanges.push(['connection-deleted',where.shop])},marketAvailabilitySnapshot:{deleteMany:async({where})=>marketChanges.push(['snapshots-deleted',where.shop])},product:{deleteMany:async({where})=>{assert.equal(where.shop,activeShop);deleted=true;}},productCollection:{findMany:async()=>deleted?[]:[{collectionId:'gid://shopify/Collection/1'}]}, collection: { upsert: async () => calls.push(["collection-metadata"]) }, session: { deleteMany: async (query) => calls.push(["uninstall", query.where.shop]) } },
     async loadModule(path) {
       if(path.includes('productPriceLock.server'))return {withProductPriceLock:async(_shop,_id,run)=>run(async()=>{})};
       if(path.includes('priceEvents.server'))return {publishProductPriceChange:async(shop,id)=>priceChanges.push({shop,id,invalidations:invalidations.length})};
@@ -159,4 +164,23 @@ test('app subscriptions use supported product and inventory topics, never metafi
  assert.ok(subscription);
  const topics=[...subscription.matchAll(/"([^"]+)"/g)].map(match=>match[1]);
  assert.deepEqual(topics,['products/update','products/create','products/delete','inventory_levels/update','inventory_items/update']);
+});
+
+test('a stock count change inside the same rule band syncs the product without rebuilding collections',async()=>{
+ for(const topic of ['INVENTORY_ITEMS_UPDATE','PRODUCTS_UPDATE']){
+  const worker=await loadWorker(undefined,false,false,'stock');
+  await worker.process({name:topic,data:{shop:'fixture.myshopify.com',payload:{id:1,inventory_item_id:2}}});
+  assert.ok(worker.calls.some(call=>call[0]==='sync'));
+  assert.equal(worker.invalidations.length,0);
+  assert.ok(worker.marketChanges.some(change=>change[0]==='stock'));
+ }
+});
+
+test('going out of stock, crossing a configured bound, unknown bounds or other edits still rebuild',async()=>{
+ const cases=[['stockOut',[['-99999','0']]],['stockWide',[['-99999','0'],['10','50']]],['stock',[['abc','0']]],['stockTag',[['-99999','0']]]];
+ for(const [mode,bounds] of cases){
+  const worker=await loadWorker(undefined,false,false,mode,bounds);
+  await worker.process({name:'INVENTORY_ITEMS_UPDATE',data:{shop:'fixture.myshopify.com',payload:{inventory_item_id:2}}});
+  assert.equal(worker.invalidations.length,1,mode);assert.equal(worker.invalidations[0].kind,'products',mode);
+ }
 });

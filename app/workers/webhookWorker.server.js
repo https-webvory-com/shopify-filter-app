@@ -3,7 +3,7 @@ import { redisOptions } from "../services/queue.server.js";
 import prisma from "../db.server.js";
 import { calculateProductScores, pushScoresToMeili } from "../services/orders.server.js";
 import meiliClient from "../services/meiliClient.server.js";
-import {productRankingFingerprint,productContentFingerprint} from '../utils/shopCacheInvalidation.js';
+import {productRankingFingerprint,productContentFingerprint,productStockFreeFingerprint,productStockCount,stockChangeCrossesBounds} from '../utils/shopCacheInvalidation.js';
 import {processCollectionRankingJob} from '../utils/processCollectionRankingJob.js';
 
 import {productPriceFingerprint} from '../utils/priceEvents.js';
@@ -197,6 +197,8 @@ async function handleLockedProductUpdate(shop, payload, job, assertOwned) {
       fingerprint: productRankingFingerprint(before),
       priceFingerprint: productPriceFingerprint(before),
       contentFingerprint: productContentFingerprint(before),
+      stockFreeFingerprint: productStockFreeFingerprint(before),
+      stockCount: productStockCount(before),
       scoreFingerprint: JSON.stringify([before?.bestSellingScore,before?.trendingScore]),
       tags: before==null?[]:Array.isArray(before.tags)&&before.tags.every(t=>typeof t==='string')?before.tags:null,
       collectionIds: [...new Set([...beforeLinks.map(link=>link.collectionId),...(before?.collections||[])])],
@@ -212,7 +214,11 @@ async function handleLockedProductUpdate(shop, payload, job, assertOwned) {
     const externalProof=Array.isArray(beforeTags)&&Array.isArray(afterTags)?{tags:[...new Set([...beforeTags,...afterTags])],ids:[String(productId).split('/').pop()]}:undefined;
     const contentChanged=typeof job.data.rankingBefore.contentFingerprint!=='string'||job.data.rankingBefore.contentFingerprint!==productContentFingerprint(after);
     const scoresChanged=job.data.rankingBefore.scoreFingerprint!==JSON.stringify([after?.bestSellingScore,after?.trendingScore]);
-    if(contentChanged||scoresChanged)await invalidateShop(shop,{kind:contentChanged?'products':'scores',collectionIds,externalProof});
+    const stockCountOnly=contentChanged&&!scoresChanged&&typeof job.data.rankingBefore.stockFreeFingerprint==='string'&&
+      job.data.rankingBefore.stockFreeFingerprint===productStockFreeFingerprint(after)&&
+      !stockChangeCrossesBounds(job.data.rankingBefore.stockCount,productStockCount(after),await activeStockBounds(shop));
+    if(stockCountOnly)console.log(`CFP Worker: Stock count changed within rule bands for ${productId}; collections unchanged`);
+    else if(contentChanged||scoresChanged)await invalidateShop(shop,{kind:contentChanged?'products':'scores',collectionIds,externalProof});
   }
   // Publish only after the database, index and cache invalidation succeed.
   // Retain the before-price comparison across retries, just like ranking data.
@@ -221,6 +227,15 @@ async function handleLockedProductUpdate(shop, payload, job, assertOwned) {
     await publishProductPriceChange(shop, productId);
   }
   console.log(`CFP Worker: Product update synced for ${productId}`);
+}
+
+// Every enabled rule's Available bounds for this shop (collection and search).
+// Unparseable bounds become NaN so the caller keeps the full rebuild.
+async function activeStockBounds(shop){
+  const rows=await prisma.merchandisingRuleCondition.findMany({where:{field:'Available',rule:{shop,status:true}},select:{value:true,minValue:true,maxValue:true}});
+  const bounds=[];
+  for(const row of rows)for(const raw of [row.minValue,row.maxValue,row.value])if(raw!=null&&String(raw).trim()!=='')bounds.push(Number(raw));
+  return bounds;
 }
 
 async function handleProductDelete(shop, payload, job) {
