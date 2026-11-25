@@ -40,9 +40,14 @@ test('four-filter card reads restrict variant work to complete indexed candidate
   assert.equal(result.priceMin,'id IN ["2","3"]');
 });
 
-test('canonical facets retain the full scope so narrowing cards cannot suppress disjunctive choices',async()=>{
-  const {calls,result}=await check({fastCards:false});assert.equal(calls.candidates.length,0);
-  assert.equal(calls.eligibility[0].where.id,undefined);assert.equal(result.priceMin,'id IN ["1","2","3","4"]');
+test('canonical facets narrow only by selected options so other groups keep disjunctive choices',async()=>{
+  const {calls}=await check({fastCards:false});assert.equal(calls.candidates.length,1);
+  const filter=calls.candidates[0].filter;
+  assert.ok(filter.includes('option_Color IN ["Blue"]'));assert.ok(filter.includes('option_Size IN ["M"]'));
+  assert.equal(filter.some(clause=>/vendor|tags/.test(clause)),false);
+  assert.equal(calls.eligibility[0].where.id.in.length,2);assert.deepEqual(calls.eligibility[0].filters,{Color:['Blue'],Size:['M']});
+  const noOptions=await check({fastCards:false,categories:{vendor:'vendor IN ["Designer"]',tags:'tags IN ["Length_Maxi"]'}});
+  assert.equal(noOptions.calls.candidates.length,0);assert.equal(noOptions.calls.eligibility[0].where.id,undefined);
 });
 
 test('incomplete candidate pages and failures fall back to the original exact full-collection check',async()=>{

@@ -813,7 +813,13 @@ export const loader = async ({ request, context }) => {
       // Facet requests retain their wider scope for disjunctive counts.
       const candidateFilters=fastCards&&!isSearch&&!searchQuery&&canonicalVariantPrice&&!variantPriceV2&&
         Object.keys(categoryFilters).length>0
-        ? [...baseFilters,...Object.values(categoryFilters),...intentFilters] : null;
+        ? [...baseFilters,...Object.values(categoryFilters),...intentFilters]
+        // Counts must keep non-option categories open, but this same-variant
+        // check already requires every selected option, so bounding it by the
+        // indexed option filters alone cannot remove an eligible product.
+        : !fastCards&&!isSearch&&!searchQuery&&canonicalVariantPrice&&!variantPriceV2&&
+          Object.keys(categoryFilters).some(key=>key.startsWith('option_'))
+        ? [...baseFilters,...Object.entries(categoryFilters).filter(([key])=>key.startsWith('option_')).map(([,value])=>value)] : null;
       const ranges=nativeRanges.length?nativeRanges:[null],ids=new Set();
       variantEligibilityDetail={candidateMs:0,databaseMs:0,candidates:null,cacheMisses:0,candidatePath:null};
       for(const range of ranges){
