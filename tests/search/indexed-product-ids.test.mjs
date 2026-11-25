@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readIndexedProductIds} from '../../app/utils/indexedProductIds.js';
+import {readIndexedProductIds,clearIndexedProductIdSettings} from '../../app/utils/indexedProductIds.js';
 import {collectionPriceCandidateIds} from '../../app/utils/collectionPriceCandidates.js';
 import {readNarrowerCollectionMembership} from '../../app/utils/collectionFilterMembership.js';
 
@@ -51,4 +51,22 @@ test('indexed narrowing keeps the frozen parent order and rejects IDs outside it
  assert.deepEqual(await readNarrowerCollectionMembership(index,{filter:['shop = "fixture"'],parentIds,shop:'fixture'}),['4','2']);
  index.search=async()=>({totalHits:1,facetDistribution:{id:{'9':1}}});
  assert.equal(await readNarrowerCollectionMembership(index,{filter:['shop = "fixture"'],parentIds,shop:'fixture'}),null);
+});
+
+test('the three safety settings are read once per index for a minute, not on every filter click',async()=>{
+ clearIndexedProductIdSettings();
+ let reads=0,searches=0;const index={uid:'products-cache-test',
+  getDistinctAttribute:async()=>{reads++;return null;},getPagination:async()=>settings.pagination,getFaceting:async()=>settings.faceting,
+  search:async()=>{searches++;return {totalHits:1,facetDistribution:{id:{'7':1}}};}};
+ for(let i=0;i<5;i++)assert.deepEqual(await readIndexedProductIds(index,{filter:['shop = "fixture"']}),['7']);
+ assert.equal(reads,1);assert.equal(searches,5);
+ // A failed settings read is not cached; the next click retries it.
+ clearIndexedProductIdSettings();index.getDistinctAttribute=async()=>{reads++;throw Error('down');};
+ assert.equal(await readIndexedProductIds(index,{filter:[]}),null);
+ index.getDistinctAttribute=async()=>{reads++;return null;};
+ assert.deepEqual(await readIndexedProductIds(index,{filter:[]}),['7']);
+ // A reconfigured index (distinct attribute) is still refused once the entry expires.
+ clearIndexedProductIdSettings();index.getDistinctAttribute=async()=>'vendor';
+ assert.equal(await readIndexedProductIds(index,{filter:[]}),null);
+ clearIndexedProductIdSettings();
 });

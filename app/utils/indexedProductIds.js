@@ -1,6 +1,20 @@
 // ID facets read the inverted index without hydrating every matched product
 // document. Accept them only with an exact total and provably sufficient caps.
 // Unsupported settings/endpoints retain the existing document-browse path.
+// These three settings change only when the index is reconfigured, yet were
+// fetched on every filter click (three extra engine round trips per click).
+// Reuse them briefly per index; the checks below are unchanged.
+const settingsCache=new Map(),settingsLifetimeMs=60000;
+async function cachedIdFacetSettings(index,now=Date.now()){
+ const key=index.uid;
+ const hit=key&&settingsCache.get(key);
+ if(hit&&now-hit.at<settingsLifetimeMs)return hit.value;
+ const value=Promise.all([index.getDistinctAttribute(),index.getPagination(),index.getFaceting()])
+  .then(([distinctAttribute,pagination,faceting])=>({distinctAttribute,pagination,faceting,filterableAttributes:['id']}));
+ if(key){settingsCache.set(key,{at:now,value});value.catch(()=>settingsCache.delete(key));}
+ return value;
+}
+export function clearIndexedProductIdSettings(){settingsCache.clear();}
 export async function readIndexedProductIds(index,{filter,maxDocuments=100000,settings}={}){
  if(typeof index.search!=='function')return null;
  try{
@@ -8,9 +22,8 @@ export async function readIndexedProductIds(index,{filter,maxDocuments=100000,se
    // Full settings can include the entire synonym dictionary. Keep these
    // safety checks current without transferring unrelated index settings.
    if(['getDistinctAttribute','getPagination','getFaceting'].every(name=>typeof index[name]==='function')){
-    const [distinctAttribute,pagination,faceting]=await Promise.all([index.getDistinctAttribute(),index.getPagination(),index.getFaceting()]);
     // A successful ID facet query below also proves that id is filterable.
-    settings={distinctAttribute,pagination,faceting,filterableAttributes:['id']};
+    settings=await cachedIdFacetSettings(index);
    }else if(typeof index.getSettings==='function')settings=await index.getSettings();
    else return null;
   }
