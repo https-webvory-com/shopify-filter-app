@@ -4810,7 +4810,9 @@ return narrowerCollectionFilters;
     if (document.activeElement && sidebar.contains(document.activeElement)) {
       document.activeElement.blur();
     }
-    if (isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) {
+    // Layouts that keep the sidebar on screen (desktop vertical, mobile
+    // horizontal scrolling bar) must stay visible to assistive technology.
+    if ((isVerticalFilterLayout() && !window.matchMedia('(max-width: 768px)').matches) || isMobileHorizontalFilterLayout()) {
       sidebar.setAttribute('aria-hidden', 'false');
       closeHorizontalFilterGroups();
       return;
