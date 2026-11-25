@@ -35,10 +35,17 @@ test('unavailable or incomplete candidates keep the original full-scoped range c
 test('complete empty candidates avoid all four database reads',async()=>{
  const {calls,ids}=await run({read:async()=>({results:[],total:0})});assert.equal(calls.eligibility.length,0);assert.deepEqual(ids,[[],[],[],[]]);
 });
-test('single-category scopes and search retain the established count path',async()=>{
- for(const options of [{search:true},{categories:{option_Color:'Color',priceMin:'price'}}]){
+test('search and price-only selections retain the established full-scope count path',async()=>{
+ for(const options of [{search:true},{categories:{priceMin:'price'}}]){
   const {calls}=await run(options);assert.equal(calls.candidates.length,0);assert.ok(calls.eligibility.every(call=>!call.where.id));
  }
+});
+test('a single selected filter already narrows price-band counts to its complete indexed candidates',async()=>{
+ const {calls,ids}=await run({categories:{option_Color:'option_Color IN ["Blue"]',priceMin:'selected price IDs'}});
+ assert.equal(calls.candidates.length,1);assert.ok(calls.candidates[0].filter.includes('option_Color IN ["Blue"]'));
+ assert.equal(calls.candidates[0].filter.includes('selected price IDs'),false);
+ for(const call of calls.eligibility)assert.deepEqual(JSON.parse(JSON.stringify(call.where.id.in)),['gid://shopify/Product/2','gid://shopify/Product/3']);
+ assert.deepEqual(ids,[[],['2'],['3'],[]]);
 });
 test('every band is decided in one database pass when the exact path is available',async()=>{
  const {calls,ids}=await run({banded:(where,ranges,prices)=>ranges.map(range=>Object.entries(prices).filter(([id,price])=>where.id.in.includes('gid://shopify/Product/'+id)&&price>=range.min&&price<=range.max).map(([id])=>id))});

@@ -1093,7 +1093,7 @@ export const loader = async ({ request, context }) => {
     // Price-list counts remove only the selected price category. All other
     // selected categories still apply, so the same complete indexed candidates
     // can bound every range's exact variant check without changing counts.
-    const priceCountCandidateFilters=!isSearch&&!searchQuery&&activeCategories.filter(key=>key!=='priceMin').length>=2
+    const priceCountCandidateFilters=!isSearch&&!searchQuery&&activeCategories.filter(key=>key!=='priceMin').length>=1
       ? [...facetBaseFilters,...activeCategories.filter(key=>key!=='priceMin').map(key=>categoryFilters[key]),...intentFilters] : null;
     let priceCountScopePromise;
     const readPriceCountScope=()=>priceCountScopePromise??=(async()=>{
