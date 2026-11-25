@@ -1179,6 +1179,19 @@ return narrowerCollectionFilters;
             return (pending || read())
               .then(result => ({ result }), error => ({ error }));
           })() : null;
+        // Filtered collection counts do not depend on card order. Read them
+        // alongside the cards instead of after them; the result is adopted only
+        // when it describes the same filters and total (see completeCollectionFacets).
+        const collectionFacetsRead = templateName !== 'search' && !isLoadMore && activeFilters.page === 1 &&
+          queryParams.get('responseProfile') === 'fast-cards-v1' && hasSelectedFilters
+          ? (() => {
+            const request = new URL(`${API_DOMAIN}/api/filter?${queryParams.toString()}`);
+            request.searchParams.set('responseProfile', 'collection-facets-v1');
+            request.searchParams.delete('rankingToken');
+            return fetchCollectionResponse(request.toString(), fetchSignal)
+              .then(response => response.status === 200 ? response.json() : null)
+              .catch(() => null);
+          })() : null;
         // Early collection responses lack search scope, settings, filters and page size.
         // Submitted search must use the fully parameterized request built above.
         if (window._cfpEarlyFetch && templateName !== 'search' && !collectionQuery && !rankedCollection && !isLoadMore && activeFilters.page === 1) {
@@ -1291,7 +1304,7 @@ return narrowerCollectionFilters;
         if(!keepPriceFiltersUsable)sidebar.classList.add('cfp-loading');
         facetsPromise=data.cfpCards?.search
           ?completeSearchFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,searchFacetsRead)
-          :scheduleCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey);
+          :scheduleCollectionFacets(data,`${API_DOMAIN}/api/filter?${queryParams.toString()}`,fetchSignal,allowSessionRestart,rankingKey,collectionFacetsRead);
       }
       if (data.products) {
         const sameCachedCards = cachedBrowserResult && !isLoadMore &&
@@ -1379,7 +1392,12 @@ return narrowerCollectionFilters;
     }finally{if(!signal.aborted)sidebar.classList.remove('cfp-loading');}
   }
 
-  async function scheduleCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
+  async function scheduleCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey,parallelRead){
+    // A counts read started together with the cards already reflects this
+    // exact filter state, so no rapid-click deferral is needed for it.
+    const parallel=parallelRead?await parallelRead:null;
+    if(signal.aborted)return;
+    if(parallel)return completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey,parallel);
     if(cards.cfpCards?.filtered===true&&filtersReady&&cfpLastSettings.length){
       await new Promise(resolve=>{
         const finish=()=>{clearTimeout(timer);signal.removeEventListener('abort',finish);resolve();};
@@ -1391,7 +1409,7 @@ return narrowerCollectionFilters;
     return completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey);
   }
 
-  async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey){
+  async function completeCollectionFacets(cards,requestUrl,signal,allowSessionRestart,rankingKey,parallel){
     if(signal.aborted)return;
     const prefix=cards.cfpCards?.prefix===true;
     const direct=cards.cfpCards?.directSort;
@@ -1402,18 +1420,22 @@ return narrowerCollectionFilters;
     const signature=JSON.stringify(cards.products);
     const presentationKeys=['showQuickViewCollection','secondImageOnHover','isWholesale','integrations'];
     const presentation=JSON.stringify(presentationKeys.map(key=>globalSettings?.[key]));
+    // Parallel counts carry their own ranking session; facets are order-free,
+    // so accept them when they describe the same filters and the same total.
+    const preloaded=facetsOnly&&parallel?.cfpFacetsOnly===true&&parallel.settings&&parallel.facets&&
+      Number.isFinite(parallel.totalCount)&&parallel.totalCount===cards.totalCount?parallel:null;
     try{
-      const response=await fetchCollectionResponse(request.toString(),signal);
+      const response=preloaded?null:await fetchCollectionResponse(request.toString(),signal);
       if(signal.aborted)return;
-      if(response.status===409){
+      if(response?.status===409){
         if(allowSessionRestart){collectionRankingTokens.clear();activeFilters.page=1;discardBrowserResult(request.searchParams);return fetchAndRenderData(false,false);}
         throw Error('Collection changed');
       }
-      let full=await response.json();
+      let full=preloaded||await response.json();
       if(prefix)full=await waitForCollectionOrder(full,request.toString(),signal);
       const directReady=directSort&&full.cfpDirectSort?.version===1&&full.cfpDirectSort.collectionId===direct.collectionId&&full.cfpDirectSort.sortBy===direct.sortBy&&!full.rankingToken;
-      const rankingReady=prefix?!!full.rankingToken:directSort?directReady:!!full.rankingToken&&full.rankingToken===cards.rankingToken;
-      if((!prefix&&response.status!==200)||!rankingReady||!full.settings||!full.facets||(!full.cfpFacetsOnly&&!Array.isArray(full.products)))throw Error('Filters unavailable');
+      const rankingReady=preloaded?true:prefix?!!full.rankingToken:directSort?directReady:!!full.rankingToken&&full.rankingToken===cards.rankingToken;
+      if((!prefix&&!preloaded&&response.status!==200)||!rankingReady||!full.settings||!full.facets||(!full.cfpFacetsOnly&&!Array.isArray(full.products)))throw Error('Filters unavailable');
       if(signal.aborted)return;
       if(prefix){
         // The early pins occupy page one only. Subsequent canonical pages,
