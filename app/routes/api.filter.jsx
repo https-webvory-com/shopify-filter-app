@@ -832,7 +832,7 @@ export const loader = async ({ request, context }) => {
           const databaseStart=Date.now();
           try{return await availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...narrowedScope},optionsFilters,mergedValues,normalized,{database:prisma,priceContext:variantEligibilityPriceContext});}
           finally{variantEligibilityDetail.databaseMs+=Date.now()-databaseStart;}
-        },30);
+        },120);
         for(const id of eligible)ids.add(id);
       }
       categoryFilters.priceMin=ids.size?'id IN '+JSON.stringify([...ids]):'id = "__no_eligible_price_variant__"';
