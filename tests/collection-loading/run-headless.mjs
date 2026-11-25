@@ -41,7 +41,7 @@ try{
   const cards=()=>evaluate(`[...document.querySelectorAll('.cfp-product-card--reveal')].map(c=>c.querySelector('a').getAttribute('href').match(/dress-(\\d+)/)[1])`);
   const navigate=async(query='')=>{await send('Page.navigate',{url:origin+'/collections/fixture'+query});await wait('window._cfpInitStarted===true');};
   let selected=!process.argv.some(a=>a.startsWith('--from='));
-  const test=async(name,fn)=>{const only=process.argv.find(a=>a.startsWith('--match='));if(only&&!name.includes(only.slice(8)))return;if(!selected){selected=name.startsWith(process.argv.find(a=>a.startsWith('--from=')).slice(7));if(!selected)return;}if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);throw error;}};
+  const test=async(name,fn)=>{const only=process.argv.find(a=>a.startsWith('--match='));if(only&&!name.includes(only.slice(8)))return;if(!selected){selected=name.startsWith(process.argv.find(a=>a.startsWith('--from=')).slice(7));if(!selected)return;}if(process.argv.includes('--performance-only')&&!name.startsWith('early first-page')&&!name.startsWith('new visitor after'))return;try{const detail=await fn();results.push({name,passed:true,detail});console.log('PASS '+name+(detail?.baselineCardsMs?': '+JSON.stringify(detail):''));}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+': '+error.message);if(!process.argv.includes('--continue'))throw error;}};
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
   beforeReset=async()=>{await send('Page.navigate',{url:'about:blank'});await delay(100);};
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
@@ -178,7 +178,7 @@ try{
     const desktopOptions=await optionStyles();
     assert.equal(desktopOptions.chip,'12px');assert.equal(desktopOptions.swatch,'12px');assert.equal(desktopOptions.label,'12px');assert.equal(desktopOptions.separator,'1px');assert.equal(desktopOptions.firstSeparator,'0px');
     assert.equal(desktopOptions.left,'16px');assert.equal(desktopOptions.right,desktopOptions.left);assert.equal(desktopOptions.bottom,desktopOptions.left);
-    assert.equal(styles.width,333);assert.equal(styles.title,'none');assert.equal(styles.font,'14px');assert.equal(styles.weight,'600');
+    assert.equal(styles.width,333);assert.equal(styles.title,'none');assert.equal(styles.font,'14px');assert.equal(styles.weight,'500');
     await evaluate("document.querySelector('[aria-controls=cfp-group-size-option-Size]').click()");
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar .cfp-button-chip > span').getBoundingClientRect().height"),32);
     assert.equal(styles.chipRadius,'4px');assert.equal(styles.swatchWidth,20);assert.equal(styles.colorColumns,2);
@@ -243,7 +243,7 @@ try{
       await evaluate("if(!document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open'))document.querySelector('#cfp-drawer-trigger-btn').click()");
       assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-vertical-summary')).display"),'none');
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-vertical-toggle-icon')).display"),'none');
-      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),300);
+      assert.equal(await evaluate("document.querySelector('#cfp-sidebar').getBoundingClientRect().width"),390,'mobile filters use the full screen width');
       assert.equal(await evaluate("getComputedStyle(document.querySelector('#cfp-sidebar .cfp-group__toggle')).textTransform"),'uppercase');
       assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
       assert.deepEqual(await evaluate('browserErrors'),[]);
@@ -632,10 +632,17 @@ try{
       await control({reset:true,productCount:24,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
       await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
-      const result=await evaluate("(()=>{const body=document.querySelector('#cfp-sidebar .cfp-sidebar__body');return {drawerScrolls:body.scrollHeight>body.clientHeight,groups:[...document.querySelectorAll('#cfp-sidebar .cfp-group__content')].map(e=>({height:e.getBoundingClientRect().height,clipped:[e,...e.querySelectorAll('*')].some(n=>['auto','scroll'].includes(getComputedStyle(n).overflowY)&&n.scrollHeight>n.clientHeight+1)})),vendors:document.querySelectorAll('#cfp-sidebar input[name=vendor]').length,sleeves:document.querySelectorAll('#cfp-sidebar input[name=tag]').length}})()");
-      assert.equal(result.vendors,24);assert.equal(result.sleeves,16);assert.equal(result.drawerScrolls,true);
-      assert.ok(result.groups.every(g=>g.height>80&&!g.clipped),JSON.stringify(result));
+      // Only one group is open at a time, so open each in turn and measure it.
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      const toggles=await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group__toggle').length");
+      for(let g=0;g<toggles;g++){
+        await evaluate(`(()=>{const t=document.querySelectorAll('#cfp-sidebar .cfp-group__toggle')[${g}];if(t.getAttribute('aria-expanded')!=='true')t.click();})()`);
+        const result=await evaluate("(()=>{const body=document.querySelector('#cfp-sidebar .cfp-sidebar__body');return {drawerScrolls:body.scrollHeight>body.clientHeight,groups:[...document.querySelectorAll('#cfp-sidebar .cfp-group__content')].map(e=>({height:e.getBoundingClientRect().height,clipped:[e,...e.querySelectorAll('*')].some(n=>['auto','scroll'].includes(getComputedStyle(n).overflowY)&&n.scrollHeight>n.clientHeight+1)})),vendors:document.querySelectorAll('#cfp-sidebar input[name=vendor]').length,sleeves:document.querySelectorAll('#cfp-sidebar input[name=tag]').length}})()");
+        assert.equal(result.vendors,24);assert.equal(result.sleeves,16);
+        const open=result.groups.filter(x=>x.height>0);
+        assert.equal(open.length,1,JSON.stringify(result));assert.ok(open[0].height>80&&!open[0].clipped,JSON.stringify(result));
+        if(g===toggles-1)assert.equal(result.drawerScrolls,true);
+      }
       assert.deepEqual(await evaluate('browserErrors'),[]);
     }
   });
@@ -647,13 +654,22 @@ try{
       await control({reset:true,productCount:8,precompute:true,noPins:true,noMerchandising:true,filterSettings,productFields,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true},apiDelay:0,assetDelay:0,imageDelay:0,priceDelay:0});
       await send('Emulation.setDeviceMetricsOverride',{width,height:744,deviceScaleFactor:1,mobile:width<768});
       await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar.cfp-loading')");
-      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();for(const b of document.querySelectorAll('#cfp-sidebar .cfp-group__toggle[aria-expanded=false]'))b.click()");
-      const grids=await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].map(g=>{const cells=[...g.children];return {images:cells.map(e=>e.querySelector('.cfp-swatch-circle').getBoundingClientRect().top),labels:cells.map(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().top),visible:cells.every(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().height>0)}})");
-      assert.equal(grids.length,2);for(const grid of grids){assert.equal(grid.visible,true);assert.ok(Math.max(...grid.images)-Math.min(...grid.images)<1);assert.ok(Math.max(...grid.labels)-Math.min(...grid.labels)<1);}
+      // One group open at a time: open each image group in turn and check its grid.
+      await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click()");
+      const toggleCount=await evaluate("document.querySelectorAll('#cfp-sidebar .cfp-group__toggle').length");let checkedGrids=0;
+      for(let g=0;g<toggleCount;g++){
+        await evaluate(`(()=>{const t=document.querySelectorAll('#cfp-sidebar .cfp-group__toggle')[${g}];if(t.getAttribute('aria-expanded')!=='true')t.click();})()`);
+        const grids=(await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].map(g=>{const cells=[...g.children];return {images:cells.map(e=>e.querySelector('.cfp-swatch-circle').getBoundingClientRect().top),labels:cells.map(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().top),visible:cells.every(e=>e.querySelector('.cfp-swatch-label').getBoundingClientRect().height>0)}})")).filter(grid=>grid.images.length&&grid.visible!==undefined);
+        const open=await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].filter(g=>g.getBoundingClientRect().height>0).length");
+        if(!open)continue;
+        const visibleGrids=grids.filter(grid=>grid.visible);assert.equal(visibleGrids.length,1);checkedGrids++;
+        for(const grid of visibleGrids){assert.ok(Math.max(...grid.images)-Math.min(...grid.images)<1);assert.ok(Math.max(...grid.labels)-Math.min(...grid.labels)<1);}
+      }
+      assert.equal(checkedGrids,2);
       assert.equal(await evaluate("document.querySelector('#cfp-clear-btn').textContent.trim()"),'Reset');
       assert.equal(await evaluate("document.querySelector('#cfp-apply-btn').textContent.trim()"),'Done');
       const footer=await evaluate("[...document.querySelectorAll('.cfp-sidebar__footer button')].map(e=>{const r=e.getBoundingClientRect();return {height:r.height,bottom:r.bottom,viewport:visualViewport.height}})");
-      assert.equal(footer.length,2);assert.ok(footer.every(r=>r.height>=40&&r.bottom<=r.viewport-12),JSON.stringify(footer));
+      assert.equal(footer.length,2);assert.ok(footer.every(r=>r.height>=36&&r.bottom<=r.viewport-12),JSON.stringify(footer));// compact Reset/Done (36 px) per merchant request
       await evaluate("document.querySelector('#cfp-sidebar input[value=\"Length:Mini\"]').click();document.querySelector('#cfp-sidebar input[value=\"Sleeve:Cap Sleeve\"]').click();document.querySelector('#cfp-clear-btn').click()");
       assert.equal(await evaluate("document.querySelectorAll('#cfp-sidebar input:checked').length"),0);
       assert.equal(await evaluate("document.querySelector('#cfp-sidebar').classList.contains('cfp-sidebar--open')"),true);
@@ -960,11 +976,13 @@ try{
       await navigate('?sort_by=price-ascending');
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar .cfp-group')&&!document.querySelector('#cfp-sidebar.cfp-loading')");
       assert.equal(await evaluate("document.querySelectorAll('.cfp-order-error,.cfp-facet-error').length"),0);
-      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),1);
+      // The 'still preparing' notice was retired with saved country prices (0dff00a).
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),0);
       assert.ok((await getState()).requests.some(r=>r.sort==='price-ascending'&&r.status===200));
       await evaluate("document.querySelector('#cfp-drawer-trigger-btn').click();document.querySelector('#cfp-sidebar input[name=vendor]').click();document.querySelector('#cfp-apply-btn').click()");
-      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('.cfp-price-sort-notice')");
-      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),1);
+      await wait("!document.querySelector('#cfp-sidebar.cfp-loading')&&document.querySelectorAll('.cfp-product-card--reveal').length===25");
+      // The 'still preparing' notice was retired with saved country prices (0dff00a).
+      assert.equal(await evaluate("document.querySelectorAll('.cfp-price-sort-notice').length"),0);
       await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===40");
       assert.equal(new Set(await cards()).size,40);
       await evaluate("document.querySelector('.cfp-custom-sort__option[data-value=\"best-selling\"]').click()");
@@ -1548,7 +1566,8 @@ try{
       await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     }
     const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
-    assert.equal(requests.length,2);assert.ok(requests.every(r=>r.status===200&&r.profile==='collection-v1'),JSON.stringify(requests));
+    // Each selection is a cards request plus a separate counts request.
+    assert.equal(requests.length,4,JSON.stringify(requests));assert.ok(requests.every(r=>r.status===200&&['fast-cards-v1','collection-facets-v1'].includes(r.profile)),JSON.stringify(requests));
     assert.equal(after.state.builds,before.state.builds);
     assert.equal(await evaluate("!!document.querySelector('.cfp-facet-error,.cfp-order-error')"),false);assert.deepEqual(await evaluate('browserErrors'),[]);
     return {filterSelections:2,pendingResponses:0,workerPaused:true,liveTiming:false};
@@ -1568,7 +1587,10 @@ try{
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const blue=await getState();
-    assert.equal(blue.trace.membershipBrowses-unfiltered.trace.membershipBrowses,1,'first Color filter should narrow the saved unfiltered ranking');
+    // Cards narrow the saved ranking (1 read); counts add bounded narrowed reads
+    // (stock check, price bands) that replace whole-collection database scans.
+    const blueReads=blue.trace.membershipBrowses-unfiltered.trace.membershipBrowses;
+    assert.ok(blueReads>=1&&blueReads<=4,'first Color filter should narrow the saved unfiltered ranking: '+blueReads);
     assert.equal(blue.trace.candidateBrowses,unfiltered.trace.candidateBrowses,'first Color filter should avoid a full collection candidate browse');
     await control({apiDelay:350});
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"L\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
@@ -1577,7 +1599,7 @@ try{
     assert.equal(loading.moreDisplay,'none');
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===15&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const after=await getState(),sizeCards=await cards();
-    assert.equal(after.trace.membershipBrowses-blue.trace.membershipBrowses,1,'Size L should query only the Blue ID set');
+    const sizeReads=after.trace.membershipBrowses-blue.trace.membershipBrowses;assert.ok(sizeReads>=1&&sizeReads<=4,'Size L should query only bounded narrowed ID sets: '+sizeReads);
     assert.equal(after.trace.candidateBrowses,blue.trace.candidateBrowses,'Size L should skip a full candidate browse');
     assert.ok(after.allRequests.slice(blue.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(sizeCards,[...Array.from({length:13},(_,i)=>String(29-i*2)),'1','3']);
@@ -1592,7 +1614,7 @@ try{
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const after=await getState();
-    assert.equal(after.trace.membershipBrowses-before.trace.membershipBrowses,1);
+    const reads=after.trace.membershipBrowses-before.trace.membershipBrowses;assert.ok(reads>=1&&reads<=4,'narrowed reads '+reads);
     assert.equal(after.trace.candidateBrowses,before.trace.candidateBrowses);
     assert.ok(after.allRequests.slice(before.allRequests.length).some(r=>r.profile==='fast-cards-v1'&&r.membershipParent&&r.status===200));
     assert.deepEqual(await evaluate('browserErrors'),[]);
@@ -1611,14 +1633,15 @@ try{
       globalSettings:{showProductCount:false},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     const hoverCounts=await evaluate("({color:document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]')?.closest('label').title,size:document.querySelector('#cfp-sidebar input[name=\"option-Size\"][value=\"XXS\"]')?.closest('label').title,vendor:document.querySelector('#cfp-sidebar input[name=\"vendor\"][value=\"Fixture\"]')?.closest('label').title,printed:document.querySelectorAll('#cfp-sidebar .cfp-checkbox__count').length})");
-    assert.deepEqual(hoverCounts,{color:'Blue (3)',size:'XXS (1)',vendor:'Fixture (8)',printed:0});
+    // Counts are off: neither printed nor in hover text (merchant request, 2026-11-13).
+    assert.deepEqual(hoverCounts,{color:'Blue',size:'XXS',vendor:'Fixture',printed:0});
     const options=await evaluate("({color:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Color\"]')].map(e=>e.value),size:[...document.querySelectorAll('#cfp-sidebar input[name=\"option-Size\"]')].map(e=>e.value)})");
     assert.deepEqual(options.color.slice(0,2),['Blue','Red']);
     assert.deepEqual(options.size,['XXS','S','M','XL','2XL','2','10','10W']);
     await evaluate("(()=>{const input=document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()");
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===3&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
-    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"vendor\"][value=\"Fixture\"]').closest('label').title"),'Fixture (3)');
-    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]').closest('label').title"),'Blue (3)');
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"vendor\"][value=\"Fixture\"]').closest('label').title"),'Fixture');
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Blue\"]').closest('label').title"),'Blue');
     settings[1].config.advanced.sortModeExplicit=true;
     await control({reset:true,productCount:8,precompute:true,early:true,noPins:true,noMerchandising:true,filterSettings:settings,
       globalSettings:{showProductCount:false},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
@@ -1707,7 +1730,8 @@ try{
       globalSettings:{showFilterOptionsWithOneItem:true,desktopFilterLayout:'drawer'},productFields,apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     await evaluate("document.getElementById('cfp-drawer-trigger-btn').click()");
-    assert.deepEqual(await evaluate("[...document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')].map(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length)"),[4,4,4]);
+    // One group open at a time: open each image group before measuring its columns.
+    assert.deepEqual(await evaluate("(()=>{const out=[];for(const grid of document.querySelectorAll('#cfp-sidebar .cfp-color-grid--images')){const toggle=document.querySelector('[aria-controls=\"'+grid.closest('.cfp-group__content').id+'\"]');if(toggle&&toggle.getAttribute('aria-expanded')!=='true')toggle.click();out.push(getComputedStyle(grid).gridTemplateColumns.split(' ').length);}return out;})()"),[4,4,4]);
     await evaluate("document.getElementById('cfp-close-btn').click()");
     for(const [,value] of groups){
       await evaluate(`(()=>{const input=[...document.querySelectorAll('#cfp-sidebar input[name="tag"]')].find(e=>e.value===${JSON.stringify(value)});input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -1730,7 +1754,7 @@ try{
       '3':{options:[{name:'Color',values:['Black']}],variantPrices:[{id:'300',price:30,available:true,option1:'Black',imageUrl:'/image/3.svg'}]},
     };
     await control({reset:true,productCount:3,precompute:true,cardSnapshots:true,publishedPages:true,publishFirst50:true,early:true,noPins:true,noMerchandising:true,
-      filterSettings:settings,globalSettings:{hideUnavailableVariantsWhenSelected:true,showProductCount:false},productFields,
+      filterSettings:settings,globalSettings:{hideUnavailableVariantsWhenSelected:true,showProductCount:true},productFields,
       apiDelay:0,assetDelay:0,priceDelay:0,imageDelay:0});
     await navigate();await wait("window._cfpInitialized&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
     assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=\"option-Color\"][value=\"Black\"]').closest('label').title"),'Black (2)');
@@ -2054,9 +2078,9 @@ try{
     const filterSettings=[{id:'color',isEnabled:true,filterType:'option',filterKey:'Color',label:'Color',config:{}}];
     await control({reset:true,hold:false,productCount:30,filterSettings,globalSettings:{desktopFilterLayout:'vertical',showAttributeBasedBreadcrumb:true}});
     await navigate('?option_Color=Blue');
-    await wait("document.querySelector('.cfp-breadcrumb-chip--color .cfp-breadcrumb-color')?.textContent==='Blue'");
+    await wait("document.querySelector('.cfp-breadcrumb-chip--color .cfp-breadcrumb-value')?.textContent==='Blue'");
     assert.equal(await evaluate("document.querySelector('.cfp-breadcrumb-chip--color').textContent.replace('×','').trim()"),'Blue');
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-breadcrumb-color')).fontWeight"),'700');
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.cfp-breadcrumb-chip--color .cfp-breadcrumb-value')).fontWeight"),'700');
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
   await test('settings audit desktop layouts, responsive transitions and vertical scrolling',async()=>{

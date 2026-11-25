@@ -54,7 +54,9 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
     bestSellingScore:i+1,createdAt:i+1,priceMin:i===2?0:i+1,priceMax:i+1,
     marketPriceMin_US:i===2?0:i+1,marketAvailablePriceMin_US:i===2?0:i+1,inventoryTotal:5,
     images:[`/image/${i+1}.svg`],options:[{name:'Color',values:['Blue']}],
-    variantPrices:[{id:String((i+1)*100),price:i===2?0:i+1,compareAtPrice:null,available:true,option1:'Blue',imageUrl:`/image/${i+1}.svg`}]});
+    variantPrices:[{id:String((i+1)*100),price:i===2?0:i+1,compareAtPrice:null,available:true,option1:'Blue',imageUrl:`/image/${i+1}.svg`,
+      // Saved country prices, as the product sync stores them for every variant.
+      marketPrices:{US:{price:i===2?0:i+1,currency:'USD',compareAtPrice:null},IN:{price:i===2?0:i+1,currency:'INR',compareAtPrice:null}}}]});
   const docs=Array.from({length:30},makeDoc);
   const byId=new Map(docs.map(p=>[p.id,p]));
   const select=options=>{
@@ -130,7 +132,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
     return docs.filter(p=>p.status==='ACTIVE').map(p=>({id:p.id,percent:(state.salePercentages || {})[p.id] ?? 0}));
   },product:{findMany:async({where})=>docs.filter(p=>p.status==='ACTIVE'&&(!where.id?.in||where.id.in.includes('gid://shopify/Product/'+p.id))).map(p=>({...p,id:'gid://shopify/Product/'+p.id,variants:p.variantPrices}))},variant:{groupBy:async()=>[]},collection:{findMany:async({where})=>(state.collectionLinks||[{shop,title:'Fixture collection',handle:'fixture'}]).filter(row=>row.shop===where.shop&&where.title.in.includes(row.title))}};
   if(database)prisma.$transaction=database.$transaction.bind(database);
-  const serviceCtx={module:{exports:{}},exports:{},console:{log(){},error(){}},require:()=>({__esModule:true,default:prisma})};
+  const serviceCtx={module:{exports:{}},exports:{},console:{log(){},info(){},warn(){},error(){}},require:()=>({__esModule:true,default:prisma})};
   vm.runInNewContext((await transform(await fs.readFile('app/services/merchandising.server.js','utf8'),{format:'cjs'})).code,serviceCtx);
   const merch=serviceCtx.module.exports;
   const redis=redisLayer?.redis||{get:async key=>values.get(key),ttl:async()=>600,set:async(key,value,mode)=>{if(mode==='NX'&&values.has(key)||mode==='XX'&&!values.has(key))return;values.set(key,value);},setex:async(key,_ttl,value)=>values.set(key,value),del:async(...keys)=>{keys.forEach(key=>values.delete(key));return keys.length;},incr:async key=>{const value=Number(values.get(key)||0)+1;values.set(key,String(value));return value;},scan:async()=>['0',[...values.keys()]]};
@@ -240,7 +242,7 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
     if(!savedPriceReads.has(key))savedPriceReads.set(key,Promise.resolve().then(fetchValue).catch(error=>{savedPriceReads.delete(key);throw error;}));
     return savedPriceReads.get(key);
   };
-  const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
+  const routeCtx={module:{exports:{}},exports:{},URL,Response,responseCache,fixtureBootstrap:collectionBootstrap,fixtureResponse:collectionResponse,fixtureCollectionPageFingerprint:collectionPageFingerprint,console:{log(){},info(){},warn(){},error(){}},require:name=>{if(!(name in mocks))throw Error('Unexpected fixture import '+name);return mocks[name];}};
   const source=(await fs.readFile('app/routes/api.filter.jsx','utf8')).replace('await import("../services/queryParser.server.js")','({parseQuery:()=>null})').replace("await import('../services/collectionResponse.server.js')",'({beginCollectionResponse:responseCache.begin,collectionPageFingerprint:fixtureCollectionPageFingerprint})').replace("await import('../utils/collectionBootstrap.js')",'fixtureBootstrap').replace("await import('../utils/collectionResponse.js')",'fixtureResponse');
   vm.runInNewContext((await transform(source,{loader:'jsx',format:'cjs'})).code,routeCtx);
   const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/collectionFilterPro.css"><style>body{margin:0;font:16px Arial}header{position:sticky;top:0;z-index:4;background:#fff;height:80px;border-bottom:1px solid}#mega-menu{position:absolute;top:80px;left:0;right:0;height:240px;background:#eee;display:none}#mega-menu.open{display:block}.cfp-v1-app-container{padding:16px;min-height:1600px}.cfp-main-content{width:100%}</style><script>window.Shopify={locale:'en',country:'US',currency:{active:'USD',rate:1},routes:{root:'/'}};window.collectionFilterProSettings={columns_desktop:4,columns_mobile:2};window.browserErrors=[];addEventListener('error',e=>browserErrors.push(e.message));addEventListener('unhandledrejection',e=>browserErrors.push(String(e.reason)));window.cardSnapshots=[];new MutationObserver(()=>{const cards=[...document.querySelectorAll('.cfp-product-card--reveal')];if(cards.length&&!window.inserted){window.inserted=true;cardSnapshots.push({at:performance.now(),cards:cards.length,imagesLoaded:cards.filter(c=>c.querySelector('img').complete&&c.querySelector('img').naturalWidth>0).length,pricesReady:cards.filter(c=>!c.innerText.includes('See product price')).length,delays:cards.slice(0,6).map(c=>getComputedStyle(c).animationDelay)})}}).observe(document.documentElement,{childList:true,subtree:true});</script></head><body><header><button id="menu-open" onclick="document.getElementById('mega-menu').classList.toggle('open')">Open mega menu</button><div id="mega-menu">Header mega menu</div></header><div class="cfp-v1-app-container"><div class="cfp-layout-wrapper"><div id="cfp-top-bar" class="cfp-top-bar"><div class="cfp-top-bar__left"><button id="cfp-drawer-trigger-btn">Filters</button><span class="cfp-product-count"></span></div><div class="cfp-top-bar__right"><div class="cfp-custom-sort"><div class="cfp-custom-sort__trigger" id="cfp-custom-sort-trigger"><span id="cfp-custom-sort-label">Best selling</span></div><div class="cfp-custom-sort__dropdown" id="cfp-custom-sort-dropdown"><div class="cfp-custom-sort__option" data-value="best-selling">Best selling</div><div class="cfp-custom-sort__option" data-value="price-ascending">Price low to high</div></div></div></div></div><aside id="cfp-sidebar" class="cfp-sidebar" data-shop="${shop}" data-collection-id="1" data-collection-handle="fixture" data-template-name="collection"><div class="cfp-sidebar__header"><button id="cfp-close-btn">Close</button></div><div class="cfp-sidebar__body"><div id="cfp-breadcrumbs"></div><div id="cfp-sidebar__filter-groups"></div></div><div class="cfp-sidebar__footer"><button id="cfp-apply-btn">Apply</button><button id="cfp-clear-btn">Clear</button></div></aside><main class="cfp-main-content"><div id="cfp-products-container" class="cfp-products-grid"></div></main></div></div><div id="cfp-overlay" class="cfp-overlay"></div><script src="/assets/marketPricing.js"></script><script src="/assets/collectionFilterPro.js"></script><script>API_DOMAIN=location.origin;</script></body></html>`;
@@ -306,7 +308,19 @@ export async function createLoadingServer({redisLayer,savedPricePage,database}={
         if(updates.reset){state.streamDelay=0;state.pinList=null;state.orderMissing=false;state.rankingFailure=null;state.publishedPages=false;publishedRows.clear();headEvents.length=0;}
         if(updates.reset){state.desktopColumns=4;state.mobileColumns=2;state.filterSettings=null;state.noMerchandising=false;state.countryStock=null;state.marketPriceReady=false;state.nativeVariants=null;state.ruleConditions=null;state.enforceCollections=false;}
         if(updates.productCount){docs.splice(0,docs.length,...Array.from({length:updates.productCount},makeDoc));byId.clear();docs.forEach(doc=>byId.set(doc.id,doc));}
-        if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields))Object.assign(byId.get(id),fields);
+        if(updates.productFields)for(const [id,fields]of Object.entries(updates.productFields)){
+          const doc=byId.get(id);Object.assign(doc,fields);
+          // Declared options need real variants: same-variant filters check that
+          // one variant carries every selected value (e.g. Red and S together).
+          if(Array.isArray(fields.options)&&!fields.variantPrices&&fields.options.length){
+            const base=doc.variantPrices[0];let combos=[[]];
+            for(const option of fields.options.slice(0,3))combos=combos.flatMap(c=>(option.values?.length?option.values:['']).map(v=>[...c,v]));
+            doc.variantPrices=combos.slice(0,99).map((values,k)=>({...base,id:k?String(Number(base.id)+k):base.id,option1:values[0]??null,option2:values[1]??null,option3:values[2]??null}));
+          }
+          // Tests that pass their own variants rarely include saved country
+          // prices; the product sync always stores them, so mirror the base price.
+          doc.variantPrices=doc.variantPrices.map(v=>v.marketPrices?v:{...v,marketPrices:{US:{price:v.price,currency:'USD',compareAtPrice:v.compareAtPrice??null},IN:{price:v.price,currency:'INR',compareAtPrice:v.compareAtPrice??null}}});
+        }
         if(updates.productVariants)for(const [id,variants]of Object.entries(updates.productVariants)){
           const doc=byId.get(id);doc.variantPrices=variants;doc.options=[{name:'Color',values:[...new Set(variants.map(v=>v.option1))]}];
         }
