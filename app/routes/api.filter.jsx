@@ -3,7 +3,7 @@ import {parseSaleSelections,configuredSaleRanges,readProductSalePercentages,sale
 import { selectSearchColorVariant } from "../utils/searchColor.js";
 import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.js';
 import { spellingCorrection } from "../utils/spellingCorrection.js";
-import { availableProductIds, savedVariantPricePage, collectionPriceCandidateIds, savedPriceCollectionScope, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
+import { availableProductIds, availableProductIdsByPriceRanges, savedVariantPricePage, collectionPriceCandidateIds, savedPriceCollectionScope, matchingAvailableVariants, ensureVariantEligibilityFilter, availableOptionFacetCounts, availableOptionFacetSignature } from "../utils/availableVariants.js";
 import { data } from "react-router";
 import prisma from "../db.server";
 import {
@@ -1098,8 +1098,16 @@ export const loader = async ({ request, context }) => {
       }catch{/* Preserve the existing full scope if the candidate read is incomplete. */}
       return priceScope;
     })();
-    const priceEligibleIds=hideUnavailable||variantPriceV2||canonicalVariantPrice?await Promise.all(priceCountRanges.map(range=>{
-      const eligibleRange=variantEligibilityPriceContext?{min:convertedPriceBound(range.min,priceSortRate),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate):Infinity}:range;
+    const eligiblePriceRange=range=>variantEligibilityPriceContext?{min:convertedPriceBound(range.min,priceSortRate),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate):Infinity}:range;
+    // Every band shares one exact database pass when it can be expressed;
+    // otherwise each band keeps its own established eligibility read.
+    const bandedPriceIds=(hideUnavailable||variantPriceV2||canonicalVariantPrice)&&priceCountRanges.length>1
+      ?await getCached('availableVariants:'+shop+':price-bands-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
+        async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return priceCountRanges.map(()=>[]);
+          return availableProductIdsByPriceRanges(prisma,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),{priceContext:variantEligibilityPriceContext||searchVariantContext||{}});},30,{maxBytes:4194304})
+      :null;
+    const priceEligibleIds=Array.isArray(bandedPriceIds)?bandedPriceIds:hideUnavailable||variantPriceV2||canonicalVariantPrice?await Promise.all(priceCountRanges.map(range=>{
+      const eligibleRange=eligiblePriceRange(range);
       return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
         async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return [];return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext});},30,{maxBytes:1048576});
     })):[];

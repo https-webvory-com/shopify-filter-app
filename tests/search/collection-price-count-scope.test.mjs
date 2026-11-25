@@ -5,8 +5,8 @@ import vm from 'node:vm';
 import {collectionPriceCandidateIds} from '../../app/utils/collectionPriceCandidates.js';
 const source=await fs.readFile('app/routes/api.filter.jsx','utf8');
 const block=source.slice(source.indexOf('    const priceScope='),source.indexOf('    for(const [index,range] of priceCountRanges.entries())'));
-async function run({read,search=false,categories}={}){
- const calls={candidates:[],eligibility:[],keys:[]},prices={'1':50,'2':110,'3':180,'4':240};
+async function run({read,search=false,categories,banded}={}){
+ const calls={candidates:[],eligibility:[],keys:[],banded:[]},prices={'1':50,'2':110,'3':180,'4':240};
  const filters=categories||{option_Color:'option_Color IN ["Blue"]',option_Size:'option_Size IN ["M"]',tags:'tags IN ["Length_Maxi"]',priceMin:'selected price IDs'};
  const context={resolvedCollectionId:'gid://shopify/Collection/7',isSearch:search,searchQuery:'',activeCategories:Object.keys(filters),categoryFilters:filters,baseFilters:['shop = "fixture.myshopify.com"',"status = 'ACTIVE'"],intentFilters:[],
   hideUnavailable:true,variantPriceV2:false,canonicalVariantPrice:true,
@@ -14,6 +14,7 @@ async function run({read,search=false,categories}={}){
   convertedPriceBound:value=>value,collectionPriceCandidateIds,
   meiliClient:{index:()=>({getDocuments:async options=>{calls.candidates.push(options);return read?read(options):{results:[{id:'2'},{id:'3'}],total:2};}})},
   getCached:async(key,fn)=>{calls.keys.push(key);return fn();},
+  availableProductIdsByPriceRanges:async(_db,where,_options,_merges,ranges)=>{calls.banded.push({where,ranges});return banded?banded(where,ranges,prices):null;},
   availableProductIds:async(_model,where,_options,_merges,range)=>{calls.eligibility.push({where,range});return Object.entries(prices).filter(([id,price])=>(!where.id||where.id.in.includes('gid://shopify/Product/'+id))&&price>=range.min&&price<=range.max).map(([id])=>id);},
  };
  context.facetBaseFilters=context.baseFilters;
@@ -38,4 +39,10 @@ test('single-category scopes and search retain the established count path',async
  for(const options of [{search:true},{categories:{option_Color:'Color',priceMin:'price'}}]){
   const {calls}=await run(options);assert.equal(calls.candidates.length,0);assert.ok(calls.eligibility.every(call=>!call.where.id));
  }
+});
+test('every band is decided in one database pass when the exact path is available',async()=>{
+ const {calls,ids}=await run({banded:(where,ranges,prices)=>ranges.map(range=>Object.entries(prices).filter(([id,price])=>where.id.in.includes('gid://shopify/Product/'+id)&&price>=range.min&&price<=range.max).map(([id])=>id))});
+ assert.equal(calls.banded.length,1);assert.equal(calls.eligibility.length,0);assert.equal(calls.candidates.length,1);
+ assert.equal(calls.banded[0].where.shop,'fixture.myshopify.com');assert.equal(calls.banded[0].ranges.length,4);
+ assert.deepEqual(ids,[[],['2'],['3'],[]]);
 });

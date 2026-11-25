@@ -5,7 +5,7 @@ import path from 'node:path';
 import net from 'node:net';
 import {spawnSync,spawn} from 'node:child_process';
 import {PrismaClient} from '@prisma/client';
-import {availableProductIds,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
+import {availableProductIds,availableProductIdsByPriceRanges,matchingAvailableVariants} from '../../app/utils/availableVariants.js';
 import {availableOptionFacetCounts} from '../../app/utils/availableOptionFacetCounts.js';
 import {skuSearchWhere} from '../../app/utils/skuSearch.js';
 const bin=process.env.POSTGRES_BIN||'C:/Program Files/PostgreSQL/18/bin';
@@ -63,6 +63,13 @@ try{
   const expected=products.filter(p=>(p.shop||'fixture')==='fixture'&&(p.status||'active').toLowerCase()==='active'&&(p.collection||'one')==='one'&&matchingAvailableVariants(p,filters,merged,range).length).map(p=>p.id).sort();
   const actual=await availableProductIds(model,where,filters,merged,range,{database});assert.deepEqual(actual,expected);
   console.log('PASS exact SQL availability '+JSON.stringify({filters,range,ids:actual}));
+ }
+ const bands=[{min:0,max:99},{min:100,max:500},{min:400,max:600},{min:600,max:Infinity}];
+ for(const [filters,merged]of cases.map(([f,m])=>[f,m])){
+  const separate=[];for(const band of bands)separate.push(await availableProductIds(model,where,filters,merged,band,{database}));
+  const together=await availableProductIdsByPriceRanges(database,where,filters,merged,bands);
+  assert.deepEqual(together,separate);
+  console.log('PASS one-pass price bands equal per-band reads '+JSON.stringify({filters,counts:together.map(ids=>ids.length)}));
  }
  let queries=0;const wrapped={$queryRaw:query=>{queries++;return database.$queryRaw(query);}};
  let fallback=0;const unknown={findMany:async()=>{fallback++;return [];}};

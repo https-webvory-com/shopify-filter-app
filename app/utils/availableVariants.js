@@ -17,7 +17,7 @@ function selectedVariantValues(name,values,mergedValues){
 
 // The public route's scope is deliberately small. Unknown caller predicates
 // keep the generic Prisma path rather than silently losing a restriction.
-async function availableProductIdsInDatabase(database,where,filters,mergedValues,priceRange,priceContext={},sortPage=null){
+async function availableProductIdsInDatabase(database,where,filters,mergedValues,priceRange,priceContext={},sortPage=null,splitRanges=null){
  if(!database?.$queryRaw||typeof where.shop!=='string'||Object.keys(where).some(key=>!['shop','status','collections','id'].includes(key)))return null;
  const clauses=[Prisma.sql`p."shop" = ${where.shop}`];
  if(where.id){
@@ -140,6 +140,24 @@ async function availableProductIdsInDatabase(database,where,filters,mergedValues
   },{timeout:10000});
   return database.$queryRaw(query);
  }
+ if(splitRanges){
+  // One pass over the matching variants decides every band at once. Each
+  // band still requires the SAME variant to satisfy price and all options.
+  const flags=[];
+  for(const range of splitRanges){
+   if(!Number.isFinite(range.min)||(range.max!==Infinity&&range.max!==null&&!Number.isFinite(range.max)))return null;
+   flags.push(Prisma.sql`bool_or(${amount} >= ${range.min}${Number.isFinite(range.max)?Prisma.sql` AND ${amount} <= ${range.max}`:Prisma.empty}) AS ${Prisma.raw(`"r${flags.length}"`)}`);
+  }
+  if(!flags.length)return [];
+  const source=optionPositions.length?Prisma.sql`(SELECT p."id", ${Prisma.join(optionPositions)} FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')})`:Prisma.sql`(SELECT p."id" FROM "Product" p WHERE ${Prisma.join(clauses,' AND ')})`;
+  const query=Prisma.sql`WITH scoped_products AS MATERIALIZED ${source}
+   SELECT p."id", ${Prisma.join(flags)} FROM scoped_products p JOIN "Variant" v ON ${Prisma.join(variants,' AND ')}
+   GROUP BY p."id" ORDER BY p."id"`;
+  const rows=typeof database.$transaction==='function'
+   ?await database.$transaction(async transaction=>{await transaction.$executeRaw`SET LOCAL jit = off`;return transaction.$queryRaw(query);},{timeout:10000})
+   :await database.$queryRaw(query);
+  return splitRanges.map((_,i)=>rows.filter(row=>row['r'+i]===true).map(row=>row.id.split('/').pop()));
+ }
  const membership=Prisma.sql`EXISTS (SELECT 1 FROM "Variant" v WHERE ${Prisma.join(variants,' AND ')})`;
  const query=optionPositions.length?Prisma.sql`
   WITH scoped_products AS MATERIALIZED (
@@ -207,6 +225,15 @@ export function matchingAvailableVariants(product, filters = {}, mergedValues = 
     }
     return matchesOptions(variant);
   });
+}
+
+// Exact per-band product IDs from one database pass. Returns null when the
+// database path cannot express the request, so callers keep their fallback.
+export async function availableProductIdsByPriceRanges(database,where,filters,mergedValues,ranges,{priceContext={}}={}){
+ if(!database||!Array.isArray(ranges)||!ranges.length)return null;
+ if(priceContext.searchColorValues&&!priceContext.searchColorValues.length)return ranges.map(()=>[]);
+ if(priceContext.ranges?.length)return null;
+ try{return await availableProductIdsInDatabase(database,where,filters,mergedValues,null,priceContext,null,ranges);}catch{return null;}
 }
 
 export async function availableProductIds(productModel, where, filters, mergedValues, priceRange = null, {database,priceContext={}} = {}) {
