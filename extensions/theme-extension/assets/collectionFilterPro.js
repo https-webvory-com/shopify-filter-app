@@ -1867,7 +1867,47 @@ return narrowerCollectionFilters;
     reviewSnippetTimer = setTimeout(tryInitialize, 0);
   }
 
+  // One click handler for every product-card swatch, installed once. Runs in
+  // the capture phase so it acts before any ancestor listener, as the former
+  // inline handlers did at the target.
+  let swatchHandlerInstalled = false;
+  function installSwatchHandler() {
+    if (swatchHandlerInstalled) return;
+    swatchHandlerInstalled = true;
+    document.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const more = target?.closest('.cfp-swatch-more[data-cfp-swatch-extra]');
+      if (more) {
+        event.preventDefault();
+        const container = more.closest('.cfp-product-swatches');
+        const isExpanded = more.textContent.startsWith('-');
+        container?.querySelectorAll('.cfp-swatch-item:nth-child(n+6)').forEach(item => item.classList.toggle('cfp-swatch-hidden'));
+        more.textContent = (isExpanded ? '+' : '-') + more.dataset.cfpSwatchExtra;
+        return;
+      }
+      const swatch = target?.closest('.cfp-swatch-item[data-cfp-swatch-img]');
+      const card = swatch?.closest('.cfp-product-card');
+      if (!swatch || !card) return;
+      event.preventDefault();
+      card.dataset.cfpUserSelectedVariant = 'true';
+      const primary = card.querySelector('.cfp-product-card__image--primary');
+      if (primary) { primary.removeAttribute('srcset'); primary.src = swatch.dataset.cfpSwatchImg; }
+      const secondary = card.querySelector('.cfp-product-card__image--secondary');
+      if (secondary) {
+        const hover = swatch.dataset.cfpSwatchHover;
+        if (hover) { secondary.removeAttribute('srcset'); secondary.src = hover; secondary.style.display = ''; }
+        else secondary.style.display = 'none';
+      }
+      swatch.closest('.cfp-product-swatches')?.querySelectorAll('.cfp-swatch-item').forEach(item => item.classList.remove('cfp-swatch-active'));
+      swatch.classList.add('cfp-swatch-active');
+      const href = swatch.dataset.cfpSwatchHref;
+      if (href) card.querySelectorAll('.cfp-product-card__link').forEach(link => { link.href = href; });
+      window.cfpUpdateMarketCardPrice?.(card, card._cfpMarketProduct);
+    }, true);
+  }
+
   async function renderProducts(products, totalCount, isLoadMore, mergedValues, contextualPricingApplied = false, previewOnly = false, pricePreview = false, partialPrefix = false) {
+    installSwatchHandler();
     const version = ++marketRenderVersion;
     const pricingProducts = products;
     if (templateName !== 'search' && !isLoadMore && !products.length)
@@ -2342,41 +2382,22 @@ return narrowerCollectionFilters;
                  }
              }
 
-             const secondaryImgJS = `
-               const secImg = card.querySelector('.cfp-product-card__image--secondary');
-               if (secImg) {
-                   ${hoverImgUrlForSwatch ? `secImg.removeAttribute('srcset'); secImg.src=${cardScriptString(getResizedImageUrl(hoverImgUrlForSwatch, '600x'))}; secImg.style.display='';` : `secImg.style.display='none';`}
-               }
-             `;
-
+             // Values for the shared swatch handler (installSwatchHandler). Each
+             // swatch used to carry its own ~1.3 KB inline script, which made 25
+             // cards ~365 KB of markup and ~0.25 s of work on every filter click.
              swatchesHtml += `<div class="cfp-swatch-item ${isHidden} ${isActive}"
                   data-cfp-color="${escapeCardHtml(colorName)}"
                   data-tooltip="${escapeCardHtml(colorName)}"
-                  onclick="event.preventDefault(); 
-                           const card = this.closest('.cfp-product-card');
-                           card.dataset.cfpUserSelectedVariant = 'true';
-                           const pImg = card.querySelector('.cfp-product-card__image--primary');
-                           if (pImg) { pImg.removeAttribute('srcset'); pImg.src=${cardScriptString(getResizedImageUrl(data.imgUrl, '600x'))}; }
-                           ${secondaryImgJS.replace(/\n/g, ' ')}
-                           const swatches = this.closest('.cfp-product-swatches').querySelectorAll('.cfp-swatch-item');
-                           swatches.forEach(s => s.classList.remove('cfp-swatch-active'));
-                           this.classList.add('cfp-swatch-active');
-                           if(${cardScriptString(data.variantId)}) card.querySelectorAll('.cfp-product-card__link').forEach(link => link.href=${cardScriptString('/products/'+product.handle+'?variant='+data.variantId)});
-                           window.cfpUpdateMarketCardPrice?.(card, card._cfpMarketProduct);">
+                  data-cfp-swatch-img="${escapeCardHtml(getResizedImageUrl(data.imgUrl, '600x'))}"
+                  data-cfp-swatch-hover="${hoverImgUrlForSwatch ? escapeCardHtml(getResizedImageUrl(hoverImgUrlForSwatch, '600x')) : ''}"
+                  ${data.variantId ? `data-cfp-swatch-href="${escapeCardHtml('/products/'+product.handle+'?variant='+data.variantId)}"` : ''}>
                 <img src="${escapeCardHtml(getResizedImageUrl(data.imgUrl, '50x'))}" alt="${escapeCardHtml(colorName)}" />
              </div>`;
           });
 
           if (colorsArray.length > 5) {
              const extraCount = colorsArray.length - 5;
-             swatchesHtml += `<div class="cfp-swatch-more"
-                  onclick="event.preventDefault(); 
-                           const container = this.closest('.cfp-product-swatches');
-                           const hiddenItems = container.querySelectorAll('.cfp-swatch-item:nth-child(n+6)');
-                           const isExpanded = this.textContent.startsWith('-');
-                           hiddenItems.forEach(item => item.classList.toggle('cfp-swatch-hidden'));
-                           this.textContent = isExpanded ? '+' + ${extraCount} : '-' + ${extraCount};
-                  ">+${extraCount}</div>`;
+             swatchesHtml += `<div class="cfp-swatch-more" data-cfp-swatch-extra="${extraCount}">+${extraCount}</div>`;
           }
           swatchesHtml += `</div>`;
 
