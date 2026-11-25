@@ -541,6 +541,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
 
     isInitializing = true;
     window._cfpInitStarted = true;
+    installFilterPrefetchListeners();
 
     customSettings=window.collectionFilterProSettings||{};
     syncThemeBackgroundColor();
@@ -695,13 +696,21 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       const identity=value=>{const query=new URLSearchParams(value);for(const key of ['responseProfile','page','limit'])query.delete(key);query.sort();return query.toString();};
       const early=window._cfpSavedFilters;
       const started=Date.now();
+      const showSaved=saved=>{
+        globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
+        window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
+        cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=countsPending?NaN:saved.totalCount;
+        renderFilterSidebar(saved.settings,saved.facets,saved.totalCount,countsPending);
+        renderBreadcrumbs();updateActiveCountBadge();sidebar.classList.remove('cfp-loading');
+      };
+      const replaced=()=>filtersReady&&cfpLastSettings.length>0;
       // An early 202 or transient failure is not a permanent result. Keep
       // checking the small saved-filter read while products load separately.
       for(let attempt=0;attempt<12&&Date.now()-started<30000;attempt++){
-        if(signal.aborted||filtersReady&&cfpLastSettings.length>0)return;
+        if(signal.aborted||replaced())return;
         const promise=attempt===0&&early&&identity(early.params)===identity(params)?early.promise:window.cfpLoadSavedFilters(params,signal);
         const saved=await Promise.resolve(promise).catch(()=>null);
-        if(signal.aborted||filtersReady&&cfpLastSettings.length>0)return;
+        if(signal.aborted||replaced())return;
         if(saved?.cfpFilters?.version!==1||!saved.settings||!saved.facets){
           await new Promise(resolve=>{
             const finish=()=>{clearTimeout(timer);signal.removeEventListener('abort',finish);resolve();};
@@ -711,11 +720,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
           });
           continue;
         }
-        globalSettings=saved.globalSettings||{};window.cfpGlobalSettings=globalSettings;
-        window.cfpQuickViewInstance?.configure(globalSettings);applyGlobalSettings(globalSettings);
-        cfpLastSettings=saved.settings;cfpLastFacets=saved.facets;cfpLastTotalCount=countsPending?NaN:saved.totalCount;
-        renderFilterSidebar(saved.settings,saved.facets,saved.totalCount,countsPending);
-        renderBreadcrumbs();updateActiveCountBadge();sidebar.classList.remove('cfp-loading');
+        showSaved(saved);
         performance.mark?.('cfp-filters-ready');
         return;
       }
@@ -928,6 +933,98 @@ return narrowerCollectionFilters;
       collectionMembershipResults.delete(remove??collectionMembershipResults.keys().next().value);
     }
   }
+  // Pure request construction shared by real filter changes and background
+  // prefetches, so both produce byte-identical request URLs.
+  function buildCollectionRequestParams(activeFilters,isLoadMore){
+      const queryParams = new URLSearchParams();
+      queryParams.set("locale", window.Shopify?.locale || window.cfpCollectionContext?.locale || document.documentElement.lang || "en");
+
+      // Guard: shop must be present
+      if (!shop) {
+        console.error('CFP: Missing shop domain — cannot fetch filter data.');
+        return null;
+      }
+      queryParams.append('shop', shop);
+
+      const country=window.Shopify?.country||window.cfpCollectionContext?.country;
+      if(country)queryParams.append('country',country);
+      if(country&&((activeFilters.priceRanges||[]).length||activeFilters.minPrice>0||activeFilters.maxPrice<999999||Object.values(activeFilters.options||{}).some(values=>values.length))){
+        queryParams.set('priceFilterVersion','1');
+        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
+        if(window.Shopify?.currency?.active)queryParams.set('priceCurrency',window.Shopify.currency.active);
+      }
+      if(templateName!=='search'&&['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)&&window.cfpPriceSortVersion!==1){
+        queryParams.set('priceSortVersion','2');
+        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
+      }
+
+      if (window.cfpCustomerTags) {
+        queryParams.append('customer_tags', window.cfpCustomerTags);
+      }
+
+      if (collectionHandle) {
+        queryParams.append('collectionHandle', collectionHandle);
+      } else if (collectionId) {
+        queryParams.append('collectionId', collectionId);
+      }
+
+      if (templateName === 'search') {
+        queryParams.append('isSearch', 'true');
+        if (searchTerms) {
+          queryParams.append('q', searchTerms);
+        }
+      } else if (templateName === 'collection' && activeFilters.q) {
+        queryParams.set('q',activeFilters.q);
+      }
+
+      // Price range
+      (activeFilters.priceRanges||[]).forEach(value=>queryParams.append('price[]',value));
+      for (const [state,parameter] of [['weightRanges','weight[]'],['ratingRanges','rating[]'],['locations','location[]']]) (activeFilters[state] || []).forEach(value=>queryParams.append(parameter,value));
+      (activeFilters.saleRanges || []).forEach(range => queryParams.append('sale[]', range));
+      if (activeFilters.minPrice > 0) queryParams.append('minPrice', activeFilters.minPrice);
+      if (activeFilters.maxPrice < 999999) queryParams.append('maxPrice', activeFilters.maxPrice);
+
+      // Basic arrays
+      activeFilters.vendors.forEach(v => queryParams.append('vendor[]', v));
+      activeFilters.types.forEach(t => queryParams.append('type[]', t));
+      activeFilters.tags.forEach(t => queryParams.append('tags[]', t));
+      activeFilters.collections.forEach(c => queryParams.append('collection[]', c));
+      activeFilters.availability.forEach(a => queryParams.append('availability[]', a));
+      (activeFilters.titles || []).forEach(t => queryParams.append('title[]', t));
+
+      // Dynamic options
+      Object.entries(activeFilters.options).forEach(([name, values]) => {
+        values.forEach(val => queryParams.append(`options[${name}][]`, val));
+      });
+
+      // Dynamic metafields
+      Object.entries(activeFilters.metafields).forEach(([key, values]) => {
+        values.forEach(val => queryParams.append(`metafields[${key}][]`, val));
+      });
+
+      // Sorting & Pagination
+      queryParams.append('sortBy', activeFilters.sortBy);
+      queryParams.append('page', activeFilters.page);
+      queryParams.append('limit', PAGE_SIZE);
+      const collectionQuery = templateName === 'collection' && Boolean(activeFilters.q);
+      const hasSelectedFilters=collectionQuery || [...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+      return {queryParams,hasSelectedFilters,collectionQuery};
+  }
+  function applyCollectionResponseProfile(activeFilters,queryParams,{hasSelectedFilters,collectionQuery},isLoadMore){
+      if (templateName !== 'search' && !collectionQuery && activeFilters.sortBy !== 'manual') {
+        queryParams.set('responseProfile','collection-v1');
+        const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
+        if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
+          queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
+      }
+      if(templateName!=='search'&&!collectionQuery&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
+          (hasSelectedFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)))
+        queryParams.set('responseProfile','fast-cards-v1');
+      if(isLoadMore&&templateName!=='search'&&!collectionQuery&&queryParams.get('priceSortVersion')==='2')
+        queryParams.set('responseProfile','price-sort-page-v1');
+      if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
+        queryParams.set('responseProfile','search-fast-cards-v1');
+  }
   function collectionMembershipParent(params){
     const child='https://collection.invalid/api/filter?'+params.toString();
     return [...collectionMembershipResults.values()].reverse().find(parent=>
@@ -1011,92 +1108,11 @@ return narrowerCollectionFilters;
     }
 
     try {
-      const queryParams = new URLSearchParams();
-      queryParams.set("locale", window.Shopify?.locale || window.cfpCollectionContext?.locale || document.documentElement.lang || "en");
-
-      // Guard: shop must be present
-      if (!shop) {
-        console.error('CFP: Missing shop domain — cannot fetch filter data.');
-        return;
-      }
-      queryParams.append('shop', shop);
-
-      const country=window.Shopify?.country||window.cfpCollectionContext?.country;
-      if(country)queryParams.append('country',country);
-      if(country&&((activeFilters.priceRanges||[]).length||activeFilters.minPrice>0||activeFilters.maxPrice<999999||Object.values(activeFilters.options||{}).some(values=>values.length))){
-        queryParams.set('priceFilterVersion','1');
-        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
-        if(window.Shopify?.currency?.active)queryParams.set('priceCurrency',window.Shopify.currency.active);
-      }
-      if(templateName!=='search'&&['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)&&window.cfpPriceSortVersion!==1){
-        queryParams.set('priceSortVersion','2');
-        queryParams.set('priceSortRate',String(Number(window.Shopify?.currency?.rate)||1));
-      }
-
-      if (window.cfpCustomerTags) {
-        queryParams.append('customer_tags', window.cfpCustomerTags);
-      }
-
-      if (collectionHandle) {
-        queryParams.append('collectionHandle', collectionHandle);
-      } else if (collectionId) {
-        queryParams.append('collectionId', collectionId);
-      }
-
-      if (templateName === 'search') {
-        queryParams.append('isSearch', 'true');
-        if (searchTerms) {
-          queryParams.append('q', searchTerms);
-        }
-      } else if (templateName === 'collection' && activeFilters.q) {
-        queryParams.set('q',activeFilters.q);
-      }
-
-      // Price range
-      (activeFilters.priceRanges||[]).forEach(value=>queryParams.append('price[]',value));
-      for (const [state,parameter] of [['weightRanges','weight[]'],['ratingRanges','rating[]'],['locations','location[]']]) (activeFilters[state] || []).forEach(value=>queryParams.append(parameter,value));
-      (activeFilters.saleRanges || []).forEach(range => queryParams.append('sale[]', range));
-      if (activeFilters.minPrice > 0) queryParams.append('minPrice', activeFilters.minPrice);
-      if (activeFilters.maxPrice < 999999) queryParams.append('maxPrice', activeFilters.maxPrice);
-
-      // Basic arrays
-      activeFilters.vendors.forEach(v => queryParams.append('vendor[]', v));
-      activeFilters.types.forEach(t => queryParams.append('type[]', t));
-      activeFilters.tags.forEach(t => queryParams.append('tags[]', t));
-      activeFilters.collections.forEach(c => queryParams.append('collection[]', c));
-      activeFilters.availability.forEach(a => queryParams.append('availability[]', a));
-      (activeFilters.titles || []).forEach(t => queryParams.append('title[]', t));
-
-      // Dynamic options
-      Object.entries(activeFilters.options).forEach(([name, values]) => {
-        values.forEach(val => queryParams.append(`options[${name}][]`, val));
-      });
-
-      // Dynamic metafields
-      Object.entries(activeFilters.metafields).forEach(([key, values]) => {
-        values.forEach(val => queryParams.append(`metafields[${key}][]`, val));
-      });
-
-      // Sorting & Pagination
-      queryParams.append('sortBy', activeFilters.sortBy);
-      queryParams.append('page', activeFilters.page);
-      queryParams.append('limit', PAGE_SIZE);
-      const collectionQuery = templateName === 'collection' && Boolean(activeFilters.q);
-      const hasSelectedFilters=collectionQuery || [...queryParams.keys()].some(key=>key.endsWith('[]')||key==='minPrice'||key==='maxPrice');
+      const built=buildCollectionRequestParams(activeFilters,isLoadMore);
+      if(!built)return;
+      const {queryParams,hasSelectedFilters,collectionQuery}=built;
       if(!isLoadMore)startIndependentCollectionFilters(queryParams,fetchSignal);
-      if (templateName !== 'search' && !collectionQuery && activeFilters.sortBy !== 'manual') {
-        queryParams.set('responseProfile','collection-v1');
-        const publicKeys = ['shop','collectionId','collectionHandle','locale','language','country','sortBy','page','limit','responseProfile'];
-        if (!hasSelectedFilters&&String(activeFilters.page)==='1' && queryParams.has('country') && [...queryParams.keys()].every(key=>publicKeys.includes(key)))
-          queryParams.set('responseProfile',activeFilters.page===1&&['best-selling','bestselling'].includes(activeFilters.sortBy)?'collection-preview-v1':'collection-v2');
-      }
-      if(templateName!=='search'&&!collectionQuery&&!isLoadMore&&activeFilters.page===1&&activeFilters.sortBy!=='manual'&&
-          (hasSelectedFilters||['price-ascending','price-asc','price-descending','price-desc'].includes(activeFilters.sortBy)))
-        queryParams.set('responseProfile','fast-cards-v1');
-      if(isLoadMore&&templateName!=='search'&&!collectionQuery&&queryParams.get('priceSortVersion')==='2')
-        queryParams.set('responseProfile','price-sort-page-v1');
-      if(templateName==='search'&&!hasSelectedFilters&&!isLoadMore&&activeFilters.page===1)
-        queryParams.set('responseProfile','search-fast-cards-v1');
+      applyCollectionResponseProfile(activeFilters,queryParams,built,isLoadMore);
       const membershipParent=templateName!=='search'&&!collectionQuery&&hasSelectedFilters&&!isLoadMore&&activeFilters.page===1?collectionMembershipParent(queryParams):null;
       if (membershipParent) {
         queryParams.set('membershipParentToken', membershipParent.token);
@@ -1189,6 +1205,7 @@ return narrowerCollectionFilters;
             try { response = await takeEarlyCollectionResponse(requestUrl, fetchSignal); }
             catch (error) { if (fetchSignal.aborted) throw error; }
           }
+          if (!response && !isLoadMore && activeFilters.page === 1) response = await takePrefetchedFilterResponse(requestUrl);
           if (!response) response = !isLoadMore && activeFilters.page === 1
             ? await fetchCollectionResponseWithRecovery(requestUrl, fetchSignal)
             : await fetchCollectionResponse(requestUrl, fetchSignal);
@@ -1228,6 +1245,7 @@ return narrowerCollectionFilters;
       console.log('[CFP] API response:', { products: data.products?.length, totalCount: data.totalCount });
 
       sidebar.classList.remove('cfp-loading');
+      if(!isLoadMore)scheduleTopFilterPrefetch();
 
       if (data.globalSettings) {
         globalSettings = data.globalSettings;
@@ -4105,6 +4123,129 @@ return narrowerCollectionFilters;
     });
   }
 
+  // Background first-page reads for likely filter choices. A shopper's click
+  // reuses the finished (or in-flight) response when its full request matches.
+  const prefetchedFilterResponses=new Map();
+  const PREFETCH_TTL_MS=45000,PREFETCH_MAX_ENTRIES=24,PREFETCH_CONCURRENCY=2;
+  let prefetchRunning=0;const prefetchQueue=[];
+  function filterPrefetchKey(url){
+    try{const u=new URL(url,window.location.href);u.searchParams.delete('membershipParentToken');u.searchParams.delete('membershipParentQuery');u.searchParams.sort();return u.toString();}
+    catch{return null;}
+  }
+  function prefetchAllowed(){
+    return templateName!=='search'&&!!shop&&!navigator.connection?.saveData&&!/(^|-)2g$/.test(navigator.connection?.effectiveType||'');
+  }
+  function prefetchFilterArray(af,name){
+    const map={availability:'availability',vendor:'vendors',product_type:'types',collection:'collections',title:'titles'};
+    if(map[name])return af[map[name]];
+    if(name==='tag'||name==='tags')return af.tags;
+    if(name.startsWith('option-')){const key=name.slice(7);return af.options[key]||=[];}
+    if(name.startsWith('metafield-')){const key=name.slice(10);return af.metafields[key]||=[];}
+    return null;
+  }
+  // Mirrors the checkbox change handler for the supported filter types.
+  function stateWithCheckbox(input){
+    const name=input.name,val=input.value;
+    let af;try{af=structuredClone(activeFilters);}catch{af=JSON.parse(JSON.stringify(activeFilters));}
+    const target=prefetchFilterArray(af,name);if(!target)return null;
+    const group=input.closest('.cfp-group, .cfp-horizontal-pill');
+    if(group?.getAttribute('data-single-select')==='true'){
+      for(const other of group.querySelectorAll('input[type="checkbox"]')){
+        if(other===input)continue;
+        const list=prefetchFilterArray(af,other.name);if(!list)return null;
+        if(other.name==='tag'||other.name==='tags')updateFilterArray(list,getCleanLabel('tag',other.value).cleanVal,false);
+        updateFilterArray(list,other.value,false);
+      }
+    }
+    af.page=1;
+    if(name==='tag'||name==='tags')updateFilterArray(target,getCleanLabel('tag',val).cleanVal,false);
+    updateFilterArray(target,val,true);
+    return af;
+  }
+  function prefetchRequestUrl(af){
+    const built=buildCollectionRequestParams(af,false);
+    if(!built)return null;
+    applyCollectionResponseProfile(af,built.queryParams,built,false);
+    if(built.queryParams.get('responseProfile')!=='fast-cards-v1')return null;
+    return `${API_DOMAIN}/api/filter?${built.queryParams.toString()}`;
+  }
+  function pumpFilterPrefetch(){
+    while(prefetchRunning<PREFETCH_CONCURRENCY&&prefetchQueue.length){
+      const job=prefetchQueue.shift();
+      if(prefetchedFilterResponses.get(job.key)!==job.entry)continue;
+      prefetchRunning++;
+      job.entry.start();
+    }
+  }
+  function prefetchFilterInput(input){
+    try{
+      if(!input||input.type!=='checkbox'||input.checked||input.disabled||!prefetchAllowed())return;
+      const af=stateWithCheckbox(input);if(!af)return;
+      const url=prefetchRequestUrl(af);if(!url)return;
+      const key=filterPrefetchKey(url);if(!key)return;
+      const now=Date.now(),existing=prefetchedFilterResponses.get(key);
+      if(existing&&now-existing.at<PREFETCH_TTL_MS)return;
+      while(prefetchedFilterResponses.size>=PREFETCH_MAX_ENTRIES)prefetchedFilterResponses.delete(prefetchedFilterResponses.keys().next().value);
+      let resolve;const entry={at:now,promise:new Promise(r=>{resolve=r;})};
+      entry.start=()=>{
+        entry.start.started=true;
+        const controller=new AbortController();
+        const timer=setTimeout(()=>controller.abort(),15000);
+        fetchCollectionResponse(url,controller.signal)
+          .then(async result=>{
+            if(!result||![200,202].includes(result.status))return null;
+            const data=await waitForCollectionOrder(await result.json(),url,controller.signal);
+            return {status:200,json:async()=>data};
+          })
+          .catch(()=>null)
+          .then(result=>{if(!result&&prefetchedFilterResponses.get(key)===entry)prefetchedFilterResponses.delete(key);resolve(result);})
+          .finally(()=>{clearTimeout(timer);prefetchRunning--;pumpFilterPrefetch();});
+      };
+      prefetchedFilterResponses.set(key,entry);
+      prefetchQueue.push({key,entry});
+      pumpFilterPrefetch();
+    }catch{}
+  }
+  async function takePrefetchedFilterResponse(requestUrl){
+    const key=filterPrefetchKey(requestUrl),entry=key&&prefetchedFilterResponses.get(key);
+    if(!entry)return null;
+    prefetchedFilterResponses.delete(key);
+    if(Date.now()-entry.at>=PREFETCH_TTL_MS)return null;
+    if(!entry.start.started&&prefetchQueue.some(job=>job.entry===entry))return null;
+    return entry.promise;
+  }
+  let topPrefetchTimer=null;
+  function scheduleTopFilterPrefetch(){
+    clearTimeout(topPrefetchTimer);
+    topPrefetchTimer=setTimeout(()=>{
+      const run=()=>{
+        if(!prefetchAllowed()||!sidebar)return;
+        const visible=sidebar.offsetParent!==null&&getComputedStyle(sidebar).visibility!=='hidden';
+        if(!visible)return;
+        const group=[...sidebar.querySelectorAll('.cfp-group')].find(g=>!g.classList.contains('cfp-group--collapsed')&&g.querySelector('input[type="checkbox"]:not(:checked)'));
+        if(!group)return;
+        [...group.querySelectorAll('input[type="checkbox"]:not(:checked):not(:disabled)')].slice(0,3).forEach(prefetchFilterInput);
+      };
+      if(window.requestIdleCallback)requestIdleCallback(run,{timeout:2000});else run();
+    },1200);
+  }
+  let hoverPrefetchTimer=null;
+  function filterInputFromEvent(event){
+    const target=event.target instanceof Element?event.target:null;if(!target)return null;
+    if(!target.closest('#cfp-sidebar, .cfp-horizontal-filters, .cfp-horizontal-pill, [id^="cfp-horizontal"]'))return null;
+    if(target.matches('input[type="checkbox"]'))return target;
+    return target.closest('label, .cfp-swatch, .cfp-color-swatch, li')?.querySelector('input[type="checkbox"]')||null;
+  }
+  let filterPrefetchListening=false;
+  function installFilterPrefetchListeners(){
+    if(filterPrefetchListening)return;filterPrefetchListening=true;
+    ['pointerover','focusin','touchstart'].forEach(type=>document.addEventListener(type,event=>{
+    const input=filterInputFromEvent(event);if(!input)return;
+    clearTimeout(hoverPrefetchTimer);
+    if(type==='touchstart'){prefetchFilterInput(input);return;}
+    hoverPrefetchTimer=setTimeout(()=>prefetchFilterInput(input),60);
+  },{passive:true,capture:true}));
+  }
   function updateFilterArray(arr, value, checked) {
     if (checked) {
       if (!facetSelectionIncludes(arr,value)) arr.push(value);
@@ -4604,6 +4745,7 @@ return narrowerCollectionFilters;
     if (reopening) stopDrawerMotion();
     sidebar.inert = false;
     sidebar.classList.add('cfp-sidebar--open');
+    scheduleTopFilterPrefetch();
     syncDrawerViewport();
     if (overlay) overlay.classList.add('cfp-overlay--visible');
     if (reopening && sidebar.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

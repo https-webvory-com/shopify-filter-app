@@ -1272,6 +1272,36 @@ try{
     assert.equal(requests.filter(request=>request.status===200&&request.profile==='collection-facets-v1').length,1,JSON.stringify(requests));
     assert.deepEqual(await evaluate('browserErrors'),[]);
   });
+  await test('hovered filter option is prefetched and its click reuses that response',async()=>{
+    const filterSettings=[{id:'vendor',isEnabled:true,filterType:'vendor',filterKey:'vendor',label:'Designer',config:{}}];
+    await control({reset:true,delay:100,filterSettings,globalSettings:{desktopFilterLayout:'drawer',showFilterOptionsWithOneItem:true}});await navigate();
+    await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
+    await wait("document.querySelector('#cfp-sidebar input[name=vendor]')");
+    await control({apiDelay:800});
+    const before=await getState();
+    await evaluate("{const input=document.querySelector('#cfp-sidebar input[name=vendor]');(input.closest('label')||input).dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));}");
+    let prefetched=[];
+    for(let i=0;i<60&&!prefetched.length;i++){await delay(250);prefetched=(await getState()).allRequests.slice(before.allRequests.length).filter(r=>r.profile==='fast-cards-v1'&&r.status===200);}
+    await delay(300);
+    assert.ok(prefetched.length>=1,'hover did not prefetch');
+    const started=Date.now();
+    await evaluate("const input=document.querySelector('#cfp-sidebar input[name=vendor]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-products-container .cfp-skeleton-card')");
+    const elapsed=Date.now()-started;
+    await delay(400);
+    const after=await getState(),requests=after.allRequests.slice(before.allRequests.length);
+    const vendor=await evaluate("document.querySelector('#cfp-sidebar input[name=vendor]').value");
+    const cardRequests=requests.filter(r=>r.profile==='fast-cards-v1'&&r.status===200);
+    assert.equal(cardRequests.length,1,'click issued a second product request: '+JSON.stringify(requests));
+    assert.ok(elapsed<700,'prefetched click took '+elapsed+'ms');
+    assert.equal(await evaluate("document.querySelector('#cfp-sidebar input[name=vendor]').checked"),true);
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    await control({apiDelay:0});await navigate();
+    await wait("document.querySelector('#cfp-sidebar input[name=vendor]')");
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length>0");
+    assert.deepEqual(await evaluate('browserErrors'),[]);
+    return {prefetchedClickMs:elapsed};
+  });
   await test('variant-dependent merchandising preserves global order and selected images across small batches',async()=>{
     await control({reset:true,colorRule:true,delay:100});await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25");
     assert.deepEqual((await cards()).slice(0,2),['1','30']);

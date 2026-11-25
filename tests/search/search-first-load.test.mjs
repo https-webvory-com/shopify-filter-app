@@ -16,6 +16,7 @@ async function load({ template = 'search', page = 1, limit = 4, sort = 'relevanc
   const context = { window: { _cfpEarlyFetch: Promise.resolve(early) }, templateName: template,
     collectionQuery: Boolean(collectionQuery), rankedCollection: template !== 'search' && !collectionQuery && sort !== 'manual', isLoadMore: loadMore,
     activeFilters: { page }, queryParams: params, API_DOMAIN: 'https://api.test', fetchSignal: new AbortController().signal,
+    takePrefetchedFilterResponse: async () => null,
     fetchCollectionResponse: async url => { calls.push(url); return { status: 200, json: async () => ({ products: expectedOrder.slice((page - 1) * limit, page * limit), source: 'scoped' }) }; },
   };
   if (collectionQuery) {params.set('q',collectionQuery);params.set('collectionHandle','formal-dresses');params.delete('isSearch');}
