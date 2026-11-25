@@ -277,7 +277,7 @@ test('a scoped catalog invalidation promotes only its own published collection',
   f.catalog.push({shop,id:'gid://shopify/Collection/'+id});
   const url=new URL('https://ranking.internal/api/filter');
   for(const [key,value]of Object.entries({shop,collectionId:id,country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))url.searchParams.set(key,value);
-  f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-1000)});
+  f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-16*60000)});
  }
  f.snapshots.set(catalogPublicationInvalidatedAtKey(shop,'1'),String(Date.now()));
  await f.scheduleCatalogCollectionWarmups(shop);
@@ -287,6 +287,18 @@ test('a scoped catalog invalidation promotes only its own published collection',
  f.snapshots.set(configurationInvalidatedAtKey(shop),String(Date.now()));
  await f.scheduleCatalogCollectionWarmups(shop);
  assert.equal(jobs.find(row=>row[2].record.collectionId==='2')[3].priority,2);
+});
+
+test('a publication refreshed within the interval is not promoted again for product or order changes',async()=>{
+ const f=await fixture(),shop='fixture.myshopify.com';
+ f.seeds.push({shop,collectionHandle:'seed',country:'IN',locale:'en'});
+ f.catalog.push({shop,id:'gid://shopify/Collection/1'});
+ const url=new URL('https://ranking.internal/api/filter');
+ for(const [key,value]of Object.entries({shop,collectionId:'1',country:'IN',locale:'en',sortBy:'best-selling',page:'1',limit:'25',responseProfile:'collection-preview-v1'}))url.searchParams.set(key,value);
+ f.published.push({aliases:[publishedCollectionKey(new Request(url))],validatedAt:new Date(Date.now()-60000)});
+ f.snapshots.set(catalogPublicationInvalidatedAtKey(shop,'1'),String(Date.now()));
+ await f.scheduleCatalogCollectionWarmups(shop);
+ assert.equal(f.writes.find(row=>row[0]==='queue'&&row[2].record.collectionId==='1')[3].priority,10);
 });
 
 test('a country rule edit promotes only that market for background publication',async()=>{

@@ -1,4 +1,5 @@
 import {hasUsableExtraFacets} from './extraProductFilters.js';
+import {productRefreshIntervalMs} from './collectionPreparation.js';
 import {hasUsableSaleFacets} from './percentSaleFilter.js';
 import {createHash} from 'node:crypto';
 import {encodePreparation,decodePreparation} from './collectionPreparationPayload.js';
@@ -59,7 +60,9 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     else if(entry.external){const current=await readExternalProof(shop,entry.externalDependencies);
       externalChanged=!current||current!==entry.externalRevision;}
    }
-   const catalogChanged=catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at||externalChanged;
+   // Product/order changes rebuild at most once per interval (see productRefreshIntervalMs).
+   const productRefreshAllowed=now()-entry.at>=productRefreshIntervalMs;
+   const catalogChanged=(catalogInvalidatedAt>0&&catalogInvalidatedAt>=entry.at||externalChanged)&&productRefreshAllowed||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at;
    // A saved merchandising or pin change must take effect on the next visit.
    // Serving the old publication here hides the current admin order.
    const ruleChanged=configurationChanged||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at;

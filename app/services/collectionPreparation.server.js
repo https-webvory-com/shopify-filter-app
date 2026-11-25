@@ -4,7 +4,7 @@ import prisma from '../db.server.js';
 import meiliClient from './meiliClient.server.js';
 import { applyMerchandisingRules, createMerchandisingComparator } from './merchandising.server.js';
 import { prepareCollectionRanking } from '../utils/prepareCollectionRanking.js';
-import { createCollectionPreparation, warmupContextsKey, warmupShopsKey, publicPreparationLimit, warmupRegistryLifetime, normalizeCollectionWarmup } from '../utils/collectionPreparation.js';
+import { createCollectionPreparation, warmupContextsKey, warmupShopsKey, publicPreparationLimit, warmupRegistryLifetime, normalizeCollectionWarmup, productRefreshIntervalMs } from '../utils/collectionPreparation.js';
 import {createHash} from 'node:crypto';
 import {collectionOrderSnapshotKey, getCollectionBestSellingState} from './collectionBestSelling.server.js';
 import configuredWarmups from '../config/collection-prewarm.json' with {type:'json'};
@@ -257,13 +257,16 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   }catch(error){console.error('CFP: Collection publication coverage unavailable:',error.name);}
   let present=0,missing=0;
   const marketVersions=new Map();
-  const publicationPriority=async(url,scopedInvalidatedAt=0)=>{
+  const publicationPriority=async(url,catalogInvalidatedAt=0,ruleInvalidatedAt=0)=>{
     if(forceMissing)return priority;
     const page=new URL(url);page.searchParams.set('responseProfile','collection-preview-v1');page.searchParams.set('limit','25');
     const key=publishedCollectionKey(new Request(page));
     if(!publishedAliases||!key)return priority;
     const at=publishedAliases.get(key)||0;
-    if(at&&at>configurationInvalidatedAt&&at>scopedInvalidatedAt){
+    // Product/order markers rebuild at most once per productRefreshIntervalMs;
+    // rule and configuration markers always rebuild.
+    const catalogCurrent=at>catalogInvalidatedAt||Date.now()-at<productRefreshIntervalMs;
+    if(at&&at>configurationInvalidatedAt&&at>ruleInvalidatedAt&&catalogCurrent){
       if(!validatePublished){present++;return priority;}
       try{
         const country=page.searchParams.get('country');
@@ -281,8 +284,8 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
   if(!collectionIds||collectionIds.includes('all'))for(const market of markets.values()){
     const url=new URL(market);url.searchParams.delete('collectionId');url.searchParams.set('collectionHandle','all');
     const record=normalizeCollectionWarmup(shop,url);if(!record)continue;
-    const marker=Math.max(Number(await redis.get(catalogPublicationInvalidatedAtKey(shop,'all')))||0,Number(await redis.get(marketRuleInvalidatedAtKey(shop,url.searchParams.get('country'))))||0);
-    const jobPriority=await publicationPriority(record.url,marker);
+    const jobPriority=await publicationPriority(record.url,Number(await redis.get(catalogPublicationInvalidatedAtKey(shop,'all')))||0,
+      Number(await redis.get(marketRuleInvalidatedAtKey(shop,url.searchParams.get('country'))))||0);
     const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
     const job=await collectionRankingQueue.getJob(jobId);
     if(job){const state=await job.getState();
@@ -309,7 +312,7 @@ export async function scheduleCatalogCollectionWarmups(shop, collectionIds=null,
       const row=rows[index];
       const url=new URL(market);url.searchParams.set('collectionId',String(row.id).split('/').pop());
       const record=normalizeCollectionWarmup(shop,url,row.id);if(!record)continue;
-      const jobPriority=await publicationPriority(record.url,Math.max(Number(markers[index])||0,marketRuleMarkers.get(url.searchParams.get('country'))||0));
+      const jobPriority=await publicationPriority(record.url,Number(markers[index])||0,marketRuleMarkers.get(url.searchParams.get('country'))||0);
       const jobId='ranking-catalog-'+createHash('sha256').update(record.url).digest('hex');
       const job=await collectionRankingQueue.getJob(jobId);
       if(job){const state=await job.getState();if(['waiting','active','prioritized','delayed'].includes(state)){

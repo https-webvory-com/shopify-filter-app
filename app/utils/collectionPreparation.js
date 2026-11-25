@@ -8,6 +8,12 @@ import {reorderVerifiedPinPrefix} from './collectionPinReorder.js';
 // configuration revisions still invalidate it immediately.
 export const preparationLifetime = 86400;
 export const preparationFreshnessMs = 600000;
+// Product edits and orders keep the last complete publication on screen while a
+// replacement is built. Rebuilding a whole collection after every such change
+// kept the search engine busy enough to delay shopper filters by 0.5-1.8 s, so
+// rebuild a publication for product/order changes at most this often. Rule,
+// pin, settings and country-rule changes are not throttled.
+export const productRefreshIntervalMs = 900000;
 export const preparationRevisionKey = shop => `collectionPreparationRevision:${shop}`;
 export const warmupContextsKey = shop => `collectionWarmupContextsV2:${shop}`;
 export const warmupShopsKey = 'collectionWarmupShopsV2';

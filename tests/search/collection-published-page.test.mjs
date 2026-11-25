@@ -1,3 +1,4 @@
+import {productRefreshIntervalMs} from '../../app/utils/collectionPreparation.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as crypto from 'node:crypto';
@@ -120,12 +121,16 @@ test('background coverage probe recognizes a complete published fifty without cr
  assert.equal(f.sessionCalls(),0);assert.equal(f.values.size,before);
  assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true,marketAvailabilityVersion:'in-v2'}),null);
 });
-test('a scoped catalog change serves old cards while requiring a complete replacement',async()=>{
+test('a scoped catalog change serves old cards and requires a replacement at most once per refresh interval',async()=>{
  let invalidatedAt=0;
  const f=fixture({readCatalogInvalidatedAt:async(_shop,id)=>id==='1'?invalidatedAt:0});
  await f.publish();
  const first=await(await f.store.get(f.request())).json();
  invalidatedAt=f.now();
+ // A product/order change within the interval keeps the publication current.
+ assert.equal((await f.store.get(f.request(),{probe:true}))?.headers.get('X-CFP-Collection-Cards'),'published');
+ assert.equal((await(await f.store.get(f.request())).json()).cfpCards.refreshDue,false);
+ f.advance(productRefreshIntervalMs);
  assert.equal(await f.store.get(f.request(),{probe:true}),null);
  const stalePageTwo=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
  assert.equal(stalePageTwo.status,200);
@@ -146,11 +151,19 @@ test('a country rule edit rejects old cards only in that market',async()=>{
  assert.equal(await f.store.get(f.request({country:'US',limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
  assert.equal((await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}))?.status,200);
 });
+test('country rule changes are never throttled by the product refresh interval',async()=>{
+ let ruleAt=0;
+ const f=fixture({readMarketRuleInvalidatedAt:async()=>ruleAt});
+ await f.publish();ruleAt=f.now();
+ assert.equal(await f.store.get(f.request(),{probe:true}),null);
+});
 test('outside pins or Include candidates refresh on product changes without hiding old cards',async()=>{
  let revision='old';
  const f=fixture({readExternalProof:async()=>revision});
  await f.publish({external:true});
  revision='new';
+ assert.equal((await(await f.store.get(f.request())).json()).cfpCards.refreshDue,false);
+ f.advance(productRefreshIntervalMs);
  const old=await(await f.store.get(f.request())).json();
  assert.equal(old.cfpCards.refreshDue,true);
  assert.equal(await f.store.get(f.request({limit:'50',responseProfile:'collection-cards-v1'}),{probe:true}),null);
