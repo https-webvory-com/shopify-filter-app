@@ -277,7 +277,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   function parseURLState() {
     const restoringHistory = arguments[0] === true;
     const searchPage = templateName === 'search' || (!templateName && /\/search\/?$/i.test(window.location.pathname));
-    if (searchPage) Object.assign(activeFilters, emptyFilterState());
+    if (searchPage || restoringHistory) Object.assign(activeFilters, emptyFilterState());
     const urlParams = new URLSearchParams(window.location.search);
 
     if (urlParams.has('q')) activeFilters.q = urlParams.get('q');
@@ -322,8 +322,8 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       if (sidebar) sidebar.dataset.searchTerms = searchTerms;
       const input = document.querySelector('.cfp-inline-search-form input[name="q"]');
       if (input) input.value = searchTerms;
-      if (restoringHistory) searchHistoryState = JSON.stringify(activeFilters);
     }
+    if (restoringHistory) searchHistoryState = JSON.stringify(activeFilters);
   }
 
   function syncSortControls() {
@@ -389,7 +389,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
     });
 
     const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + (templateName === 'search' ? window.location.hash : '');
-    if (templateName === 'search') {
+    {
       const state = JSON.stringify(activeFilters);
       // Fetches and popstate never create history entries or rewrite the URL
       // restored by the browser. Only a changed shopper selection adds one.
@@ -398,7 +398,7 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
       searchHistoryState = state;
       if (newUrl !== window.location.pathname + window.location.search + window.location.hash)
         window.history[method](window.history.state, '', newUrl);
-    } else window.history.replaceState(null, '', newUrl);
+    }
   }
 
   function selectSort(value) {
@@ -416,23 +416,15 @@ const facetSelectionIncludes = (values, value) => Array.isArray(values) && value
   }
 
   window.addEventListener('popstate', () => {
-    if (templateName === 'search') {
+    {
       parseURLState(true);
       syncSortControls();
       syncCheckboxSelections();
       renderBreadcrumbs();
       updateActiveCountBadge();
+      if (templateName === 'collection') updateVerticalFilterSummary(cfpLastTotalCount);
       fetchAndRenderData();
-      return;
     }
-    const params = new URLSearchParams(window.location.search);
-    activeFilters.sortBy = params.get('sort_by') || params.get('sortBy') || (templateName === 'search' ? 'relevance' : 'best-selling');
-    activeFilters.page = Number.parseInt(params.get('page'), 10) || 1;
-    if (templateName === 'collection') {
-      activeFilters.q = params.get('q') || '';
-      updateVerticalFilterSummary(cfpLastTotalCount);
-    }
-    fetchAndRenderData();
   });
 
   parseURLState(); // Call immediately to populate activeFilters
@@ -2910,6 +2902,22 @@ return narrowerCollectionFilters;
           // console.log("CFP Debug: Group", setting.label, "before excluded/manual check:", JSON.stringify(items));
         }
 
+        // Keep a group the shopper has selected from visible even when the
+        // current results no longer offer that value, so it can be removed.
+        const selectedInGroup = !navigation ? (
+          type === 'vendor' ? activeFilters.vendors :
+          type === 'product_type' ? activeFilters.types :
+          (type === 'tag' || type === 'tags') ? activeFilters.tags :
+          type === 'collection' ? activeFilters.collections :
+          type === 'option' ? activeFilters.options?.[key] :
+          type === 'metafield' ? activeFilters.metafields?.[key] : null) || [] : [];
+        if (selectedInGroup.length) {
+          const present = new Set((items || []).map(i => String(i.value)));
+          const missing = selectedInGroup.filter(v => !present.has(String(v)) &&
+            (!prefix || !(type === 'tag' || type === 'tags' || type === 'collection') || String(v).toLowerCase().startsWith(prefix.toLowerCase())));
+          if (missing.length) items = [...(items || []), ...missing.map(value => ({ value, count: 0 }))];
+        }
+
         if (!items || items.length === 0) return;
 
         // Apply prefix filtering for tags and collections
@@ -2988,7 +2996,7 @@ return narrowerCollectionFilters;
         if (items.length === 0) return;
 
         if (globalSettings && globalSettings.showFilterOptionsWithOneItem === false) {
-           if (items.length === 1 && items[0].count === totalCount) {
+           if (items.length === 1 && items[0].count === totalCount && !selectedInGroup.length) {
               return; // skip rendering this filter group
            }
         }

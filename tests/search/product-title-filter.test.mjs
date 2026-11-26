@@ -72,7 +72,7 @@ test('Title selections round-trip through URLs without splitting commas, quotes 
   const params=new URLSearchParams();titles.forEach(t=>params.append('title[]',t));
   const activeFilters={options:{},metafields:{},page:1,sortBy:'best-selling',minPrice:0,maxPrice:999999};
   let saved;
-  const context={URLSearchParams,activeFilters,searchTerms:'',templateName:'collection',window:{location:{pathname:'/collections/all',search:'?'+params},history:{replaceState:(_a,_b,url)=>saved=url}}};
+  const context={URLSearchParams,activeFilters,searchTerms:'',templateName:'collection',searchHistoryState:null,window:{location:{pathname:'/collections/all',search:'?'+params},history:{replaceState:(_a,_b,url)=>saved=url}}};
   vm.runInNewContext(parse+completeSync+'\nparseURLState();syncStateToURL();',context);
   assert.deepEqual([...activeFilters.titles],titles);assert.deepEqual(new URL(saved,'http://fixture').searchParams.getAll('title[]'),titles);
 });

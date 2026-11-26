@@ -55,7 +55,7 @@ test('stock and comma-containing categorical values survive URL reloads without 
   const start=source.indexOf('  function syncStateToURL()'),sync=source.slice(start,source.indexOf('\n  }',start)+4);
   const params=new URLSearchParams({'availability[]':'pre_order','weight[]':'100:500','rating[]':'4:5','location[]':'gid://shopify/Location/1','vendors[]':'A, Inc.','collections[]':'Blue, Evening','options[Color][]':'Red, White','metafields[custom.fabric][]':'Silk, Cotton'});
   const activeFilters={options:{},metafields:{},minPrice:0,maxPrice:999999,page:1};let saved;
-  const context={URLSearchParams,activeFilters,searchTerms:'',templateName:'collection',window:{location:{pathname:'/collections/all',search:'?'+params},history:{replaceState:(_a,_b,url)=>saved=url}}};
+  const context={URLSearchParams,activeFilters,searchTerms:'',templateName:'collection',searchHistoryState:null,window:{location:{pathname:'/collections/all',search:'?'+params},history:{replaceState:(_a,_b,url)=>saved=url}}};
   vm.runInNewContext(parse+sync+';parseURLState();syncStateToURL();',context);
   const restored=new URL(saved,'http://fixture').searchParams;
   for(const [key,value]of params)assert.deepEqual(restored.getAll(key),[value],key);
