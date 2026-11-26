@@ -1107,6 +1107,7 @@ export const loader = async ({ request, context }) => {
     const eligiblePriceRange=range=>variantEligibilityPriceContext?{min:convertedPriceBound(range.min,priceSortRate),max:Number.isFinite(range.max)?convertedPriceBound(range.max,priceSortRate):Infinity}:range;
     // Every band shares one exact database pass when it can be expressed;
     // otherwise each band keeps its own established eligibility read.
+    const priceBandStarted=Date.now();
     const bandedPriceIds=(hideUnavailable||variantPriceV2||canonicalVariantPrice)&&priceCountRanges.length>1
       ?await getCached('availableVariants:'+shop+':price-bands-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
         async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return priceCountRanges.map(()=>[]);
@@ -1117,6 +1118,7 @@ export const loader = async ({ request, context }) => {
       return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
         async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return [];return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext});},30,{maxBytes:1048576});
     })):[];
+    const priceBandMs=Date.now()-priceBandStarted,priceBandIdCount=priceEligibleIds.reduce((n,ids)=>n+(ids?.length||0),0);
     for(const [index,range] of priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
       if(hideUnavailable||variantPriceV2||canonicalVariantPrice){
@@ -2181,6 +2183,7 @@ export const loader = async ({ request, context }) => {
           meiliMs: meiliTime,
           normalizedCountMs,
           normalizedCountQueries:duplicateGroups.length,
+          priceBandMs,priceBandIdCount,
           totalMs,
           variantEligibilityMs,
           rankingPreparationMs,
