@@ -183,92 +183,90 @@ jobs:
                 finally { client.disconnect(); }
               '
 
-            # Keep the exact previous image IDs so a failed startup can restore
-            # the last app/worker pair instead of leaving the new app without ranking.
+            # Zero-downtime web rollout. Shoppers reach the app through nginx;
+            # the search engine's embedding relay calls port 3005 directly, so
+            # the final container must always serve 3005:
+            #   1. new version on spare port 3006 -> nginx to 3006
+            #   2. replace the 3005 container with the new version
+            #   3. nginx back to 3005, remove the spare copy.
+            NGINX_SITE=/etc/nginx/sites-enabled/aisearchfilter.webvory.com
             previous_app_image=$(docker inspect --format '{{.Image}}' shopify-filter-app 2>/dev/null || true)
             previous_worker_image=$(docker inspect --format '{{.Image}}' shopify-filter-sync-worker 2>/dev/null || true)
-            replacement_started=false
-            restore_previous_containers() {
-              task_failure_code="$1"
-              trap - EXIT
-              if [ "$task_failure_code" -eq 0 ] || [ "$replacement_started" != true ]; then return; fi
-              if [ -z "$previous_app_image" ]; then
-                echo "Startup failed and no previous app image is available for rollback."
-                exit "$task_failure_code"
-              fi
-              echo "Startup failed. Restoring the previous app and worker images."
+            docker rm -f shopify-filter-app-next >/dev/null 2>&1 || true
+            sudo cp "$NGINX_SITE" /tmp/aisearchfilter.nginx.bak
+
+            point_nginx() {
+              sudo sed -i -E "s#proxy_pass http://127\.0\.0\.1:(3005|3006)#proxy_pass http://127.0.0.1:$1#" "$NGINX_SITE"
+              sudo nginx -t && sudo nginx -s reload
+            }
+            wait_http() {
+              for attempt in $(seq 1 40); do
+                if curl -fsS -o /dev/null --max-time 3 "http://127.0.0.1:$1/healthz"; then return 0; fi
+                sleep 3
+              done
+              return 1
+            }
+            run_web() {
+              docker run -d --name "$1" --env-file .env -e CFP_WORKER_MODE=web -e PORT=3005 \
+                -p "$2:3005" --restart always --log-opt max-size=10m --log-opt max-file=3 "$3"
+            }
+            stage=start
+            recover() {
+              code="$1"; trap - EXIT
+              [ "$code" -eq 0 ] && return
               set +e
-              docker rm -f shopify-filter-sync-worker shopify-filter-app >/dev/null 2>&1
-              docker run -d --name shopify-filter-app --env-file .env -e CFP_WORKER_MODE=web \
-                -p 3005:3005 --restart always --log-opt max-size=10m --log-opt max-file=3 "$previous_app_image"
-              restore_app_code=$?
-              restore_worker_code=0
-              if [ -n "$previous_worker_image" ]; then
+              echo "Rollout failed at stage $stage; recovering."
+              if ! curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:3005/healthz; then
+                docker rm -f shopify-filter-app >/dev/null 2>&1
+                if [ -n "$previous_app_image" ]; then run_web shopify-filter-app 3005 "$previous_app_image"; wait_http 3005; fi
+              fi
+              if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:3005/healthz; then
+                point_nginx 3005; docker rm -f shopify-filter-app-next >/dev/null 2>&1
+              else
+                echo "3005 is not healthy; leaving nginx on the spare copy if it is serving."
+              fi
+              if ! docker ps --format '{{.Names}}' | grep -qx shopify-filter-sync-worker && [ -n "$previous_worker_image" ]; then
                 docker run -d --name shopify-filter-sync-worker --env-file .env -e CFP_WORKER_MODE=worker \
                   -e CFP_WEBHOOK_CONCURRENCY=2 -e NODE_OPTIONS=--max-old-space-size=256 \
                   --memory=512m --memory-swap=512m --cpu-shares=256 --restart always \
                   --log-opt max-size=10m --log-opt max-file=3 "$previous_worker_image" node scripts/run-background-worker.mjs
-                restore_worker_code=$?
               fi
-              if [ "$restore_app_code" -ne 0 ] || [ "$restore_worker_code" -ne 0 ]; then
-                echo "Automatic rollback could not start every previous container; manual recovery is required."
-              else
-                echo "Previous containers started; this deployment remains failed."
-              fi
-              exit "$task_failure_code"
+              exit "$code"
             }
-            trap 'restore_previous_containers "$?"' EXIT
-            replacement_started=true
+            trap 'recover "$?"' EXIT
 
-            docker stop --time 30 shopify-filter-sync-worker || true
-            docker rm shopify-filter-sync-worker || true
-
-            docker stop shopify-filter-app || true
-            docker rm shopify-filter-app || true
-
-
-            docker run -d \
-            --name shopify-filter-app \
-            --env-file .env \
-            -e CFP_WORKER_MODE=web \
-            -p 3005:3005 \
-            --restart always \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
-            $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-            # Container startup includes schema sync; wait for the HTTP server.
-            ready=false
-            for attempt in $(seq 1 30); do
-              if docker exec shopify-filter-app node -e 'fetch("http://127.0.0.1:" + (process.env.PORT || "3000"), {redirect: "manual", signal: AbortSignal.timeout(3000)}).then(r => process.exit(r.status >= 200 && r.status < 400 ? 0 : 1)).catch(() => process.exit(1))'; then
-                ready=true
-                break
-              fi
-              sleep 3
-            done
-            if [ "$ready" != true ]; then
+            stage=spare
+            run_web shopify-filter-app-next 127.0.0.1:3006 $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            if ! wait_http 3006; then
               echo "App failed its startup health check."
-              # Capture the startup error before the rollback removes this container.
-              docker inspect --format 'Status={{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}} Error={{.State.Error}}' shopify-filter-app || true
+              docker logs --tail 150 shopify-filter-app-next 2>&1 || true
+              exit 1
+            fi
+            stage=nginx-spare
+            point_nginx 3006
+            sleep 3
+
+            stage=main
+            docker stop --time 30 shopify-filter-app || true
+            docker rm shopify-filter-app || true
+            run_web shopify-filter-app 3005 $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            if ! wait_http 3005; then
+              echo "App failed its startup health check on 3005."
               docker logs --tail 150 shopify-filter-app 2>&1 || true
               exit 1
             fi
+            stage=nginx-main
+            point_nginx 3005
+            sleep 3
+            docker stop --time 30 shopify-filter-app-next || true
+            docker rm shopify-filter-app-next || true
+            curl -fsS -o /dev/null --max-time 10 https://aisearchfilter.webvory.com/healthz && echo "Public health check passed." || echo "Public health check did not answer."
+            stage=worker
 
-            # Isolate background work from the HTTP server with bounded memory.
-            docker run -d \
-            --name shopify-filter-sync-worker \
-            --env-file .env \
-            -e CFP_WORKER_MODE=worker \
-            -e CFP_WEBHOOK_CONCURRENCY=2 \
-            -e NODE_OPTIONS=--max-old-space-size=256 \
-            --memory=512m \
-            --memory-swap=512m \
-            --cpu-shares=256 \
-            --restart always \
-            --log-opt max-size=10m \
-            --log-opt max-file=3 \
-            $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            node scripts/run-background-worker.mjs
+            # Background worker has no shopper traffic; replace it after the web switch.
+            docker stop --time 30 shopify-filter-sync-worker || true
+            docker rm shopify-filter-sync-worker || true
+            docker run -d             --name shopify-filter-sync-worker             --env-file .env             -e CFP_WORKER_MODE=worker             -e CFP_WEBHOOK_CONCURRENCY=2             -e NODE_OPTIONS=--max-old-space-size=256             --memory=512m             --memory-swap=512m             --cpu-shares=256             --restart always             --log-opt max-size=10m             --log-opt max-file=3             $ECR_REGISTRY/$ECR_REPOSITORY:latest             node scripts/run-background-worker.mjs
 
             worker_ready=false
             for attempt in $(seq 1 45); do
@@ -282,12 +280,10 @@ jobs:
               echo "Background worker failed its startup check; the web server remains running."
               docker inspect --format '{{.State.Status}} OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Restarts={{.RestartCount}}' shopify-filter-sync-worker
               docker logs --tail 150 shopify-filter-sync-worker 2>&1 || true
+              docker rm -f shopify-filter-sync-worker || true
               exit 1
             fi
 
-            # Both processes passed startup checks; cleanup must not roll back
-            # a healthy release after deleting its unused previous image.
-            replacement_started=false
             trap - EXIT
             docker image prune -f || echo "Unused-image cleanup failed."
 

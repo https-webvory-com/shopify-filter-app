@@ -6,10 +6,8 @@ import {parse} from 'yaml';
 const workflow=parse(await fs.readFile('.github/workflows/docker-image.yml','utf8'));
 const steps=workflow.jobs.deploy.steps;
 const script=steps.find(step=>step.name==='Deploy to EC2').with.script;
-const start=script.indexOf('restore_previous_containers() {');
-const end=script.indexOf("trap 'restore_previous_containers",start);
-const restore=script.slice(start,end);
-const bash=process.platform==='win32'?'C:\\Program Files\\Git\\bin\\bash.exe':'bash';
+const rollout=script.slice(script.indexOf('NGINX_SITE='),script.indexOf('echo "Deployment completed successfully."')+'echo "Deployment completed successfully."'.length);
+const bash=process.platform==='win32'?'C:/Program Files/Git/bin/bash.exe':'bash';
 
 test('production regression and heap checks run before image publishing or live replacement',()=>{
   const check=steps.findIndex(step=>step.name==='Check ranking, cache, webhook and storefront regressions');
@@ -17,39 +15,71 @@ test('production regression and heap checks run before image publishing or live 
   assert.ok(steps[check].run.includes('run-regression-tests.mjs'));
   assert.ok(steps[check].run.includes('--max-old-space-size=256'));
   assert.ok(script.includes('previous_app_image=$(docker inspect'));
-  assert.ok(script.indexOf("trap 'restore_previous_containers")<script.indexOf('docker stop --time 30'));
 });
 
-function run({code=7,started=true,previous=true,failRestore=false}={}){
-  const input=`set -eu\nexec 3>&1\nprevious_app_image=${previous?'old-app':''}\nprevious_worker_image=old-worker\nreplacement_started=${started}\ndocker(){ echo "MOCK_DOCKER $*" >&3; ${failRestore?'return 1;':'return 0;'} }\n${restore}\ntrap 'restore_previous_containers "$?"' EXIT\nexit ${code}\n`;
-  return spawnSync(bash,['-c',input],{encoding:'utf8',windowsHide:true,timeout:10000});
+// Simulated server: which ports answer health checks, plus a log of actions.
+function run({healthy3006=true,healthy3005After=true,old3005=true,workerReady=true}={}){
+  const input=`set -eu
+exec 3>&1
+ECR_REGISTRY=reg; ECR_REPOSITORY=repo
+state=$(mktemp -d)
+${old3005?'touch "$state/3005"':''}
+sleep(){ :; }
+seq(){ echo 1; }
+sudo(){ case "$1" in
+  cp) return 0;;
+  sed) p=\${4##*:}; echo "NGINX \${p%#}" >&3; return 0;;
+  nginx) return 0;;
+  *) return 0;; esac; }
+curl(){ for a in "$@"; do case "$a" in
+  *127.0.0.1:3006*) [ -f "$state/3006" ] && return 0 || return 1;;
+  *127.0.0.1:3005*) [ -f "$state/3005" ] && return 0 || return 1;;
+  https://*) return 0;; esac; done; return 1; }
+docker(){ echo "DOCKER $*" >&3
+  case "$1" in
+    inspect) echo old-image;;
+    run) case "$*" in
+      *127.0.0.1:3006:3005*) ${healthy3006?'touch "$state/3006"':':'};;
+      *" 3005:3005"*) ${healthy3005After?'touch "$state/3005"':':'};;
+      esac;;
+    stop|rm) case "$*" in *shopify-filter-app-next*) rm -f "$state/3006";; *shopify-filter-app*) rm -f "$state/3005";; esac;;
+    exec) ${workerReady?'return 0':'return 1'};;
+    ps) echo shopify-filter-sync-worker;;
+  esac
+  return 0; }
+${rollout}
+`;
+  return spawnSync(bash,['-c',input],{encoding:'utf8',windowsHide:true,timeout:20000});
 }
+const lines=result=>result.stdout.split('\n').filter(Boolean);
+const index=(result,pattern)=>lines(result).findIndex(line=>pattern.test(line));
 
-test('failed startup restores exact previous app and worker images and preserves failure status',()=>{
-  const result=run();assert.equal(result.status,7,result.stderr);
-  assert.ok(result.stdout.includes('MOCK_DOCKER rm -f shopify-filter-sync-worker shopify-filter-app'));
-  assert.ok(result.stdout.includes('old-app'));assert.ok(result.stdout.includes('old-worker node scripts/run-background-worker.mjs'));
-  assert.ok(result.stdout.includes('CFP_WORKER_MODE=web'));assert.ok(result.stdout.includes('CFP_WORKER_MODE=worker'));
-});
-
-test('successful deployment and failures before replacement never invoke rollback deletion',()=>{
-  for(const options of [{code:0},{started:false}]){
-    const result=run(options);assert.equal(result.status,options.code??7,result.stderr);assert.ok(!result.stdout.includes('MOCK_DOCKER'));
-  }
-});
-
-test('missing previous image or failed rollback is reported without masking deployment failure',()=>{
-  const missing=run({previous:false});assert.equal(missing.status,7);assert.ok(missing.stdout.includes('no previous app image'));assert.ok(!missing.stdout.includes('MOCK_DOCKER'));
-  const failed=run({failRestore:true});assert.equal(failed.status,7);assert.ok(failed.stdout.includes('manual recovery is required'));
-});
-
-test('post-startup cleanup failures cannot roll back a healthy app and worker',()=>{
-  const start=script.lastIndexOf('# Both processes passed startup checks;');
-  assert.ok(start>script.indexOf('if [ "$worker_ready" != true ]'));
-  const cleanup=script.slice(start);
-  const input=`set -eu\nprevious_app_image=old-app\nprevious_worker_image=old-worker\nreplacement_started=true\ndocker(){ echo "MOCK_DOCKER $*"; return 1; }\n${restore}\ntrap 'restore_previous_containers "$?"' EXIT\n${cleanup}\n`;
-  const result=spawnSync(bash,['-c',input],{encoding:'utf8',windowsHide:true,timeout:10000});
-  assert.equal(result.status,0,result.stderr);
+test('traffic moves to the new version before the serving app is stopped, and ends on 3005',()=>{
+  const result=run();assert.equal(result.status,0,result.stderr+result.stdout);
+  const spare=index(result,/DOCKER run .*shopify-filter-app-next .*127\.0\.0\.1:3006:3005/);
+  const toSpare=index(result,/^NGINX 3006/);
+  const stopOld=index(result,/DOCKER stop .*shopify-filter-app$/);
+  const main=index(result,/DOCKER run .*--name shopify-filter-app .* 3005:3005/);
+  const backTo3005=index(result,/^NGINX 3005/);
+  assert.ok(spare>=0&&toSpare>spare&&stopOld>toSpare&&main>stopOld&&backTo3005>main,result.stdout);
   assert.ok(result.stdout.includes('Deployment completed successfully.'));
-  assert.ok(!result.stdout.includes('rm -f shopify-filter-sync-worker'));
+});
+
+test('a new version that never becomes healthy leaves the serving app and nginx untouched',()=>{
+  const result=run({healthy3006:false});assert.notEqual(result.status,0);
+  assert.equal(index(result,/DOCKER stop .*shopify-filter-app$/),-1,result.stdout);
+  assert.equal(index(result,/^NGINX 3006/),-1);
+  assert.ok(index(result,/DOCKER rm -f shopify-filter-app-next/)>=0);
+});
+
+test('if the 3005 replacement fails, the previous image is restored on 3005 and nginx returns to it',()=>{
+  const result=run({healthy3005After:false});assert.notEqual(result.status,0);
+  assert.ok(index(result,/DOCKER run .*--name shopify-filter-app .*old-image/)>=0,result.stdout);
+  const out=result.stdout;assert.ok(out.includes('Rollout failed at stage main'));
+});
+
+test('a worker that fails its startup check fails the deploy without touching the web app',()=>{
+  const result=run({workerReady:false});assert.notEqual(result.status,0);
+  assert.ok(index(result,/^NGINX 3005/)>=0);
+  assert.ok(result.stdout.includes('Rollout failed at stage worker'));
 });

@@ -54,7 +54,7 @@ export async function fetchCollectionPage(index, { page, limit, pinnedIds, tiers
       try {
         documents.set(id, await index.getDocument(id, { fields: attributes }));
       } catch (error) {
-        if (!pinSet.has(id) || error.code !== "document_not_found") throw error;
+        if (!pinSet.has(id) || (error?.cause?.code || error?.code) !== "document_not_found") throw error;
         // The route hydrates valid DB pins that have not reached the index yet.
         documents.set(id, { id });
       }

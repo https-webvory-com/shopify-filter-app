@@ -207,7 +207,7 @@ export async function readRankedCollectionPage(index, { ids, page, limit, attrib
         documents.set(id, product);
       }
       catch (error) {
-        if (error.code !== 'document_not_found') throw error;
+        if ((error?.cause?.code || error?.code) !== 'document_not_found') throw error;
         if(requireDocuments)throw Error('Collection changed while ranking; retry the request');
         documents.set(id, { id }); // Hydrate from DB without moving later page slots.
       }

@@ -187,7 +187,7 @@ async function handleLockedProductUpdate(shop, payload, job, assertOwned) {
   const { admin } = await unauthenticated.admin(shop);
   const beforeLinks=await prisma.productCollection.findMany({where:{productId,product:{shop}},select:{collectionId:true}});
   const index=meiliClient.index('products');
-  const read=async()=>{try{const doc=await index.getDocument(String(productId).split('/').pop());if(doc.shop!==shop)throw Error('Product tenant mismatch');return doc;}catch(error){if(error.code==='document_not_found')return null;throw error;}};
+  const read=async()=>{try{const doc=await index.getDocument(String(productId).split('/').pop());if(doc.shop!==shop)throw Error('Product tenant mismatch');return doc;}catch(error){if((error?.cause?.code||error?.code)==='document_not_found')return null;throw error;}};
   const before=await read();
   // Preserve the original comparison across BullMQ retries. Indexing may finish
   // before cache invalidation fails; the next attempt must not mistake that for
