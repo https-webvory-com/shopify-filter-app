@@ -75,6 +75,7 @@ export const loader = async ({ request }) => {
     if(parsedQuery?.skuProductIds?.length)meiliFilters.push('id IN '+JSON.stringify(parsedQuery.skuProductIds));
 
     if (parsedQuery?.colorFilter) meiliFilters.push(parsedQuery.colorFilter);
+    if (parsedQuery?.vendorFilter && !parsedQuery?.skuProductIds?.length) meiliFilters.push(parsedQuery.vendorFilter);
 
     if (globalSettings?.showOnlyInStock) {
       meiliFilters.push(`available = true`);

@@ -303,6 +303,7 @@ export const loader = async ({ request, context }) => {
         appliedIntent.size = true;
       }
     }
+    if (isSearch && parsedQuery?.vendorFilter && !parsedQuery?.skuProductIds?.length) intentFilters.push(parsedQuery.vendorFilter);
     if (parsedQuery) parsedQuery.appliedIntent = appliedIntent;
     const useResidual = intent && (!intent.price || appliedIntent.price) &&
       (!intent.size || appliedIntent.size) && !intent.sortHint;

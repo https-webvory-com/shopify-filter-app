@@ -112,7 +112,11 @@ export async function parseQuery(query, shop) {
     queryColorWords,
     colorQuery,
     colorIntent,
-    colorFilter: colorSearchFilter(colorIntent, cache.colorFields)
+    colorFilter: colorSearchFilter(colorIntent, cache.colorFields),
+    // A brand named in the query restricts results to that brand, so other
+    // labels cannot rank ahead of it (exact facet values, safely quoted).
+    vendorFilter: detectedVendors.length
+      ? `vendor IN [${[...new Set(detectedVendors)].map(v => JSON.stringify(v)).join(',')}]` : null
   };
 }
 
