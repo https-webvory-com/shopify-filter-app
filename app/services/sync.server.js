@@ -1227,6 +1227,35 @@ export async function syncSingleProduct(shop, admin, productId, { retrySearchErr
 }
 
 // Bulk JSONL and webhook reads share the same DB/index write contract.
+// Webhook workers each index one product. Every engine write has a fixed cost
+// that delays shopper searches, so concurrent single-product writes made within
+// a short window share one write task. Each caller still waits on that task.
+const PRODUCT_WRITE_WINDOW_MS = 200, PRODUCT_WRITE_MAX = 50;
+const pendingProductWrites = new Map();
+export function queueProductDocumentWrite(index, documents) {
+  const key = index.uid;
+  let batch = pendingProductWrites.get(key);
+  if (!batch) {
+    batch = { documents: [], waiters: [] };
+    pendingProductWrites.set(key, batch);
+    batch.timer = setTimeout(() => flushProductWrites(index, batch), PRODUCT_WRITE_WINDOW_MS);
+  }
+  return new Promise((resolve, reject) => {
+    batch.documents.push(...documents);
+    batch.waiters.push({ resolve, reject });
+    if (batch.documents.length >= PRODUCT_WRITE_MAX) { clearTimeout(batch.timer); flushProductWrites(index, batch); }
+  });
+}
+function flushProductWrites(index, batch) {
+  if (pendingProductWrites.get(index.uid) === batch) pendingProductWrites.delete(index.uid);
+  // A product written twice in one window keeps only its latest document.
+  const latest = new Map(batch.documents.map(doc => [String(doc.id), doc]));
+  index.addDocuments([...latest.values()]).then(
+    task => batch.waiters.forEach(waiter => waiter.resolve(task)),
+    error => batch.waiters.forEach(waiter => waiter.reject(error)),
+  );
+}
+
 export async function syncProductPayload(shop, admin, productId, product, { retrySearchErrors = false, deferIndex = false, wantsLocations, collectionUpserts } = {}) {
 
   const shouldDelete = !isStorefrontProduct(product);
@@ -1363,8 +1392,7 @@ export async function syncProductPayload(shop, admin, productId, product, { retr
   const index = meiliClient.index("products");
   await Promise.all([
     smartUpsertProduct(shop, product, prisma),
-    index
-      .addDocuments(await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }])))
+    queueProductDocumentWrite(index, await withHeldEmbeddingsForIndex(index,await withCollectionRuleFacts([{ ...meiliDoc, ...searchIndexProjection(meiliDoc) }])))
       .then(async (task) => {
         if(retrySearchErrors){const completed=await meiliClient.tasks.waitForTask(task.taskUid,{timeout:120000});if(completed.status!=='succeeded')throw Error('Product indexing failed');}
         await scheduleSearchIndexProducts(shop,[meiliDoc.id],task.taskUid);

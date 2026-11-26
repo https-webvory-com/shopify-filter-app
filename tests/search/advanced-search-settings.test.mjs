@@ -82,7 +82,9 @@ test('selected metafields, delimiters and response whitelist do not expose index
 async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({length:23},(_,i)=>product(i+1)),activeSynonym=false){
  const rows=new Map([[shop,{shop,config:plain(config),updatedAt:1}]]),cache=new Map(),indexes=new Map(),jobs=[],calls=[];
  let clock=1,task=0,fail=false;
- const redis={get:async key=>cache.get(key)??null,set:async(key,value)=>cache.set(key,value),del:async key=>cache.delete(key),incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));}};
+ const redis={get:async key=>cache.get(key)??null,set:async(key,value)=>cache.set(key,value),del:async key=>cache.delete(key),incr:async key=>{const value=Number(cache.get(key)||0)+1;cache.set(key,String(value));return value;},eval:async(_script,_n,key,value)=>{cache.set(key,String(Math.max(Number(cache.get(key)||0),Number(value))));},
+  sadd:async(key,...values)=>{const set=cache.get(key) instanceof Set?cache.get(key):new Set();values.forEach(v=>set.add(String(v)));cache.set(key,set);return values.length;},
+  multi(){const ops=[];const chain={smembers:key=>{ops.push(()=>[...(cache.get(key)||[])]);return chain;},del:key=>{ops.push(()=>cache.delete(key));return chain;},exec:async()=>ops.map(op=>[null,op()])};return chain;}};
  const prisma={searchSetting:{findUnique:async({where})=>rows.has(where.shop)?structuredClone(rows.get(where.shop)):null,upsert:async({where,create})=>{if(!rows.has(where.shop))rows.set(where.shop,{...create,updatedAt:++clock});return rows.get(where.shop);},updateMany:async({where,data})=>{const row=rows.get(where.shop);if(!row||row.updatedAt!==where.updatedAt)return {count:0};rows.set(where.shop,{...row,...structuredClone(data),updatedAt:++clock});return {count:1};}},synonym:{findMany:async({distinct}={})=>distinct?activeSynonym?[{shop}]:[]:activeSynonym?[{word:'gown',synonyms:'dress'}]:[],findFirst:async({where})=>activeSynonym&&where.shop===shop?{id:'synonym'}:null}};
  const queued=async()=>({taskUid:++task});
  prisma.product={findMany:async({where,take})=>catalog.filter(p=>p.shop===where.shop&&(!where.id||p.id>where.id.gt)&&where.OR.some(clause=>p.title.includes(clause.title.contains))).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,take).map(p=>({id:p.id})),count:async({where})=>catalog.filter(p=>p.shop===where.shop&&where.OR.some(clause=>p.title.includes(clause.title.contains))).length};
@@ -102,7 +104,7 @@ async function fixture(config=settings({stopwords:['the']}),catalog=Array.from({
    return {results:plain(options.fields?page.map(doc=>Object.fromEntries(Object.entries(doc).filter(([key])=>options.fields.includes(key)))):page),total:docs.length};
   },search:async(q,options)=>{calls.push(['query',uid,q,plain(options)]);return {hits:[...indexes.get(uid).values()]};},
  })};
- const queue={getJob:async()=>null,add:async(name,data,options)=>jobs.push({name,data:plain(data),options:plain(options)})};
+ const queue={getJob:async id=>{const job=jobs.find(j=>j.options?.jobId===id);return job?{getState:async()=>'delayed',remove:async()=>{}}:null;},add:async(name,data,options)=>jobs.push({name,data:plain(data),options:plain(options)})};
  const mocks={'node:crypto':{createHash,randomUUID},'../db.server.js':{__esModule:true,default:prisma},'./redis.server.js':{__esModule:true,default:redis},'./meiliClient.server.js':{__esModule:true,default:client},'./shopCache.server.js':{getCached:async(_key,read)=>read()},'../utils/searchSettings.js':schema,'../utils/searchConfiguration.js':configuration,'../utils/semanticSearch.js':semantic,'../utils/searchIndexExtras.js':{readSearchIndexExtras},'../utils/skuSearch.js':sku,'../utils/embeddingHold.js':{withHeldEmbeddingsForIndex:async(_index,docs)=>docs}};
  const source=(await fs.readFile('app/services/searchIndex.server.js','utf8')).replace("await import('./queue.server.js')",'injectedQueue');
  const context={module:{exports:{}},exports:{},process:{env:{}},console,injectedQueue:{searchIndexQueue:queue},require:name=>{if(name==='../utils/searchSuggestions.js')return suggestionText;if(!(name in mocks))throw Error(name);return mocks[name];}};
@@ -403,4 +405,14 @@ test('Shopify metadata uses variables, validates identity and rejects incomplete
  assert.equal(result.variantPrices[0].searchMetafields['custom.fabric'],'Silk');assert.equal(calls[0].options.variables.v0Namespace,'custom');assert.ok(!calls[0].query.includes('namespace:"custom"'));
  admin.graphql=async()=>({json:async()=>({data:{product:{id:'gid://shopify/Product/2'}}})});
  await assert.rejects(readSearchIndexExtras(admin,[doc],config),/identity mismatch/);
+});
+
+test('single-product updates within one window share one search-index job and one write',async()=>{
+ const f=await fixture();await f.service.scheduleSearchIndex(shop);await f.drain();
+ const before=f.jobs.length;
+ for(const id of ['1','2','3','4','5'])await f.service.scheduleSearchIndexProducts(shop,[id],9);
+ assert.equal(f.jobs.length-before,1);
+ const writes=f.calls.length;await f.drain();
+ assert.equal(f.calls.slice(writes).filter(c=>c[0]==='add'||c[0]==='addDocuments').length<=1,true);
+ assert.ok(f.calls.some(c=>c[0]==='wait'&&c[1]===9));
 });

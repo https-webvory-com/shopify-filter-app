@@ -19,6 +19,10 @@ const stateOf=row=>row?.config?._index||{};
 const revisionKey=shop=>'searchIndexRevision:'+shop;
 const sourceRevisionKey=shop=>'searchIndexSourceRevision:'+shop;
 const sourceTaskKey=shop=>'searchIndexSourceTask:'+shop;
+const pendingProductsKey=shop=>'searchIndexPendingProducts:'+shop;
+// Product updates arrive one at a time. Each engine write has a fixed cost, so
+// IDs collect for a few seconds and one job writes them together.
+const PENDING_PRODUCTS_WINDOW_MS=3000;
 export const resetSearchIndexContext=shop=>redis.incr(revisionKey(shop));
 const wait=async task=>{const done=await client.tasks.waitForTask(task.taskUid,{timeout:120000,interval:250});if(done.status!=='succeeded')throw Error('Search index operation failed: '+(done.error?.code||done.status));return done;};
 const meiliErrorCode=error=>error?.cause?.code||error?.code;
@@ -331,6 +335,15 @@ export async function processSearchIndexJob(data){
  }
  if(!row)return {skipped:true};
  const config=validateSearchSettings(row.config),state=stateOf(row);
+ if(data.pending){
+  const ids=await takePendingProducts(shop);if(!ids.length)return {skipped:true};
+  try{
+   // Wait for the newest catalog write these IDs depend on, then copy them all.
+   const latest=await redis.get(sourceTaskKey(shop));if(latest!=null)await wait({taskUid:Number(latest)});
+   for(let i=0;i<ids.length;i+=100)await updateSearchIndexProducts(shop,ids.slice(i,i+100),row);
+   return {updated:ids.length};
+  }catch(error){if(ids.length)await redis.sadd(pendingProductsKey(shop),...ids);throw error;}
+ }
  if(data.ids){if(data.sourceTaskUid!=null)await wait({taskUid:data.sourceTaskUid});return updateSearchIndexProducts(shop,data.ids,row);}
  if(data.incremental)return processSearchRuleUpdate(shop,data.hash,row);
  if(state.active?.uid&&state.build&&state.requested===data.hash){
@@ -376,7 +389,14 @@ export async function scheduleSearchIndexProducts(shop,ids,sourceTaskUid){
  if(sourceTaskUid!=null)await redis.eval("local old=redis.call('GET',KEYS[1]); if not old or tonumber(ARGV[1])>tonumber(old) then redis.call('SET',KEYS[1],ARGV[1]); end; return 1",1,sourceTaskKey(shop),String(sourceTaskUid));
  await redis.incr(sourceRevisionKey(shop));
  const unique=[...new Set(ids.map(id=>String(id).split('/').pop()))].filter(id=>/^\d+$/.test(id));
- for(let i=0;i<unique.length;i+=20){const batch=unique.slice(i,i+20);await enqueue('SEARCH_INDEX_PRODUCTS',{shop,ids:batch,sourceTaskUid},'search-products-'+hash([shop,batch,sourceTaskUid??Date.now()]),7);}
+ if(!unique.length)return;
+ await redis.sadd(pendingProductsKey(shop),...unique);
+ const bucket=Math.floor(Date.now()/PENDING_PRODUCTS_WINDOW_MS);
+ await enqueue('SEARCH_INDEX_PRODUCTS',{shop,pending:true},'search-products-pending-'+hash([shop,bucket]),7,PENDING_PRODUCTS_WINDOW_MS);
+}
+async function takePendingProducts(shop){
+ const [[,ids]]=await redis.multi().smembers(pendingProductsKey(shop)).del(pendingProductsKey(shop)).exec();
+ return ids||[];
 }
 // Price refresh completion means both the shared catalog and configured search
 // projections are ready. Keep the durable delta as crash recovery as well.
