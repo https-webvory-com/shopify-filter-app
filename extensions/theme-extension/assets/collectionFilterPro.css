@@ -3494,3 +3494,19 @@ body.cfp-no-filters #cfp-overlay {
     max-width: 100% !important;
   }
 }
+
+/* "Show product video first": the video covers the card photo. */
+.cfp-card-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
+}
+.cfp-has-video .cfp-product-card__image--secondary {
+  display: none;
+}

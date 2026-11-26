@@ -29,6 +29,8 @@ export async function getFilterGlobalSettings(shop) {
     filterBarBackgroundColor: integrations.filterBarBackgroundColor,
     priceFilterDisplayMode: integrations.priceFilterDisplayMode === 'Range' ? 'Range' : 'List',
     sizeOptionsPerRow: Number.isInteger(integrations.sizeOptionsPerRow) && integrations.sizeOptionsPerRow >= 2 && integrations.sizeOptionsPerRow <= 6 ? integrations.sizeOptionsPerRow : 4,
+    // Off unless the merchant turns it on.
+    videoFirstInCards: integrations.videoFirstInCards === true,
   };
 }
 
@@ -48,7 +50,7 @@ export async function updateFilterGlobalSettings(shop, data) {
     if(!isValidCollectionSpacing(key,data[key]))throw Error('Enter valid whole-number collection spacing');
     updateData[key]=Number(data[key]);
   }
-  const presentationKeys = ['showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile', 'filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', ...FILTER_WIDTH_KEYS,...COLLECTION_LAYOUT_KEYS];
+  const presentationKeys = ['showQuickViewCollectionMobile', 'showQuickViewInstantSearchMobile', 'filterBarBackgroundColor', 'priceFilterDisplayMode', 'sizeOptionsPerRow', 'videoFirstInCards', ...FILTER_WIDTH_KEYS,...COLLECTION_LAYOUT_KEYS];
   if (typeof data.desktopFilterLayout === 'string' || presentationKeys.some(key => data[key] !== undefined) || typeof data.horizontalFilters === 'boolean') {
     const current = await prisma.filterGlobalSetting.findUnique({
       where: { shop },
@@ -76,12 +78,13 @@ export async function updateFilterGlobalSettings(shop, data) {
   });
   
   const appearanceOnly = ['desktopFilterLayout','horizontalFilters','mobileFilterLayout',...FILTER_WIDTH_KEYS,...COLLECTION_LAYOUT_KEYS,
-    'filterBarBackgroundColor','sizeOptionsPerRow','showAttributeBasedBreadcrumb','showProductCount','scrollUpOnFilterValuesChange'];
+    'filterBarBackgroundColor','sizeOptionsPerRow','videoFirstInCards','showAttributeBasedBreadcrumb','showProductCount','scrollUpOnFilterValuesChange'];
   const keys = Object.keys(data);
   await invalidateShop(shop, keys.length && keys.every(key => appearanceOnly.includes(key)) ? {kind:'presentation'} : undefined);
   return {
     ...settings,
     filterBarBackgroundColor: settings.integrations?.filterBarBackgroundColor,
+    videoFirstInCards: settings.integrations?.videoFirstInCards === true,
     ...Object.fromEntries(FILTER_WIDTH_KEYS.map(key=>[key,normalizeFilterWidth(settings.integrations?.[key]??(key==='mobileDrawerWidth'?settings.integrations?.mobileVerticalFilterWidth:undefined),key)])),
     ...collectionLayoutSettings(settings.integrations),
     desktopFilterLayout: settings.integrations?.desktopFilterLayout || updateData.integrations?.desktopFilterLayout || (settings.horizontalFilters ? 'horizontal' : 'drawer'),

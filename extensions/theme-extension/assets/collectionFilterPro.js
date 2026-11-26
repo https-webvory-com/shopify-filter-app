@@ -1645,6 +1645,57 @@ return narrowerCollectionFilters;
   }
 
   const wishlistProducts=new Map();
+  // Optional "Show product video first" (General settings, off by default).
+  // The product's own Shopify data says whether it has a video; it is read
+  // once per handle and only for cards that are rendered.
+  const cardVideoSources=new Map();
+  function productVideoSource(handle){
+    if(!cardVideoSources.has(handle))cardVideoSources.set(handle,fetch(`${window.Shopify?.routes?.root||'/'}products/${encodeURIComponent(handle)}.js`,{credentials:'same-origin'})
+      .then(response=>response.ok?response.json():null).then(product=>{
+        const video=(product?.media||[]).find(media=>media?.media_type==='video'&&Array.isArray(media.sources)&&media.sources.length);
+        if(!video)return null;
+        const sources=video.sources.filter(source=>typeof source?.url==='string'&&/mp4/i.test(String(source.format||source.mime_type||source.url)));
+        const pick=sources.sort((a,b)=>Math.abs((a.height||720)-720)-Math.abs((b.height||720)-720))[0];
+        return pick?{url:pick.url,poster:video.preview_image?.src||null}:null;
+      }).catch(()=>null));
+    return cardVideoSources.get(handle);
+  }
+  let cardVideoObserver=null;
+  function applyCardVideos(root){
+    if(globalSettings?.videoFirstInCards!==true||!root)return;
+    const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true;
+    if(!cardVideoObserver&&'IntersectionObserver' in window)cardVideoObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{
+      const video=entry.target.querySelector('video.cfp-card-video');if(!video)return;
+      if(entry.isIntersecting&&!reduceMotion)video.play().catch(()=>{});else video.pause();
+    }),{rootMargin:'150px'});
+    root.querySelectorAll('.cfp-product-card[data-cfp-product-id]:not([data-cfp-video-checked])').forEach(card=>{
+      card.dataset.cfpVideoChecked='true';
+      const link=card.querySelector('a[href*="/products/"]'),container=card.querySelector('.cfp-product-card__image-container');
+      if(!link||!container)return;
+      const handle=new URL(link.href,location.origin).pathname.split('/products/')[1]?.split('/')[0];
+      if(!handle)return;
+      productVideoSource(decodeURIComponent(handle)).then(source=>{
+        if(!source||!card.isConnected||container.querySelector('video.cfp-card-video'))return;
+        const video=document.createElement('video');
+        video.className='cfp-card-video';video.muted=true;video.defaultMuted=true;video.loop=true;video.playsInline=true;
+        video.setAttribute('muted','');video.setAttribute('playsinline','');video.setAttribute('aria-hidden','true');video.preload='metadata';
+        const image=container.querySelector('img.cfp-product-card__image--primary');
+        video.poster=image?.currentSrc||image?.src||source.poster||'';
+        video.src=source.url;
+        if(image)image.after(video);else container.prepend(video);
+        container.classList.add('cfp-has-video');
+        if(cardVideoObserver)cardVideoObserver.observe(card);else if(!reduceMotion)video.play().catch(()=>{});
+      });
+    });
+  }
+  // Choosing a colour shows that colour's photo instead of the video.
+  document.addEventListener('click',event=>{
+    const swatch=event.target?.closest?.('.cfp-swatch-item,[class*="cfp-card-swatch"]');
+    const container=swatch?.closest('.cfp-product-card')?.querySelector('.cfp-product-card__image-container.cfp-has-video');
+    if(!container)return;
+    container.querySelector('video.cfp-card-video')?.remove();container.classList.remove('cfp-has-video');
+  },true);
+
   function wishlistMarkup(product){
       let wishlistHtml = '';
       // console.log("CFP DEBUG: globalSettings.integrations =>", globalSettings?.integrations);
@@ -2512,6 +2563,7 @@ return narrowerCollectionFilters;
     }
 
     initializeReviewSnippets(grid);
+    applyCardVideos(grid);
     if(!previewOnly&&Number.isFinite(totalCount)&&(isLoadMore||products.length>=Math.min(PAGE_SIZE,totalCount)))renderPagination(grid,totalCount);
     if (templateName === 'search') {
       if (!isLoadMore) grid.dataset.cfpSearchOffset = String((activeFilters.page - 1) * PAGE_SIZE);

@@ -51,7 +51,7 @@ export const action = async ({ request }) => {
     if(!isValidCollectionSpacing(key,value))return Response.json({success:false,error:`Enter whole-number spacing from ${limits.min} to ${limits.max} px.`},{status:400});
     payload[key]=Number(value);
   }
-  for (const key of ['showOnlyInStock','secondImageOnHover','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewCollectionMobile','showQuickViewInstantSearchMobile','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
+  for (const key of ['showOnlyInStock','secondImageOnHover','videoFirstInCards','showQuickViewInstantSearch','showQuickViewCollection','showQuickViewCollectionMobile','showQuickViewInstantSearchMobile','showQuickViewSizeChart','showQuickViewInstantSearchSizeChart','isWholesale']) {
     if (!formData.has(key)) continue;
     const value = formData.get(key);
     if (value !== 'true' && value !== 'false') return Response.json({ success:false, error:'Invalid display setting.' },{status:400});
@@ -105,6 +105,9 @@ export default function Settings() {
   const secondImageOnHover = fetcher.formData?.has("secondImageOnHover")
     ? fetcher.formData.get("secondImageOnHover") === "true"
     : (settings?.secondImageOnHover ?? true);
+  const videoFirstInCards = fetcher.formData?.has("videoFirstInCards")
+    ? fetcher.formData.get("videoFirstInCards") === "true"
+    : (settings?.videoFirstInCards ?? false);
   const showQuickViewInstantSearch = fetcher.formData?.has("showQuickViewInstantSearch")
     ? fetcher.formData.get("showQuickViewInstantSearch") === "true"
     : (settings?.showQuickViewInstantSearch ?? true);
@@ -523,6 +526,38 @@ export default function Settings() {
                 <p className="int-desc">
                   Display the second product image when a customer hovers over a
                   product card in the search and filter results.
+                </p>
+              </div>
+            </div>
+
+            {/* Card: Product video first */}
+            <div className="int-card">
+              <div className="int-header">
+                <span
+                  className="int-tag int-tag-inventory"
+                  style={{ backgroundColor: "#fef3c7", color: "#b45309" }}
+                >
+                  DISPLAY
+                </span>
+                <label className="int-toggle" aria-label="Toggle setting">
+                  <input
+                    type="checkbox"
+                    aria-label="Show product video first"
+                    disabled={fetcher.state !== "idle"}
+                    checked={videoFirstInCards}
+                    onChange={() =>
+                      toggleSetting("videoFirstInCards", videoFirstInCards)
+                    }
+                  />
+                  <span className="int-slider"></span>
+                </label>
+              </div>
+              <div>
+                <h3 className="int-title">Show product video first</h3>
+                <p className="int-desc">
+                  When a product has a video, collection cards play it first,
+                  muted and on a loop, instead of the first photo. Products
+                  without a video keep their photo. Off by default.
                 </p>
               </div>
             </div>
