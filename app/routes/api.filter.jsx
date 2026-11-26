@@ -1100,7 +1100,7 @@ export const loader = async ({ request, context }) => {
       if(priceCountCandidateFilters)try{
         const ids=await collectionPriceCandidateIds(meiliClient.index('products'),{filter:priceCountCandidateFilters});
         if(ids.some(id=>!/^\d+$/.test(id)))throw Error('Invalid price-count candidate IDs');
-        return {...priceScope,id:{in:ids.map(id=>'gid://shopify/Product/'+id)}};
+        return {...priceScope,id:{in:ids.map(id=>'gid://shopify/Product/'+id)},cfpCandidateScope:true};
       }catch{/* Preserve the existing full scope if the candidate read is incomplete. */}
       return priceScope;
     })();
@@ -1108,18 +1108,22 @@ export const loader = async ({ request, context }) => {
     // Every band shares one exact database pass when it can be expressed;
     // otherwise each band keeps its own established eligibility read.
     const priceBandStarted=Date.now();
-    const bandedPriceIds=(hideUnavailable||variantPriceV2||canonicalVariantPrice)&&priceCountRanges.length>1
-      ?await getCached('availableVariants:'+shop+':price-bands-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
-        async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return priceCountRanges.map(()=>[]);
-          return availableProductIdsByPriceRanges(prisma,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),{priceContext:variantEligibilityPriceContext||searchVariantContext||{}});},30,{maxBytes:4194304})
+    const bandedPriceResult=(hideUnavailable||variantPriceV2||canonicalVariantPrice)&&priceCountRanges.length>1
+      ?await getCached('availableVariants:'+shop+':price-bands-eligibility-v2:'+JSON.stringify([priceScope,optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
+        async()=>{const {cfpCandidateScope,...scope}=await readPriceCountScope();if(scope.id?.in.length===0)return {exact:!!cfpCandidateScope,ids:priceCountRanges.map(()=>[])};
+          return {exact:!!cfpCandidateScope,ids:await availableProductIdsByPriceRanges(prisma,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,priceCountRanges.map(eligiblePriceRange),{priceContext:variantEligibilityPriceContext||searchVariantContext||{}})};},30,{maxBytes:4194304})
       :null;
+    const bandedPriceIds=bandedPriceResult?.ids;
     const priceEligibleIds=Array.isArray(bandedPriceIds)?bandedPriceIds:hideUnavailable||variantPriceV2||canonicalVariantPrice?await Promise.all(priceCountRanges.map(range=>{
       const eligibleRange=eligiblePriceRange(range);
       return getCached('availableVariants:'+shop+':price-band-eligibility:'+JSON.stringify([priceScope,optionsFilters,mergedValues,eligibleRange,variantEligibilityPriceContext,...(priceCountCandidateFilters?[priceCountCandidateFilters]:[])]),
-        async()=>{const scope=await readPriceCountScope();if(scope.id?.in.length===0)return [];return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext});},30,{maxBytes:1048576});
+        async()=>{const {cfpCandidateScope,...scope}=await readPriceCountScope();if(scope.id?.in.length===0)return [];return availableProductIds(prisma.product,{shop,status:{equals:'active',mode:'insensitive'},...scope},optionsFilters,mergedValues,eligibleRange,{database:prisma,priceContext:variantEligibilityPriceContext||searchVariantContext});},30,{maxBytes:1048576});
     })):[];
     const priceBandMs=Date.now()-priceBandStarted,priceBandIdCount=priceEligibleIds.reduce((n,ids)=>n+(ids?.length||0),0);
-    for(const [index,range] of priceCountRanges.entries()){
+    // Candidates already satisfy every other selected filter, so each band's
+    // exact same-variant IDs are its count; no engine query per band needed.
+    const directPriceCounts=bandedPriceResult?.exact===true&&!isSearch&&!searchQuery?bandedPriceIds.map(ids=>ids.length):null;
+    for(const [index,range] of directPriceCounts?[]:priceCountRanges.entries()){
       let priceClause=`priceMin >= ${range.min}${Number.isFinite(range.max)?` AND priceMin <= ${range.max}`:''}`;
       if(hideUnavailable||variantPriceV2||canonicalVariantPrice){
         const ids=priceEligibleIds[index];priceClause=ids.length?'id IN '+JSON.stringify(ids):'id = "__no_available_variant_price__"';
@@ -1338,7 +1342,7 @@ export const loader = async ({ request, context }) => {
         const selected=multiSearchRes.results;multiSearchRes.results=queries.map(()=>({hits:[],estimatedTotalHits:0}));
         queryIndexes.forEach((index,i)=>{multiSearchRes.results[index]=selected[i];});
       }
-      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:multiSearchRes.results[priceCountQueryStart+i]?.totalHits??0}));
+      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:directPriceCounts?directPriceCounts[i]:multiSearchRes.results[priceCountQueryStart+i]?.totalHits??0}));
       extraCounts=Object.fromEntries(extraChoices.map((choice,i)=>[`${choice.type}:${choice.value}`,multiSearchRes.results[extraCountQueryStart+i]?.totalHits??0]));
       saleCounts = Object.fromEntries(saleCountRanges.map((range,i) => [range.value,multiSearchRes.results[saleCountQueryStart+i]?.totalHits ?? 0]));
       const tier1Res = multiSearchRes.results[0];
@@ -1463,7 +1467,7 @@ export const loader = async ({ request, context }) => {
     if (needsRankedSearch && (saleCountRanges.length || priceCountRanges.length || extraChoices.length)) {
       const counts = await semanticMultiSearch(queries.slice(saleCountQueryStart));
       saleCounts = Object.fromEntries(saleCountRanges.map((range,i) => [range.value,counts.results[i]?.totalHits ?? 0]));
-      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:counts.results[priceCountQueryStart-saleCountQueryStart+i]?.totalHits??0}));
+      exactPriceCounts=priceCountRanges.map((range,i)=>({...range,max:Number.isFinite(range.max)?range.max:null,count:directPriceCounts?directPriceCounts[i]:counts.results[priceCountQueryStart-saleCountQueryStart+i]?.totalHits??0}));
       extraCounts=Object.fromEntries(extraChoices.map((choice,i)=>[`${choice.type}:${choice.value}`,counts.results[extraCountQueryStart-saleCountQueryStart+i]?.totalHits??0]));
     }
     const meiliTime = Date.now() - meiliStart;

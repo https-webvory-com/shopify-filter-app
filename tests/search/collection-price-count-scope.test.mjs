@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import {collectionPriceCandidateIds} from '../../app/utils/collectionPriceCandidates.js';
 const source=await fs.readFile('app/routes/api.filter.jsx','utf8');
-const block=source.slice(source.indexOf('    const priceScope='),source.indexOf('    for(const [index,range] of priceCountRanges.entries())'));
+const block=source.slice(source.indexOf('    const priceScope='),source.indexOf('    // Candidates already satisfy every other selected filter'));
 async function run({read,search=false,categories,banded}={}){
  const calls={candidates:[],eligibility:[],keys:[],banded:[]},prices={'1':50,'2':110,'3':180,'4':240};
  const filters=categories||{option_Color:'option_Color IN ["Blue"]',option_Size:'option_Size IN ["M"]',tags:'tags IN ["Length_Maxi"]',priceMin:'selected price IDs'};
@@ -18,8 +18,8 @@ async function run({read,search=false,categories,banded}={}){
   availableProductIds:async(_model,where,_options,_merges,range)=>{calls.eligibility.push({where,range});return Object.entries(prices).filter(([id,price])=>(!where.id||where.id.in.includes('gid://shopify/Product/'+id))&&price>=range.min&&price<=range.max).map(([id])=>id);},
  };
  context.facetBaseFilters=context.baseFilters;
- vm.runInNewContext(`async function run(){${block};return priceEligibleIds;}this.run=run;`,context);
- return {calls,ids:JSON.parse(JSON.stringify(await context.run()))};
+ vm.runInNewContext(`async function run(){${block};return {ids:priceEligibleIds,exact:bandedPriceResult?.exact??null};}this.run=run;`,context);
+ const result=await context.run();return {calls,ids:JSON.parse(JSON.stringify(result.ids)),exact:result.exact};
 }
 test('all price-list ranges share one complete candidate read with the selected price category removed',async()=>{
  const {calls,ids}=await run();assert.equal(calls.candidates.length,1);assert.equal(calls.eligibility.length,4);
@@ -52,4 +52,9 @@ test('every band is decided in one database pass when the exact path is availabl
  assert.equal(calls.banded.length,1);assert.equal(calls.eligibility.length,0);assert.equal(calls.candidates.length,1);
  assert.equal(calls.banded[0].where.shop,'fixture.myshopify.com');assert.equal(calls.banded[0].ranges.length,4);
  assert.deepEqual(ids,[[],['2'],['3'],[]]);
+});
+test('banded counts are exact only when they come from the complete filtered candidates',async()=>{
+ const banded=(where,ranges,prices)=>ranges.map(range=>Object.entries(prices).filter(([id,price])=>(!where.id||where.id.in.includes('gid://shopify/Product/'+id))&&price>=range.min&&price<=range.max).map(([id])=>id));
+ const exact=await run({banded});assert.equal(exact.exact,true);assert.equal(exact.calls.banded[0].where.cfpCandidateScope,undefined);
+ const fallback=await run({banded,read:async()=>{throw Error('Unavailable');}});assert.equal(fallback.exact,false);assert.deepEqual(fallback.ids,[['1'],['2'],['3'],['4']]);
 });
