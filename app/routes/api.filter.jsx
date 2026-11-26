@@ -1089,7 +1089,10 @@ export const loader = async ({ request, context }) => {
     // Slider bounds come from priceMin facet stats. Saved list ranges are
     // irrelevant in Range mode and can trigger costly variant-price scans.
     let configuredPrices=[];if(String(priceSettings?.displayMode||'List').toLowerCase()==='list')try{configuredPrices=(typeof priceSettings?.config==='string'?JSON.parse(priceSettings.config):priceSettings?.config)?.priceRanges||[];}catch{}
-    const priceCountRanges=(fastCards||fastSearchCards?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
+    // With counts hidden the storefront lists every price band regardless of
+    // its count, so exact band counting is skipped entirely.
+    const countsHidden=globalSettings?.showProductCount===false;
+    const priceCountRanges=(fastCards||fastSearchCards||countsHidden?[]:configuredPrices).slice(0,100).map(range=>{const min=Number(range.min??range.from??0),rawMax=range.max??range.to;return {...range,min,max:rawMax==null||rawMax===''?Infinity:Number(rawMax)};}).filter(range=>Number.isFinite(range.min)&&range.min>=0&&range.max>=range.min);
     const priceScope=resolvedCollectionId?{collections:{some:{collectionId:resolvedCollectionId.includes('gid://')?resolvedCollectionId:'gid://shopify/Collection/'+resolvedCollectionId}}}:{};
     // Price-list counts remove only the selected price category. All other
     // selected categories still apply, so the same complete indexed candidates
@@ -1936,7 +1939,9 @@ export const loader = async ({ request, context }) => {
       const count=searchNormalizedFacetCounts?.[group.field]?.[facetValueKey(group.canonical)];
       if(Number.isSafeInteger(count)&&count>=0)exactNormalizedCounts.set(key,count);
     }
-    const missingGroups=duplicateGroups.filter(([key])=>!exactNormalizedCounts.has(key));
+    // Exact merged-value counts only change the numbers shown; which values are
+    // listed comes from the facet distribution. Skip them when counts are hidden.
+    const missingGroups=globalSettings?.showProductCount===false?[]:duplicateGroups.filter(([key])=>!exactNormalizedCounts.has(key));
     const normalizedCountStarted=Date.now();
     if(cancelled())return cancelledResponse();
     if (missingGroups.length) {
