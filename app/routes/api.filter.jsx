@@ -1995,7 +1995,9 @@ export const loader = async ({ request, context }) => {
       const key = `${field}\u0000${facetValueKey(mapped)}`;
       const canonical=normalizedGroups.get(key)?.canonical??mapped;
       const duplicate = normalizedGroups.get(key)?.raw.length > 1;
-      if(duplicate&&!exactNormalizedCounts.has(key))throw new Error('Exact facet counts unavailable; retry the filters');
+      // With counts hidden the exact union is skipped on purpose; the summed raw
+      // counts still say the value is present, which is all the list needs.
+      if(duplicate&&!exactNormalizedCounts.has(key)&&globalSettings?.showProductCount!==false)throw new Error('Exact facet counts unavailable; retry the filters');
       const display = canonical;
       destination[display] = duplicate && exactNormalizedCounts.has(key)
         ? exactNormalizedCounts.get(key) : (destination[display] || 0) + count;

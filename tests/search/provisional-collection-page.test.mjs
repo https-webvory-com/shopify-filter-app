@@ -31,3 +31,9 @@ test('engine errors fall back to the previous empty pending response',async()=>{
 test('cache keys differ for different filter states',()=>{
  const {key}=load();assert.notEqual(key('["a"]'),key('["b"]'));
 });
+
+test('hidden counts never turn a skipped exact merged count into a server error',()=>{
+ const guard=source.slice(source.indexOf('const addNormalizedCount'),source.indexOf('const vendorCounts'));
+ assert.match(guard,/showProductCount!==false\)throw/);
+ assert.match(source,/const missingGroups=globalSettings\?\.showProductCount===false\?\[\]/);
+});
