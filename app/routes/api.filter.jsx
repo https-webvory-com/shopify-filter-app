@@ -51,6 +51,23 @@ import {searchCacheHeaders} from '../utils/searchCachePolicy.js';
 // Only exclusions with an exact indexed equivalent may use direct sorted pages.
 // Saved pins remain eligible because the collection ranker protects them from
 // Exclude rules even when their positions do not outrank the selected sort.
+// While a collection's ranking is still being prepared, direct API callers get
+// a provisional first page from the index (filters, stock and Exclude rules
+// applied, best-selling order) instead of an empty list. The status stays
+// pending, so the storefront keeps waiting for the exact ranked order.
+function provisionalKey(text){let a=0x811c9dc5,b=0x12345;for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b^c,2246822519);}return (a>>>0).toString(36)+(b>>>0).toString(36)+text.length.toString(36);}
+const PROVISIONAL_FIELDS=['id','handle','title','vendor','productType','priceMin','priceMax','images','available'];
+async function provisionalCollectionPage(index,{filters,rule,pinnedIds,limit,cacheKey}){
+  const exclusions=directSortExclusions(rule,pinnedIds);
+  if(exclusions===null)return null;
+  try{
+    return await getCached('provisionalCollection:'+cacheKey,async()=>{
+      const result=await index.search('',{filter:[...filters,...exclusions],sort:['bestSellingScore:desc','createdAt:desc'],limit:Math.min(Math.max(limit||25,1),40),attributesToRetrieve:PROVISIONAL_FIELDS});
+      return {products:(result.hits||[]).map(hit=>({...hit,images:Array.isArray(hit.images)?hit.images.slice(0,1):hit.images})),totalCount:result.estimatedTotalHits??result.totalHits??null};
+    },30);
+  }catch{return null;}
+}
+
 function directSortExclusions(rule, pinnedIds) {
   const protectedIds=[...new Set((pinnedIds||[]).map(id=>String(id).split('/').pop()))]
     .filter(id=>/^\d+$/.test(id));
@@ -1269,7 +1286,14 @@ export const loader = async ({ request, context }) => {
       collectionRankingStatus = prepared.status;
       if(prepared.status==='ready'&&!pinnedPrefix&&!context?.rankingWarmup&&typeof compareCollectionHead==='function')await compareCollectionHead(preparedSpec,prepared);
       if (prepared.status !== 'ready') {
-        return data({ products: [], totalCount: 0, debug: {
+        // Storefront widgets (any version) identify themselves with these
+        // parameters and must never render an unranked page; only direct API
+        // callers receive the provisional list.
+        const directApiCaller=!['responseProfile','priceFilterVersion','rankingToken','cfpCards'].some(key=>url.searchParams.has(key))&&!acceptsCollectionPinnedPrefix(request);
+        const provisional=directApiCaller&&!context?.rankingWarmup&&page===1&&prepared.status==='pending'
+          ?await provisionalCollectionPage(meiliClient.index('products'),{filters:allFiltersList,rule:activeRule,pinnedIds:activePinnedList,limit,
+            cacheKey:shop+':'+provisionalKey(JSON.stringify([allFiltersList,activeRule?.id??null,activeRule?.updatedAt??null,limit]))}):null;
+        return data({ products: provisional?.products||[], totalCount: provisional?.totalCount??0, ...(provisional?{provisional:true}:{}), debug: {
           collectionRankingStatus: prepared.status,
           collectionBestSellingStatus: prepared.status,
           collectionOrderSnapshotStatus: collectionBestSellingState.status,
