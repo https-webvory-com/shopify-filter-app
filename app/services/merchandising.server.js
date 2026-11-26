@@ -221,9 +221,14 @@ export async function getActiveRuleForSearch(
     }
 
     // Check if any of the search queries match the user's query
-    if (!rule.searchQueries?.length || rule.searchQueries.some((q) => q.toLowerCase().trim() === queryLower)) {
+    const globalRule = !rule.searchQueries?.length;
+    if (globalRule || rule.searchQueries.some((q) => q.toLowerCase().trim() === queryLower)) {
+      // A rule for every search keeps its exclusions and boosts, but pinning
+      // belongs to the queries a merchant targeted: otherwise the same pinned
+      // products lead unrelated searches, including ones with no real match.
+      const applied = globalRule ? withoutPinConditions(rule) : rule;
       if (!rule.customerTags || rule.customerTags.trim() === "") {
-        return rule; // Rule applies to everyone
+        return applied; // Rule applies to everyone
       }
 
       // Rule has specific customer tags, check if currentCustomerTags intersect
@@ -235,12 +240,17 @@ export async function getActiveRuleForSearch(
 
       const hasMatchingTag = requiredTags.some((tag) => tag === "[no tag]" ? userTags.length === 0 : userTags.includes(tag));
       if (hasMatchingTag) {
-        return rule;
+        return applied;
       }
     }
   }
 
   return null;
+}
+
+function withoutPinConditions(rule) {
+  const conditions = (rule.conditions || []).filter(condition => condition?.action !== 'Pin');
+  return conditions.length === (rule.conditions || []).length ? rule : { ...rule, conditions };
 }
 
 /**
@@ -318,7 +328,6 @@ export async function getActivePinningRuleForSearch(
 
   const queryLower = searchQuery.toLowerCase();
 
-  let allSearchesRule = null;
   for (const rule of activeRules) {
     const appliesTo = rule.applyToSearchType === "search" ? "page" : rule.applyToSearchType;
     // Check if the rule applies to this type of search (instant vs page)
@@ -328,17 +337,15 @@ export async function getActivePinningRuleForSearch(
       continue;
     }
 
-    if (rule.applyToAll) {
-      allSearchesRule ??= rule;
-      continue;
-    }
+    if (rule.applyToAll) continue;
 
     if (rule.searchQueries?.some((q) => q.toLowerCase().trim() === queryLower.trim())) {
       return rule;
     }
   }
 
-  return queryLower.trim()?allSearchesRule:null;
+  // An all-searches pin rule never pins products ahead of a typed query.
+  return null;
 }
 
 /**

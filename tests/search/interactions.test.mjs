@@ -214,7 +214,7 @@ test("All searches survives editor load and save; editing does not enable a disa
   assert.equal(Object.hasOwn(writes[1].data, "status"), false);
 });
 
-test("Search pin selection prefers query-specific pins and respects search type for all-search fallback", async () => {
+test("Search pin selection prefers query-specific pins and never falls back to all-search pins", async () => {
   const all = {
     id: "all",
     applyToAll: true,
@@ -252,15 +252,14 @@ test("Search pin selection prefers query-specific pins and respects search type 
     ).id,
     "dress",
   );
+  // All-searches pins never lead an unrelated typed query.
   assert.equal(
-    (
-      await service.getActivePinningRuleForSearch(
-        "fixture.myshopify.com",
-        "coat",
-        "page",
-      )
-    ).id,
-    "all",
+    await service.getActivePinningRuleForSearch(
+      "fixture.myshopify.com",
+      "coat",
+      "page",
+    ),
+    null,
   );
   assert.equal(
     await service.getActivePinningRuleForSearch(

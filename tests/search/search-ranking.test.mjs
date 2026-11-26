@@ -150,7 +150,22 @@ test('search scopes, legacy page scope and specific query precedence remain isol
   } } });
   assert.equal((await service.getActivePinningRuleForSearch(shop, ' GREEN DRESSES ', 'instant')).name, 'instant');
   assert.equal((await service.getActivePinningRuleForSearch(shop, 'green dresses', 'page')).name, 'page');
-  assert.equal((await service.getActivePinningRuleForSearch(shop, 'green dresses today', 'instant')).name, 'global');
+  assert.equal(await service.getActivePinningRuleForSearch(shop, 'green dresses today', 'instant'), null);
+});
+
+test('rules for every search keep exclusions and boosts but drop pins; targeted rules keep pins', async () => {
+  const global = { name: 'global', searchQueries: [], customerTags: '', locales: '', conditions: [
+    { action: 'Pin', field: 'Tags', value: 'TopProm' }, { action: 'Exclude', field: 'Available', value: '0' }, { action: 'Boost', field: 'Color', value: 'Red' }] };
+  const targeted = { name: 'prom', searchQueries: ['prom'], customerTags: '', locales: '', conditions: [{ action: 'Pin', field: 'Tags', value: 'TopProm' }] };
+  const service = await loadModule('app/services/merchandising.server.js', { '../db.server.js': { default: {
+    merchandisingRule: { findMany: async () => [targeted, global] },
+  } } });
+  const other = await service.getActiveRuleForSearch(shop, 'xyzqwerty');
+  assert.equal(other.name, 'global');
+  assert.deepEqual(other.conditions.map(c => c.action), ['Exclude', 'Boost']);
+  assert.equal(global.conditions.length, 3);
+  const prom = await service.getActiveRuleForSearch(shop, 'Prom');
+  assert.deepEqual(prom.conditions.map(c => c.action), ['Pin']);
 });
 
 test('search merchandising normalizes exact phrases and checks customer tags, locale and schedule query', async () => {
