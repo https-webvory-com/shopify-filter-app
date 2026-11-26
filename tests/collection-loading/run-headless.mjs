@@ -1112,7 +1112,7 @@ try{
     const first=await cards();
     await control({apiDelay:4000});
     await navigate();
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",2500);
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",2500);// no filter groups configured here, so the sidebar has nothing to mark loading
     assert.deepEqual(await cards(),first);
     assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),true);
     assert.equal(await evaluate("performance.getEntriesByType('resource').some(entry=>entry.name.includes('/api/filter')&&entry.responseEnd>0)"),false);
@@ -1124,7 +1124,7 @@ try{
     assert.equal(await evaluate("!!document.querySelector('#cfp-load-more-btn')"),true);
     await control({archive:'1',invalidate:true,hold:false,delay:0,apiDelay:1000});
     await navigate();
-    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')",2500);
+    await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25",2500);// no filter groups configured here, so the sidebar has nothing to mark loading
     assert.equal((await cards()).includes('1'),true,'Recent cards should appear while the changed collection is checked');
     await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&![...document.querySelectorAll('.cfp-product-card--reveal')].some(card=>card.querySelector('a')?.href.includes('/dress-1'))",15000);
     assert.equal((await cards()).includes('1'),false,'Fresh stock and membership must replace the browser copy');
@@ -1133,6 +1133,9 @@ try{
   });
   let oldToken,oldIds;
   await test('load more keeps token order without duplicate products and puts zero-price product last',async()=>{
+    // Own setup: the preceding reload check changes the catalog (80 products, an archive).
+    await control({reset:true,precompute:true,early:false,assetDelay:0,apiDelay:0,clockOffset:0});
+    await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal:not(.cfp-product-card--preview)').length===25",8000);
     oldToken=fixture.latestRankingToken();
     assert.equal(await evaluate("new URL(location.href).searchParams.has('rankingToken')"),false);
     await evaluate("document.querySelector('#cfp-load-more-btn').click()");await wait("document.querySelectorAll('.cfp-product-card--reveal').length===30");
@@ -1544,6 +1547,29 @@ try{
       await evaluate("document.querySelector('.cfp-swatch-item').click()");
       assert.equal(await evaluate("new URL(document.querySelector('.cfp-product-card__image--primary').src).searchParams.get('shade')"),"O'Reilly",'Swatch click must preserve the quoted image URL');
       assert.deepEqual(await evaluate('browserErrors'),[]);return {literalTitles:true,literalColorNames:true,swatchClickPassed:true};
+    }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
+  });
+  await test('product video first: off by default, and when on only cards with a video play it muted on a loop',async()=>{
+    const productJs=`(()=>{const original=window.fetch;window.__videoReads=[];window.fetch=async function(input,options){const url=new URL(typeof input==='string'?input:input.url,location.origin);const match=url.pathname.match(/\\/products\\/([^/]+)\\.js$/);if(match){window.__videoReads.push(match[1]);const first=document.querySelector('.cfp-product-card a[href*="/products/"]');const firstHandle=first&&new URL(first.href).pathname.split('/products/')[1];const media=match[1]===firstHandle?[{media_type:'image',src:'/image/1.svg'},{media_type:'video',preview_image:{src:'/image/1.svg'},sources:[{format:'m3u8',url:'/video/1.m3u8',height:1080},{format:'mp4',mime_type:'video/mp4',url:'/video/1-1080.mp4',height:1080},{format:'mp4',mime_type:'video/mp4',url:'/video/1-720.mp4',height:720}]}]:[{media_type:'image',src:'/image/2.svg'}];return new Response(JSON.stringify({handle:match[1],media}),{status:200,headers:{'Content-Type':'application/json'}});}return original.call(this,input,options);};})()`;
+    const injection=await send('Page.addScriptToEvaluateOnNewDocument',{source:productJs});
+    try{
+      await control({reset:true,productCount:30,precompute:true,early:false,assetDelay:0,apiDelay:0,priceDelay:0,imageDelay:0});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!document.querySelector('#cfp-sidebar').classList.contains('cfp-loading')");
+      await new Promise(resolve=>setTimeout(resolve,500));
+      assert.equal(await evaluate("document.querySelectorAll('video.cfp-card-video').length"),0,'Off by default: no videos');
+      assert.equal(await evaluate("window.__videoReads.length"),0,'Off by default: no product reads');
+      await control({reset:true,productCount:30,precompute:true,early:false,assetDelay:0,apiDelay:0,priceDelay:0,imageDelay:0,globalSettings:{videoFirstInCards:true}});
+      await navigate();await wait("document.querySelectorAll('.cfp-product-card--reveal').length===25&&!!document.querySelector('video.cfp-card-video')");
+      const video=await evaluate(`(()=>{const card=document.querySelector('.cfp-product-card');const v=card.querySelector('video.cfp-card-video');const img=card.querySelector('.cfp-product-card__image--primary');const sec=card.querySelector('.cfp-product-card__image--secondary');return {src:new URL(v.src).pathname,muted:v.muted,loop:v.loop,playsInline:v.playsInline,afterImage:img.nextElementSibling===v,covers:getComputedStyle(v).position==='absolute'&&getComputedStyle(v).zIndex==='1',secondaryHidden:!sec||getComputedStyle(sec).display==='none',poster:!!v.poster,videos:document.querySelectorAll('video.cfp-card-video').length,reads:window.__videoReads.length}})()`);
+      assert.equal(video.src,'/video/1-720.mp4','Picks the mp4 closest to 720p');
+      assert.ok(video.muted&&video.loop&&video.playsInline&&video.afterImage&&video.covers&&video.secondaryHidden&&video.poster,JSON.stringify(video));
+      assert.equal(video.videos,1,'Only products with a video get one');
+      assert.ok(video.reads>=25,'Every rendered card is checked once');
+      await evaluate("document.querySelector('.cfp-product-card .cfp-swatch-item')?.click()");
+      const afterSwatch=await evaluate("document.querySelector('.cfp-product-card video.cfp-card-video')===null");
+      assert.equal(afterSwatch,true,'Choosing a colour shows its photo instead of the video');
+      assert.deepEqual(await evaluate('browserErrors'),[]);
+      return {offByDefault:true,video:video.src,onlyVideoProducts:true,swatchRestoresPhoto:afterSwatch};
     }finally{await send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});}
   });
   await test('short four-card collections do not reserve blank space above the footer',async()=>{
