@@ -1,7 +1,8 @@
 export const collectionFacetScopeVersion=1;
 
 export function hasCurrentCollectionFacetScope(payload){
- return !payload?.facets||!payload.debug?.activeRuleConditions?.some(rule=>rule.action==='Include')||
+ const hasInclude=payload?.debug?.hasIncludeRule??payload?.debug?.activeRuleConditions?.some(rule=>rule.action==='Include');
+ return !payload?.facets||!hasInclude||
   payload.facets.collectionScopeVersion===collectionFacetScopeVersion;
 }
 

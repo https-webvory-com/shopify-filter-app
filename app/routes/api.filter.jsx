@@ -2163,11 +2163,9 @@ export const loader = async ({ request, context }) => {
         hasActivePinningRule: !!activePinningRule,
         searchRankingApplied,
         searchRankingMode,
-        pinningRuleName: activePinningRule?.name,
         pinnedProductsCount: pinnedIds.length,
         hasMerchandisingRule: !!activeRule,
-        activeRuleName: activeRule?.name || null,
-        activeRuleConditions: activeRule?.conditions || [],
+        hasIncludeRule: !!activeRule?.conditions?.some(rule=>rule?.action==='Include'),
         rawMeiliHitsCount: meiliRes.hits?.length || 0,
         allMatchedCount: allMatchedProducts.length,
         finalProductsCount: finalProducts.length,
@@ -2175,14 +2173,7 @@ export const loader = async ({ request, context }) => {
         activeGroupFiltersLength: activeGroupFilters
           ? activeGroupFilters.length
           : null,
-        meiliError,
-        topProductScores: finalProducts.slice(0, 25).map(p => ({
-          title: p.title,
-          id: p.id,
-          merchandisingScore: p.merchandisingScore,
-          bestSellingScore: p.bestSellingScore,
-          isPinned: pinnedIds.includes(p.id)
-        })),
+        meiliError: meiliError ? true : null,
         timing: {
           configurationReadyMs,
           queryReadyMs,
