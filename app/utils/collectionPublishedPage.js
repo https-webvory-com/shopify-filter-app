@@ -68,8 +68,10 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
    const ruleChanged=configurationChanged||marketRuleInvalidatedAt>0&&marketRuleInvalidatedAt>=entry.at;
    // Product/catalog changes can keep the last complete page briefly while a
    // replacement is prepared; country stock follows its separate freshness limit.
+   // Tokens are shared by identical orders, so an outdated copy can belong to
+   // an earlier visit. Page two then continues from the ranking session.
    if(ruleChanged||stockChanged&&!stockStaleAllowed||entry.configuration==null&&readConfigurationRevision){
-    if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+    if(page===2){Promise.resolve().then(()=>redis.del?.(`collectionPublishedSession:${shop}:${token}`)).catch(()=>{});return null;}
     if(onHit){const visit=new URL(request.url);visit.searchParams.delete('rankingToken');
      Promise.resolve().then(()=>onHit({request:new Request(visit),entry,published:true,refreshDue:true})).catch(()=>{});
     }
@@ -87,7 +89,7 @@ export function createPublishedCollectionPages({redis,loadDurable,saveDurable,cr
     const current=await readGlobalSettings(shop);if(!current)return null;
     const rankingFlags=['showOnlyInStock','prioritizeSortOverPinning','prioritizeSortOverMerchandising','hideUnavailableVariantsWhenSelected'];
     if(rankingFlags.some(key=>(current[key]===true)!==(globalSettings?.[key]===true))){
-     if(page===2)return Response.json({error:'Collection settings changed. Restart this collection.'},{status:409,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
+     if(page===2){Promise.resolve().then(()=>redis.del?.(`collectionPublishedSession:${shop}:${token}`)).catch(()=>{});return null;}
      return null;
     }
     globalSettings=current;

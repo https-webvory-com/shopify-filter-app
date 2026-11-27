@@ -226,7 +226,7 @@ test('country publications retain fast 25/50-card serving and reject an obsolete
  assert.deepEqual(second.products.map(p=>p.id),f.ids.slice(25,50));
  assert.equal(await f.store.get(f.request(),{marketAvailabilityVersion:'india-v2'}),null);
  const stale=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}),{marketAvailabilityVersion:'india-v2'});
- assert.equal(stale.status,409);
+ assert.equal(stale,null,'an outdated copy defers page two to the ranking session');
  assert.equal(await f.store.get(f.request({country:'US'}),{marketAvailabilityVersion:'usa-v1'}),null);
 });
 
@@ -303,7 +303,7 @@ for(const flag of ['showOnlyInStock','prioritizeSortOverPinning','prioritizeSort
   let current={[flag]:enabled};const f=fixture({readGlobalSettings:async()=>current});
   f.payload.globalSettings={...current};await f.publish();const first=await(await f.store.get(f.request())).json();
   current={[flag]:!enabled};assert.equal(await f.store.get(f.request()),null);
-  assert.equal((await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}))).status,409);
+  assert.equal(await f.store.get(f.request({page:'2',rankingToken:first.rankingToken})),null);
  });
 }
 test('published cards decline safely when current settings cannot be read',async()=>{
@@ -317,7 +317,7 @@ test('new visits reject old pin and merchandising cards while prioritizing a rep
  await Promise.resolve();assert.equal(hits.length,1);assert.equal(hits[0].refreshDue,true);
  assert.equal(await f.store.get(f.request(),{probe:true}),null);
  const second=await f.store.get(f.request({page:'2',rankingToken:first.rankingToken}));
- assert.equal(second.status,409);
+ assert.equal(second,null);
  f.advance(1);await f.publish({configuration:'two'});assert.equal((await f.store.get(f.request())).status,200);
 });
 
