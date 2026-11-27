@@ -1,7 +1,7 @@
 import prisma from '../db.server';
 import { createHash } from 'node:crypto';
 import { getCached } from './shopCache.server';
-import { semanticSearch, keywordSearch } from './semanticSearch.server';
+import { semanticSearch, keywordSearch, getSearchDocuments } from './semanticSearch.server';
 import { applyMerchandisingRules, buildMeiliIncludeFilters, selectMerchandisingVariant, createMerchandisingComparator } from './merchandising.server';
 import { selectSearchColorVariant } from '../utils/searchColor.js';
 import { hydrateCollectionInventory, hydrateCollectionSkus } from '../utils/rankedCollectionPage.js';
@@ -11,6 +11,33 @@ import { pinnedProductMatchesAppliedIntent } from '../utils/searchPinnedIntent.j
 import {savedVariantPriceSelections} from '../utils/availableVariants.js';
 import {priceSortVariant} from '../utils/savedMarketPricing.js';
 import {createFacetValueMapper,facetValueKey} from '../utils/facetNormalization.js';
+
+// Ranking only needs these fields. Transferring full documents for every
+// match (thousands for broad queries) made sorted results pages very slow.
+const rankingFields = ['id', 'shop', 'status', 'available', 'title', 'vendor', 'productType', 'tags', 'priceMin',
+  'inventoryTotal', 'variantPrices', 'options', 'images', 'collections', 'collection_titles', 'bestSellingScore',
+  'trendingScore', 'createdAt', 'rating', 'metafield_reviews.rating'];
+const knownRuleFields = new Set(['tags', 'vendor', 'product type', 'product', 'collections', 'price', 'date', 'sku',
+  'rating', 'id', 'available', 'discount', 'percent sales']);
+export function searchRankingFields(rule, facetKeys = []) {
+  for (const condition of rule?.conditions || []) {
+    const field = String(condition.field || '').toLowerCase();
+    if (!knownRuleFields.has(field) && !/option|color|size|title/.test(field)) return null;
+  }
+  return [...new Set([...rankingFields, ...facetKeys])];
+}
+
+// Fetch complete documents for the visible page only, in ranked order.
+async function hydrateSearchPage(products, query, shop) {
+  const missing = products.filter(p => !p._fromDb);
+  if (!missing.length || typeof getSearchDocuments !== 'function') return products;
+  const byId = new Map((await getSearchDocuments(query, missing.map(p => String(p.id).split('/').pop())))
+    .filter(d => d && (!d.shop || d.shop === shop)).map(d => [gid(d.id), d]));
+  return products.map(p => {
+    const doc = byId.get(p.id);
+    return doc ? { ...doc, ...p, variants: p.variants, images: p.images ?? doc.images } : p;
+  });
+}
 
 const gid = id => `gid://shopify/Product/${String(id).split('/').pop()}`;
 const variants = rows => (rows || []).map(v => ({ ...v,
@@ -32,8 +59,10 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     attributesToRetrieve, ...searchOptions } = options;
   // The admin pin picker only consumes IDs. Keep color eligibility fields,
   // but do not transfer images, descriptions, vectors or other card data.
+  const projected = !membershipOnly && searchRankingFields(rule, facetKeys);
   if (membershipOnly) searchOptions.attributesToRetrieve = parsedQuery?.colorIntent?.requested.length
     ? ['id', 'status', 'options', 'variantPrices', 'variants'] : ['id', 'status'];
+  else if (projected) searchOptions.attributesToRetrieve = projected;
   const batchSize = 1000;
   const semanticWindow = 200;
   const includes = buildMeiliIncludeFilters(rule?.conditions?.filter(c => c.action === 'Include') || []);
@@ -98,7 +127,7 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     const sortOverridesPins = sortBy && !['relevance', 'r', 'best-selling', 'bestselling', 'manual'].includes(sortBy)
       && globalSettings.prioritizeSortOverPinning === true;
     for (const id of pinIds) if (valid.has(id) && (!sortOverridesPins || seen.has(id))) {
-      products.push({ ...valid.get(id), variants: variants(valid.get(id).variants), _originalIndex: products.length });
+      products.push({ ...valid.get(id), variants: variants(valid.get(id).variants), _fromDb: true, _originalIndex: products.length });
     }
   }
   const eligible = products.filter(p => {
@@ -169,7 +198,9 @@ export async function rankSearchResults({ shop, query, options, rule, pinningRul
     if(type)normalizedFacetCounts[key]=normalizedCounts;
     if (Number.isFinite(minimum)) facetStats[key] = { min: minimum, max: maximum };
   }
-  return { products: ranked.slice((page - 1) * limit, page * limit).map(p => {
+  const pageProducts = ranked.slice((page - 1) * limit, page * limit);
+  const visible = projected ? await hydrateSearchPage(pageProducts, query, shop) : pageProducts;
+  return { products: visible.map(({ _fromDb, ...p }) => {
     const selection = !parsedQuery?.colorIntent?.requested.length ? selectMerchandisingVariant(p, rule, mergedValues) : null;
     return { ...p, isPinned: effectiveIds.has(p.id), ...(selection ? {
       selectedVariantId: selection.variantId, merchandisingImage: selection.imageUrl || p.merchandisingImage,

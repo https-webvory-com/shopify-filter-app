@@ -147,6 +147,14 @@ export async function keywordSearch(query, options) {
   return runQuery({indexUid,q,...(q?.trim()?{...params,matchingStrategy:'all'}:params)});
 }
 
+// Full documents for one visible page of a ranked search, read from the
+// same configured index the query used. Missing documents are skipped.
+export async function getSearchDocuments(query, ids) {
+  const [{indexUid}]=await prepareConfiguredSearchQueries([{q:query}]);
+  const index=meiliClient.index(indexUid);
+  return Promise.all(ids.map(id=>index.getDocument(id).catch(()=>null)));
+}
+
 // A ranked page may use several count/page queries. Never mix semantic counts
 // with keyword hits when an embedding request fails halfway through the plan.
 export async function searchPageBatch(queries, mode) {
